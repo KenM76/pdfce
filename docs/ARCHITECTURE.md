@@ -27330,3 +27330,128 @@ free 072.**
   **Standing rule `R232` was minted from the same finding** (`ROADMAP.md`
   *Standing rules*) and generalises past this section to any figure copied
   into a document nothing gates.
+
+- **2026-08-29 — Decision 103. THE INK PROBE (`Pass 174.0`, `150bcb8`) REPORTS
+  ONLY WHAT IT READ. WHERE THERE IS NOTHING TO READ IT REPORTS *ABSENCE*,
+  NAMED, RATHER THAN A RECONSTRUCTED VALUE — AND IT CARRIES ITS PAYLOAD ON A
+  SECOND STDOUT LINE RATHER THAN ON THE PUBLISHED METRICS LINE. ★ BOTH HALVES
+  ANSWER ONE QUESTION: *HOW DOES A DIAGNOSTIC AVOID MANUFACTURING THE QUANTITY
+  IT EXISTS TO MEASURE?***
+
+  **Recorded as ONE decision covering two choices**, on the engineer's
+  recommendation and this role's agreement. They are not two topics that
+  happened to land in one Pass: the first is about **inventing a value**, the
+  second about **inventing a value's slot**, and separating them would let a
+  future session adopt one and reject the other without noticing they share a
+  warrant.
+
+  **What was built, so the decision is checkable against a surface.**
+  `pdfce_render::RenderOptions::ink_probe: Option<(u32, u32)>` plus a `const`,
+  `#[must_use]` `with_ink_probe(x, y)` builder; the `#[non_exhaustive]` public
+  types `InkProbe { x, y, source, cmyk: Option<[f32;4]>, alpha: Option<f32>,
+  srgb: Option<[u8;3]> }` and `InkProbeSource { CmykBuffer | ScreenSrgb |
+  OutOfRange }`, both re-exported at the crate root
+  (`crates/pdfce-render/src/lib.rs:109`); `Diagnostics::ink_probe`; and
+  `pdfce-cli render-page --probe-ink X,Y`. It reads the four-colorant page
+  buffer **in the instruction before** ISO 32000-1 §11.4.7's *"convert the
+  result to the device's native colour space"* — one line later the buffer is
+  consumed into a pixmap and dropped, so this is the last moment the quantity
+  exists at all.
+
+  **WHY THE PROJECT NEEDED IT — a boundary question, not a rendering one.**
+  Under **decision 064** the colorant buffer does **two separable things**: it
+  **composites in ink** (pdfce's half) and it **converts to sRGB on exit** (the
+  sibling `iccce` project's half). pdfce's only switch for the buffer,
+  `--max-cmyk-buffer-bytes`, **turns both off together**, so **no measurement
+  taken through that switch can attribute a pixel to either half.** That is a
+  gap in this project's ability to honour its own decided boundary, which is
+  what makes the instrument architectural rather than incidental. On the real
+  patch the operand `0.75 0 1 0` reaches the conversion **unchanged** — the
+  composite is an **identity**, the residual is downstream, and the boundary
+  held.
+
+  **★★ CHOICE 1 — ABSENCE IS NAMED, NEVER RECONSTRUCTED.** A page composited
+  **on screen** (additive blending space, or the colorant buffer refused for
+  memory) reports `InkProbeSource::ScreenSrgb` with `cmyk: None` and
+  `alpha: None`. Running the sRGB result backwards through
+  `overprint::rgb_to_cmyk` **was available**, and would have filled four fields
+  **convincingly**.
+
+  It is refused because it is a **different quantity**: a max-GCR
+  reconstruction of the *output*, not a reading of a *composite that never
+  happened*. ★ **It is also, precisely, the substitution that caused the defect
+  decision 098 records** — reconstructing colorants from already-resolved sRGB,
+  where `Rgb::from_cmyk` and `rgb_to_cmyk` are **not an inverse pair**. ⇒ **An
+  instrument that commits the bug it exists to detect is worse than no
+  instrument**, because it converts a detectable defect into a plausible
+  reading. The sibling project independently named this as the right call in
+  its closing message.
+
+  **The generalisation, which is the part that outlives the probe:** a
+  diagnostic's `None` is **information**. Filling it to make the output look
+  uniform destroys the only signal that distinguishes *"this measurement was
+  not taken"* from *"this measurement came back zero"*, and those are the two
+  states an instrument exists to separate. `InkProbeSource` is a **three-valued
+  classification, not a nullable field**, for exactly that reason.
+
+  **★★ CHOICE 2 — A SECOND STDOUT LINE, NOT MORE KEYS ON THE METRICS LINE.**
+  `render-page`'s metrics line is a **published contract**: `key=<integer>`
+  pairs in a fixed order, gate-enforced by
+  `tools/check-metrics-line-contract.py` (**99 keys** at this commit). The
+  probe's payload is **four floats plus a classification**, and it is **absent
+  unless asked for**.
+
+  Folding it in leaves only two options and both are defects. Change the line's
+  **shape** conditionally, and every parser must branch before it can read
+  anything. Emit **placeholder zeros**, and `c=0 m=0 y=0 k=0` **reads exactly
+  like "no ink on this pixel"** — the single misreading `InkProbeSource` was
+  designed to prevent, reintroduced at the output layer after being solved at
+  the type layer. ⇒ A separate line, on which **every key is present in every
+  variant with `-` for absent**, so a variant is distinguished by `source=` and
+  never by which keys are missing.
+
+  ★ **The stable line stays FIRST**, and a test asserts it
+  (`crates/pdfce-cli/tests/render_page.rs:1888`), so a script that reads one
+  line off this command keeps working. **An optional diagnostic must not
+  relocate a published one.**
+
+  **REFUSAL POLICY — decided on what is DECIDABLE, and WHEN**, which is the
+  third small principle inside this decision:
+
+  | input | disposition | why |
+  |---|---|---|
+  | coordinate outside the raster | **reported** (`OutOfRange`), page still renders | the raster's size depends on scale, region and page box, so it is **not knowable at parse time** — and *a diagnostic must not destroy the output it was asked about* |
+  | malformed coordinate string | **refused** | decidable from the string alone, before anything is rendered |
+  | `-4,2` | eaten by `clap`, left that way | `--region` carries `allow_hyphen_values` because a `/MediaBox` may have a negative origin; **a device pixel may not** |
+
+  **HOW THE CENTRAL CLAIM IS KEPT NON-VACUOUS**, because it looks too obvious
+  to test and had in fact never been tested. For a single opaque paint over an
+  empty page a correct colorant composite **is the identity on its operand** —
+  transparent backdrop, alpha 1, Normal blend, nothing to blend with. Every
+  pre-existing colorant assertion in `pdfce-render` is made on **sRGB pixels
+  after the conversion**, which measures composite and conversion **together** —
+  the exact conflation this decision exists to break. Two guards, both per
+  `R225`: a **sabotage** (a `0.9×` on the yellow plane inside
+  `CmykBuffer::composite_at` turns the assertion red with the right message),
+  and a **discriminating control fixture** (an additive page — an
+  implementation that echoed the content stream's operands instead of reading
+  the buffer passes the subtractive page and **cannot** pass the additive one).
+
+  **GUI-core separation:** unaffected and **not re-verified this session** —
+  no crate manifest was touched and no dependency added, so `cargo tree` was
+  neither run nor claimed. `pdfce-render` gains public types only.
+
+  **Body-section counterpart: none required.** This decision adds a public
+  diagnostic to `pdfce-render`; it redraws no crate boundary and defines no new
+  invariant. §4.2 (*Published model guarantees*) is untouched — the probe makes
+  no promise about a **document**, only about **one render**. The consumer-facing
+  account is `docs/core-api/03-capabilities.md` **§7.3b** (with the builder
+  listed in §7.2), which is the gate-enforced surface document decision 102
+  routed readers to.
+
+  **Decision ceiling moves 102 → 103; next free 104.** **No standing rule
+  minted from this decision** — `R233` was minted in the same filing but from
+  `Pass 174.1`'s aggregate, not from this. The *"absence is information"* half
+  is one instance here plus decision 098's prior defect and is recorded as a
+  decision rather than elevated, per the 2026-08-05 ruling against elevating on
+  occurrence count.

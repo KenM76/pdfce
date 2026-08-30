@@ -96,6 +96,508 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 174.4` (`ecc24ac`, 2026-08-29) — `#231F20` is ONE OF TWO CORRECT ANSWERS, one count apart, and a note telling another project they were wrong was written and WITHDRAWN before sending — filed 2026-08-29 (329th filing)
+
+**Sourcing.** As `Pass 174.2` below. This Pass **landed mid-filing**, after the
+dispatch was written and while this entry's neighbours were being drafted;
+found by `python tools/check-commits-filed.py` going red on **1 unfiled code
+commit**, then a second on the re-check. `git show --stat ecc24ac` = **1 file,
++24** (`crates/pdfce-core/src/settings/mod.rs`); commit message read in full;
+`git log --oneline -1` confirms it is **HEAD**.
+
+**No behaviour change. Twenty-four lines of doc block**, and the value is that
+it **stops a future session from "fixing" one of two correct paths.**
+
+**What is measured**, with `Pass 174.0`'s probe, on **one page rendered both
+ways**:
+
+| `0 0 0 1 k` — the same operand | sRGB | hex |
+|---|---|---|
+| page composited **on screen** | `35, 31, 31` | `#231F1F` |
+| page composited **in the colorant buffer** | `35, 31, 32` | `#231F20` |
+
+**Both are ours and BOTH ARE RIGHT.** The two paths reach the **same
+conversion table at different precisions** — one converts an **8-bit paint
+colour**, the other converts **`f32` colorants at the very end** in
+`CmykBuffer::to_srgb_over_white`. ⇒ **Every `DeviceCMYK` colour carries a ±1
+blue uncertainty that is a property of the COMPOSITING PATH and not of the
+table.** The saturated green this session chased all week shows the identical
+signature: **`47,180,73` on screen against `47,181,73` in ink** — same size,
+same axis, same cause.
+
+**★★★ WHY THIS IS A PASS AND NOT A FOOTNOTE, and it is the best-shaped near
+miss in the session.** The gap was found while building a characterisation
+table for the sibling project, where the render disagreed with pdfce's own
+stated `#231F20` **by one count on blue**. The first conclusion was *"our doc
+is off by one"*, **and a note saying so to another project was written and then
+withdrawn before sending.** The doc was not wrong; the second render was a
+different path. ⇒ A future session will hit the same one-count gap, reach the
+same first conclusion, and **"fix" one of two correct paths** — which is a
+silent colour regression introduced by a correction.
+
+★ **The general form, worth more than the incident:** *a disagreement between
+two of your own outputs is not automatically an error in either.* Ask **which
+path produced each number** before deciding which one to change — and the probe
+is what made asking the same page both ways a ten-second question rather than
+an investigation.
+
+**★ NOTE WHAT THE COMMIT DELIBERATELY DID NOT WRITE**, because it is `R232`
+being applied unprompted: *"every doc comment stating `#231F20` is quoting the
+colorant path and is right to. **Deliberately NOT stated as a count of such
+comments** — that would be one more number nothing keeps true."* A count of
+matching doc comments is exactly the figure `R232` forbids writing into an
+ungated document, and it was declined at write time rather than corrected
+later.
+
+**`FEATURES.md`: ZERO rows changed.** A doc block disambiguating two correct
+outputs moves no capability.
+
+### `Pass 174.3` (`6eae65b`, 2026-08-29) — which `DeviceCMYK` operands is the table ACTUALLY asked for? A census — and ONE FILE was 59 % of the first answer, which is `R233`'s second instance in the same session — filed 2026-08-29 (329th filing)
+
+**Sourcing.** As `Pass 174.2` below. This Pass **landed mid-filing** and was
+**found by a gate, not by the dispatch**: `python tools/check-commits-filed.py`
+reported **1 code commit in no filing** while this filing was being written.
+`git show --stat 6eae65b` = **1 file, +386** (`tools/cmyk-operand-census.py`,
+new); commit message read in full.
+
+**★★ THIS DISCHARGES THE OPEN ASK RECORDED IN `Pass 174.0` ABOVE, WITHIN THE
+HOUR.** The sibling project offered to return what real ICC profiles say for a
+**list** of operands rather than one green at a time — *"a better use of this
+channel than one green at a time"*. Taking them up on it exposed something
+pdfce had never measured.
+
+**★★★ THE FINDING THAT MATTERS, and it is not the tool: WE HAD NO IDEA WHICH
+OPERANDS OUR OWN TABLE IS ASKED FOR.** Every evaluation of the `DeviceCMYK`→sRGB
+conversion in this project's history has been **one colour, chosen because it
+was visibly wrong**. ⇒ *That is a good way to find a defect and no way to say
+whether a table is good.* A parity claim about a conversion had never been made
+against the population the conversion actually serves.
+
+**★★★ AND THE FIRST ANSWER WAS A TRAP — `R233`'S SECOND INSTANCE, IN THE SAME
+SESSION AS ITS MINT.** Over the 4,023-file regression corpus:
+
+| population | figure |
+|---|---|
+| paint events found | **775** |
+| contributing files | **53** |
+| ★ share supplied by the **single largest file** | **59 %** |
+
+**One file supplied 59 % of the population**, and its top operand is **that
+file's registration black**. ⇒ The ranking was **a description of one test
+file, not of PDFs** — *and it was about to be filed as "what real pages ask
+for"*. Same shape as `Pass 174.1`'s 125-of-132: **a true number answering a
+different question**, twice in one day, in two unrelated measurements.
+
+**The remedy shipped in the tool rather than in a note**, which is the right
+place for it: the census now prints its **three top-contributing files** and
+**shouts when one exceeds a quarter of the population, UNCONDITIONALLY** — the
+reason stated in the header being that ***"59 % of paints" and "59 % of pages"
+read identically and are not the same claim*** (hard rule 10(a)'s
+denominator-shape problem, in a tool's own output).
+
+**Re-run against the material the question was actually about** — prepress and
+CAD output rather than the mixed regression corpus:
+
+| | figure |
+|---|---|
+| paint events | **3,245** |
+| contributing files | **136** |
+| largest single file's share | **18 %** (against 59 %) |
+| distinct operands | **83** |
+| ★ operands covering **95 %** of the ink | **49** |
+
+⇒ **A characterisation set for real print work is DOZENS of entries, not
+thousands** — `3,245 / 136 ≈ 23.9 paint events per contributing file`, both
+forms per hard rule 10(a) — **and that is the number that decides whether
+"answer for all of them at once" is affordable. It is.**
+
+**LIMITS ARE IN THE TOOL'S HEADER AND ARE DELIBERATE**, and the reasoning is
+the reusable half: **no `sc`/`scn` under a space that *resolves* to
+`DeviceCMYK`** (needs resource dictionaries and tint transforms); **no images**
+(*one CMYK photograph contributes more distinct operands than a corpus of
+vector art, and would drown the population rather than extend it* — a
+population-composition judgement, `R233`'s own concern, made at design time);
+**no shading outputs**. ⇒ **The census is a LOWER BOUND, and every operand in
+it genuinely is asked for.** ★ *A list that is incomplete but sound is usable;
+one padded with guesses is not.*
+
+**Implementation care worth keeping:** a **token scan, not a regex**, because
+`num num num num k` **matches inside embedded font programs and inline-image
+payloads**; inline images are skipped between `ID` and `EI`; and a
+**five-operand guard** stops `0 0 0 0 1 k` being read as a colour nobody wrote.
+
+**★★ THE PROVENANCE SPLIT, and it is a `LEGAL.md` §5 / rule 7 decision made
+correctly without being asked:** the `#` header names files and **the operand
+table does not**, with `--set` emitting **four numbers per line and no
+provenance of any kind**. Part of the prepress corpus is **licensed material
+whose name may not appear in this repository**. The stated reasoning: *a
+frequency table of colour tuples is not anybody's copyrightable expression; a
+list of the files they came from is a different question and is not worth
+having.* `tools/check-suite-name-absent.py` re-run after this commit — **clean**.
+
+**★ The `#231F20` finding fell out of building the list** and became
+`Pass 174.4`, immediately above.
+
+**`FEATURES.md`: ZERO rows changed.** An out-of-tree census tool is not a pdfce
+capability; `tools/` has never had a features row and does not gain one here.
+
+### `Pass 174.2` (`0887acd`, 2026-08-29) — `PCS2_030`'s three traps are ATTRIBUTED, the week-old lead was the WRONG lead, and the patch turns out to belong to a bucket that already exists — filed 2026-08-29 (329th filing)
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
+here, on disk, not relayed: `git log --oneline -6` for `150bcb8`, `c81b879`,
+`0887acd` and their order above `4efa0a9`; `git status --porcelain` (**empty**);
+`git rev-list --count origin/main..main` = **3**; `git remote -v` (the remote
+exists — `github.com/KenM76/pdfce.git`); `git show --stat` on all three
+commits; **all three commit messages read in full**, per the dispatch. For this
+entry specifically: the whole `+51`-line addition to
+`docs/suite-patch-reference.md` read as a diff. **Relayed, not re-run:**
+`bash tools/run-gates.sh` (**PASS, 29 commands, 2 filing gates**), `cargo fmt
+--all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace`, `check-core-api-verbs.py`,
+`check-metrics-line-contract.py` (**99 keys**), `check-suite-name-absent.py`,
+and the suite baseline. **`cargo tree` was NOT re-run and is NOT claimed** —
+no crate manifest was touched by any of the three commits, and no dependency
+was added; the GUI-core separation invariant is *unchallenged this session*,
+which is a different statement from *verified this session*.
+
+**No code. One doc section**, `docs/suite-patch-reference.md` §3 (engineer-owned),
+and the value is that it **removes an open mystery without opening any work**.
+
+**What was carried, and for a week.** `PCS2_030` sat as *"cause unknown, and
+**not** the defect `Pass 143.0` fixed"*, with a recorded lead: *"`.5 G` — a grey
+**stroke** — appears in its streams while every synthetic fixture uses fills."*
+
+**The instrument is `Pass 174.0`'s probe**, which is what makes the three rows
+below *ink* rather than pixels — the whole point of building it two commits
+earlier:
+
+| trap (device px, scale 2) | X's ink | surround's ink |
+|---|---|---|
+| `(27, 68)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` |
+| `(28, 135)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` |
+| `(434, 136)` | `0.500 0 1.000 0.500` | `0.029 0 0.059 0.500` |
+
+**1. The `Pass 143.0` §8.6.7 grey ambiguity is REFUTED AS THE CAUSE, BY
+ABLATION.** All three `overprint_zero_tint_scope` values — `device_cmyk_only`,
+`grey_as_k_only`, `all_process_spaces` — return **bit-identical ink** at the
+failing pixel. ★ **The ablation is LIVE, not inert**, and that is the half that
+makes it evidence: the same three settings move the page's total
+effective-overprint count **24 / 29 / 29**. A knob that moves a page-level
+counter and does not move the pixel under test has been *exercised* and found
+irrelevant, which is a different and much stronger result than a knob that
+turned out to be disconnected.
+
+**2. THE GREY-STROKE LEAD IS REFUTED TOO, and is recorded as a near miss
+rather than quietly dropped.** `.5 G` does occur — under a **different**
+ExtGState (`/GS5`), on a **different** cell. The two failing traps at `(27,68)`
+and `(28,135)` are `0 0 0 .5 k` and `.5 g` **FILLS** under `/GS4`, and their
+whole **49×49** interior is wrong, not a **0.283 pt** outline. A stroke defect
+cannot produce a solid wrong X. ★ **The lead was reasonable** — every synthetic
+fixture pdfce owns does use fills, and `B` (fill *and* stroke) is genuinely
+unusual — **but *"an untested route exists"* is not *"the untested route is the
+cause"*.** That sentence is the reusable half of this entry.
+
+**3. THE ACTUAL CAUSE: the absent per-spot-colorant plane.** The backdrop is a
+two-colorant `/DeviceN` naming Black plus a spot over `/DeviceCMYK`; pdfce
+flattens the spot into C/M/Y, and **the measured `0.443 0 0.885` IS that
+flattening** — the diagnosis is read directly off the instrument rather than
+inferred from the source. A `DeviceCMYK` source specifies C, M, Y and K, so
+Table 149 has it knock those four out; it does **not** name the spot, **whose
+plane must survive**. There is no such plane, so knocking out C/M/Y destroys
+the spot with them. The patch's own DERIVED truth table demands *"Green + 50 %
+K"* on the affected cells — exactly what a surviving spot plane produces.
+
+⇒ **`PCS2_030` joins `PCS020` / `PCS040` / `PCS081` in the n-channel-buffer
+bucket. It is NOT a separate unknown**, and this file's existing line — *the
+remaining overprint/spot FAILs need a real n-channel buffer* — already covers
+it. **One fewer open mystery, no new work, no new Pass, no new Backlog entry.**
+
+**★ Suite baseline RE-MEASURED on this tree rather than carried forward**
+(`docs/NEXT_SESSION.md` §C asked for exactly this): **6 FAIL / 29 clean / 16
+unresolved of 51, 0 render errors — UNCHANGED** from the 2026-08-27 figure. The
+16 unresolved split **8 REF / 5 REF-PASS / 3 MARK?**. The 6 FAILs, with their
+trap counts: **`PCS2_020` (6), `PCS2_030` (3), `PCS2_040` (3), `PCS2_081` (1),
+`PCS3_130` (4), `PCS3_161` (12)** — **29 traps over 6 patches ≈ 4.8 each**, filed
+in both forms per hard rule 10(a). No verdict moved, and none should have: this
+Pass explained a FAIL, it did not repair one.
+
+**`FEATURES.md`: ZERO rows changed by this Pass**, stated rather than left
+unstated. A diagnosis moves no capability.
+
+### `Pass 174.1` (`c81b879`, 2026-08-29) — a shipped default's justification said the OPPOSITE of what is measured; the corpus has now been measured, and the aggregate that measured it is itself a trap — filed 2026-08-29 (329th filing)
+
+**Sourcing.** As `Pass 174.2` above. For this entry specifically: the whole
+`crates/pdfce-core/src/settings/mod.rs` hunk read **as a diff**, so the
+**withdrawn** wording is on the record here and not only in the source;
+`git show --stat` = **2 files, +398 / −3** (`settings/mod.rs` +59,
+`tools/flat-color-parity.py` +342, new).
+
+**This discharges `docs/NEXT_SESSION.md` §A item 5.**
+
+**What the doc comment claimed.** `CmykIntent::Calibrated` justified its cool
+mid-greys with — kept legible rather than silently rewritten, per this
+project's standing practice:
+
+> ~~"…and mid greys are slightly cool. **That is what Acrobat shows, which is
+> the point**: *"what will this look like in Acrobat?"* and *"what does pdfce
+> show?"* now have one answer."~~
+
+**What is measured**, against the reference engine's own renders of all 51
+patches, over every flat achromatic region of ≥ 2 000 px, with `--probe-ink`
+confirming each grey's route:
+
+| pure-K ink (operand) | reference | pdfce (`Calibrated`) | channel spread, pdfce |
+|---|---|---|---|
+| `0 0 0 0.500` | `156,156,156` | `147,149,152` | **5** |
+| `0 0 0 0.749` | ` 98, 98, 98` | ` 99,100,103` | **4** |
+
+**The reference renders pure-K greys EXACTLY neutral — spread 0 — at both
+levels the corpus offers. pdfce does at neither.** The cool cast is a
+**divergence**, and the sentence justifying it was justifying the opposite of
+what it claimed. (A third achromatic pair, on the output-intent-change patch,
+is **excluded by name**: pdfce's whole region there is 65–70 counts dark, which
+is a lightness defect, not a hue one. **Two levels is a thin sample and the
+comment says so** rather than implying more.)
+
+**★★ THE OTHER HALF OF THE CLAIM SURVIVES, and separating the two is the
+entire point of the correction.** `Calibrated` tracks the reference's
+**LIGHTNESS** closely — **99 against 98** at `K = 0.749` — where a naive `1 − K`
+gives **64**, more than thirty counts out. **The table is right about how dark
+ink looks and wrong about its hue.** A future session must not read this as an
+argument for reverting to a naive conversion; it is an argument about
+**neutrality, on the achromatic axis only**.
+
+**NOT CHANGED, deliberately, and the three reasons are stated so the restraint
+is auditable rather than looking like inaction:** the conversion itself is the
+sibling project's domain under **decision 064**; two levels is a thin basis for
+moving a **shipped default**; and **the operator ruled this default on
+2026-08-28**. What was owed was an accurate justification, and that is what
+shipped.
+
+**★ THE INSTRUMENT — `tools/flat-color-parity.py` (342 lines, new).** pdfce had
+**three** render instruments and **none of the three measured colour
+accuracy**, which is why a colour claim could be carried for weeks with nothing
+able to confirm or refute it over more than one patch at a time:
+
+| instrument | what it actually answers | why it cannot answer this |
+|---|---|---|
+| `render-parity` | fraction of pixels over a threshold | conflates *"the colour is 20 counts off everywhere"* with *"a glyph moved half a pixel"* |
+| `suite-check.py` | presence/absence of an authored trap mark | its criterion is **conformance**; two patches PASS it while every colour on them is wrong |
+| `cmyk_intent.rs` tests | regression against values chosen when written | a self-pin cannot detect that the pinned value was never right |
+
+**The load-bearing implementation detail is the EROSION**: the two rasters are
+not pixel-aligned, so an un-eroded flat region samples pdfce's own antialiased
+boundary and **reports edge noise as colour error**. Each region is eroded
+before sampling.
+
+**★★★ AND THE AGGREGATE IS A TRAP — this is the finding, and `R233` is minted
+from it in this filing.** Over the same corpus, **125 of 132** achromatic
+reference regions come out of pdfce still achromatic — **94.7 %**, which reads
+as a strong result and *is* a true number. **Segment out the regions the
+reference painted PAPER WHITE**, where a conversion that did nothing at all
+scores perfectly, and the population is **7 mid-grey regions, of which pdfce
+leaves 0 neutral — 0 %**. Both figures beside their denominators per hard rule
+10(a): **125/132 = 94.7 % undifferentiated; 0/7 = 0 % on the discriminating
+subset; 125/132 = 94.7 % of the population was the non-discriminating kind.**
+**The 95 % is a true number answering a different question.** See `R233`
+(*Standing rules*) for why this is a mint rather than an instance of `R225`,
+and `D:/dev/rag/rust/an_aggregate_dominated_by_cases_the_null_implementation_also_passes_cannot_falsify.md`
+for the general half.
+
+**`FEATURES.md`: ZERO rows changed by this Pass.** A doc-comment correction and
+an out-of-tree instrument move no capability. Stated explicitly so a later
+reader does not go looking for the row that was missed.
+
+### `Pass 174.0` (`150bcb8`, 2026-08-29) — an ink probe: what is in the colorant buffer at the moment it STOPS EXISTING. It settled a cross-project attribution, and BOTH SIDES' premises moved — filed 2026-08-29 (329th filing)
+
+**Sourcing.** As `Pass 174.2` above. For this entry specifically, checked here
+on disk: `git show --stat 150bcb8` = **12 files, +1,126 / −4**; the new public
+types read out of `crates/pdfce-render/src/font/mod.rs` (`RenderOptions` at
+`:428`, `ink_probe` field `:707`, `InkProbeSource` `:718`, `InkProbe` `:738`,
+`with_ink_probe` `:1014` — `#[must_use]` and `const` both confirmed on the
+line above it, `#[non_exhaustive]` confirmed on both types); the crate-root
+re-export read at `crates/pdfce-render/src/lib.rs:109–112`;
+`grep -c '#\[test\]'` on `crates/pdfce-render/tests/ink_probe.rs` = **4**, with
+all four names read individually; the four CLI test names read out of
+`crates/pdfce-cli/tests/render_page.rs` at `:1888`, `:1931`, `:1973`, `:2008`;
+`wc -l docs/core-api/03-capabilities.md` = **2,633**, matching the figure the
+commit wrote into `docs/core-api/index.md`. **Relayed, not re-run:** the gate
+suite, as above.
+
+**★ NOTE THE MODULE, because it will surprise the next reader and it is not
+this Pass's doing:** `RenderOptions` lives in
+`crates/pdfce-render/src/font/mod.rs`, not in a settings or options module.
+Pre-existing; recorded here only so a future grep does not conclude the entry
+is wrong.
+
+**THE PUBLIC SURFACE** (`pdfce-render`, all re-exported at the crate root):
+
+    RenderOptions::ink_probe : Option<(u32, u32)>
+    RenderOptions::with_ink_probe(x, y)   const, #[must_use]
+    InkProbe        { x, y, source, cmyk: Option<[f32;4]>,
+                      alpha: Option<f32>, srgb: Option<[u8;3]> }   #[non_exhaustive]
+    InkProbeSource  { CmykBuffer | ScreenSrgb | OutOfRange }       #[non_exhaustive]
+    Diagnostics::ink_probe : Option<InkProbe>
+
+**In the CLI:** `pdfce-cli render-page --probe-ink X,Y`, printing **ONE extra
+stdout line** after the stable metrics line:
+
+    ink-probe: x=<n> y=<n> source=<…> c=<f|-> m=<f|-> y=<f|-> k=<f|-> alpha=<f|-> srgb=<r,g,b|->
+
+**WHY IT EXISTS — and this is the load-bearing half.** The sibling `iccce`
+project asked on 2026-08-29 for **exactly one number**, and **refused pdfce's
+earlier "ours, in the compositor" attribution as premature**. Their argument
+was correct and is worth keeping in this project's own record: a colorant
+buffer does **TWO separable things** — it **composites in ink** (pdfce's, under
+**decision 064**) and it **converts to sRGB on exit** (theirs, same decision) —
+and `--max-cmyk-buffer-bytes`, pdfce's only switch for the buffer, **turns BOTH
+off together**. ⇒ **No measurement taken through that switch can tell the two
+apart.** The probe reads **between** the stages.
+
+**★★ THE MEASURED ANSWER**, on the real `PCS3_132` patch at the green:
+
+    ink-probe: source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 alpha=1.000 srgb=47,181,73
+
+**The operand arrives at the exit conversion UNCHANGED.** By the sibling
+project's own stated rule the composite is an **identity** and the residual is
+**theirs**.
+
+**★★★ AND THEIR PREMISE HAD MOVED, which is the more interesting result and
+the one a future session should carry.** Their strongest observation was *"the
+fallback path taken when memory runs out is the better match to Acrobat — by
+roughly **3×** on every channel."* Measured on this tree: **buffer
+`(47,181,73)` against on-screen `(47,180,73)` — ONE COUNT, ONE CHANNEL.** The
+3× was **`Pass 165.0`'s compositor defect**, already fixed and released in
+**v0.16.0**. ⇒ **They were measuring pdfce's bug and reading it as confirmation
+of their own suspicion.**
+
+**★★ AND THE RESIDUAL IS WIDER THAN THE SEAM ANYONE WAS POINTING AT.** Against
+the reference engine, `(59,171,51)` vs pdfce's `(47,181,73)` = **−12 / +10 /
++22 counts**, and it is present on **BOTH** paths. ⇒ It is the **shared
+`cmyk_to_srgb_with` table**, not the buffer's exit conversion specifically —
+**and no memory knob turns it off.** Both sides had been arguing about a seam
+narrower than the defect.
+
+**★★★ THE THREAD IS CLOSED, BY THE OTHER SIDE, AND THE CLOSING MESSAGE CARRIES
+A NUMBER THIS PROJECT SHOULD KEEP.** Their reply arrived at **21:00**, nineteen
+minutes before this Pass's own commit, and is archived at
+`D:/Dev/FeatureRequests/iccce_FeatureRequests/archive/2026-08-29-cmyk-buffer-attribution-4-iccce-number.md`
+(**5,832 B**; `ls -la`, this filing). It **accepts the attribution**,
+**withdraws the 3× line by name**, and supplies what a real transform through
+the patch's own declared output condition returns for the same operand:
+
+| | red | green | blue |
+|---|---:|---:|---:|
+| reference engine *(a REFERENCE, **not** a target)* | 59 | 171 | 51 |
+| pdfce, current binary | 47 | 181 | 73 |
+| **the sibling project** | **65** | **171** | **61** |
+| pdfce's distance | −12 | +10 | +22 |
+| **its distance** | **+6** | **0** | **+10** |
+
+**Corroborated by `lcms2` 2.19.1 to four decimal places** (65.0311 / 171.3385 /
+61.3930), which establishes the number is not an artefact of their arithmetic
+and says **nothing** about whether it is right. ★ **Their first stated limit is
+one this project must adopt rather than merely note: the reference column is
+capture-derived, and *"closer to the reference"* MUST NOT harden into *"tune
+toward the reference"*** — that would make a screenshot the ground truth. It
+sits exactly alongside this project's own withdrawn-ΔE discipline (`DL-070`:
+8-bit channel counts only, no ΔE of any formula against a capture) and the
+operator's standing *parity is a floor, not a target*. **They also refuse `--bpc`
+by name on that profile** (black point not estimable), and say plainly that
+their own remaining `+10` blue is **partly their own refusal**.
+
+**★ ONE OPEN, OPTIONAL, NOT-OWED ASK, recorded here because the channel folder
+is NOT in git and this entry is the durable half:** they asked for **the list of
+CMYK operands pdfce's table is actually asked for on a real page**, to answer
+for all of them at once rather than one green at a time. **Nothing is owed** —
+they said so explicitly — but it is a cheap, high-value follow-up and it will
+be invisible if it lives only in an untracked INDEX.
+**★★ DISCHARGED ON THIS SIDE WITHIN THE HOUR — see `Pass 174.3` above**
+(`6eae65b`, `tools/cmyk-operand-census.py`): **83 distinct operands, 49 covering
+95 % of the ink** over the prepress/CAD corpus. **The reply has not been sent**;
+that is the outstanding half, and building the list exposed that pdfce had never
+measured which operands its own table is asked for at all.
+
+**WHY AN INSTRUMENT AND NOT A PRINTF**, in the project's own words: `Pass
+165.0`'s headline was that `cmyk_bridged_pixels` — the counter **whose entire
+job** is to say *"this page was composited from approximations"* — sat at **0
+across 40,000 pixels it was supposed to be counting**, costing six hypotheses
+and a wrong test. ⇒ ***The instrument you only build when you already need the
+answer is the one nobody has calibrated.*** (The sibling project quoted that
+sentence back and is keeping it.)
+
+**TWO DESIGN DECISIONS — recorded as ONE decision record, `103`**
+(`ARCHITECTURE.md` §12; the engineer recommended one covering both and the
+recommendation is accepted, because both answer the same question — *how does a
+diagnostic avoid manufacturing the quantity it exists to measure?*):
+
+1. **A page composited ON SCREEN reports NO colorants**, rather than running
+   the sRGB result backwards through `rgb_to_cmyk`. That reconstruction was
+   available and would have filled four fields **convincingly**. It is a
+   **DIFFERENT QUANTITY** — a max-GCR reconstruction of the *output*, not a
+   reading of a composite that never happened — and it is **the same
+   substitution that caused the defect decision 098 records**. ★ An instrument
+   that commits the bug it exists to detect is worse than no instrument.
+2. **A SECOND stdout line, not more keys on the published metrics line.** That
+   line is `key=<integer>` pairs in a fixed published order; this payload is
+   four floats plus a classification and is **absent unless asked for**.
+   Folding it in means either changing the line's shape on every render or
+   emitting **placeholder zeros, which read exactly like "no ink here"** — the
+   one misreading `InkProbeSource` exists to prevent. **Every key is present in
+   every variant with `-` for absent**, so *"this page was never composited in
+   ink"* and *"this pixel has no ink on it"* cannot be confused.
+
+**Refusal policy, three cases, decided on what is decidable WHEN:**
+**out-of-range is a REPORT** (the raster's size depends on scale, region and
+page box, so a coordinate cannot be judged at parse time — and a diagnostic
+must not destroy the output it was asked about); **a malformed coordinate IS
+refused** (decidable from the string alone); **`-4,2` is eaten by `clap`** and
+left that way, because unlike `--region` — which carries `allow_hyphen_values`
+for a `/MediaBox` with a negative origin — **a device pixel cannot legitimately
+be negative**.
+
+**★★ NON-VACUITY, and it matters here more than usual because the claim looks
+too obvious to test.** For a single opaque paint over an empty page a correct
+colorant composite **is the identity on its operand** — transparent backdrop,
+alpha 1, Normal blend, nothing to blend with. **It had never been tested**:
+every existing colorant assertion in `pdfce-render` is made on **sRGB pixels
+AFTER** the conversion, which measures composite *and* conversion together —
+**precisely the conflation the sibling project declined to accept.**
+
+- **VERIFIED BY SABOTAGE, per `R225`:** a `0.9×` on the yellow plane inside
+  `CmykBuffer::composite_at` turns the assertion red **with the right
+  message**.
+- **The additive-page fixture is a GENUINE CONTROL, per `R225`'s own
+  criterion:** an implementation that echoed the content stream's **operands**
+  instead of reading the **buffer** passes the subtractive page and **cannot
+  pass the additive one**. That is the discriminating fixture, chosen rather
+  than stumbled onto.
+
+**Files:** `crates/pdfce-render/src/font/mod.rs` (+136),
+`crates/pdfce-render/src/lib.rs` (+99/−4), `crates/pdfce-render/src/interpret.rs`
+(+18), `crates/pdfce-render/tests/ink_probe.rs` (+206, **4 tests**),
+`crates/pdfce-cli/src/main.rs` (+181), `crates/pdfce-cli/tests/render_page.rs`
+(+195, **4 tests**), `docs/core-api/03-capabilities.md` (+69, §7.2 builder
+listed and a new **§7.3b**), `docs/core-api/index.md` (**2,568 → 2,633 lines,
+60 → 62 clauses**; `check-core-api-verbs.py` **PASSES**),
+`fixtures/synthetic/ink-probe/` (2 PDFs — **468 B** and **514 B** — plus
+`PROVENANCE.md`), `tools/gen-ink-probe-fixtures.py` (+166).
+**No `crates/pdfce-gui` path, and no `D:\dev\pdfceGUI` consumer** — `gui` stays
+`[ ]` in `FEATURES.md`, deliberately not rounded up; the capability has not
+even been **offered** to that project yet.
+
+**★★ A HARD-RULE-11 SURVIVOR FOUND BY THIS FILING AND NOT FIXED BY IT — see
+*Findings* in the 329th `SESSION_LOG.md` entry and the report to the engineer.**
+The `--probe-ink` line's illustrative example, in **two** places, shows
+`source=cmyk-buffer … srgb=24,140,108` beside `source=screen-srgb … srgb=47,180,73`.
+`24,140,108` is **the pre-`Pass 165.0` defect value**, and the pair as printed
+**restates, inside shipped documentation, the very "the fallback beats the
+buffer" premise this Pass measured away** — while the shipped test at
+`crates/pdfce-cli/tests/render_page.rs:1918` asserts `srgb=47,181,73` for the
+same operand on the same route. **`crates/` is outside this role's remit and
+`docs/core-api/` is a gate-adjacent consumer contract, so both are reported,
+not edited.**
+
 ### `Pass 173.1` (`f07ec78`, 2026-08-29) — a pasted **ce dimension** now shows the same NUMBER it was copied from: the group's scale, number format and drafting standard travel with it, and the destination's own group wins loudly — filed 2026-08-29 (328th filing)
 
 **★★★ THIS IS THE FILING'S OWN CATCH, DISCHARGED. `Pass 120.5` IS NOW FULLY
@@ -120826,6 +121328,134 @@ same cause (hashes exist only at commit time), two different failure modes.
   as decision **102** in its own right.
 
   **Standing rules ceiling `R231` → `R232`; next free `R233`.**
+
+- **R233 — AN AGGREGATE OVER A POPULATION IS A FIXTURE, AND ITS DISCRIMINATING
+  POWER IS THE FRACTION OF THE POPULATION ON WHICH THE CORRECT AND THE NULL
+  IMPLEMENTATION *DISAGREE* — NOT THE SIZE OF THE POPULATION. BEFORE QUOTING A
+  RATE, SEGMENT OUT THE CASES A DO-NOTHING IMPLEMENTATION ALSO PASSES AND
+  REPORT BOTH DENOMINATORS. A HEADLINE PERCENTAGE COMPUTED OVER A POPULATION
+  DOMINATED BY SUCH CASES IS A TRUE NUMBER ANSWERING A DIFFERENT QUESTION.**
+  Minted 2026-08-29 (329th filing), librarian-minted at the engineer's explicit
+  invitation, from `Pass 174.1` (`c81b879`).
+
+  **The instance, with both denominators, per hard rule 10(a).**
+  `tools/flat-color-parity.py` measured achromatic-region neutrality against a
+  reference engine's own renders of all 51 conformance patches:
+
+  | population | pdfce still achromatic | rate |
+  |---|---|---|
+  | **all** achromatic reference regions | **125 of 132** | **94.7 %** |
+  | ★ regions the reference painted **paper white** (a do-nothing conversion also passes) | 125 of 125 | 100 % |
+  | ★★ **mid-grey** regions (the only ones that can fail) | **0 of 7** | **0 %** |
+
+  **94.7 % of the population was the non-discriminating kind.** The 94.7 %
+  figure is arithmetically correct, was correctly computed, and is the exact
+  number a reader would have quoted as evidence that the colour conversion is
+  in good shape — while the conversion leaves **zero of seven** mid-greys
+  neutral and the reference leaves **all seven** exactly neutral.
+
+  **★★★ SECOND INSTANCE, THE SAME DAY, IN AN UNRELATED MEASUREMENT — added to
+  this entry hours after the mint, from `Pass 174.3` (`6eae65b`).** A census of
+  which `DeviceCMYK` operands pdfce's conversion table is actually asked for
+  found **775 paint events in 53 files** over the 4,023-file regression corpus
+  — **and ONE FILE supplied 59 % of them**, its top operand being that file's
+  own registration black. **The ranking was a description of one test file, not
+  of PDFs, and it was about to be filed as *"what real pages ask for"*.**
+  Re-run over the material the question was about (prepress and CAD output):
+  **3,245 events across 136 files, largest file 18 %, 83 distinct operands, 49
+  covering 95 % of the ink.**
+
+  Two things make this instance worth more than a tally. **It is a DIFFERENT
+  degeneracy from the first** — instance 1 is *most of the population is
+  trivially passable*, instance 2 is *most of the population is one member* —
+  and both produce the identical symptom: a headline that reads as a fact about
+  the world and is a fact about one artefact. **And the remedy shipped in the
+  TOOL rather than in a note**: `tools/cmyk-operand-census.py` now prints its
+  three top-contributing files and **shouts unconditionally when one exceeds a
+  quarter of the population**, on the stated grounds that ***"59 % of paints"
+  and "59 % of pages" read identically and are not the same claim.*** ⇒ **Where
+  a measurement is produced by a tool this project owns, clause (b) is
+  dischargeable BY THE TOOL, and that is the better place for it** — an
+  instrument that reports its own population's concentration cannot forget to.
+
+  ★ Clause (a) is amended by this instance rather than merely illustrated:
+  **ask what a do-nothing implementation would score, AND ask how much of the
+  population comes from its largest single contributor.** Both questions are
+  about composition; only the first was in the mint.
+
+  **★★ WHY THIS IS A MINT AND NOT AN INSTANCE OF `R225` — expected to be
+  re-litigated, so the fork is stated rather than asserted.** `R225` is the
+  parent and the *cause* is the same one: correct and wrong answers coinciding
+  on a degenerate input. Three things differ, and the third is the warrant.
+
+  1. **Different SITE.** `R225` fires at **fixture-selection time inside the
+     test suite**, on a sabotage run. This fires at **measurement-reporting
+     time in a filing**, where there is no test, no sabotage and nothing to be
+     green — only a number in prose.
+  2. **Different REMEDY, and they are not interchangeable.** `R225` says
+     *change the input — the implementation is fine.* Here the input is a
+     **corpus nobody chose**: pdfce does not get to author the reference
+     engine's 51 patches, and 125 of them being paper white is a fact about
+     the corpus. The remedy is therefore **segment and report both**, not
+     **replace**. An engineer following `R225` from this finding would go
+     looking for a fixture to swap that does not exist.
+  3. **★★★ THE WARRANT: hard rule 10(a)'s OWN PRESCRIBED REMEDY WAS APPLIED
+     AND WAS INSUFFICIENT.** Hard rule 10(a) obliges *"record the denominator
+     — without it the division is impossible."* **The denominator WAS
+     recorded.** `125 of 132` states its denominator in the same breath, in
+     the form the rule asks for, and **it still misled**, because *the size of
+     the denominator is not what determines whether a rate can fail.* ⇒
+
+         hard rule 10(a) — state the denominator — is sufficient to make a rate
+         CHECKABLE and insufficient to make it DISCRIMINATING.
+
+     Same shape as `R232`'s warrant against `R212`(b): the parent rule's remedy
+     was followed and the failure recurred, which is this project's stated bar
+     for a sharpening mint rather than an occurrence count (the 2026-08-05
+     ruling forbids elevating per occurrence, and this is not that).
+
+  **What the rule obliges, in three lines.**
+  (a) **Before quoting a rate over a corpus, ask what a DO-NOTHING
+  implementation would score on the same population.** If the answer is *"most
+  of it"*, the rate is not evidence about the implementation.
+  (b) **Report both denominators, side by side, with the discriminating one
+  marked as such** — never the aggregate alone, and never the aggregate first
+  in a way that lets it travel without its segmentation. The table above is the
+  shape.
+  (c) **A segmented population of one or two is a THIN SAMPLE and says so.**
+  Seven regions at two grey levels is what this instance actually had;
+  segmenting turns a reassuring 94.7 % into an alarming 0 % **and** into a much
+  smaller sample, and both halves are the honest report.
+
+  **★ Scope, so it is not over-read.** This binds on **rates and pass-fractions
+  quoted as evidence about an implementation** — corpus censuses, parity
+  sweeps, conformance percentages, coverage figures. It does **not** bind on a
+  count that is simply a fact about a corpus (*"3,245 files"*), nor on the
+  append-only record's dated history (hard rule 1), nor does it require
+  segmenting a population where **no** null-passing subset exists — where every
+  case can fail, the aggregate is already the discriminating figure and one
+  denominator is the complete report.
+
+  **Sibling of `R225`** (a sabotage is only as discriminating as its fixture)
+  and of `state_every_denominator_a_census_could_report.md` in the Rust RAG,
+  which is the **nearest neighbour and a different rule**: that one says *which
+  unit you count in changes the answer, so report all the units*; this one says
+  *even in the right unit, the population's COMPOSITION can make the answer
+  uninformative.* Both can be satisfied and the measurement still mislead if
+  the other is not.
+
+  **The general half is filed cross-project** to
+  `D:/dev/rag/rust/an_aggregate_dominated_by_cases_the_null_implementation_also_passes_cannot_falsify.md`
+  — the same split `R225`'s own mint argued for and against the 2026-08-05
+  ruling's criterion: the **epistemic** failure belongs where any project can
+  find it, and what stays here is pdfce-specific and actionable (the
+  instrument, the corpus, the two denominators).
+
+  **No `ARCHITECTURE.md` body-section counterpart** — this is a
+  measurement-discipline rule, not a crate boundary, invariant or library
+  choice.
+
+  **Standing rules ceiling `R232` → `R233`; next free `R234`.**
 
 ## Update protocol
 

@@ -76403,3 +76403,385 @@ session* below rather than written thin.
   major `174.0`. **Standing rules ceiling `R232`**, next free `R233`.
   **Decision ceiling `102`**, next free `103`. Operator-question ceiling
   unchanged. **Filing ordinal 328.**
+
+## 2026-08-29 (329th filing) — the colour cluster is FINISHED: `Pass 174.0`–`174.4`. An ink probe settles a cross-project attribution, a shipped default's justification is corrected, an open mystery retires into a bucket that already existed, a census answers the sibling's open ask within the hour — and `R233`, minted from `174.1`, gets its SECOND instance from `174.3` before the filing was committed. Decision `103` recorded; §A items 4–9 all discharged
+
+**★★ TWO OF THE FIVE PASSES LANDED MID-FILING AND WERE FOUND BY A GATE, NOT BY
+THE DISPATCH.** The dispatch named three commits (`150bcb8`, `c81b879`,
+`0887acd`). While this entry was being drafted the engineer committed
+`6eae65b` (`Pass 174.3`, 21:30) and `ecc24ac` (`Pass 174.4`), and
+`python tools/check-commits-filed.py` went red on *"1 code commit in no
+filing"* — twice, once per commit. ★ **That gate is the only reason this filing
+is complete**, and it is worth naming because the dispatch was accurate when
+written: **a dispatch is a snapshot, and a session that loops does not stop to
+re-issue one.** Run `check-commits-filed.py` at the END of a filing, not only
+at the start.
+
+**Sourcing — `R228` invoked. THE DISPATCH SAID "you have NO shell"; THIS ROLE
+HAD ONE AND USED IT**, which is hard rule 8's whole point and is recorded here
+because the dispatch's own premise was the first thing checked and the first
+thing found wrong. Checked here, on disk, not relayed: `git log --oneline -6`
+(the three hashes and their order above `4efa0a9`); `git status --porcelain`
+(**empty**); `git remote -v` (**`github.com/KenM76/pdfce.git`**, so a push
+publishes); `git rev-list --count origin/main..main` = **3**;
+`git show --stat` on all three commits; **all three commit messages read in
+full**, per the dispatch's instruction. Public surface read out of source:
+`RenderOptions` `crates/pdfce-render/src/font/mod.rs:428`, `ink_probe` `:707`,
+`InkProbeSource` `:718`, `InkProbe` `:738`, `with_ink_probe` `:1014` with
+`#[must_use]` on the line above and `#[non_exhaustive]` on both types;
+crate-root re-export `crates/pdfce-render/src/lib.rs:109–112`.
+`grep -c '#[test]' crates/pdfce-render/tests/ink_probe.rs` = **4**, all four
+names read; the four CLI test names at `crates/pdfce-cli/tests/render_page.rs`
+`:1888`, `:1931`, `:1973`, `:2008`. `wc -l docs/core-api/03-capabilities.md` =
+**2,633**, matching what the commit wrote into `docs/core-api/index.md`. The
+`settings/mod.rs` and `suite-patch-reference.md` hunks read **as diffs**, so the
+withdrawn wording is on the record. `ls -la` on the channel folder for the
+outbound reply and the inbound. **Relayed, not re-run:** `bash
+tools/run-gates.sh` (**PASS — 29 commands, incl. 2 filing gates**, with the two
+standing skips: `cargo about`, and `--all-features` replaced by plain
+`cargo test --workspace`, so this is a **default-features** green), `cargo fmt
+--all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace`, `check-core-api-verbs.py`,
+`check-metrics-line-contract.py` (**99 keys**), `check-suite-name-absent.py`,
+and the suite baseline. ★ **`cargo tree` was NOT re-run and is NOT claimed** —
+no crate manifest was touched, no dependency added; the GUI-core separation
+invariant is **unchallenged this session**, which is a different statement from
+**verified this session**, and the dispatch asked for it in exactly that form.
+
+**Shipped:**
+- **`Pass 174.0`** (`150bcb8`) — **the ink probe.**
+  `RenderOptions::with_ink_probe(x, y)`, `InkProbe`, `InkProbeSource`,
+  `Diagnostics::ink_probe`, `render-page --probe-ink X,Y`. Reads the
+  four-colorant page buffer **in the instruction before** §11.4.7's exit
+  conversion — one line later the buffer is consumed and dropped. 8 new tests
+  (4 render, 4 CLI), 2 generated fixtures, `docs/core-api/03-capabilities.md`
+  **§7.3b**. 12 files, **+1,126 / −4**.
+- **`Pass 174.1`** (`c81b879`) — **`CmykIntent::Calibrated`'s doc comment
+  corrected in place**, prior wording struck through, plus
+  `tools/flat-color-parity.py` (342 lines, new). 2 files, **+398 / −3**.
+  Discharges `docs/NEXT_SESSION.md` §A item 5.
+- **`Pass 174.2`** (`0887acd`) — **`PCS2_030`'s three traps attributed** in
+  `docs/suite-patch-reference.md` §3. 1 file, **+51**. Discharges §A item 7.
+- **`Pass 174.3`** (`6eae65b`) — **`tools/cmyk-operand-census.py`** (386 lines,
+  new): which `DeviceCMYK` operands is pdfce's table actually asked for?
+  **Discharges the sibling project's open ask within the hour.** 1 file,
+  **+386**.
+- **`Pass 174.4`** (`ecc24ac`) — **`#231F20` is one of TWO correct answers**, a
+  24-line doc block on `crates/pdfce-core/src/settings/mod.rs`. 1 file, **+24**.
+
+**Decisions made this session:**
+- **Decision 103** (`ARCHITECTURE.md` §12; **no body-section counterpart
+  required** — a public diagnostic on `pdfce-render`, no crate boundary
+  redrawn, no invariant defined; the consumer account is the gate-enforced
+  `docs/core-api/03-capabilities.md` §7.3b). **The probe reports only what it
+  read: where there is nothing to read it reports ABSENCE, NAMED, rather than a
+  reconstructed value — and it carries its payload on a SECOND stdout line
+  rather than on the published metrics line.** Filed as **one** record covering
+  both choices, on the engineer's recommendation and this role's agreement,
+  because they answer one question: **how does a diagnostic avoid manufacturing
+  the quantity it exists to measure?** Splitting them would let a future
+  session adopt one and reject the other without seeing the shared warrant.
+- **`R233` minted** — *an aggregate over a population is a fixture, and its
+  discriminating power is the fraction of the population on which the correct
+  and the null implementation DISAGREE, not the size of the population.*
+  Librarian-minted at the engineer's explicit invitation. **Warrant is not a
+  count**: hard rule 10(a)'s own remedy — *record the denominator* — **was
+  applied and was insufficient**, which is the same shape as `R232`'s warrant
+  against `R212`(b) and is this project's stated bar for a sharpening mint.
+- **`FEATURES.md`: exactly ONE row added, and `Pass 174.1` and `174.2` change
+  ZERO rows** — stated explicitly in all three `ROADMAP.md` entries at the
+  dispatch's request, so a later reader does not go hunting for a row that was
+  never owed. A doc-comment correction and a diagnosis move no capability.
+- **`gui` NOT rounded up** on the new row. Nothing in `D:\dev\pdfceGUI`
+  consumes the probe and **it has not been offered to that project at all** —
+  `[ ]` is a gap, not a shape mismatch. The **Acrobat** column is `—` with the
+  qualification stated in the row itself, on the `--fast-subpixel` row's
+  precedent: it records that *a report on pdfce's own compositor state is not a
+  parity target*, not that Acrobat lacks a soft-proof ink readout. The nearest
+  Acrobat surface is Output Preview (`Acrobat_Features/prepress__output_preview.md`),
+  whose RAG file records separations, Ink Manager, TAC and overprint simulation
+  but **no per-pixel cursor readout**, and this role has not measured it.
+
+**Findings + decisions:**
+
+- **★★★ THE ATTRIBUTION IS SETTLED, AND BOTH SIDES' PREMISES MOVED — the
+  result is better than either side predicted.** The sibling `iccce` project
+  refused pdfce's earlier *"ours, in the compositor"* handoff as **premature**,
+  and was right: a colorant buffer **composites in ink** (pdfce's, decision
+  064) and **converts to sRGB on exit** (theirs, same decision), and
+  `--max-cmyk-buffer-bytes` **turns both off together**, so no measurement
+  taken through that switch can separate them. The probe reads **between** the
+  stages. **`0.75 0 1 0` arrives at the exit conversion unchanged ⇒ the
+  composite is an identity and the residual is theirs, by their own stated
+  rule.**
+- **★★ Their strongest observation had EXPIRED, and neither side knew.** *"The
+  fallback path taken when memory runs out is the better match — by roughly
+  **3×** on every channel."* Measured on this tree: buffer `(47,181,73)`
+  against on-screen `(47,180,73)` — **one count, one channel.** The 3× was
+  **`Pass 165.0`'s compositor defect**, fixed and released in **v0.16.0**. ⇒
+  **They were measuring pdfce's bug and reading it as confirmation of their own
+  suspicion.** ★ The general form is worth more than the incident: **a
+  cross-project claim is dated by the BINARY it was measured on, and neither
+  side owns that date.** Nothing was dishonest, nothing contradicted anything —
+  a fix simply crossed a channel boundary without the claim it invalidated
+  being re-run.
+- **★★ AND THE RESIDUAL IS WIDER THAN THE SEAM ANYONE WAS ARGUING ABOUT.**
+  Against the reference engine, `(59,171,51)` vs `(47,181,73)` = **−12 / +10 /
+  +22 counts**, present on **BOTH** paths ⇒ it is the **shared
+  `cmyk_to_srgb_with` table**, not the buffer's exit conversion specifically,
+  **and no memory knob turns it off.** Both sides had been debating a seam
+  narrower than the defect.
+- **★★★ THE THREAD IS CLOSED BY THE OTHER SIDE, and its closing message
+  arrived NINETEEN MINUTES BEFORE this session's first commit.**
+  `archive/2026-08-29-cmyk-buffer-attribution-4-iccce-number.md` (**5,832 B**,
+  21:00; the first commit is 21:19). It **accepts the attribution**,
+  **withdraws the 3× line by name**, and supplies **(65, 171, 61)** — what a
+  real transform through the patch's own declared output condition returns for
+  the same operand — **closer than pdfce on all three channels, halved on two,
+  exact on green**, corroborated by **lcms2 2.19.1 to four decimal places**.
+  ★ Their first stated limit is one **this project must adopt, not merely
+  note**: the reference column is **capture-derived**, and *"closer to the
+  reference"* must never harden into *"tune toward the reference"* — that makes
+  a screenshot the ground truth. It sits exactly alongside `DL-070` (counts
+  only, no ΔE against a capture) and the operator's standing *parity is a
+  floor, not a target*. They also **refuse `--bpc` by name** on that profile and
+  say plainly that part of their own remaining `+10` blue **is their own
+  refusal** — a project stating the limit its own discipline imposes on its own
+  number, which is the behaviour this channel was built for.
+- **★ ONE OPEN, OPTIONAL, NOT-OWED ASK, carried into `ROADMAP.md` because the
+  channel folder is NOT in git**: they asked for **the list of CMYK operands
+  pdfce's table is actually asked for on a real page**, to answer for all of
+  them at once rather than one green at a time. It is recorded in their
+  untracked `INDEX.md`; without a tracked copy it would have been invisible to
+  the next session.
+- **★★★ `R233`'s finding, and it is the most transferable thing this session
+  produced.** `125 of 132` achromatic regions stay achromatic — **94.7 %**,
+  correctly computed, and the number anyone would quote as evidence the colour
+  conversion is in good shape. **Segment out the paper-white regions, where a
+  do-nothing conversion also scores perfectly, and it is 0 of 7 mid-greys —
+  0 %**, against a reference that leaves **all seven exactly neutral**.
+  **94.7 % of the population was the non-discriminating kind.** ⇒ **Hard rule
+  10(a) obliges the denominator; the denominator WAS there; it still misled**,
+  because the *size* of a denominator is not what determines whether a rate can
+  fail. Filed as `R233` (project half) and
+  `an_aggregate_dominated_by_cases_the_null_implementation_also_passes_cannot_falsify.md`
+  (`D:/dev/rag/rust/`, general half), the same split `R225`'s mint argued for.
+- **★★★ AND `R233` GOT ITS SECOND INSTANCE BEFORE THE FILING WAS COMMITTED —
+  from `Pass 174.3`, a completely unrelated measurement, the same day.** A
+  census of which `DeviceCMYK` operands pdfce's table is asked for found **775
+  paint events in 53 files** over the regression corpus, **one file supplying
+  59 % of them**, its top operand that file's own **registration black**. **The
+  ranking was a description of one test file, and was about to be filed as
+  *"what real pages ask for"*.** ★ **It is a DIFFERENT degeneracy from the
+  first** — instance 1 is *most of the population is trivially passable*,
+  instance 2 is *most of the population is one member* — **with the identical
+  symptom**: a headline that reads as a fact about the world and is a fact
+  about one artefact. ★★ **And the remedy shipped in the TOOL**, not in prose:
+  the census prints its three top contributors and **shouts unconditionally**
+  when one exceeds a quarter of the population, on the stated grounds that
+  *"59 % of paints" and "59 % of pages" read identically and are not the same
+  claim.* ⇒ **Where a measurement is produced by a tool this project owns,
+  `R233` clause (b) is dischargeable BY THE TOOL** — an instrument that reports
+  its own population's concentration cannot forget to. `R233` clause (a) was
+  **amended** in the same filing to ask both questions: *what would a do-nothing
+  implementation score*, **and** *how much of this comes from the largest single
+  contributor*.
+- **★ Re-run against the material the question was actually about** (prepress
+  and CAD output rather than the mixed regression corpus): **3,245 paint events
+  across 136 files ≈ 23.9 each**, largest file **18 %**, **83 distinct
+  operands**, **49 of them covering 95 % of the ink**. ⇒ **A characterisation
+  set for real print work is DOZENS of entries, not thousands**, which is the
+  number that decides whether *"answer for all of them at once"* is affordable.
+  **It is.**
+- **★★ And the census exposed something pdfce had never measured about itself:
+  we had NO IDEA which operands our own conversion table is asked for.** Every
+  evaluation of that conversion in this project's history has been **one
+  colour, chosen because it was visibly wrong.** *A good way to find a defect
+  and no way to say whether a table is good.*
+- **★★★ `Pass 174.4` — the best-shaped near miss of the session, and it is a
+  near miss in the OUTBOUND direction.** `0 0 0 1 k` renders `35,31,31`
+  (`#231F1F`) on the screen path and `35,31,32` (`#231F20`) in the colorant
+  buffer. **A note telling the sibling project that pdfce's own documented
+  `#231F20` was off by one was WRITTEN AND THEN WITHDRAWN BEFORE SENDING.**
+  Both numbers are ours and **both are right**: the two paths reach the **same
+  table at different precisions** — an 8-bit paint colour on one, `f32`
+  colorants at the end on the other — so **every `DeviceCMYK` colour carries a
+  ±1 blue uncertainty that belongs to the COMPOSITING PATH, not to the table.**
+  The green chased all week has the identical signature (`47,180,73` on screen
+  vs `47,181,73` in ink). ⇒ ***A disagreement between two of your own outputs
+  is not automatically an error in either*** — ask which path produced each
+  number before deciding which to change, or a future session will "fix" one of
+  two correct paths and ship a silent colour regression. The probe made asking
+  the same page both ways a **ten-second** question.
+- **★ `R232` applied unprompted, by the engineer, at write time.** `Pass 174.4`
+  states that every doc comment saying `#231F20` is quoting the colorant path
+  and is right to — and **deliberately does not say how many such comments
+  there are**, *"that would be one more number nothing keeps true."* A count in
+  an ungated document, declined before it was written rather than corrected two
+  filings later.
+- **★ `Pass 174.3` made a `LEGAL.md` §5 / project-rule-7 call correctly without
+  being asked:** the census's `#` header names contributing files and **the
+  operand table does not**; `--set` emits **four numbers per line and no
+  provenance of any kind**, because part of the prepress corpus is licensed
+  material whose name may not appear in this repository. Stated reasoning: *a
+  frequency table of colour tuples is not anybody's copyrightable expression; a
+  list of the files they came from is a different question and is not worth
+  having.* `check-suite-name-absent.py` re-run after both new commits — **clean**.
+- **★★ `Pass 174.1` corrected a justification and NOT the behaviour, and the
+  restraint is the interesting half.** `Calibrated`'s cool mid-greys are a
+  **divergence** — the reference renders pure-K greys at spread **0** at both
+  levels the corpus offers and pdfce at neither — but **the other half of the
+  claim survives**: `Calibrated` tracks the reference's *lightness* closely
+  (**99 vs 98** at `K = 0.749`) where a naive `1 − K` gives **64**. **The table
+  is right about how dark ink looks and wrong about its hue.** Not changed,
+  deliberately, for three stated reasons: the conversion is the sibling's
+  domain (decision 064), two levels is a thin basis for moving a **shipped
+  default**, and **the operator ruled this default on 2026-08-28**. ★ A future
+  session must not read the correction as an argument for a naive conversion.
+- **★★ `Pass 174.2` refuted TWO leads and kept both refutations.** The `Pass
+  143.0` §8.6.7 grey ambiguity is **refuted by ablation** — all three
+  `overprint_zero_tint_scope` values return **bit-identical ink** at the
+  failing pixel, **while moving the page's total effective-overprint count
+  24 / 29 / 29**, so the ablation is **live, not inert**, which is what makes
+  it evidence rather than a null result. The grey-**stroke** lead is refuted
+  too: `.5 G` occurs under a different ExtGState on a different cell, while the
+  failing traps are `0 0 0 .5 k` and `.5 g` **fills** whose whole **49×49**
+  interior is wrong, not a **0.283 pt** outline. ⇒ ***"An untested route
+  exists" is not "the untested route is the cause."*** The lead was reasonable
+  and is recorded as a near miss rather than dropped.
+- **The actual cause is the absent per-spot-colorant plane, and it was read off
+  the instrument rather than inferred**: the measured `0.443 0 0.885` **IS**
+  pdfce's flattening of the spot into C/M/Y. Table 149 has a `DeviceCMYK`
+  source knock out C, M, Y and K; it does **not** name the spot, whose plane
+  must survive, and there is none. ⇒ **`PCS2_030` joins `PCS020` / `PCS040` /
+  `PCS081` in the n-channel-buffer bucket — not a separate unknown, no new
+  work, no new Pass.**
+- **★★ Suite baseline RE-MEASURED, not carried forward** (`NEXT_SESSION.md` §C
+  asked for exactly this): **6 FAIL / 29 clean / 16 unresolved of 51, 0 render
+  errors — UNCHANGED** from 2026-08-27. Unresolved split **8 REF / 5 REF-PASS /
+  3 MARK?**. The 6 FAILs: `PCS2_020` (6 traps), `PCS2_030` (3), `PCS2_040` (3),
+  `PCS2_081` (1), `PCS3_130` (4), `PCS3_161` (12) — **29 traps over 6 patches ≈
+  4.8 each**, both forms per hard rule 10(a).
+- **★ `PCS3_130` cells c/d — §A item 6 ANSWERED AND THE HYPOTHESIS REFUTED, by
+  an ablation worth reusing.** The offered explanation was image-path
+  resampling. Ablated over a **12× scale range** (rasters **256×142 →
+  3062×1701**, spanning minification *and* magnification): the ink is
+  **bit-identical at every scale**. ⇒ **Resampling that is invariant under a
+  12× change of sampling density is not resampling.** **The cause is in the
+  file**: the vector fill's operands are `0.1 0.76 0.96 0.07`; the image is
+  `[/Indexed [/ICCBased … /N 4] 0 <lut>]` whose one-entry palette is the four
+  bytes `25 198 244 18` = `0.098 0.776 0.957 0.071`, **which pdfce reproduces
+  exactly**. Three of four channels are consistent with 8-bit quantisation of
+  the vector's operands; **magenta is four texel counts away and is simply a
+  different number in the document.** ★★ **The reference engine disagrees with
+  ITSELF in the same place** — its cell c `(14,143,51)` against its cell d
+  `(8,141,51)`, **six counts of red apart, in the same direction as pdfce's.**
+  pdfce's own c-vs-d gap is now **(0, −3, +1)**, down from the sibling's
+  measured `(204,116,57)` vs `(208,89,41)`; **`Pass 165.0` closed it**, because
+  cell c is the CMYK **vector** — the exact fill that had been re-deriving its
+  tints from flattened sRGB. **Nothing owed on either side for c-vs-d.** The
+  X's **absolute** colour on that patch remains a source-profile question and
+  remains theirs.
+- **§A items 8 and 9 honoured in the outbound reply**, not in code: every
+  number quoted is **8-bit channel counts** (`DL-070`), and the reply states
+  explicitly that `PCS3_132`/`PCS3_133` **PASS their own criterion** and that
+  the gap is an **accuracy gap on a conformance-passing panel** — a different
+  claim, which the sibling asked specifically be kept distinct.
+- **★★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string, and it
+  found a survivor the dispatch did not know about.** The `--probe-ink`
+  illustrative example shows, in **two** places,
+  `source=cmyk-buffer … srgb=24,140,108` printed beside
+  `source=screen-srgb … srgb=47,180,73`:
+  - `crates/pdfce-cli/src/main.rs:9702–9703` (a `text` block in
+    `format_ink_probe`'s rustdoc)
+  - `docs/core-api/03-capabilities.md:2447` — **the consuming-project contract**,
+    i.e. the document the sibling project reads
+
+  **`24,140,108` is the pre-`Pass 165.0` defect value.** The two example lines
+  as printed **restate, inside shipped documentation, the very *"the fallback
+  beats the buffer"* premise this Pass measured away** — while the shipped test
+  at `crates/pdfce-cli/tests/render_page.rs:1918` asserts **`srgb=47,181,73`**
+  for the same operand on the same route. ★ **The example and the test
+  contradict each other on the same quantity, in the same commit, and the
+  example is the half that travels.** Four other occurrences of `24,140,108`
+  were checked and are **correct**: `overprint.rs:194`, `overprint.rs:1297`,
+  `ARCHITECTURE.md:26861` and `NEXT_SESSION.md:209` all state it explicitly as
+  the **observed wrong value before the fix**. **Reported, not edited** —
+  `crates/` is outside this role's remit and `docs/core-api/` is a
+  gate-adjacent consumer contract whose correct replacement value is a
+  measurement this role cannot take (the example's pixel is not the test's
+  fixture).
+- **★★ A SECOND DISPATCH CLAIM CHECKED AND FOUND ALREADY DISCHARGED — the
+  `ARCHITECTURE.md` §4.1 instruction.** The dispatch asked this filing to
+  retire §4.1 with a forward pointer, describing it as *"an instruction the
+  engineer decided and did not execute"*. **It was executed in the 328th filing
+  (`61bbf98`)**: `ARCHITECTURE.md:2485` carries the RETIRED heading and the
+  routing block, `:2563` carries the *"§4.1 is the living truth"* sentence
+  marked **superseded in place**, and **decision 102 is already in §12**.
+  Nothing was done here, deliberately — re-executing it would have produced a
+  second retirement block or an edit to an append-only decision record. ★ Note
+  the shape, because it is the third dispatch-premise error this role has
+  caught in as many filings: **a dispatch is a claim about the tree, not the
+  tree.** Two of this filing's three premise checks (no shell; §4.1 outstanding)
+  came back false, and the third (the outbound reply's path) came back
+  **partly** false.
+- **★ A THIRD, minor: the outbound reply is NOT at the path the dispatch gave.**
+  It named
+  `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\reply_the_printf_says_yours_and_the_3x_was_ours_and_is_gone.md`;
+  `ls -la` finds no such file under `open/`. **The content exists** — that exact
+  title is the H1 of
+  `archive/2026-08-29-cmyk-buffer-attribution-3-pdfce-printf.md` (**11,009 B**,
+  20:52), archived by the engineer at 21:12 along with the reply to it. The
+  reply is real and complete; only the locator was stale, because the archive
+  move happened after the dispatch was drafted.
+
+**Still in flight:**
+- **The n-channel (per-spot-colorant) buffer — unchanged and unscoped.** It is
+  now the sole remaining cause behind **four** of the six suite FAILs
+  (`PCS020`, `PCS2_030`, `PCS040`, `PCS081`); `Pass 174.2` moved a patch
+  **into** that bucket rather than opening a new one. No Pass ID, no Backlog
+  promotion, and none proposed here.
+- **`docs/NEXT_SESSION.md` §A colour cluster: items 4–9 are ALL discharged.**
+  4 was already resolved (`Pass 165.0`); **5 → `Pass 174.1`**; **6 → the c/d
+  refutation above**; **7 → `Pass 174.2`**; 8 and 9 honoured in the outbound
+  reply. **Nothing remains in the cluster except the n-channel buffer.**
+- §A items 1 (decision 097, the ce-dimension text override — still the only
+  item the operator has personally specified, still unstarted), 2 (`Pass
+  142.0`), 3 (`Pass 163.0`'s two named verbs) and 10–14 are untouched by this
+  session.
+
+**For next session:**
+- **★★ TWO DOC SURVIVORS TO FIX, both `srgb=24,140,108` on the `cmyk-buffer`
+  example line:** `crates/pdfce-cli/src/main.rs:9702` and
+  `docs/core-api/03-capabilities.md:2447`. Replace with a value measured on the
+  example's own pixel, or re-point the example at the test's fixture
+  (`0.75 0 1 0 k`, `100,50` → `srgb=47,181,73`). **The second one is the
+  urgent one** — it is the contract document the sibling project reads, and it
+  currently shows them the buffer path 23 counts off from the screen path.
+- **★★ The sibling's open ask is DISCHARGED on pdfce's side (`Pass 174.3`) and
+  the reply has not been sent.** The list exists — `python
+  tools/cmyk-operand-census.py --set` over the prepress/CAD corpus, **83
+  distinct operands, 49 covering 95 % of the ink**, four numbers per line and no
+  provenance. **Send it.** They offered to return what the profiles say for all
+  of them at once, and this is the cheap half of that exchange already done.
+- **★ Carry `Pass 174.4`'s ±1 finding into the outbound reply too** if the
+  operand list goes over: **every `DeviceCMYK` colour pdfce reports has a ±1
+  blue uncertainty that is a property of which compositing path produced it**,
+  so a single quoted sRGB triple from pdfce is only meaningful with its path
+  named. Without that, the sibling will measure a one-count disagreement and
+  reach the same wrong first conclusion pdfce reached and withdrew.
+- **`main` is 5 commits ahead of `origin/main`** (`git rev-list --count`, at the
+  close of this filing) and this filing adds one more. **Pushing `main` is
+  standing-authorized** (rule 8, decision 090 — *"always push"*);
+  `check-suite-name-absent.py` re-run after `ecc24ac` and after this filing's
+  document edits — **clean** both times, which matters because this filing adds
+  `PCS`-prefixed text to four tracked documents and `Pass 174.3` added a corpus
+  tool.
+- **★ Run `python tools/check-commits-filed.py` at the END of a filing, not
+  only at the start.** It caught two Passes this session that the dispatch could
+  not have known about, because the engineer kept looping while the librarian
+  was writing. Cost: one command.
+- **Ledger after this filing: Pass ceiling `174.4`**, next free `174.5` / new
+  major `175.0`. **Standing rules ceiling `R233`**, next free `R234`.
+  **Decision ceiling `103`**, next free `104`. Operator-question ceiling
+  unchanged. **Filing ordinal 329.**
