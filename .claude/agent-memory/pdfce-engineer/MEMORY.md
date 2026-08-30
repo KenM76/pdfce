@@ -78,3 +78,6 @@
 - [Never `rm -rf` a directory you only assumed you created](feedback_never_rm_rf_a_directory_you_only_assumed_you_created.md) — `mkdir -p` + `rm -rf` ate two committed files; only `git status` saw it
 - [Two shipping functions are not an inverse pair](feedback_two_shipping_functions_are_not_an_inverse_pair.md) — a writer+reader that both ship can still drift a shape 7.5pt per round trip; measure before building on it
 - [Count what committed, not what you intended](feedback_count_what_committed_not_what_you_intended.md) — an early-returning callee makes an intent counter over-count, and the undo fold then silently does not happen
+- [A sweep is only as good as its spelling](feedback_a_sweep_is_only_as_good_as_its_spelling.md) — punctuation is the failure surface; narrow the FILE SET and widen the pattern, and a claim in a comment is not a check
+- [State your premises in a dispatch](feedback_state_your_premises_in_a_dispatch.md) — four agents returned corrections to the thing that sent them, every one landing on a stated premise
+- [A worked example is a claim](feedback_a_worked_example_is_a_claim.md) — a doc example shipped the defect value it was written to replace; take the number from a test or a live run, never from prose
