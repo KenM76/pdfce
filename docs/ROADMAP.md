@@ -96,6 +96,244 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 178.2` (`75174fc`, 2026-08-30) — ★★★ **THREE INSTANCES HAD BEEN FOUND BY *READING*. DRIVING ALL EIGHT ce-DIMENSION GROUP VERBS AGAINST THE SHIPPED BINARY FOUND A FOURTH IN ABOUT A MINUTE — AND IT WAS A VERB THAT HAD ALREADY BEEN READ IN THE SAME SESSION AND ASSERTED GUARDED, BY GENERALISING FROM ITS NEIGHBOUR** — ★★ **THE SWEEP'S NEGATIVE RESULT IS FILED HERE SO IT IS NOT RE-RUN BLIND: 20 VERBS PROBED, 19 REFUSED, 1 DID NOT** — filed 2026-08-30 (339th filing)
+
+**Sourcing — `R228`; this filing had a shell and used it.** Re-run here, not
+relayed: `check-ledger-numbers` **clean**, its LIVE CEILINGS block read
+directly for all three numbers below; `check-core-api-verbs` **PASS at 175**
+public `EditSession` methods (unchanged — this Pass adds no verb);
+`check-cited-verbs-exist` **PASS, 7 of 7**; `check-cited-commits-exist`
+**clean across 79 documents**; `check-suite-name-absent` **clean**;
+`check-commits-filed` named **`a95eb0a` and `75174fc`** as the two code
+commits in no filing, before these entries were written. `git show --stat`:
+**2 files, +91 / −0** (`crates/pdfce-cli/tests/dimension_group_management.rs`
++76, `crates/pdfce-core/src/edit.rs` +15) ⇒ **test-file share 76 of 91 =
+83.5 %**. Live source read for the verdict, not relayed:
+`crates/pdfce-core/src/edit.rs:29488-29505` (the new guard) and
+`crates/pdfce-cli/tests/dimension_group_management.rs:887`.
+**Relayed, not re-run:** `cargo test --workspace --all-features`
+(foreground), fmt, `clippy --all-targets --all-features -D warnings`, the new
+integration test's five-verb coverage and the sabotage result.
+
+#### 1. WHAT SHIPPED — ONE REFUSAL, NO NEW VERB, NO NEW ERROR VARIANT
+
+```rust
+// crates/pdfce-core/src/edit.rs, EditSession::set_group_scale
+if model.group(group).is_none() {
+    return Err(EditError::DimensionGroupNotFound { id: group.0 });
+}
+model.set_group_scale(group, scale, format);
+```
+
+`EditError` stays at **104** variants; the public `EditSession` verb count
+stays at **175**. **That is exactly why this one was invisible to the gate** —
+see §5.
+
+#### 2. THE MEASUREMENT
+
+```
+group-set-scale --group 99 …   ->  success line naming group 99   (exit 0)
+                                   nothing changed
+```
+
+`DimensionModel::set_group_scale` returns `()` and its own doc comment says
+**"No-op for an unknown group"** — a pure-model setter with **no channel at
+all** to refuse, which is `R235`'s shape in its purest form. The three earlier
+instances at least returned *something* (`usize`, `bool`, a fresh
+`DimensionId`); this one returns nothing, so the verb had literally no value
+to misread. **It simply never asked.**
+
+★ **The consequence is the same class as `Pass 178.1`'s and lands on the same
+authority.** The ce-dimension group carries scale, unit, precision and
+drafting standard. A calibration typed against a mistyped group id reported
+success and left every ce dimension in the document reading at the old scale
+— **a drawing whose numbers the operator believes he has just corrected.**
+
+#### 3. ★★★ HOW IT WAS FOUND, WHICH IS WORTH MORE THAN THE FIX
+
+Instances 1–3 were all found by **inspection**. After the third, the engineer
+drove **every** ce-dimension group verb against the **shipped binary** with a
+bogus id. **Seven refused. This one did not.**
+
+★★ **And he had read this very function earlier in the same session and
+asserted it was guarded.** The assertion came from reading `set_group_style` —
+which *is* guarded — and generalising to its neighbour. His own words in
+`75174fc`:
+
+> *"That is exactly the failure this project already has a name for — a claim
+> about a caller is a measurement — and I made it, in a session whose whole
+> subject was verbs that report success without checking. Eight probes cost a
+> minute. The reading cost an hour and produced a wrong answer that would have
+> shipped."*
+
+⇒ **When the question is *"does this code path check X?"* across a FAMILY of
+similar functions, probe the family against the shipped binary rather than
+reading them.** Two properties make probing strictly better here, and only one
+of them is speed: it is faster per item, **and it cannot generalise from a
+sibling**, which is the specific mistake reading makes. **Reading is for
+*why*; running is for *whether*.** Cross-project derivation filed at
+`D:/dev/rag/rust/reading_a_sibling_cannot_answer_whether_a_function_checks_something_probe_the_family_against_the_binary.md`;
+the engineer's own agent memory carries the project-local half (`44cc0f5`).
+
+#### 4. ★★ THE SWEEP'S FULL NEGATIVE RESULT — FILED SO IT IS NOT RE-RUN BLIND
+
+**A sweep that found nothing is a fact with a shelf life**, and the 338th
+filing's *"nothing outside `dimension/` has been measured"* is discharged by
+this table rather than carried forward.
+
+| family | verbs probed with a bogus identifier | refused | defects |
+|---|---|---|---|
+| **ce-dimension GROUP verbs** (`group-rename`, `group-set-scale`, `group-set-standard`, `group-set-style`, `dimension-group`, `group-delete`, `layer-toggle`, `dimension-add`) | **8** | 7 | **1** — `group-set-scale` |
+| ce-dimension non-group verbs (`dimension-style`, `-offset`, `-display`, `-label`, `-rotate`) | 5 | 5 | 0 |
+| widgets (`edit-widget`, `move-widget`, `rotate-widget --index 9`) | 3 | 3 | 0 |
+| forms (`fill-field`, unknown field name) | 1 | 1 | 0 |
+| annotations (`move-annotation --index 9`) | 1 | 1 | 0 |
+| page ops (`rotate-pages`, `delete-pages --pages 99`) | 2 | 2 | 0 |
+| **total** | **20** | **19** | **1** |
+
+⇒ **1 defect per 20 verbs probed**, at a cost of roughly **one minute for the
+20 = ~3 s per verb** (hard rule 10(a): the total beside its per-item form).
+**Every identifier-taking verb outside the ce-dimension group family already
+refused an out-of-range identifier.** ★ The value of that row is that it is a
+**measured** negative rather than an untested assumption — the 338th filing
+was explicit that it had *not* measured outside `dimension/`, and this closes
+that gap rather than inheriting it.
+
+#### 5. ★★★ THE GATE WAS GREEN AND THE DOCUMENT WAS INCOMPLETE — AGAIN, AND THE ENGINEER SAID SO FIRST
+
+`check-core-api-verbs` **PASSED through all three of `178.0`–`178.2`.** It
+derives the public `EditSession` verb count and the `EditError` variant count;
+`178.1` and `178.2` added **neither**, so there was nothing for it to notice
+while `docs/core-api/02-editing-and-saving.md` sat two refusals behind the
+shipped surface.
+
+**This is the shape the 335th filing flagged by name: a gate attests what it
+can COUNT and is silent about what it cannot.** The dispatch that produced
+this filing reported the debt as **owed**, correctly at the time it was
+written. ★ **It was discharged while this filing ran** — `d6a2e6d`
+(*"docs(core-api): the four `R235` refusals, in the document `pdfceGUI` builds
+against"*, 2026-08-30 05:50:55 −0400), which adds a warning to the
+`add_dimension` and `set_group_scale` rows, a five-row table covering the
+family, `R235`'s shape, and the sweep's negative result. **Confirmed on disk
+by `git show d6a2e6d --stat`, not relayed** (2 files, +27 / −3). See *Still in
+flight* in the 339th filing for the survivor in §6.6 of that same document
+that `d6a2e6d` did **not** reach.
+
+★ **The half a consuming shell needs, and it is `d6a2e6d`'s own sentence:**
+**a ce-dimension group id cached across a reload now produces an error where
+it used to appear to work.** That error is correct and the previous silence
+was not — but it surfaces as a new dialog in a panel that changed nothing, and
+a shell author who does not know why would reasonably report it as a
+regression. `pdfceGUI` is owed this in the pending note (see *Still in
+flight*).
+
+#### 6. THE TEST COVERS THE FAMILY, NOT THE ONE THAT WAS BROKEN
+
+The engineer's reasoning, adopted here because it is the durable half: *"a
+test for `group-set-scale` alone would need writing again for the next verb
+added to the family. Driving all five group verbs is what found this one, so
+that is what the test does."* ⇒ **the new integration test drives five group
+verbs with a bogus id**, sabotage-checked. **This is `R235` clause (b) turned
+into a test rather than a habit** — the check that found the defect is the
+check that now guards it, which is the only form in which a sweep survives the
+session that ran it.
+
+---
+
+### `Pass 178.1` (`a95eb0a`, 2026-08-30) — ★★★ **THE THIRD `R235` INSTANCE WALKS STRAIGHT THROUGH `R235`'s OWN MECHANICAL CHECK AND DISPROVED IT WITHIN THE HOUR OF THE MINT — BECAUSE A SUBSTITUTION'S RETURN VALUE IS NOT WRONG** — ★★ **`dimension-add --group 99` PRINTED A SUCCESS LINE NAMING A ce-DIMENSION GROUP THE ce DIMENSION DID NOT GO INTO, AND THE GROUP IS THE AUTHORITY FOR SCALE** ⇒ **A WRONG NUMBER ON A DRAWING, FROM A MISTYPED ID, WITH A GREEN EXIT CODE** — filed 2026-08-30 (339th filing)
+
+**★ THE 338th FILING'S OPEN QUALIFIER IS DISCHARGED HERE.** That filing
+recorded this instance in `R235`'s table as **"UNCOMMITTED at filing time"**,
+per hard rule 8, having observed it only as `git diff crates/` (+33 lines at
+`edit.rs:27326`) while its own `ROADMAP.md` entry was being written. **The
+commit is `a95eb0a`**, `2026-08-30 05:35:38 −0400`, an ancestor of `HEAD` by
+`git log`; `check-cited-commits-exist` **clean across 79 documents**.
+`R235`'s instance table now carries it as **committed**, and the qualifier is
+**struck there rather than deleted**.
+
+**Sourcing — `R228`.** `git show --stat a95eb0a`: **2 files, +122 / −0**
+(`crates/pdfce-cli/tests/dimension_group_management.rs` +89,
+`crates/pdfce-core/src/edit.rs` +33) ⇒ **test-file share 89 of 122 = 73.0 %**.
+Combined with `Pass 178.2`: **+213 / −0 across the same 2 files; test share
+165 of 213 = 77.5 %.** Live source read, not relayed:
+`crates/pdfce-cli/tests/dimension_group_management.rs:798`.
+**Relayed, not re-run:** the test suite, fmt, clippy, the contrast case and
+the sabotage result.
+
+#### 1. THE MEASUREMENT, ON A DOCUMENT WHOSE ONLY ce-DIMENSION GROUP IS `0`
+
+```
+dimension-add --group 99 …
+  ->  "dimension-add … group=99 … dim=1"      (exit 0)
+  ->  dimension-list:  dim 1  group=0
+```
+
+**THE SUCCESS LINE NAMED A ce-DIMENSION GROUP THE ce DIMENSION DID NOT GO
+INTO.** And that is worse than a wrong label, because **the group is the
+authority for scale, unit, precision and drafting standard**: the ce dimension
+was **measured at a scale the caller did not choose**. ⇒ **A wrong number on a
+drawing, from a mistyped id, with a green exit code.**
+
+★ **The test's two groups differ by exactly 2×**, so the substitution shows up
+**in the value** rather than only in the id — a fixture chosen so the
+assertion can fail for the right reason (`R225`'s family; a fixture that made
+the two candidate answers equal would have been vacuous). The contrast case is
+what makes the test mean anything: **a REAL non-default group still works and
+its ce dimension reads `2.500 m`, half the default's** — without it the
+refusal would be indistinguishable from a verb that had simply stopped
+accepting `--group`.
+
+`DimensionModel::add_dimension` falls back to `DEFAULT_GROUP_ID` for an
+unknown id. **That is reasonable IN THE MODEL** — a record whose `group`
+resolved to nothing would be an orphan every reader must then handle — but it
+is **a model invariant expressed as a silent substitution**, and the verb
+passed it through. Now refused with `DimensionGroupNotFound`, **before
+anything is written**, matching every sibling group verb. **Safe:** the only
+other caller is `paste_objects`, which passes a group it has just matched or
+created.
+
+#### 2. ★★★ WHY THIS ONE MATTERS MORE THAN ITS SIZE — IT DISPROVED THE MINT'S OWN CHECK
+
+`R235` was minted (338th filing) with a **signature** check: *look for a
+mutator returning the resulting state — `-> bool` — rather than `-> Result`.*
+Run over `crates/pdfce-core/src/` it returned **5 hits, 2 instances, 3
+discriminating-and-correct** — clean, bounded, satisfying.
+
+★★ **This verb walks straight through that grep**, because
+`model.add_dimension(…)` returns a **fresh, correct, always-valid
+`DimensionId`**. The reason is exact and is now the rule's own text:
+
+> **a substitution's return value is not wrong — it describes what happened,
+> not what was asked for.**
+
+⇒ The signature check catches the **return-value conflation** and is **blind
+to the silent substitution**. `R235` shipped with the **widened** predicate as
+a result, the narrow form **struck and kept visible** inside the rule per
+house style. ★ **A check that was clean and wrong is worth more here than the
+fix** — a bounded, satisfying negative result is the most persuasive possible
+argument for stopping, and this one was disproved about an hour after it was
+drafted.
+
+#### 3. THE DISCRIMINATOR THIS PASS MUST NOT BLUR
+
+`delete_group`'s reassignment of members to the default group
+(`crates/pdfce-core/src/dimension/group.rs:1182`) is **the same substitution
+shape in the same file and is NOT an instance**, because
+`delete_dimension_group_with` **surfaces it as an operand**
+(`GroupDeletion::Reassign`) — the operator chose it. **`R235` is about a
+policy the caller cannot see, not about substitution as such.** Recorded here
+as well as in the rule because a Pass that fixes three substitutions is
+exactly where the fourth gets "fixed" by mistake.
+
+#### 4. `FEATURES.md`
+
+**Two rows edited, no row added.** Decision `105`'s precedent stands — a
+refusal is not a capability — so neither `178.1` nor `178.2` earns a row. The
+ce-dimension **authoring** row and the ce-dimension **groups** row were both
+silent on the new refusals and are now not; see the 339th filing's sweep.
+
+---
+
 ### `Pass 178.0` (`c441a92`, 2026-08-30) — LOOKING FOR A SECOND INSTANCE FOUND **TWO**, AND ONE OF THEM RETURNED `exit 0` FOR A ce-DIMENSION GROUP THAT DOES NOT EXIST — ★★★ **THE 336th FILING'S DECLINE WAS CORRECT ON THE EVIDENCE IT HAD AND THE EVIDENCE HAS CHANGED: `R235` IS MINTED HERE AT n=2, WIDENED AT MINT TIME BY A THIRD INSTANCE FOUND IN THE WORKING TREE WHILE THIS ENTRY WAS BEING WRITTEN** — filed 2026-08-30 (338th filing)
 
 **Sourcing — `R228` invoked; this filing had a shell and used it.** Re-run
@@ -218,9 +456,25 @@ grep '    pub fn (set_|remove_|delete_|clear_|add_|insert_|toggle_|rename_|move_
 `remove_group -> bool` and `remove_dimension -> bool` (`false` genuinely means
 "it was not there") and `text_state.rs:734 apply_operator -> bool` ("did I
 handle this operator"). **Reported as surviving-and-correct so a later sweep
-does not "fix" them** (hard rule 11(e)). `set_group_scale` returns `()` and
+does not "fix" them** (hard rule 11(e)). ~~`set_group_scale` returns `()` and
 no-ops silently on an unknown id, but its session verb **does** guard, so that
-boundary is closed.
+boundary is closed.~~
+
+> **★★★ AMENDED 2026-08-30 (339th filing) — THE STRUCK SENTENCE IS FALSE, AND
+> IT IS `R235`'s FOURTH INSTANCE.** `EditSession::set_group_scale` did **not**
+> guard. Measured against the shipped binary in `Pass 178.2` (`75174fc`):
+> `group-set-scale --group 99` returned **exit 0** with a success line naming
+> group 99 and changed nothing. The sentence was written from **reading
+> `set_group_style`** — which *is* guarded — **and generalising to its
+> neighbour**, which is this project's own named failure (*a claim about a
+> caller is a measurement*), committed here in the filing rather than in the
+> code. ★ **A correction is a claim** (hard rule 10's corollary), so the
+> world-source is named: `git show 75174fc -- crates/pdfce-core/src/edit.rs`,
+> which adds the missing `model.group(group).is_none()` guard at
+> `edit.rs:29488`, and `check-cited-commits-exist` clean. **The boundary is
+> closed NOW, by `Pass 178.2`, and was not closed when this was written.**
+> ★★ **The sweep's own negative result — 20 verbs probed, 19 refused, 1 did
+> not — is filed in `Pass 178.2` §4** so it is not re-run blind.
 
 ★★ **And then instance 3 walked straight through that grep**, because
 `add_dimension` returns `DimensionId` — **a fresh, correct, always-valid
@@ -229,10 +483,22 @@ and is blind to the SILENT SUBSTITUTION**, and the reason is exact: a
 substitution's return value **is not wrong**. It truthfully describes what
 happened; it simply does not describe **what was asked for**. `R235`'s
 mechanical check is written in the widened form because of this, roughly an
-hour after the narrow form was drafted. Re-running the widened predicate over
+hour after the narrow form was drafted. ~~Re-running the widened predicate over
 `dimension/` (a `DEFAULT_GROUP_ID` sweep, 34 hits read) closes the set at
 **three**: `group.rs:1063` (instance 2), `:1080` (instance 3), `:1176`
-(instance 1).
+(instance 1).~~
+
+> **★★ AMENDED 2026-08-30 (339th filing) — THE SET IS FOUR, NOT THREE, AND THE
+> REASON THE SWEEP MISSED THE FOURTH IS THE SAME REASON IT MISSED THE THIRD,
+> ONE LEVEL FURTHER OUT.** The re-run above was a **`DEFAULT_GROUP_ID` sweep**
+> — it looked for the *substitution* sub-shape. `set_group_scale` performs
+> **neither** sub-shape: it returns `()` and its doc comment says *"No-op for
+> an unknown group"*, so it substitutes nothing and returns nothing, and no
+> grep keyed on either symptom can see it. **It was found by driving the
+> family against the shipped binary** (`Pass 178.2`, `75174fc`), not by any
+> re-reading. ⇒ **`R235`'s instance set is closed at FOUR by MEASUREMENT, not
+> at three by grep**; the full instance table and the counting convention are
+> in `R235` itself, and the sweep's negative result is in `Pass 178.2` §4.
 
 ★ **`group.rs:1182` — `delete_group`'s reassignment of members to the default
 group — is NOT an instance and must not be "fixed".** It is deliberate ui-spec
@@ -124474,9 +124740,13 @@ same cause (hashes exist only at commit time), two different failure modes.
     command and wrote an incremental revision.** Measured on the release
     binary: `--group 0 --hide` and `--group 99 --hide` both →
     `visible=true changed=1 appended=556`, **exit 0**.
-  - **★★ Instance 3 — `Pass 178.1`, IN THE WORKING TREE AND UNCOMMITTED when
-    this rule was minted, stated as such because hard rule 8 requires it.
-    SILENT SUBSTITUTION.** `DimensionModel::add_dimension(group, kind) ->
+  - **★★ Instance 3 — `Pass 178.1` (`a95eb0a`, 2026-08-30). SILENT
+    SUBSTITUTION.** ~~IN THE WORKING TREE AND UNCOMMITTED when this rule was
+    minted, stated as such because hard rule 8 requires it.~~ **★ QUALIFIER
+    DISCHARGED 2026-08-30 (339th filing): committed as `a95eb0a` at
+    `05:35:38 −0400`, an ancestor of `HEAD` by `git log`,
+    `check-cited-commits-exist` clean across 79 documents. Filed under
+    *Shipped*.** `DimensionModel::add_dimension(group, kind) ->
     DimensionId` **falls back to `DEFAULT_GROUP_ID`** for an unknown group —
     reasonable in the pure model, where a record whose `group` resolves to
     nothing would be an orphan every reader must then handle. The session path
@@ -124485,6 +124755,53 @@ same cause (hashes exist only at commit time), two different failure modes.
     the authority for scale, unit, precision and drafting standard**, so the ce
     dimension was measured against a scale nobody chose. ⇒ **A wrong number on
     a drawing, from a mistyped id, with a green exit code.**
+  - **★★★ Instance 4 — `Pass 178.2` (`75174fc`, 2026-08-30). ADDED 2026-08-30
+    (339th filing). NO CHANNEL AT ALL, AND FOUND BY DRIVING THE BINARY AFTER
+    A READING HAD ALREADY GOT IT WRONG.**
+    `DimensionModel::set_group_scale(id, scale, format) -> ()` returns
+    **nothing**, and its own doc comment says *"No-op for an unknown group"*.
+    `EditSession::set_group_scale` never asked. Measured on the shipped
+    binary: `group-set-scale --group 99` → **exit 0**, a success line naming
+    group 99, **nothing changed** — a calibration the operator believes has
+    corrected every number on the drawing and has corrected none.
+    ★ **This is the purest form of the shape**: instances 1–3 at least
+    returned *something* the verb could have misread (`usize`, `bool`, a fresh
+    `DimensionId`); this one returns `()`, so there was no value to misread and
+    **no grep keyed on a return type or on `DEFAULT_GROUP_ID` could ever have
+    seen it.** ★★ **It had been READ in the same session and asserted guarded**,
+    by generalising from `set_group_style` — the reading-side form of *a claim
+    about a caller is a measurement*. See clause (e) below.
+
+  **★★ THE COUNTING CONVENTION, STATED BECAUSE THE NUMBER WILL BE QUOTED.**
+  `R235` stands at **FOUR instances over FIVE failing inputs**, all in
+  `crates/pdfce-core/src/dimension/`, all fixed. **An instance is one
+  helper→verb boundary** — one pure-model helper whose refusal the shipping
+  verb could not hear — **not one failing input.** Instance 2
+  (`toggle_dimension_layer`) is therefore **one** instance carrying **two**
+  distinct failures (the un-hideable default group, and an id resolving to no
+  group at all); counting by failing input would give **five**. The
+  boundary-count is the right one because **the remedy is per boundary** —
+  clause (a) adds one guard at one verb and closes both of instance 2's inputs
+  at once — and a rule is counted in the unit its remedy is applied in.
+
+  | # | Pass | pure-model helper | return | how the refusal was encoded | shipping verb |
+  |---|---|---|---|---|---|
+  | 1 | `176.0` (`8b825ed`) | `delete_group` | `usize` | `return 0` for the default group | `delete_dimension_group_with` — **silent total data loss** |
+  | 2 | `178.0` (`c441a92`) | `set_group_visible` | `bool` | `return true`, **twice over** | `toggle_dimension_layer` — **false success ×2** |
+  | 3 | `178.1` (`a95eb0a`) | `add_dimension` | `DimensionId` | **silent substitution** of `DEFAULT_GROUP_ID` | the `dimension-add` path — **measured at a scale nobody chose** |
+  | 4 | `178.2` (`75174fc`) | `set_group_scale` | `()` | **no channel at all** — documented no-op | `set_group_scale` — **calibration reported and not performed** |
+
+  **★★ THE SET IS CLOSED AT FOUR BY MEASUREMENT, AND EVERYTHING OUTSIDE IT HAS
+  NOW BEEN MEASURED TOO — the 338th filing's *"nothing outside `dimension/`
+  has been measured"* is DISCHARGED, not carried.** `Pass 178.2` drove **20
+  identifier-taking verbs** against the shipped binary with a bogus id:
+  **19 refused, 1 did not** ⇒ **1 defect per 20 probes**, at roughly one
+  minute for the 20 (**≈ 3 s per verb**). The full table — ce-dimension group
+  verbs, ce-dimension non-group verbs, widgets, forms, annotations, page ops —
+  is in `Pass 178.2` §4. ★ **A sweep that found nothing is a fact with a shelf
+  life**: it is filed with its date and its verb list so a later session can
+  see that it was run, on what, and when, rather than re-running it blind or
+  assuming it.
 
   **★★★ WHY THIS IS A MINT AND NOT AN INSTANCE OF AN EXISTING RULE**, which is
   what a future session will reach for. This project's bar for a sharpening
@@ -124549,7 +124866,20 @@ same cause (hashes exist only at commit time), two different failure modes.
   operator chose it. **The rule is about a policy the caller cannot see, not
   about substitution as such.**
 
-  **What the rule obliges, in four lines.**
+  **★★★ AND THE WIDENED CHECK MISSED INSTANCE 4 TOO — ADDED 2026-08-30 (339th
+  filing), WHICH IS WHY CLAUSE (e) EXISTS.** The widened predicate above is
+  still a **reading** instrument, and when it was re-run over `dimension/` it
+  was re-run as a **`DEFAULT_GROUP_ID` sweep** (34 hits read) — i.e. keyed on
+  the *substitution* sub-shape. `set_group_scale` performs **neither**
+  sub-shape: it returns `()` and substitutes nothing, so it presents **no
+  symptom in source at all**. It was found by **driving the shipped binary**,
+  and it was found *after* it had already been read and asserted guarded by
+  generalising from `set_group_style`. ⇒ **Two successive mechanical checks,
+  each a genuine widening of the last, each returning a clean bounded result,
+  each wrong** — which is the argument for clause (e) rather than a third
+  widening.
+
+  **What the rule obliges, in five lines.**
   (a) **When a session verb delegates to a pure-model helper, re-derive the
   helper's preconditions at the verb and return `Err` before any mutation** —
   do not infer refusal from the helper's return value.
@@ -124564,6 +124894,24 @@ same cause (hashes exist only at commit time), two different failure modes.
   six sibling ce-dimension-group verbs refused an unknown id by name and one
   did not, so a script got a green exit code from that one alone and the
   operator could not learn the convention from the tool.
+  (e) **★★★ ADDED 2026-08-30 (339th filing), FROM INSTANCE 4. DO NOT ANSWER
+  *"does this verb check its identifier?"* BY READING THE FAMILY. DRIVE THE
+  FAMILY AGAINST THE SHIPPED BINARY WITH A BOGUS IDENTIFIER, AND FILE THE
+  NEGATIVE RESULT.** Probing is strictly better than reading for this
+  question, and speed is only half the reason: it is faster per item **and it
+  cannot generalise from a sibling**, which is the specific mistake reading
+  makes. **Reading is for *why*; running is for *whether*.** ★ **The tell that
+  you are about to make the error**: the words *"and its neighbour does the
+  same"*, or any conclusion about function B reached while looking at function
+  A. ★★ **Earned, not hypothesised** — instance 4 was READ in the session whose
+  entire subject was verbs that report success without checking, ASSERTED
+  guarded on the strength of `set_group_style` next door, and was wrong;
+  **eight probes then found it in about a minute** after two successive
+  source-reading checks had each come back clean. ★ **File the negative
+  result** (`Pass 178.2` §4: 20 verbs, 19 refused, 1 did not) — a sweep that
+  found nothing is a fact with a shelf life, and an unfiled one is re-run
+  blind or, worse, assumed. **Cross-project derivation:**
+  `D:/dev/rag/rust/reading_a_sibling_cannot_answer_whether_a_function_checks_something_probe_the_family_against_the_binary.md`.
 
   **★ Scope, so it is not over-read.** This binds on the boundary between a
   **pure model** (no `Document`, deliberately `Result`-free so it stays
@@ -124575,10 +124923,19 @@ same cause (hashes exist only at commit time), two different failure modes.
   `remove_group -> bool` is exemplary, because its `false` is
   **discriminating**.
 
-  **`FEATURES.md`: no row.** Both changes are refusals, and decision `105`'s
-  precedent is that **a refusal is not a capability**. One existing row was
-  edited — the ce-dimension layer-visibility row, which was silent on both new
-  limits.
+  **`FEATURES.md`: no row.** All four fixes are refusals, and decision `105`'s
+  precedent is that **a refusal is not a capability**. **Three existing rows
+  were edited across two filings**, each because it was silent on a limit a
+  shell author would otherwise discover at runtime: the ce-dimension
+  layer-visibility row (338th filing), and — **added 2026-08-30, 339th
+  filing** — the ce-dimension **authoring** row (`add_dimension` now refuses
+  an unknown group id, `Pass 178.1`) and the ce-dimension **groups** row
+  (`set_group_scale` likewise, `Pass 178.2`, plus the count: all eight group
+  verbs now refuse, four did not before `176.0`–`178.2`).
+  **Reported surviving-and-correct** per hard rule 11(e): the layer-toggle
+  row's *"matching every sibling group verb"* clause, which was written in the
+  338th filing and **became fully true only at `Pass 178.2`** — it is true now
+  and must not be "corrected" back.
 
   **Cross-references.** `R151` (the mechanism in the mirror: there, a rule with
   no caller; here, a caller that cannot hear it), `R171` (argued above as the
@@ -124591,7 +124948,14 @@ same cause (hashes exist only at commit time), two different failure modes.
 
   **Standing rules ceiling `R234` → `R235`; next free `R236`.** **Decision
   ceiling UNCHANGED: `105`; next free `106`** — see `Pass 178.0`'s entry §5 for
-  why the toggle/non-toggle undo split earns no record.
+  why the toggle/non-toggle undo split earns no record. **★ Amended 2026-08-30
+  (339th filing): instance 3 discharged as committed (`a95eb0a`), instance 4
+  added (`75174fc`), clause (e) added, the counting convention stated (four
+  instances over five failing inputs, counted per helper→verb boundary), and
+  the sweep's negative result filed. `R235` is still the ceiling; next free is
+  still `R236` — no new rule was minted for clause (e), because it is a remedy
+  for the shape `R235` already names and a rule whose own check needs a third
+  widening is not a second rule.**
 
 ## Update protocol
 

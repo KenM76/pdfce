@@ -78746,3 +78746,357 @@ NOT duplicating are named:**
    for a third filing. One stale re-export figure was found by reading for the
    claim; the block it sits in lists several modules' surfaces the same way and
    nothing derives any of them.
+
+---
+
+## 2026-08-30 (339th filing) — `Pass 178.1` (`a95eb0a`) and `Pass 178.2` (`75174fc`) filed; **the 338th filing's "uncommitted at mint time" qualifier on `R235` instance 3 is DISCHARGED**. ★★★ **`R235` stands at FOUR instances over FIVE failing inputs, and instance 4 was found by DRIVING THE SHIPPED BINARY after TWO successive source-reading checks had each come back clean and wrong — and after the very function had been read in that session and asserted guarded by generalising from its neighbour.** Clause (e) added; the sweep's **negative** result filed (20 verbs probed, 19 refused, 1 did not); two `FEATURES.md` rows corrected; one `ROADMAP.md` claim of this role's own **struck and amended**; **`docs/core-api` was owed and is DISCHARGED on disk at `d6a2e6d`, contradicting the dispatch** — with one survivor it did not reach
+
+**Shipped:**
+- **`Pass 178.1`** (`a95eb0a`) — `EditSession::add_dimension` now refuses an
+  unknown ce-dimension group with `DimensionGroupNotFound`, **before anything
+  is written**. **2 files, +122 / −0; test-file share 89 of 122 = 73.0 %.** No
+  new verb (`EditSession` stays at **175**), no new `EditError` variant (stays
+  at **104**). One new integration test with the contrast case that makes it
+  mean something — a REAL non-default group still works and its ce dimension
+  reads `2.500 m`, **half the default's** — without which the refusal would be
+  indistinguishable from a verb that stopped accepting `--group` at all.
+  Sabotage-checked.
+- **`Pass 178.2`** (`75174fc`) — `EditSession::set_group_scale` likewise.
+  **2 files, +91 / −0; test-file share 76 of 91 = 83.5 %.** Same counts,
+  unmoved. One new integration test **over five group verbs**, not over the one
+  that was broken. Sabotage-checked.
+- **Combined: +213 / −0 across the same 2 files; test share 165 of 213 =
+  77.5 %.**
+
+**The two measurements, on the release binary before the fixes:**
+
+```
+dimension-add --group 99 …      -> "… group=99 … dim=1"   (exit 0)
+                                -> dimension-list: dim 1 group=0
+group-set-scale --group 99 …    -> success line naming group 99, exit 0
+                                -> nothing changed
+```
+
+**Both land on the same authority and both produce the same class of harm.**
+The ce-dimension group carries **scale, unit, precision and drafting
+standard**. `178.1` authored a ce dimension into a group nobody asked for, so
+it was **measured at a scale nobody chose**; `178.2` reported a calibration it
+never performed, so **every ce dimension in the document kept reading at the
+old scale** while the operator believed he had just corrected them. ⇒ **A
+wrong number on a drawing, from a mistyped id, with a green exit code** — in
+both directions.
+
+**★★ THE 338th FILING'S OPEN ITEM 1 — DISCHARGED, AND CHECKED RATHER THAN
+RELAYED.** That filing recorded `R235` instance 3 as **"UNCOMMITTED at mint
+time"** per hard rule 8, having seen it only as `git diff crates/` while its
+own entry was being written. **The commit is `a95eb0a`,
+`2026-08-30 05:35:38 −0400`, an ancestor of `HEAD` by `git log`;
+`check-cited-commits-exist` clean across 79 documents.** `R235`'s instance
+table now carries it as committed, the qualifier **struck rather than
+deleted**, and the Pass is filed under *Shipped*.
+
+**Decisions made this session:** **none minted; ceiling stays `105`, next free
+`106`. No standing rule minted either; `R235` stays the ceiling, next free
+`R236`.** Two dispositions:
+
+- **NO NEW RULE FOR CLAUSE (e), AND THE REASON IS THIS PROJECT'S OWN BAR.**
+  The probe-don't-read finding is a **remedy for the shape `R235` already
+  names**, not a different shape — it answers *how do you find an instance*,
+  where `R235` answers *what an instance is and what the verb owes*. The
+  project's mint bar (`R232`/`R233`/`R234`, and the 2026-08-05 ruling against
+  elevating per occurrence) is *the parent's remedy is correct and does not
+  reach the case*; here the parent's remedy reaches it exactly, and only its
+  **check** was too narrow. ⇒ **filed as `R235` clause (e)**, beside (b) which
+  it corrects. ★ **A rule whose own check needs a third widening is not a
+  second rule.**
+- **DECISION LOG — NO ENTRY.** Nothing here is a crate boundary, an invariant
+  definition or a library choice (`ARCHITECTURE.md` §12's own scope). Four
+  refusals added to four verbs, matching a convention that already existed on
+  the other four members of the same family, is `R235` clause (d) being
+  applied, not a policy being chosen.
+
+**Findings + decisions:**
+
+- **★★★ THE FINDING OF THIS FILING — TWO SUCCESSIVE MECHANICAL CHECKS, EACH A
+  GENUINE WIDENING OF THE LAST, EACH RETURNING A CLEAN BOUNDED RESULT, EACH
+  WRONG.** The 338th filing already recorded that `R235`'s **signature** check
+  (`-> bool` rather than `-> Result`) was too narrow and was disproved within
+  the hour by instance 3. What this filing adds is that **the widened check
+  was too narrow as well**, and for a reason one level further out:
+
+  | check | keyed on | found | missed |
+  |---|---|---|---|
+  | signature check | the **return type** | instances 1, 2 | instance 3 — returns a **valid fresh id**, nothing looks wrong |
+  | `DEFAULT_GROUP_ID` sweep, 34 hits read | the **substitution** | instance 3 | instance 4 — **substitutes nothing** |
+  | **driving the shipped binary with a bogus id** | **behaviour** | **instance 4** | — |
+
+  ⇒ **A guard's ABSENCE has no syntax.** Every source-level check must key on
+  some *positive* symptom — a return type, a sentinel constant, a substituted
+  operand. `set_group_scale` returns `()` and its doc comment says *"No-op for
+  an unknown group"*: it exhibits **none of them**. The verb simply never
+  asked, and **no grep could have seen that.** ★ Both failed checks came back
+  **clean, bounded and satisfying**, which is the trap — **a negative result
+  from a check you have just widened feels like completion.**
+- **★★★ AND IT HAD BEEN READ, IN THAT SESSION, AND ASSERTED GUARDED.** The
+  engineer read `set_group_scale`, saw that its neighbour `set_group_style`
+  *is* guarded, generalised, and wrote the conclusion into a working note as
+  settled — **in a session whose entire subject was verbs that report success
+  without checking.** His own words in `75174fc`: *"That is exactly the failure
+  this project already has a name for — a claim about a caller is a
+  measurement — and I made it… Eight probes cost a minute. The reading cost an
+  hour and produced a wrong answer that would have shipped."* ⇒ **`R235` clause
+  (e): do not answer *"does this verb check its identifier?"* by reading the
+  family; DRIVE the family against the shipped binary with a bogus identifier,
+  and FILE the negative result.** Probing beats reading for two reasons and
+  only one is speed — it is faster per item **and it cannot generalise from a
+  sibling**, which is the specific mistake reading makes. **Reading is for
+  *why*; running is for *whether*.** ★ **The tell:** the words *"and its
+  neighbour does the same"*, or any conclusion about function B reached while
+  looking at function A. It leaves **no artefact** — unlike a stale comment, a
+  silent inference cannot be grepped for later.
+- **★★ THE NEGATIVE RESULT, FILED EXPLICITLY BECAUSE A SWEEP THAT FOUND
+  NOTHING IS A FACT WITH A SHELF LIFE.** **20 identifier-taking verbs probed
+  with a bogus id; 19 refused; 1 did not ⇒ 1 defect per 20 probes**, about
+  **one minute for the 20 = ≈ 3 s per verb** (hard rule 10(a): the total beside
+  its per-item form). ce-dimension group verbs **8** (1 defect —
+  `group-set-scale`); ce-dimension non-group verbs (`dimension-style`,
+  `-offset`, `-display`, `-label`, `-rotate`) **5**, clean; widgets
+  (`edit-widget`, `move-widget`, `rotate-widget --index 9`) **3**, clean; forms
+  (`fill-field`, unknown field name) **1**, clean; annotations
+  (`move-annotation --index 9`) **1**, clean; page ops (`rotate-pages`,
+  `delete-pages --pages 99`) **2**, clean. ⇒ **The 338th filing's *"`dimension/`
+  is closed at three and nothing outside it has been measured"* is BOTH
+  UPDATED AND DISCHARGED: it is closed at four, and the rest HAS been measured
+  and is clean.** The zero rows are the valuable part — an honest statement of
+  ignorance has been replaced by a measurement a later session can inspect
+  (what was probed, that it refused, when) instead of re-running blind or
+  assuming.
+- **★★ `R235`'s COUNTING CONVENTION, STATED IN THE RULE BECAUSE THE NUMBER
+  WILL BE QUOTED.** **FOUR instances over FIVE failing inputs.** An instance is
+  **one helper→verb boundary** — one pure-model helper whose refusal the
+  shipping verb could not hear — **not one failing input**. Instance 2
+  (`toggle_dimension_layer`) is therefore **one** instance carrying **two**
+  distinct failures (un-hideable default group; id resolving to no group);
+  counting per failing input would give **five**. **The boundary-count is the
+  right one because the remedy is per boundary** — clause (a) adds one guard at
+  one verb and closes both of instance 2's inputs at once — **and a rule is
+  counted in the unit its remedy is applied in.** Both numbers are filed so a
+  quote of either can be reconciled.
+- **★ Instance 4 is the PUREST form of the shape, which is why it is worth its
+  own row rather than being folded into instance 3.** Instances 1–3 each
+  returned *something* the verb could in principle have misread (`usize`,
+  `bool`, a fresh `DimensionId`). Instance 4 returns `()`. **There was no value
+  to misread; the verb had no channel at all**, and the model's doc comment
+  said so in plain English while the verb ignored it.
+- **★★ THE GATE WAS GREEN AND THE DOCUMENT WAS INCOMPLETE — the 335th filing's
+  shape, recurring, and named first by the engineer rather than by this role.**
+  `check-core-api-verbs` **PASSED throughout `178.0`–`178.2`**: it derives the
+  public `EditSession` verb count and the `EditError` variant count, and
+  `178.1`/`178.2` moved **neither** (still **175** and **104**), so it had
+  nothing to notice while `docs/core-api/02-editing-and-saving.md` sat two
+  refusals behind the shipped surface. **A gate attests what it can COUNT and
+  is silent about what it cannot.**
+
+**★★ Hard-rule-11 sweep — TWO `FEATURES.md` rows corrected, TWO `ROADMAP.md`
+claims of this role's own STRUCK AND AMENDED, one `docs/core-api` survivor
+REPORTED as owed, and four reported surviving-and-correct.** Claim swept:
+*"an unknown ce-dimension group id is tolerated / a group verb accepts any
+id."* Per clause (e) — bare keywords (`group`, `--group`, `falls back`,
+`default group`, `DEFAULT_GROUP`, `unknown`, `set_group_scale`,
+`add_dimension`, `dimension-add`), case-insensitive, over the handful of files
+the feature touches — not the exact phrase over the tree.
+
+- **Survivor 1 — `docs/FEATURES.md`, the ce-dimension AUTHORING row.** Read in
+  its entirety: *"Author a ce dimension with snapping — linear, radius,
+  diameter."* Not wrong, and **silent on the new refusal**. **Corrected**: it
+  now names `DimensionGroupNotFound`, says what it used to do instead
+  (substitute the DEFAULT group silently **while printing the group asked
+  for**), names the scale consequence, and carries the sentence a consuming
+  shell actually needs — *a group id cached across a reload now produces an
+  error where it used to appear to work.*
+- **Survivor 2 — `docs/FEATURES.md`, the ce-dimension GROUPS row.** It names
+  `set_group_scale` as *"the sanctioned route"* for changing a group's unit and
+  was **silent on that verb's new refusal**, which is precisely the verb a
+  shell author would go and call on the strength of that sentence.
+  **Corrected**, plus the count: **all eight ce-dimension group verbs now
+  refuse an unknown id; four did not before `176.0`–`178.2`.**
+- **★★★ Survivor 3 — `docs/ROADMAP.md`, `Pass 178.0`'s §4, WRITTEN BY THIS
+  ROLE IN THE 338th FILING, AND FALSE.** Verbatim: *"`set_group_scale` returns
+  `()` and no-ops silently on an unknown id, **but its session verb does
+  guard**, so that boundary is closed."* **It did not guard.** ⇒ **`R235`'s
+  fourth instance was asserted closed, in the filing that minted `R235`, one
+  paragraph below the mint's own sweep.** ★ And the provenance is the same one
+  the engineer confessed: **the sentence was written from reading
+  `set_group_style` and generalising to its neighbour** — *a claim about a
+  caller is a measurement*, committed **in the filing rather than in the
+  code**. **Struck (not deleted) with a dated amendment** naming its
+  world-source per hard rule 10's corollary: `git show 75174fc --
+  crates/pdfce-core/src/edit.rs`, which adds the missing
+  `model.group(group).is_none()` guard at `edit.rs:29488`.
+- **Survivor 4 — `docs/ROADMAP.md`, `Pass 178.0`'s §4, second claim.** *"Re-
+  running the widened predicate over `dimension/` … **closes the set at
+  three**."* **Struck and amended**: the set is **four**, and the re-run missed
+  the fourth because it was run as a `DEFAULT_GROUP_ID` sweep — keyed on the
+  substitution sub-shape, which instance 4 does not exhibit.
+- **★★ Survivor 5 — `docs/core-api/02-editing-and-saving.md` §6.6, REPORTED
+  BACK TO THE ENGINEER AS OWED (this role does not edit `docs/core-api/`).**
+  `d6a2e6d` corrected §2's verb tables and added the family block, and touched
+  only the hunks at lines 2075 and 2158 (`git show d6a2e6d --stat` and its hunk
+  headers, read here); **§6.6 at ~3300 is untouched and now carries three false
+  statements**, under a heading that reads *"three that look required but are
+  not"*:
+  1. ***"NOT required — `add_dimension_group` before `add_dimension`. An
+     unknown `GroupId` joins the always-present default group."*** — **false
+     since `Pass 178.1`.** It is now refused. ★ This is the shape hard rule 11
+     was amended for: **a wrong claim stated as a RESULT under a heading that
+     invites belief rather than checking.**
+  2. ***"UNVERIFIED — the unknown-`GroupId` fallback specifically is NOT
+     TESTED; no test passes a bogus `GroupId` to `add_dimension` (searched
+     `DimensionGroupNotFound`, `GroupId(99`, across `crates/`)."*** — **false
+     since `Pass 178.1`**, which added exactly that test. ★★ **And the search
+     it names would STILL return nothing**, because the test drives the CLI
+     with the string `"99"`, not the constructor `GroupId(99`. **A clause-(e)
+     instance in the wild: the claim's spelling, not the claim, is what was
+     searched for.**
+  3. ***"Required — a custom group must exist before `set_group_scale` /
+     `set_group_style` / `set_group_standard`, which return
+     `EditError::DimensionGroupNotFound`."*** — **this was FALSE for
+     `set_group_scale` from the day it was written until `Pass 178.2` made it
+     accidentally true.** It reads correct today and must not be "fixed"; it is
+     reported here because **the document asserted a guard that did not exist**,
+     which is the same wrong belief the engineer independently formed by
+     reading the neighbour — worth knowing when deciding whether §6.6's other
+     orderings were measured or inferred.
+- **Reported surviving-and-correct, so the next sweep does not "fix" them:**
+  (a) `docs/FEATURES.md`'s **layer-toggle** row's clause *"An unknown group id
+  is refused by name (`DimensionGroupNotFound`), matching every sibling group
+  verb"* — written in the 338th filing and **fully true only as of `Pass
+  178.2`**; true now, leave it. (b) `crates/pdfce-core/src/dimension/group.rs`
+  `remove_group -> bool`, `remove_dimension -> bool` and
+  `crates/pdfce-core/src/text_state.rs:734 apply_operator -> bool` — all three
+  **discriminating** returns enforcing no rule (`R235`'s own false positives),
+  unchanged from the 338th filing. (c) `group.rs:1182` — `delete_group`'s
+  member reassignment, **the rule's discriminator**: same substitution shape,
+  **not** an instance, because `GroupDeletion::Reassign` surfaces it as an
+  operand. ★ Re-stated here rather than assumed, because **a Pass that fixes
+  three substitutions is exactly where the fourth gets "fixed" by mistake.**
+
+**Sourcing — `R228`; this filing had a shell and used it.** Re-run here:
+`check-ledger-numbers` **clean**, LIVE CEILINGS block read directly for all
+three numbers below rather than inferred from documents, and it now reports
+**"Pass families with headings: up to 178 (highest ID 178.2)"** with `178` no
+longer under CLAIMED-BUT-NOT-YET-HEADED; `check-core-api-verbs` **PASS at 175**
+public `EditSession` methods; `check-cited-verbs-exist` **PASS, 7 of 7**;
+`check-cited-commits-exist` **clean across 79 documents**;
+`check-suite-name-absent` **clean**; `check-passes-filed` — no new orphan;
+`check-commits-filed` named **`a95eb0a` and `75174fc`** as the two code commits
+in no filing **before** these entries were written. `git show --stat` for both
+Passes and for `d6a2e6d`. Live source read, not relayed:
+`crates/pdfce-core/src/edit.rs:29488-29505`,
+`crates/pdfce-cli/tests/dimension_group_management.rs:697`, `:731`, `:798`,
+`:887`, and `docs/core-api/02-editing-and-saving.md:2082-2100`, `:3304-3316`.
+**Relayed, not re-run:** `cargo test --workspace --all-features` (foreground),
+fmt, `clippy --all-targets --all-features -D warnings`, both sabotage results,
+and the 20-verb probe sweep itself (the engineer ran it against the shipped
+binary; this role read its result out of `75174fc`).
+
+**★★ `docs/core-api` — THE DISPATCH SAID IT WAS OWED. IT IS DISCHARGED, AND
+THAT IS A CORRECTION TO THE DISPATCH, CHECKED RATHER THAN ASSUMED.** The
+dispatch asked this role to report the debt back plainly. **`git log` says it
+was paid while this filing ran**: `d6a2e6d`, *"docs(core-api): the four `R235`
+refusals, in the document `pdfceGUI` builds against"*, **2026-08-30 05:50:55
+−0400** — after the dispatch was written, before this entry. **2 files,
++27 / −3**: warnings on the `add_dimension` and `set_group_scale` rows, a
+five-row family table (five failures across four verbs, matching this filing's
+counting convention), `R235`'s shape, the consuming-shell sentence, and the
+sweep's negative result. `docs/core-api/index.md` moves with it. ⇒ **Nothing is
+owed on the two Passes themselves; §6.6 (survivor 5 above) IS owed and is the
+only piece.** ★ Filed this way deliberately: **hard rule 8 forbids inferring
+disk state from documents, and a dispatch is a document.**
+
+**Cross-project RAG — ONE new finding, ONE amended, neighbours named:**
+- **NEW —** `D:/dev/rag/rust/reading_a_sibling_cannot_answer_whether_a_function_checks_something_probe_the_family_against_the_binary.md`
+  — the general methodology fact: for *"does this code path check X?"* across a
+  **family**, probe the shipped binary rather than reading; **a guard's absence
+  has no syntax**; the three-row check table; the tell; file the negative
+  result; turn the probe into a **family-wide** regression test.
+- **AMENDED —** `a_pure_model_helper_that_returns_a_result_value_cannot_refuse_so_the_rule_is_invisible_at_the_verb.md`,
+  written yesterday-in-session-time at **three** instances with the third
+  described as *in-tree*. Now **four**, instance 3 committed, a new closing
+  section for instance 4, and the counting convention in the header. **This is
+  hard rule 11 applied to this role's own RAG output** — the file would
+  otherwise have been read as current and quoted at three.
+- **Checked before writing, deliberately NOT duplicated:**
+  `a_convention_documented_on_one_function_does_not_bind_an_existing_sibling.md`
+  is about a convention *written* on one function not binding a sibling — this
+  is about a property *inferred* from a sibling while reading, and its remedy
+  is a different **instrument**, not a second doc comment;
+  `a_claim_in_a_comment_is_not_a_check.md` is the artefact form of the same
+  family; `a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`
+  says how to make a **textual** sweep sound, where this one says when to stop
+  making the sweep textual at all;
+  `an_accessor_carries_the_preconditions_of_the_caller_it_was_written_for.md`
+  is adjacent and about preconditions travelling, not about verifying one.
+  Both `index.md` entries added in the same session, per the tree's discipline.
+- **Nothing filed to `C:\personal_rag\pdf\`** — this is a Rust/verification
+  methodology fact with **no PDF-domain content**; hard rule 3's bar is met by
+  the `rust` file alone and a second copy would violate hard rule 4. Nothing
+  filed to `C:\personal_rag\claude_code\` for the same reason.
+- **Not duplicated into the engineer's agent memory either** — `44cc0f5`
+  already carries the project-local half (*"a claim about callers is a
+  measurement"*, reading-side amendment, committed by the engineer). The RAG
+  file cites it rather than restating it.
+
+**Still in flight:**
+- **★★ `docs/core-api/02-editing-and-saving.md` §6.6 — OWED, and it is the
+  only core-api piece outstanding.** Three false statements listed as survivor
+  5 above, one of which (*"no test passes a bogus `GroupId`"*) would still
+  return nothing to the search it names — a live clause-(e) instance.
+- **★ THE TREE MOVED UNDER THIS FILING AGAIN, and this time it moved a fact
+  the DISPATCH depended on.** First `git log` at the start of this filing
+  showed `HEAD` at `44cc0f5`; a later `git log` showed `d6a2e6d` on top,
+  committed **05:50:55**, discharging the very debt the dispatch had asked this
+  role to report as owed. ⇒ **`R201` says a dispatch in flight is not a commit
+  window; this is the reporting half, and the third consecutive filing to hit
+  it.** Statements here about `a95eb0a`/`75174fc`/`d6a2e6d` are about
+  **commits**; the working tree carried only `?? .tmp_1781.py` at both checks.
+- **`bash tools/run-gates.sh` has NOT been run** against `a95eb0a`,
+  `75174fc` or `d6a2e6d`; seven gates were run individually here.
+- **Backup bundle currency and `origin` divergence — NOT re-measured in this
+  filing** and therefore not asserted. The 338th filing measured 10 commits on
+  both counts at `c441a92`; **four commits have landed since**, so both figures
+  are stale by construction. `ls -lt /d/Dev/pdfce-backups/` and
+  `git rev-list --count origin/main..HEAD` are one command each. ★ Stated this
+  way on purpose: hard rule 8's whole content is that **a confident figure
+  inferred from a prior filing is worse than silence**, and this filing has
+  already caught one of its own predecessor's inferences today.
+- **Pushing `main` is standing-authorized** (decision 090) and
+  `check-suite-name-absent` is clean, so the public-facing gate is green.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+  open, unchanged for a fifth filing: single-sourced at moderate confidence,
+  its own author asked for a live-Acrobat check, and this machine has Reader
+  only.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — carried unchanged for a
+  fourth filing. One stale re-export figure was found by reading for the claim;
+  the block it sits in lists several modules' surfaces the same way and nothing
+  derives any of them.
+
+**For next session:**
+1. **Write `docs/core-api/02-editing-and-saving.md` §6.6** — the three
+   corrections in survivor 5. Engineer's file, engineer's act.
+2. **★ Notify `D:\dev\pdfceGUI`, as ONE note, now four items deep and overdue
+   since the 336th filing:** `rotate_widget` / `rotate-widget` (`Pass 177.0`);
+   `group-rename` / `group-delete` / `dimension-group` / `dimension-label`
+   (`Pass 176.0`, `175.0`); the layer panel needing to **grey out the default
+   group's toggle** (`Pass 178.0`); and now **the four new refusals across the
+   ce-dimension group family** — *a ce-dimension group id cached across a
+   reload now produces an error where it used to appear to work.* That last
+   line is the one that stops a shell author filing it as a regression.
+3. **★★ Run clause (e) on ANOTHER family.** This session's probe sweep covered
+   ce-dimension, widget, form-fill, annotation-move and page-op verbs against a
+   bogus **identifier**. The obvious untested axes are the **other bad-input
+   classes** on the same verbs — an out-of-range page index, an empty or
+   over-long string, a NaN/negative geometry operand — each of which is one
+   loop over the same verb list and none of which has been measured.
+4. **Measure the backup bundle and `origin` divergence**, and file both figures
+   with the command that produced them.
