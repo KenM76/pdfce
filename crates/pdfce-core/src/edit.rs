@@ -4793,6 +4793,45 @@ pub enum EditError {
         /// How many dimensions still belong to it.
         members: usize,
     },
+    /// The **default** ce-dimension group was named for deletion
+    /// (`Pass 176.0`).
+    ///
+    /// # ★ Why this is a refusal and not a permission the model could grant
+    ///
+    /// The default group is the one every ce dimension falls back to and the
+    /// one [`crate::dimension::DimensionModel::new`] guarantees exists. The
+    /// SIDECAR READER enforces that guarantee as a coherence check —
+    /// `deserialize_model` returns `None` for a sidecar with no group `0`,
+    /// and the session turns `None` into a **fresh, empty model**.
+    ///
+    /// So a document saved without its default group loses **every group,
+    /// every calibrated scale and every ce dimension** the next time pdfce
+    /// opens it, and loses them **silently**: the `/Line` annotations keep
+    /// rendering perfectly off their baked `/AP`, so nothing looks wrong
+    /// until the next save writes the empty model over the good sidecar and
+    /// makes it permanent.
+    ///
+    /// # How it was reachable, which is the part worth remembering
+    ///
+    /// The rule already existed and was enforced in exactly one of the two
+    /// deletion paths. [`crate::dimension::DimensionModel::delete_group`] has
+    /// guarded it since `Pass 25.7` (`if id == DEFAULT_GROUP_ID { return 0 }`)
+    /// — but that is the pure-model helper, reached only by this crate's own
+    /// tests. [`EditSession::delete_dimension_group_with`], the verb every
+    /// consumer actually calls, went straight to `remove_group` with no check
+    /// at all.
+    ///
+    /// It stayed latent because **nothing called it with group `0`** until
+    /// `Pass 176.0` gave the CLI a `group-delete` subcommand and a test passed
+    /// `--group 0`. One rule, two paths, enforced in the one nobody ships
+    /// through.
+    #[error(
+        "dimension group {id} is the default group and cannot be deleted; every ce dimension falls back to it, and a document saved without it loses its entire measurement model on the next open"
+    )]
+    DimensionGroupIsDefault {
+        /// The group named for deletion — always the default group's id.
+        id: u32,
+    },
     /// [`GroupDeletion::Reassign`] named the group being deleted.
     ///
     /// Its own error rather than a silent no-op: the members would be moved
@@ -28804,6 +28843,22 @@ impl EditSession {
         }
         self.check_certification()?;
         self.check_dimension_sidecar()?;
+        // ★ The default group is undeletable, refused BEFORE anything is
+        // touched (rule 4). See `EditError::DimensionGroupIsDefault` for what
+        // deleting it costs -- the sidecar it produces is well-formed and the
+        // READER rejects it as incoherent, so the whole measurement model is
+        // gone on the next open, silently.
+        //
+        // Checked here rather than inside `DimensionModel::remove_group`, and
+        // the distinction is deliberate: `remove_group`'s own docs say it
+        // "does not touch its members" and leave member fate to callers, so it
+        // is a primitive with no policy. This verb is the policy boundary. The
+        // sibling `DimensionModel::delete_group` guards the same rule for the
+        // reassign-to-default path it implements -- which is exactly the split
+        // that let this through.
+        if group == crate::dimension::DEFAULT_GROUP_ID {
+            return Err(EditError::DimensionGroupIsDefault { id: group.0 });
+        }
         let mut model = self.read_dimension_model();
         if model.group(group).is_none() {
             return Err(EditError::DimensionGroupNotFound { id: group.0 });

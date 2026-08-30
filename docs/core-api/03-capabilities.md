@@ -507,7 +507,10 @@ derivations of a display value: the properties pane read `77.5°` while the
 - **`EditError::SidecarWrittenByNewerBuild`** (`edit.rs:16930`) — every
   ce-dimension mutation first calls `check_dimension_sidecar()`
   (`edit.rs:16917`) and refuses if the document's `/PieceInfo` sidecar
-  version exceeds `SIDECAR_VERSION` (currently `2`, `sidecar.rs:44`). Surface
+  version exceeds `SIDECAR_VERSION` (read the constant — `grep 'pub const
+  SIDECAR_VERSION' crates/pdfce-core/src/dimension/sidecar.rs`; it was `2` when
+  this line was written, `3` when it was next read and `4` now, and the line
+  number moved every time). Surface
   it as *"this file's ce dimensions were written by a newer pdfce"*, not as a
   generic failure.
 - **Kind-mismatch refusals.** `set_dimension_display` refuses a

@@ -2071,8 +2071,26 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 > |---|---|---|
 > | Rename a group | `rename_dimension_group(&mut self, group: GroupId, name: &str) -> Result<(), EditError>` | Metadata only — **no appearance is regenerated**, because the name is not drawn. Names are **not** required to be unique; `GroupId` is the identity. |
 > | Delete an empty group | `delete_dimension_group(&mut self, group: GroupId) -> Result<(), EditError>` | Refuses a populated group with `DimensionGroupNotEmpty { members }`. |
-> | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. |
+> | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. ⚠️ **Refuses the DEFAULT group with `DimensionGroupIsDefault`, whatever the policy** (`Pass 176.0`) — see below. |
 > | **Move a dimension to another group** | `set_dimension_group(&mut self, dimension: DimensionId, group: GroupId) -> Result<(), EditError>` | ★ **RE-MEASURES it** — see below. |
+>
+> ★★ **The DEFAULT group cannot be deleted, and a shell should not offer to.**
+> `DimensionGroupIsDefault { id }` (`Pass 176.0`) refuses it before anything is
+> touched, under **every** `GroupDeletion` policy including `Reassign`.
+>
+> This is worth a paragraph rather than a row because the failure it prevents
+> is invisible and total. The sidecar pdfce *wrote* for a default-group
+> deletion was well formed — the group removed, the survivors kept, the
+> members re-parented — and the **reader** rejected it: the sidecar decoder
+> requires group `0` as a coherence check and yields `None` without it, which
+> the session turns into a **fresh, empty model**. Every group, every
+> calibrated scale and every ce dimension disappeared on the next open, and
+> disappeared silently, because the `/Line` annotations keep rendering
+> perfectly off their baked `/AP`. Nothing looked wrong until the next save
+> wrote the empty model over the good sidecar.
+>
+> A grey-out on the default group in a group list is the right shell
+> behaviour; the refusal is the backstop, not the UI.
 >
 > ★★ **`set_dimension_group` is not a field assignment, and a shell must not
 > treat it as one.** A ce dimension's label is derived from its GROUP's scale,
@@ -3095,7 +3113,7 @@ private to `pdfce-gui` (`crates/pdfce-gui/src/main.rs:1411`). `WriteReport`:
 |---|---|---|---|
 | **Encryption** | `EditError::DocumentEncrypted` `edit.rs:2765` | inlined `if self.base.trailer().contains_key(b"Encrypt")` — **no named helper** (`NOT FOUND — searched `refuse_if_encrypted`, `is_encrypted`, `encryption_refusal` across `crates/`); 38 occurrences in `edit.rs` | Today pdfce refuses to *load* an encrypted file at all, so this is a forward-compatible R37 seam (`edit.rs:19338`), not a path a loadable file currently reaches. |
 | **Enforced certification** | `EditError::CertificationForbidsChange { permission: u8 }` `edit.rs:2722` | three functions, §6.2 | The catalog carries `/Perms → /DocMDP` **and** at least one signature exists (`signature.rs:332`). |
-| **Sidecar version** | `EditError::SidecarWrittenByNewerBuild { found, supported }` `edit.rs:2415` | `check_dimension_sidecar` `edit.rs:16917` | The ce-dimension `/PieceInfo` sidecar declares a version above `SIDECAR_VERSION` (**currently 2**, `dimension/sidecar.rs:44`). No sidecar ⇒ `Ok`. |
+| **Sidecar version** | `EditError::SidecarWrittenByNewerBuild { found, supported }` `edit.rs:2415` | `check_dimension_sidecar` `edit.rs:16917` | The ce-dimension `/PieceInfo` sidecar declares a version above `SIDECAR_VERSION` — **read the constant, do not quote a number here** (`grep 'pub const SIDECAR_VERSION' crates/pdfce-core/src/dimension/sidecar.rs`). Note it is emitted **per document**: a file using no post-`3` feature is still written at `3`. No sidecar ⇒ `Ok`. |
 | **`/Size` suppression** | `EditError::ObjectCreationWouldExposeHiddenObjects { count }` `edit.rs:2355` | `self.base.suppressed_object_count() > 0` | §7.5.5: objects at or above `/Size` *"shall be ignored and defined to be missing"*. Creating an object raises `/Size` and would resurrect objects nobody touched. **Only creation is refused; editing an existing object is unaffected.** |
 
 Plus the allocator's `EditError::ObjectNumbersExhausted` (`edit.rs:2336`).
@@ -3634,7 +3652,7 @@ breaking change and the project treats it as routine.
 | `to_incremental_bytes` / `to_full_bytes` / `SaveReport` | **Stable.** Two-method shape unchanged since Pass 3.x; `SaveReport` is `#[non_exhaustive]` and has gained fields additively (`objects_deleted`, `delinearized`). | `writer/save.rs:208` |
 | Guard model (encryption / certification / `/Size`) | **Stable in shape, still growing in coverage.** The three-gate certification split is argued as a permanent design (`edit.rs:12253-12266`). The encryption guard is explicitly a *forward-compatible seam* — `edit.rs:19338` records that no loadable file currently reaches it, so its behaviour when encrypted loading ships is **UNVERIFIED — re-check when `Pass 5` (Encryption) delivers a decrypting loader**. | `edit.rs:6970`, `:11449`, `:12289`, `:19338` |
 | Forms (authoring, structure, values) | **Recently active.** Four of the last fifteen `edit.rs` commits touch forms (`3fe8a19` border spec, `ce5642d` hybrid fail-open, `f83be5a` four authoring properties, `7d2b71b` reset-form). Expect additive changes to `New*Field` specs and to `FieldAuthorDisclosures`. | `git log -15 -- crates/pdfce-core/src/edit.rs` |
-| ce dimensions (14 verbs) | **★ Actively changing — the least stable area.** `set_group_style` / `set_dimension_style` and the whole `dimension::style` cascade shipped **today** (`7ebee12`, 2026-08-13), and `dimension::tolerance` shipped in the next commit (`dbc4aa9`, same day) adding the tenth and eleventh cascade properties. `SIDECAR_VERSION` is 2 and the project has an explicit, argued policy about when it bumps (`ARCHITECTURE.md` §12 entries (R), (S), (T)). Treat every ce-dimension signature as provisional. | `git log -3 -- crates/pdfce-core/src/dimension/style.rs` |
+| ce dimensions (see §1's ce-dimension block for the current set) | **★ Actively changing — the least stable area.** `set_group_style` / `set_dimension_style` and the whole `dimension::style` cascade shipped 2026-08-13 (`7ebee12`), `dimension::tolerance` in the next commit (`dbc4aa9`, same day), and `set_dimension_label` on 2026-08-30 (`c7ac578`). The project has an explicit, argued policy about when `SIDECAR_VERSION` bumps (`ARCHITECTURE.md` §12) and it is now emitted **per document** rather than per build. Treat every ce-dimension signature as provisional. | `git log -3 -- crates/pdfce-core/src/dimension/style.rs` |
 | Attachments (`attach_file` / `detach_file`) | **New.** Shipped 2026-08-12 (`74582ca`, `95c3416`). Only two verbs; the refused name-tree shape (`AttachmentTreeUnsupported`) is a known boundary. | `ARCHITECTURE.md` §12 (Q) |
 | Fonts (`embed_*` / `unembed_*`) | **New.** Shipped 2026-08-12–13 (`f3acd24`, `d87fb58`). These are the only two verbs whose `*_refusal` accessor is load-bearing, which may or may not be a pattern the project generalises. **UNVERIFIED — whether the other four refusal accessors will be made load-bearing; nothing in the source states an intent either way.** | `edit.rs:16375`, `:16627` |
 | Vector geometry (11 verbs) | **Stable in shape, `Vec<String>` return is a weak contract.** Every verb returns an untyped disclosure list. `ARCHITECTURE.md` §4.1 (C) records decision 027 already changed five `EditSession` signatures in this family once and removed two error variants. **UNVERIFIED — whether `Vec<String>` will become a typed disclosure struct; decision 027 moved in that direction for `PlannedEdit` but stopped at the session boundary.** | `edit.rs:4483-5057`, `ARCHITECTURE.md` §4.1 (C) |

@@ -5520,6 +5520,110 @@ enum Command {
         #[arg(long)]
         style: bool,
     },
+    /// **Rename a ce dimension group** (Pass 25.7).
+    ///
+    /// Metadata only — **no appearance is regenerated**, because a group's
+    /// name is not drawn on the page. Nothing about what any member measures
+    /// or prints changes.
+    ///
+    /// The name matters beyond the group list: a ce dimension copied to
+    /// another document is matched to a destination group **by name**, so
+    /// renaming here changes where a future paste lands. Two groups may not
+    /// share a name.
+    ///
+    /// List the ids and current names with `dimension-list`.
+    GroupRename {
+        /// Input PDF.
+        input: PathBuf,
+        /// The group id, as printed by `dimension-list`.
+        #[arg(long)]
+        group: u32,
+        /// The new name.
+        #[arg(long)]
+        name: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// **Delete a ce dimension group**, answering the what-about-the-members
+    /// question explicitly (Pass 25.7).
+    ///
+    /// `--members refuse` (the default) **refuses** a group that still has
+    /// members and reports how many, so a script never destroys measurements
+    /// it did not know were there. `--members reassign --to N` moves them to
+    /// group N first and **re-measures** every one of them against that
+    /// group's scale, unit and precision — the label derives from the group,
+    /// so a re-parented ce dimension genuinely reads differently afterwards.
+    ///
+    /// There is deliberately **no delete-the-members policy.** It would be a
+    /// second `/Annots` removal path and would give one undo entry per
+    /// member; `dimension-delete` already removes a ce dimension outright.
+    ///
+    /// One undo entry covering the group, its members and every regenerated
+    /// appearance. The default group cannot be deleted.
+    GroupDelete {
+        /// Input PDF.
+        input: PathBuf,
+        /// The group id, as printed by `dimension-list`.
+        #[arg(long)]
+        group: u32,
+        /// What happens to member ce dimensions.
+        #[arg(long, value_enum, default_value_t = GroupDeletionArg::Refuse)]
+        members: GroupDeletionArg,
+        /// Destination group for `--members reassign`. Required with it, and
+        /// refused without it.
+        #[arg(long)]
+        to: Option<u32>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// **Move one placed ce dimension into another group — RE-MEASURING it**
+    /// (Pass 25.7).
+    ///
+    /// ★ This is not a field assignment. A ce dimension's scale, unit,
+    /// precision and drafting standard all live on its GROUP, so re-parenting
+    /// changes what the dimension **reads**, not merely which list it appears
+    /// in. A 200 pt line reading `5.000 m` in a 1:50 group reads something
+    /// else entirely in a 1:100 one.
+    ///
+    /// The printed value before and after is reported on the result line for
+    /// exactly that reason — it is the fact most likely to be mistaken for a
+    /// defect.
+    ///
+    /// `/Rect`, `/Contents`, `/Measure` and `/L` are all regenerated together
+    /// through the one shared path, as a single undo entry.
+    DimensionGroup {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// The destination group id.
+        #[arg(long)]
+        group: u32,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Set a ce dimension group's drafting standard** (Pass 27.2) and
     /// regenerate every member to it.
     ///
@@ -8868,6 +8972,39 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_dimension_display(&input, dimension, show, &output, mode, verify_undo),
+        Command::GroupRename {
+            input,
+            group,
+            name,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_group_rename(&input, group, &name, &output, mode, verify_undo),
+        Command::GroupDelete {
+            input,
+            group,
+            members,
+            to,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_group_delete(&GroupDeleteArgs {
+            input: &input,
+            group,
+            members,
+            to,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::DimensionGroup {
+            input,
+            dimension,
+            group,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_group(&input, dimension, group, &output, mode, verify_undo),
         Command::DimensionLabel {
             input,
             dimension,
@@ -24073,6 +24210,25 @@ undo_verified={} undo_identical={}",
 
 /// `dimension-list` — inventory the stored dimension model (read-only).
 /// The drafting standard, as a CLI value.
+/// `--members` for `group-delete`: what happens to the ce dimensions inside
+/// a group being removed.
+///
+/// A **two-variant** mirror of `pdfce_core::edit::GroupDeletion`, whose
+/// `Reassign` arm carries its destination in the value. Clap cannot express a
+/// value-carrying variant as a `--flag word`, so the destination rides on a
+/// separate `--to` and the two are recombined in the handler — where a
+/// `reassign` without a `--to`, and a `--to` without `reassign`, are both
+/// refused by name rather than defaulted. Defaulting either one would pick a
+/// destination group on the operator's behalf and re-measure every dimension
+/// in it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum GroupDeletionArg {
+    /// Refuse if the group still has members, reporting how many.
+    Refuse,
+    /// Move the members to the group named by `--to`, re-measuring them.
+    Reassign,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum StandardArg {
     /// ANSI/ASME practice — broken dimension line, horizontal text, point
@@ -24090,6 +24246,238 @@ impl StandardArg {
             Self::Iso => pdfce_core::dimension::DimStandard::Iso,
         }
     }
+}
+
+/// `group-rename` -- rename a ce dimension group (Pass 25.7).
+///
+/// ## Contract
+///
+/// - Emits one `group-rename ...` line carrying the OLD and the NEW name,
+///   then defers the exit code to [`finish_edit`].
+/// - **Both names**, because the id alone does not tell an operator reading a
+///   log which group moved, and the old name is gone from the document the
+///   moment this succeeds. It is also the fact a future paste depends on: a
+///   ce dimension copied between documents is matched to a destination group
+///   BY NAME, so a rename silently changes where a later paste lands.
+/// - No appearance is regenerated -- a group's name is not drawn -- so there
+///   is no member count to report and deliberately none is printed.
+fn cmd_group_rename(
+    input: &Path,
+    group: u32,
+    name: &str,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    // Read the old name BEFORE the rename, from the model rather than from an
+    // argument -- the caller supplied only an id, and after the write the
+    // previous name exists nowhere.
+    let was = session
+        .dimension_model()
+        .group(pdfce_core::dimension::GroupId(group))
+        .map_or_else(String::new, |g| g.name.clone());
+    if let Err(err) = session.rename_dimension_group(pdfce_core::dimension::GroupId(group), name) {
+        return report_edit_error(input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "group-rename {} group={group} was=\"{}\" now=\"{}\" mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        was.replace('"', "'"),
+        name.replace('"', "'"),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// The `group-delete` argument bundle -- seven parameters, which is past the
+/// point where positional arguments of the same type stop being readable
+/// (`group` and `to` are both `u32` group ids and would sit side by side).
+struct GroupDeleteArgs<'a> {
+    input: &'a Path,
+    group: u32,
+    members: GroupDeletionArg,
+    to: Option<u32>,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `group-delete` -- remove a ce dimension group, saying what happens to its
+/// members (Pass 25.7).
+///
+/// ## Contract
+///
+/// - Recombines `--members` and `--to` into the core `GroupDeletion` policy.
+///   Both mismatches are refused BY NAME rather than defaulted -- `reassign`
+///   without `--to`, and `--to` without `reassign`. A default destination
+///   would pick a group on the operator's behalf and RE-MEASURE every
+///   dimension moved into it, and a silently-ignored `--to` would let a
+///   script believe it had specified a destination that was never read.
+/// - Emits one `group-delete ...` line with `members_moved=`, then defers the
+///   exit code to [`finish_edit`].
+/// - A non-empty group under the default policy is refused through
+///   [`report_edit_error`] with the engine's own sentence, which names the
+///   member count.
+fn cmd_group_delete(args: &GroupDeleteArgs) -> u8 {
+    use pdfce_core::edit::GroupDeletion;
+
+    // Both halves of the policy are validated BEFORE the document is opened:
+    // an argument error is not a document error, and reporting it against the
+    // input path would suggest the file was at fault.
+    let policy = match (args.members, args.to) {
+        (GroupDeletionArg::Refuse, None) => GroupDeletion::Refuse,
+        (GroupDeletionArg::Refuse, Some(_)) => {
+            eprintln!(
+                "pdfce-cli: --to names a destination group, which only `--members reassign` uses; pass `--members reassign` or drop `--to`"
+            );
+            return exit::EDIT_REFUSED;
+        }
+        (GroupDeletionArg::Reassign, Some(to)) => {
+            GroupDeletion::Reassign(pdfce_core::dimension::GroupId(to))
+        }
+        (GroupDeletionArg::Reassign, None) => {
+            eprintln!(
+                "pdfce-cli: --members reassign needs --to <GROUP>; the members would otherwise be moved to a group nobody chose, and re-measured against its scale"
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let moved = match session
+        .delete_dimension_group_with(pdfce_core::dimension::GroupId(args.group), policy)
+    {
+        Ok(n) => n,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "group-delete {} group={} members={} to={} members_moved={moved} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.group,
+        match args.members {
+            GroupDeletionArg::Refuse => "refuse",
+            GroupDeletionArg::Reassign => "reassign",
+        },
+        args.to.map_or_else(|| "-".to_owned(), |t| t.to_string()),
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// `dimension-group` -- move one placed ce dimension into another group,
+/// re-measuring it (Pass 25.7).
+///
+/// ## Contract
+///
+/// - Emits one `dimension-group ...` line carrying the printed value BEFORE
+///   and AFTER the move, then defers the exit code to [`finish_edit`].
+/// - ★ **Both values, because the re-measurement IS the operation.** Scale,
+///   unit, precision and drafting standard all live on the group, so a
+///   re-parented ce dimension reads differently -- `5.000 m` becomes
+///   `2.500 m` moving from a 1:50 group to a 1:100 one. That is correct and
+///   is the single fact about this verb most likely to be reported as a
+///   defect, so the CLI states it unasked. In the GUI the same disclosure
+///   lives off-canvas; here the invocation is the commit, so the line is it.
+/// - The values are read through `DimensionModel::display`, the one producer
+///   the baked `/AP` also goes through, so the reported number cannot
+///   disagree with what the page draws.
+fn cmd_dimension_group(
+    input: &Path,
+    dimension: u32,
+    group: u32,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let id = pdfce_core::dimension::DimensionId(dimension);
+    let before = session
+        .dimension_model()
+        .display(id)
+        .map_or_else(String::new, |m| m.text);
+    if let Err(err) = session.set_dimension_group(id, pdfce_core::dimension::GroupId(group)) {
+        return report_edit_error(input, &err);
+    }
+    let after = session
+        .dimension_model()
+        .display(id)
+        .map_or_else(String::new, |m| m.text);
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-group {} dimension={dimension} group={group} was=\"{}\" now=\"{}\" remeasured={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        before.replace('"', "'"),
+        after.replace('"', "'"),
+        u32::from(before != after),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
 }
 
 /// `group-set-standard` — set a group's drafting standard, regenerating every
@@ -28446,25 +28834,48 @@ fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
         );
         return exit::EDIT_REFUSED;
     };
-    let format = match args.precision {
-        Some(p) if unit == Unit::FeetInches => NumberFormat::feet_inches(p, false),
-        Some(p) => NumberFormat::decimal(unit, p),
-        None => unit.default_format(),
-    };
-
-    let scale = if args.one_to_one {
-        ScaleState::OneToOne
+    // ★ THE FORMAT IS BUILT AFTER THE SCALE BRANCH, NOT BEFORE IT
+    // (`Pass 176.0`), because `--real-length` can name a unit that `--unit`
+    // did not.
+    //
+    // It used to be built here, from `--unit` alone, and the `--real-length`
+    // branch below then SHADOWED `unit` with the one it read out of the text.
+    // The shadow was local to that block and the format had already been
+    // computed outside it, so the text-named unit reached the SCALE and never
+    // reached the LABEL.
+    //
+    // What that shipped, measured on the release binary 2026-08-30:
+    //
+    // ```text
+    //   group-set-scale --real-length '55 5/8"' --drawn 200
+    //   -> a 200 pt line reads   55.62 mm      (should be 55.62 in)
+    // ```
+    //
+    // The magnitude is the INCH value and the label says MILLIMETRES — a
+    // number that is neither, on a drawing, off by 25.4x. And this command's
+    // own `--help` promises the opposite in writing: *"A notation that names a
+    // unit sets the group's unit too … the same rule the GUI field follows, so
+    // a command and a click produce the same result from the same text."*
+    //
+    // So the branch now yields `(scale, effective_unit)` and the format is
+    // built from the unit that actually won. One binding, resolved once,
+    // consumed once -- there is no longer a second `unit` for a reader to pick
+    // the wrong one of.
+    let (scale, unit) = if args.one_to_one {
+        (ScaleState::OneToOne, unit)
     } else if let Some(ratio) = args.ratio {
         let Some((paper, real)) = parse_ratio(ratio) else {
             eprintln!("pdfce-cli: {}: --ratio must be `N:M`", args.input.display());
             return exit::EDIT_REFUSED;
         };
+        // A ratio carries no unit of its own -- `1:100` is dimensionless --
+        // so `--unit` is the only source here and passes through unchanged.
         match preview_group_scale(ScaleEntry::Ratio {
             paper,
             real,
             basis: unit,
         }) {
-            Some(p) => ScaleState::Calibrated { scale: p.scale },
+            Some(p) => (ScaleState::Calibrated { scale: p.scale }, unit),
             None => {
                 eprintln!("pdfce-cli: {}: invalid ratio", args.input.display());
                 return exit::EDIT_REFUSED;
@@ -28486,6 +28897,10 @@ fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
         // A unit named in the text wins over `--unit`, matching the GUI: the
         // operator said inches by typing `"`, and making them repeat it in a
         // flag would be asking the same question twice.
+        //
+        // This binding is no longer a SHADOW -- it is the value the whole
+        // expression yields, so it reaches the number format as well as the
+        // scale. See the note above the branch for what the shadow cost.
         let unit = if parsed.unit_from_text {
             parsed.unit
         } else {
@@ -28496,7 +28911,7 @@ fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
             real_length: parsed.value,
             unit,
         }) {
-            Some(p) => ScaleState::Calibrated { scale: p.scale },
+            Some(p) => (ScaleState::Calibrated { scale: p.scale }, unit),
             None => {
                 eprintln!(
                     "pdfce-cli: {}: --drawn must be a positive length",
@@ -28511,6 +28926,16 @@ fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
             args.input.display()
         );
         return exit::EDIT_REFUSED;
+    };
+
+    // Built from the unit that WON, which for `--real-length '4\'-7 1/2"'` is
+    // `ft-in` and takes the feet-inches arm below -- an operator writing
+    // architectural notation gets architectural output without also passing
+    // `--unit ft-in`.
+    let format = match args.precision {
+        Some(p) if unit == Unit::FeetInches => NumberFormat::feet_inches(p, false),
+        Some(p) => NumberFormat::decimal(unit, p),
+        None => unit.default_format(),
     };
 
     let (source, mut session) = match open_for_edit(args.input) {
@@ -28534,10 +28959,15 @@ fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "group-set-scale {} group={} mode={} -> {}; members_regenerated={members} \
+        "group-set-scale {} group={} unit={} mode={} -> {}; members_regenerated={members} \
 changed={} objects={} appended={} out_bytes={}",
         args.input.display(),
         args.group,
+        // ★ REPORTED (`Pass 176.0`), and its absence is part of why the unit
+        // bug survived: this line said what was set for every field except the
+        // one that was wrong. A caller passing `--real-length '55 5/8"'` saw a
+        // success line with no unit on it and had no reason to check.
+        unit.token(),
         args.mode.name(),
         args.output.display(),
         outcome.changed,
