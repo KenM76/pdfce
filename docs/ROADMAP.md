@@ -96,6 +96,148 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 174.10` (`5a60fae`, 2026-08-30) — THE FIVE SURVIVORS DISCHARGED, AND THE ONE THAT MATTERED WAS `#[error(transparent)]`: the correction reached the rustdoc and stopped **three lines short** of the only copy an operator reads — filed 2026-08-30 (334th filing)
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
+here, on disk, not relayed: `git status --short` (**empty**);
+`git rev-list --count origin/main..main` = **4**; the commit message read in
+full; `git show --stat 5a60fae` = **4 files, +44 / −17**; **the shipped
+`#[error]` template read from live source** at
+`crates/pdfce-core/src/forms_author.rs:259-264` (not from the commit message —
+see below); the **whole `destroy|orphan` sweep re-run** over the four touched
+files; `cargo test -p pdfce-core --test form_field_merge` **re-run here: 36
+passed, 0 failed** (unchanged from `174.9` — this Pass changed **wording**, not
+behaviour, so a moving count would itself have been a defect);
+`python tools/check-core-api-verbs.py` **PASS**;
+`python tools/check-ledger-numbers.py` **clean**;
+`python tools/check-suite-name-absent.py` **clean**;
+`wc -l docs/core-api/03-capabilities.md` = **2,671**, agreeing with the figure
+`index.md` was moved to in this same commit (**2,668 → 2,671 = +3 lines**;
+clause count **63, unchanged** — the correction added prose, cited no new
+clause); `check-commits-filed.py` **confirmed RED here before this entry was
+written**, naming `5a60fae` and nothing else; `ls -lt D:/Dev/pdfce-backups/`
+(newest **`pdfce-20260829-2335-3d71ad2-full.bundle`**, so the bundle is **5
+commits behind `HEAD`** — `git rev-list --count 3d71ad2..HEAD` = **5**).
+**Relayed, not re-run:** `cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`, `check-string-gaps.sh`.
+★ **`bash tools/run-gates.sh` was NOT re-run and NO pass count is claimed** —
+the filing gate was red *because of this filing*, and the engineer runs the
+sweep after it. ★ **`cargo tree` was NOT re-run and is NOT claimed** — no
+manifest touched; the GUI-core separation invariant is **unchallenged**, which
+is not the same statement as **verified**.
+
+**What changed.** Nothing in the refusal, nothing in the tests' assertions,
+nothing in the object model. **Five copies of a withdrawn description**, all
+five reported as owed by the 333rd filing, all five now corrected.
+
+**★★★ SURVIVOR 1, AND WHY IT IS THE WHOLE PASS.** The shipped message now
+reads — **verified by reading live source, not the commit message**:
+
+```text
+cannot create `Text.2`: `Text` is already a field, and nesting under it would
+stop it being one — a field with kids has no type, value or widget of its own
+(§12.7.3.1), so `Text`'s value would stay in the file and become unreachable
+by name
+```
+
+Longer than what it replaced, and it says the thing the operator has to act
+on: **the data is not gone, it is unaddressable.** `EditError::FieldAuthoring`
+is `#[error(transparent)]`, so this template is verbatim what `pdfce-cli` and
+`pdfceGUI` print.
+
+**★★ A DURABLE NOTE NOW SITS AT THE TEMPLATE ITSELF**
+(`forms_author.rs:243-258`, the rustdoc block headed *"THE MESSAGE BELOW IS
+SHIPPED UI, AND IT SURVIVED THE CORRECTION THREE LINES ABOVE IT"*). It states
+the mechanism rather than the incident: the variant is `#[error(transparent)]`
+⇒ the template is shipped UI; **nothing reads it** — not the compiler (which
+type-checks `{fqn}`/`{terminal}` and never the literal text), not clippy, not
+`missing_docs` (the *variant* is documented; the *message* was wrong), and no
+test asserts on it. ⇒ **The next person to correct a claim in that file is told
+by the file itself where the second copy lives.** That is the cheapest possible
+form of `R222`'s remedy: not a gate, but the reminder sitting where the miss
+happened.
+
+**Survivors 2 and 3 — the substantive half.** The no-repair-verb justification
+rested on *"there is nothing to put back"*, which `174.9` had already measured
+to be false. It now rests on the consuming shell's own reason: **the operator's
+document is already wrong in a way they cannot see, and refusing the operation
+beats repairing it afterwards.** The self-contradicting `docs/core-api` bullet
+— *"the value is already gone"* four lines under its own *"still carries
+`/V (K. Mantle)`"* — is fixed; both halves of that bullet now agree, and it
+reads *"not because there is nothing to put back (there is)"*.
+
+**Survivors 4 and 5** — the test's `expect_err` string and the doc-comment
+paragraph beside it, in `crates/pdfce-core/tests/form_field_merge.rs`.
+
+#### ★ THE RE-SWEEP, RUN HERE — 5 OF 5 DISCHARGED, AND THE SURVIVING HITS CLASSIFIED
+
+Same method as the sweep that found them (hard rule 11 clause (e) — narrow the
+file set, widen the pattern): case-insensitive grep for the bare keywords
+`destroy` and `orphan` over the **same four files**, every hit read. **A
+correction is a claim**, so this was re-run rather than assumed.
+
+| File | hits | classification |
+|---|---|---|
+| `crates/pdfce-core/src/forms_author.rs` | 6 | 5 are the **withdrawal text itself** (quoting *"destroyed"* / *"orphaned"* as struck, at `:182`, `:194`, `:205-207`, `:248`); 1 is `RenameCollision` at `:278` — **correct, do not touch** |
+| `crates/pdfce-core/tests/form_field_merge.rs` | **0** | survivors 4 and 5 gone, no replacement |
+| `docs/core-api/03-capabilities.md` | 7 | 1 is the correction (`:943`); 1 is the `RenameCollision` quote (`:928`); 5 are **unrelated features** — `insert_pages`' genuinely-orphaning `replies_orphaned` family (`:1161`, `:1224`), form-script format helpers (`:982`), redaction's image refusal (`:1699`), raster diagnostics (`:2465`) |
+| `docs/core-api/index.md` | 0 | — |
+
+★ **The dispatch described the residue as *"the withdrawal text plus the two
+named as correct"*; the count here is larger and the extra three are none of
+the above.** `:982`, `:1699` and `:2465` are about form-script formatting,
+redaction and raster diagnostics respectively — **different features, accurate
+uses of the word.** Recorded per clause (e) so a future sweep does not "fix"
+them. **The word `destroy` is not the defect; the word applied to THIS defect
+was.**
+
+#### THE RULE DISPOSITION — NO MINT, `R222` INSTANCE 6 STANDS AS FILED
+
+The 333rd filing rejected `R232` as the parent (*it binds on figures and its
+mechanism is DRIFT; these copies did not drift, they were wrong at birth from
+one inference*) and named **`R222`**, whose remedy was **never applied** —
+below this project's mint bar, which is *a parent remedy applied and
+insufficient*, never *unapplied*. **`Pass 174.10`'s commit message adopts that
+call in full and withdraws the `R232` suggestion by name.** Nothing further is
+owed on it.
+
+**Verified against what actually shipped:** `R222`'s *"what the rule asks for"*
+clause now names **`#[error("…")]` / `#[derive(Error)]` attribute templates**
+and **`expect` / `expect_err` / `unwrap_or_else` messages in tests**, and its
+sixth-instance note is in place. Both extensions were earned separately and
+the rule's text says so — the `#[error]` template because `transparent`
+propagation makes it *frequently the only copy the operator reads*, the
+`expect_err` string because it is what a **test author** writes to say what the
+test is for, so a withdrawn claim surviving there teaches the wrong defect in
+the one file guaranteed to be read when the guard is next touched.
+
+**Standing rules ceiling UNCHANGED: `R234`; next free `R235`. Decision ceiling
+UNCHANGED: `104`; next free `105`.** **No `ARCHITECTURE.md` §12 entry:** no
+architectural decision was made — five sentences were corrected.
+
+**`FEATURES.md`: ZERO rows change — verified, not relayed.**
+`git diff fa52bd4 5a60fae -- docs/FEATURES.md` = **0 lines**, and a keyword
+sweep of the file for `dotted` / `field name` / `fully-qualified` / `FQN` /
+`hierarch` returned **no hits at all** (exit 1). Same reason as `174.9`: **a
+refusal is not a capability**, and a correction to a refusal's *wording* is
+not one either.
+
+**Channel — the outbound reply was UPDATED IN PLACE**, in `open/`, untracked,
+so this entry is the durable record:
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\reply_the_dotted_name_refusal_ships_and_your_diagnosis_was_exact.md`
+— **9,546 bytes, 2026-08-30 01:02** (was 8,922 bytes at 00:16 ⇒ **+624 bytes**;
+`ls -l`, run here). It carries the **new** message string and a line naming
+**`Pass 174.10`** as what changed it, *"in case they cached the earlier one"* —
+verified on disk at line 42. ★ **Updating an already-sent reply in place is the
+right move here precisely because the shell quotes error text back**; a second
+file would have left two message strings in their `open/` folder with nothing
+saying which shipped.
+
+**★ Owed-list discharge.** The 333rd filing's five-survivor table
+(`Pass 174.9`'s *Shipped* entry, and that date's `SESSION_LOG.md` *For next
+session* item 1) is **DISCHARGED IN FULL — 5 of 5.** The table is left intact;
+the discharge is recorded against it in place.
+
 ### `Pass 174.9` (`9d322d8`, 2026-08-30) — the defect is a DEMOTION, not a deletion; `174.8`'s own account of the damage it prevents was wrong in three places from ONE inference — and this filing's sweep found FIVE MORE, the first of them the string the operator actually reads — filed 2026-08-30 (333rd filing)
 
 **Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
@@ -214,6 +356,14 @@ against.**
 list is repeated in the *For next session* block of this date's
 `SESSION_LOG.md` entry.
 
+> **★★ DISCHARGED IN FULL — 5 of 5 — by `Pass 174.10` (`5a60fae`), filed
+> 2026-08-30 (334th filing).** The table above is left intact as the record of
+> what was found. The re-sweep confirming the discharge, and the
+> classification of the `destroy`/`orphan` hits that legitimately survive in
+> those four files, are in `Pass 174.10`'s *Shipped* entry at the head of this
+> file. Survivor 1's fix also planted a **durable note at the `#[error]`
+> template itself**, saying why the correction missed it.
+
 ★ **Hits that SURVIVE AND ARE CORRECT**, recorded per clause (e) so the next
 sweep does not "fix" them: `forms_author.rs:255` (*"would destroy an identity
 they never offered up"* — that is `RenameCollision`, an unrelated and accurate
@@ -245,8 +395,14 @@ moved twice in two days.**
   for a mint is **a parent remedy applied and insufficient**, never a parent
   remedy *unapplied* — and here it was not applied at all. ⇒ **No mint.**
 
-**What IS filed instead: `R222` instance 3, plus an extension of its media
-enumeration.** `R222`'s "what the rule asks for" clause lists `println!`,
+**What IS filed instead: `R222` instance ~~3~~ 6, plus an extension of its
+media enumeration.** [★ **Corrected 2026-08-30, 334th filing.** This entry read
+*"instance 3"* while `R222`'s own text, this date's `SESSION_LOG.md` entry and
+`Pass 174.10`'s commit message all read **6** — and 6 is right: instances 1–2
+at the mint (295th filing), 3 the first live firing (297th, `cfa2c44`), 4 at
+`Pass 153.0`, 5 at the 311th filing, 6 here. A stray digit in the one place a
+reader arrives first. Nothing downstream used it; corrected in place rather
+than by footer because it is a transcription slip, not a changed judgement.] `R222`'s "what the rule asks for" clause lists `println!`,
 `eprintln!`, `format!`, `write!`, `panic!`, `assert!` "and any string constant
 assembled into operator-facing output". A `#[derive(Error)]` **attribute
 template is none of those by name** and is arguably the highest-traffic

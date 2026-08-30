@@ -77643,3 +77643,133 @@ untracked reply's durable record is the `ROADMAP.md` entry.
    (`ls -lt D:/Dev/pdfce-backups/`, run here; `git bundle verify` — *"records
    a complete history … is okay"*). It is **3 commits behind `HEAD`**
    (`e523395`, `609ec6b`, `9d322d8`). A fresh bundle is cheap.
+
+## 2026-08-30 (334th filing) — `Pass 174.10`: the five survivors discharged. The one that mattered was an `#[error(transparent)]` template — the correction reached the rustdoc and stopped THREE LINES SHORT of the only copy an operator reads. No mint; `R222` instance 6 stands as filed, and the engineer's `R232` suggestion is withdrawn
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Commands
+named in `Pass 174.10`'s *Shipped* entry in `ROADMAP.md` rather than repeated.
+The figures worth carrying inline: `git show --stat 5a60fae` = **4 files,
++44 / −17**; the shipped `#[error]` template **read from live source**, not
+from the commit message; the `destroy|orphan` sweep **re-run here** over the
+same four files (**5 of 5 discharged**); `cargo test -p pdfce-core --test
+form_field_merge` **re-run here — 36 passed, 0 failed** (unchanged from
+`174.9`, which is the correct result: this Pass changed wording, not
+behaviour); `git diff fa52bd4 5a60fae -- docs/FEATURES.md` = **0 lines**;
+`git rev-list --count origin/main..main` = **4**. ★ **`bash tools/run-gates.sh`
+was NOT re-run and NO 29-of-29 pass count is claimed** — the filing gate was
+red *because of this filing*, and the engineer runs the sweep afterwards.
+★ **`cargo tree` was NOT re-run and is NOT claimed** — no manifest touched.
+
+**Shipped:**
+
+- **`Pass 174.10`** (`5a60fae`) — five copies of a withdrawn description
+  corrected. Refusal, tests and object model all unchanged.
+
+**Findings + decisions:**
+
+- **★★★ An `#[error(transparent)]` wrapper makes the INNER template shipped
+  UI, and it is the one copy a maintainer never reads.**
+  `EditError::FieldAuthoring` propagates `FormAuthorError`'s message
+  untouched, so that template is verbatim what `pdfce-cli` and `pdfceGUI`
+  print. `Pass 174.9` corrected the claim in the rustdoc **three lines above
+  it** and stopped. **Nothing reads a format string**: the compiler
+  type-checks `{fqn}`/`{terminal}` and never the literal text; clippy has no
+  lint for it; `missing_docs` is satisfied because the **variant** is
+  documented — it was the **message** that was wrong; and no test asserted on
+  the text.
+- **★★ Distance is not the protective variable, and this is the second half
+  of a pair.** Instance 5 of `R222` established that a **nine-day** horizon
+  protects nothing. This one establishes the other end: **three lines**
+  protects nothing either. The remedy is a **grep**, not proximity or
+  diligence, precisely because neither is the variable.
+- **★★ The durable note went into the CODE, not only into the record.** The
+  fix planted a rustdoc block at the template itself
+  (`forms_author.rs:243-258`) stating the mechanism — `transparent` ⇒ shipped
+  UI, and nothing checks it. ⇒ **The next person correcting a claim in that
+  file is told by the file where the second copy lives.** The cheapest form
+  of `R222`'s remedy: not a gate, a reminder sitting where the miss happened.
+- **The substantive half was not the wording.** The no-repair-verb decision
+  had rested on *"there is nothing to put back"* — false, as `174.9`
+  measured. It now rests on the consuming shell's own reason: the document is
+  already wrong in a way the operator cannot see, and refusing beats
+  repairing afterwards. The self-contradicting `docs/core-api` bullet, which
+  said *"the value is already gone"* four lines under its own *"still carries
+  `/V (K. Mantle)`"*, now agrees with itself.
+- **A correction is a claim, so the sweep was re-run rather than assumed** —
+  and it found the residue is **larger and more varied** than the dispatch
+  described. Beyond the withdrawal text and the two hits already named as
+  correct, `03-capabilities.md` carries three further `destroy`/`orphan` uses
+  (`:982` form-script format helpers, `:1699` redaction's image refusal,
+  `:2465` raster diagnostics) that belong to **different features** and are
+  accurate. Classified in `ROADMAP.md` per hard rule 11 clause (e) so a
+  future sweep does not "fix" them.
+
+**Rule disposition — NO MINT; `R222` instance 6 stands as filed.**
+
+The 333rd filing rejected `R232` as the parent (*it binds on figures, its
+mechanism is DRIFT, and these copies did not drift — they were wrong at birth
+from one inference*) and named **`R222`**, whose remedy was **never applied**,
+which is below the mint bar. **`Pass 174.10`'s commit message adopts that call
+in full and withdraws the `R232` suggestion by name.** Verified against what
+shipped: `R222`'s *"what the rule asks for"* clause names `#[error("…")]` /
+`#[derive(Error)]` attribute templates and `expect`/`expect_err`/
+`unwrap_or_else` test messages, and the sixth-instance note is in place, each
+extension carrying its own separate warrant. **Ceilings UNCHANGED: rules
+`R234`, next free `R235`; decisions `104`, next free `105`.** **No
+`ARCHITECTURE.md` §12 entry** — five sentences were corrected; that is not a
+crate boundary, an invariant or a library choice.
+
+**★ Correction to this role's own 333rd filing.** `Pass 174.9`'s *Shipped*
+entry read *"`R222` instance 3"* while `R222`'s own text, that date's
+`SESSION_LOG.md` entry and the commit message all read **6**. Six is right
+(1–2 at the mint, 3 the first live firing, 4 at `Pass 153.0`, 5 at the 311th
+filing, 6 here). Corrected in place with a dated bracket rather than by
+footer, because it is a transcription slip and not a changed judgement.
+Nothing downstream had consumed it.
+
+**`FEATURES.md`: ZERO rows change — verified, not relayed.** The diff is 0
+lines and the keyword sweep (`dotted` / `field name` / `fully-qualified` /
+`FQN` / `hierarch`) returns no hits at all. **A refusal is not a capability,
+and a correction to a refusal's wording is not one either.**
+
+**Cross-project record:**
+`D:/dev/rag/rust/an_error_transparent_wrapper_makes_the_inner_template_the_only_copy_the_operator_reads.md`
+— **new**, and deliberately narrow: the Rust-ecosystem fact about `thiserror`,
+not the pdfce incident. Sibling of the existing
+`error_refusal_messages_naming_a_verb_are_unchecked_operator_facing_ui.md`
+(which covers *phantom citations* in the same medium — a different defect in
+the same blind spot). `index.md` updated in the same filing. **Nothing written
+to `C:\personal_rag\pdf\`**: the PDF-domain half was already filed by the
+333rd filing and this Pass added no PDF-domain fact.
+
+**Channel — one outbound, UPDATED IN PLACE**, `open/`, untracked, so the
+`ROADMAP.md` entry is the durable record:
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\reply_the_dotted_name_refusal_ships_and_your_diagnosis_was_exact.md`
+— **9,546 bytes, 2026-08-30 01:02** (was 8,922 bytes at 00:16 ⇒ **+624**;
+`ls -l`, run here). Carries the new message string and names **`Pass 174.10`**
+as what changed it, in case the shell cached the earlier one. ★ Updating in
+place is right here precisely because the shell quotes error text back; a
+second file would leave two message strings in their folder with nothing
+saying which shipped.
+
+**Still in flight:** unchanged from the 333rd filing — the **n-colorant
+buffer** bucket (`PCS2_020`/`030`/`040`/`081`), **`CmykIntent::Calibrated`'s
+cool greys**, **`/OutputIntents`-aware CMYK conversion** (blocked on `iccce`),
+and **the ce-dimension text override (decision 097)**, which remains the head
+of `NEXT_SESSION.md` §A and the only item on it Ken has personally specified.
+
+**For next session:**
+
+1. **The 333rd filing's five-survivor list is DISCHARGED — nothing is owed
+   from it.** The table is left intact in `Pass 174.9`'s *Shipped* entry with
+   the discharge recorded against it in place.
+2. **Run `bash tools/run-gates.sh` now.** Both filing gates were red on
+   `5a60fae` before this entry; turning them green is what this filing is
+   for. **This entry claims no sweep result** — report the real one.
+3. **`main` is 4 commits ahead of `origin/main`** (`git rev-list --count
+   origin/main..main`, run here). Pushing is standing-authorized (rule 8,
+   decision 090); `check-suite-name-absent.py` was **run here and is clean**.
+4. **The newest backup bundle is `pdfce-20260829-2335-3d71ad2-full.bundle`**
+   (`ls -lt D:/Dev/pdfce-backups/`, run here), **5 commits behind `HEAD`**
+   (`git rev-list --count 3d71ad2..HEAD` = 5). Was 3 behind at the last
+   filing; it is drifting one commit per Pass. A fresh bundle is cheap.
