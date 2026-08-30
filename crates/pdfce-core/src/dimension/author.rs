@@ -59,6 +59,19 @@ const TEXT_BREAK_PAD: f64 = 3.0;
 /// **Convention, not mandated.**
 const TEXT_ABOVE_GAP: f64 = 3.0;
 
+/// The token an operator's text override may contain to have the MEASURED
+/// caption substituted in (`Pass 175.0`, decision 097) — see
+/// [`author_dimension_with_label`] for the contract.
+///
+/// Uppercase and angle-bracketed to match the convention CAD drafting tools
+/// already use for the same idea, so an operator arriving from one does not
+/// have to learn a second spelling. Every character of it is in
+/// `WinAnsiEncoding`, which matters because the override is baked through
+/// [`crate::vartext::encode_winansi`]: a placeholder that could not itself be
+/// drawn would turn into `?????` in the one case where the substitution
+/// failed to happen.
+pub const DIM_PLACEHOLDER: &str = "<DIM>";
+
 /// Everything the appearance of one ce dimension depends on besides its
 /// geometry (Pass 27.2).
 ///
@@ -258,6 +271,21 @@ pub struct AuthoredDimension {
     pub rect: Rect,
     /// The display label (for CLI/GUI echo; also stored as `/Contents`).
     pub label: String,
+    /// **Whether [`Self::label`] came from an operator override** rather than
+    /// from the measurement (`Pass 175.0`, decision 097).
+    ///
+    /// Carried out of the baker rather than recomputed by callers, because the
+    /// baker is the only place that knows whether the override it was handed
+    /// actually reached the caption. A caller comparing `label` against a
+    /// separately formatted measurement would get the answer wrong for a
+    /// `<DIM>`-only override, which prints exactly the measured caption and is
+    /// still an override.
+    ///
+    /// Exists so a shell can DISCLOSE the divergence without re-deriving it —
+    /// rule 4's obligation is on disclosure, and a fact that has to be
+    /// recomputed to be disclosed is a fact that will eventually be disclosed
+    /// wrongly.
+    pub label_overridden: bool,
 }
 
 /// Author a dimension's `/Line` annotation + baked `/AP` from its geometry and
@@ -297,6 +325,77 @@ pub struct AuthoredDimension {
 /// ```
 #[must_use]
 pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> AuthoredDimension {
+    author_dimension_with_label(kind, style, None)
+}
+
+/// The `Pass 175.0` widening of [`author_dimension`]: author the same
+/// annotation + baked `/AP`, with the caption optionally REPLACED by an
+/// operator-supplied string (decision 097, branch 1).
+///
+/// [`author_dimension`] is this function with `label_override = None` and is
+/// kept as the name every existing caller uses. **One implementation, not
+/// two** — a second baker would be a second place for "which keys does
+/// authoring own", for the WinAnsi encoding, and for the ANSI text-break
+/// geometry to be answered, and `Pass 68.0` is this module's own record of
+/// what two answers to one display question costs (the pane read `77.5°`
+/// while the `/AP` baked into the file read `77.47 pt`).
+///
+/// # The contract of an override
+///
+/// - `None` ⇒ the caption is the measurement, exactly as before this Pass:
+///   `kind.caption_prefix()` + the formatted value + `style.tolerance`'s
+///   caption (or, for a limit tolerance, the two limits alone).
+/// - `Some(text)` ⇒ **the caption is `text`, WHOLE.** The prefix and the
+///   tolerance caption are not appended around it. That is a deliberate
+///   choice and not an omission: an override is the operator saying what the
+///   dimension reads, and a `R ` prefix or a `±0.5` suffix bolted onto their
+///   sentence would produce a caption nobody typed. It also composes with a
+///   LIMIT tolerance without a special case, which the alternative does not —
+///   a limit tolerance suppresses the nominal entirely, so there is no
+///   nominal for an override to sit beside.
+/// - The measured geometry, the group's scale and the `/Measure` dict are
+///   **untouched** in every case. An override changes what is DRAWN, never
+///   what was measured (decision 097; `CLAUDE.md` rule 15's provenance
+///   distinction survives an override intact).
+///
+/// # `<DIM>`, and why pdfce ships a placeholder Acrobat's dimension tool
+/// does not
+///
+/// Every occurrence of the literal ASCII token `<DIM>` in `text` is replaced
+/// by the measured caption (prefix + value + tolerance). So:
+///
+/// - `"2X <DIM>"` on a 25 mm feature prints `2X 25.00 mm` and **keeps
+///   tracking the geometry** — re-scale the group and the printed number
+///   follows, because the substitution happens here, at bake time, on every
+///   regeneration.
+/// - `"55 5/8"` prints `55 5/8` and tracks nothing, which is the operator
+///   explicitly saying so.
+///
+/// This is a parity-PLUS: it is modelled on the `<DIM>` placeholder CAD
+/// drafting tools give dimension text, and it exists because it makes
+/// decision 097's central guarantee — *the measurement is retained, only
+/// shadowed* — visible in the output rather than merely true in the sidecar.
+/// There is no escape for a literal `<DIM>`; a caption that needs to print
+/// those five characters is not a case this Pass serves, and inventing an
+/// escape syntax for it would be a notation the operator has to learn for a
+/// case that has never come up.
+///
+/// # What is NOT validated here
+///
+/// This function is pure and total: it bakes whatever string it is handed.
+/// Characters outside `WinAnsiEncoding` are substituted with `?` by
+/// [`crate::vartext::encode_winansi`] the same way they always were.
+/// **The refusal lives at the verb** — `EditSession::set_dimension_label`
+/// rejects an unprintable override before it can reach the sidecar, because
+/// that is where an operator is present to be told. Baking is downstream of
+/// that check and must stay able to re-bake whatever is already stored,
+/// including a sidecar written by hand.
+#[must_use]
+pub fn author_dimension_with_label(
+    kind: &DimensionKind,
+    style: DimensionStyle,
+    label_override: Option<&str>,
+) -> AuthoredDimension {
     let DimensionStyle { scale, format, .. } = style;
     let label_size = style.text_height;
     // Through `display_with`, never `format_measurement` directly: an ANGULAR
@@ -314,7 +413,7 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     let tol_places = style
         .tolerance_places
         .unwrap_or_else(|| nominal_places(format));
-    let label = if style.tolerance.suppresses_nominal() {
+    let measured_caption = if style.tolerance.suppresses_nominal() {
         // A limit tolerance PRINTS ITS TWO LIMITS AND NOT THE NOMINAL
         // (`SolidWorks_Dimensions` §A.1). The measured value is unchanged and
         // still in the sidecar — this is a display decision, not a loss.
@@ -326,6 +425,17 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
             display.text,
             style.tolerance.caption(format, tol_places)
         )
+    };
+    // The override, applied LAST and to the finished measured caption, so
+    // `<DIM>` substitutes the same string the un-overridden dimension would
+    // have printed — including its prefix and its tolerance. Substituting
+    // only `display.text` would make `<DIM>` mean "the number" on a linear
+    // dimension and "the number without its R" on a circular one, which is
+    // one token with two meanings.
+    let label_overridden = label_override.is_some();
+    let label = match label_override {
+        Some(text) => text.replace(DIM_PLACEHOLDER, &measured_caption),
+        None => measured_caption,
     };
 
     // The leader endpoints in page space (the /L pair).
@@ -629,6 +739,7 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
         ap_content: b.into_bytes(),
         rect,
         label,
+        label_overridden,
     }
 }
 

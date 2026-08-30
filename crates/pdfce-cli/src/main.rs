@@ -5862,6 +5862,52 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Set or clear a ce dimension's TEXT OVERRIDE** (Pass 175.0,
+    /// decision 097): make it print what you type instead of what it measured
+    /// -- or clear the override and get the measurement back, exactly, with no
+    /// re-measurement.
+    ///
+    /// The override SHADOWS the measurement; it never replaces it. The
+    /// measured geometry, the group's scale and the annotation's `/Measure`
+    /// dict are all untouched, and the measured value stays in the
+    /// `/PieceInfo` sidecar beside the override, so `--clear` a week and three
+    /// saves later restores exactly what was there.
+    ///
+    /// `<DIM>` in the text is replaced by the measured caption, so
+    /// `--text "2X <DIM> TYP"` keeps TRACKING the geometry: re-scale the group
+    /// and the printed number follows. A bare `--text "55 5/8"` tracks nothing,
+    /// which is you saying so.
+    ///
+    /// Find the id, and see which dimensions are already overridden, with
+    /// `dimension-list` -- it prints the measured `value=` and the overriding
+    /// `label=` side by side.
+    ///
+    /// Refused for text that is empty, longer than 128 characters, or contains
+    /// a character the caption cannot draw (the label font is Helvetica with
+    /// WinAnsiEncoding, so a glyph outside it would print as a question mark).
+    DimensionLabel {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// The caption to print instead of the measurement. May contain
+        /// `<DIM>`, which is replaced by the measured caption.
+        #[arg(long, conflicts_with = "clear", required_unless_present = "clear")]
+        text: Option<String>,
+        /// Clear the override and restore the measured caption.
+        #[arg(long, conflicts_with = "text")]
+        clear: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Delete a ce dimension** (Pass 25.6): remove its `/Annots` reference,
     /// its annotation dictionary, its `/AP` appearance stream and its
     /// `/PieceInfo` sidecar record, together, as one undoable command.
@@ -8822,6 +8868,26 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_dimension_display(&input, dimension, show, &output, mode, verify_undo),
+        Command::DimensionLabel {
+            input,
+            dimension,
+            text,
+            clear,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_label(
+            &input,
+            dimension,
+            // `--clear` and `--text` are mutually exclusive at the clap layer
+            // and one of them is required, so this reads as the two-state
+            // choice it is rather than a three-state one with an unreachable
+            // arm.
+            if clear { None } else { text.as_deref() },
+            &output,
+            mode,
+            verify_undo,
+        ),
         Command::GroupAdd {
             input,
             name,
@@ -27407,6 +27473,74 @@ fn cmd_dimension_display(
     finish_edit(input, &outcome)
 }
 
+/// `dimension-label` -- set or clear one ce dimension's text override
+/// (Pass 175.0, decision 097).
+///
+/// ## Contract
+///
+/// - `label=None` (from `--clear`) clears the override; `Some(text)` sets it.
+/// - Emits one `dimension-label ...` line carrying BOTH captions --
+///   `measured=` (what the geometry says) and `printed=` (what the page now
+///   draws) -- plus `changed=`, then defers the exit code to [`finish_edit`].
+/// - **Both captions, always.** In the GUI the disclosure lives off-canvas in
+///   a panel; in the CLI the invocation IS the commit, so the disclosure is
+///   this line (`CLAUDE.md` rule 4's CLI half: the CLI prints what it
+///   inferred on the way past). An operator who overrides a dimension to read
+///   something other than its measurement is entitled to see, in the same
+///   breath, what the measurement was.
+/// - `changed=0` means the requested state already held; nothing was
+///   committed and no undo entry was pushed, so the save is a no-op.
+/// - A refusal (empty, over-long, or unprintable text; unknown id) goes
+///   through [`report_edit_error`] before any mutation, with the same message
+///   and exit code the GUI surfaces.
+fn cmd_dimension_label(
+    input: &Path,
+    dimension: u32,
+    label: Option<&str>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let change =
+        match session.set_dimension_label(pdfce_core::dimension::DimensionId(dimension), label) {
+            Ok(change) => change,
+            Err(err) => return report_edit_error(input, &err),
+        };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-label {} dimension={dimension} overridden={} changed={} measured=\"{}\" printed=\"{}\" mode={} -> {}; changed_objects={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        u32::from(change.applied.is_some()),
+        u32::from(change.changed),
+        change.measured.replace('"', "'"),
+        change.printed.replace('"', "'"),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
 /// `dimension-delete` — remove one ce dimension and every trace of it.
 ///
 /// ## Contract
@@ -28097,8 +28231,26 @@ fn cmd_dimension_list(input: &Path, show_style: bool) -> u8 {
         // dimensions will move when he edits the group and which will not.
         // Printing nothing unless `--style` is passed would hide exactly the
         // surprise the cascade exists to prevent.
+        // The TEXT OVERRIDE, printed unconditionally beside the measured
+        // `value=` rather than replacing it (`Pass 175.0`, decision 097).
+        //
+        // Both, always, because that is what discloses the divergence:
+        // `value=` stays the measurement and `label=` is what the page
+        // actually prints. Replacing `value=` with the override would make
+        // this listing agree with the page and disagree with the geometry,
+        // and an operator auditing a drawing for overridden dimensions would
+        // have nothing to compare. Omitting the override would do the reverse
+        // and is worse — a caption that is not its measurement is exactly the
+        // fact `CLAUDE.md` rule 4 says must not be silent.
+        //
+        // Absent when there is no override, so an un-overridden listing is
+        // byte-identical to what this command printed before this Pass and no
+        // existing script parsing it breaks.
+        let label = model.label_override(d.id).map_or_else(String::new, |t| {
+            format!(" label=\"{}\"", t.replace('"', "'"))
+        });
         println!(
-            "  dim {} group={} kind={kind} value=\"{value}\"{placement} overrides={}",
+            "  dim {} group={} kind={kind} value=\"{value}\"{label}{placement} overrides={}",
             d.id.0,
             d.group.0,
             d.style.count()

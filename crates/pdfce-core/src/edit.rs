@@ -714,6 +714,19 @@ pub enum CommandKind {
         /// (`0` ⇒ it now inherits everything from its group again).
         overrides: usize,
     },
+    /// ONE ce dimension's **text override** was set, replaced or cleared
+    /// (`Pass 175.0`, decision 097) and its baked `/AP` regenerated. ONE
+    /// undoable command. See [`EditSession::set_dimension_label`].
+    ///
+    /// The measured geometry is untouched in every direction: setting an
+    /// override shadows the measurement, clearing one reveals it again with no
+    /// re-measurement. That is why `overridden` is the whole payload — there
+    /// is no measurement change to report, by construction.
+    SetDimensionLabel {
+        /// `true` ⇒ the ce dimension now prints an override; `false` ⇒ it now
+        /// prints its measurement again.
+        overridden: bool,
+    },
     /// A ce dimension was DELETED (Pass 25.6): its `/Annots` reference, its
     /// annotation dictionary, its `/AP` stream and its sidecar record were all
     /// removed together. ONE undoable command. See
@@ -4981,6 +4994,64 @@ pub enum EditError {
         /// Which of the three, in the words
         /// [`crate::dimension::ToleranceError`] itself uses.
         reason: String,
+    },
+    /// A ce-dimension **text override** was supplied that is empty, or is
+    /// nothing but whitespace (`Pass 175.0`, decision 097).
+    ///
+    /// Refused rather than accepted, because a blank caption is
+    /// indistinguishable on the page from a ce dimension whose label failed to
+    /// draw. An operator who wants the number gone wants the dimension gone,
+    /// and `delete_dimension` is that verb; an operator who wants the override
+    /// gone passes `None`, which is a different call with a different meaning
+    /// and restores the measurement.
+    #[error(
+        "a ce dimension's text override cannot be empty -- pass no override to restore its measured value, or delete the dimension if it should not appear"
+    )]
+    DimensionLabelEmpty,
+    /// A ce-dimension **text override** contains characters the baked caption
+    /// cannot draw (`Pass 175.0`, decision 097).
+    ///
+    /// # Why this is refused rather than substituted
+    ///
+    /// The caption is baked into the annotation's `/AP` with the Base-14
+    /// Helvetica declared `/WinAnsiEncoding`
+    /// ([`crate::dimension::author_dimension_with_label`]), and
+    /// [`crate::vartext::encode_winansi`] substitutes `?` for anything outside
+    /// that repertoire. Accepting the override would put a `?` on a drawing
+    /// where the operator typed a character — a silent corruption of a value,
+    /// in the one place on a page where a wrong value is most expensive.
+    ///
+    /// Until this Pass nothing a ce-dimension caption could contain was
+    /// outside WinAnsi, and the baker's own comment says so and says a miss
+    /// "would mean the formatter had started emitting something new — which is
+    /// a change that should come with its own disclosure decision rather than
+    /// inherit one guessed at here." An operator-typed override is exactly
+    /// that change, and this refusal is that decision.
+    #[error(
+        "a ce dimension's text override cannot contain {chars} -- its caption is drawn in Helvetica with WinAnsiEncoding, which has no code for it, so it would print as a question mark"
+    )]
+    DimensionLabelUnprintable {
+        /// The offending characters, quoted and comma-separated, in the order
+        /// they appear — so an operator can find them in what they typed
+        /// rather than re-deriving which one this is about.
+        chars: String,
+    },
+    /// A ce-dimension **text override** is longer than
+    /// [`EditSession::MAX_DIMENSION_LABEL`] characters (`Pass 175.0`).
+    ///
+    /// A cap rather than no cap because the caption's width drives real
+    /// geometry: it sets the ANSI dimension-line break, the `/AP` `/BBox` and
+    /// the annotation `/Rect`. A caption of unbounded length produces a
+    /// `/Rect` spanning far outside the page, which every reader clips
+    /// differently and which no error would report.
+    #[error(
+        "a ce dimension's text override is {found} characters, over the {max}-character limit -- the caption sets the dimension line's break and the annotation's /Rect, so an unbounded one draws off the page"
+    )]
+    DimensionLabelTooLong {
+        /// How many characters were supplied.
+        found: usize,
+        /// The limit.
+        max: usize,
     },
     /// Field authoring was asked for on a document carrying an **XFA**
     /// layer (§12.7.8).
@@ -9395,7 +9466,11 @@ impl EditSession {
         }
 
         Ok(crate::vector::ObjectClip {
-            version: clip::CLIP_VERSION,
+            // CONTENT-DEPENDENT (`Pass 175.0`): a clip carrying no ce-dimension
+            // text override is still written at version 2, so it still pastes
+            // into the build the operator has open in the other folder. See
+            // `ObjectClip::needed_version`.
+            version: crate::vector::ObjectClip::needed_version(&annotations),
             items,
             objects: clip_objects,
             bbox,
@@ -9444,6 +9519,11 @@ impl EditSession {
                     scale: group.scale,
                     standard: group.standard,
                     style: record.style,
+                    // `Pass 175.0`: the operator's text override, if any.
+                    // Same class of fact as `scale` above -- the caption is
+                    // derived from it, so leaving it off makes the pasted ce
+                    // dimension read differently from the copied one.
+                    label_override: record.label_override.clone(),
                     kind: Box::new(record.kind.clone()),
                 });
             }
@@ -9739,6 +9819,7 @@ impl EditSession {
                     standard,
                     style,
                     kind,
+                    label_override,
                 } => {
                     let (group, adopted) = self.find_or_create_dimension_group_with(
                         group_name, format, *scale, *standard,
@@ -9760,6 +9841,37 @@ impl EditSession {
                     // applied whether the group was created or matched.
                     if style != &crate::dimension::StyleOverrides::default() {
                         self.set_dimension_style(id, *style)?;
+                    }
+                    // The text override, applied on the same terms and for the
+                    // same reason: it belongs to this one ce dimension, so no
+                    // destination group has an opinion about it.
+                    //
+                    // Routed through the VERB rather than written into the
+                    // model directly, so a pasted override gets the identical
+                    // WinAnsi-printability check a typed one does. A clip can
+                    // arrive from a file on disk (`ObjectClip::from_bytes`),
+                    // so "it was checked when it was typed" is not a fact this
+                    // code knows.
+                    if let Some(text) = label_override {
+                        match self.set_dimension_label(id, Some(text)) {
+                            Ok(change) => {
+                                if change.applied.is_some() {
+                                    disclosures.push(format!(
+                                        "paste: this ce dimension carries a TEXT OVERRIDE -- it prints {:?} rather than its measurement of {:?}.",
+                                        change.printed, change.measured
+                                    ));
+                                }
+                            }
+                            // A clip whose override cannot be drawn here is
+                            // pasted WITHOUT it rather than refused outright:
+                            // the geometry, the group and the style are all
+                            // still correct, and losing the paste entirely
+                            // over an unprintable character would be a worse
+                            // answer than losing the caption and saying so.
+                            Err(err) => disclosures.push(format!(
+                                "paste: this ce dimension's text override was DROPPED and it prints its measurement instead -- {err}"
+                            )),
+                        }
                     }
                     placed += 1;
                 }
@@ -12525,6 +12637,56 @@ pub struct AnnotationRotate {
 /// HAD a note and it was replaced."* [`Self::replaced`] is that case, and it
 /// carries the previous text rather than a count, so a shell can offer it
 /// back rather than only mention its size.
+/// What [`EditSession::set_dimension_label`] did, and the two captions a
+/// shell needs to disclose it (`Pass 175.0`, decision 097).
+///
+/// # Why both captions are returned rather than just the new one
+///
+/// `CLAUDE.md` rule 4 requires that a ce dimension whose caption diverges from
+/// its measurement say so — off-canvas, never as a mark drawn on the page.
+/// Disclosing a divergence means naming the two things that diverge, so both
+/// are here. A shell that recomputed [`Self::measured`] from the group's scale
+/// and format would be a SECOND derivation of a display value, which is
+/// precisely the defect `Pass 68.0` shipped (the panel read `77.5 degrees`
+/// while the caption baked into the file read `77.47 pt`).
+///
+/// Both strings come from the one baker,
+/// [`crate::dimension::author_dimension_with_label`], so they cannot disagree
+/// with what the page draws.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DimensionLabelChange {
+    /// The caption this ce dimension WOULD print with no override — its
+    /// measurement, with the kind's prefix and the resolved tolerance.
+    ///
+    /// Computed on every call, including a call that clears the override, so a
+    /// shell always has the honest number to show beside the printed one.
+    pub measured: String,
+    /// The caption this ce dimension prints AFTER the call.
+    ///
+    /// Equal to [`Self::measured`] when no override is in force — and also
+    /// when the override is exactly `<DIM>`, which is a real override that
+    /// happens to print the measurement. Use [`Self::applied`] to tell those
+    /// apart; do not infer the override's existence from a string comparison.
+    pub printed: String,
+    /// The override in force BEFORE the call, or `None` if the ce dimension
+    /// was printing its measurement.
+    ///
+    /// The disclosure half of a clear: an operator who has just removed an
+    /// override may want to know what it said, and this is the only copy left
+    /// once the sidecar key is gone.
+    pub previous: Option<String>,
+    /// The override in force AFTER the call — `None` when this call cleared
+    /// one, or when there was none and none was set.
+    pub applied: Option<String>,
+    /// Whether anything was committed.
+    ///
+    /// `false` when the requested state already held, in which case no undo
+    /// entry was pushed. See [`EditSession::set_dimension_label`] for why an
+    /// empty command is worse than no command.
+    pub changed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct MarkupNoteChange {
@@ -20002,16 +20164,19 @@ impl EditSession {
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "ce dimension".to_owned(),
                 use_instead: "set_dimension_label",
-                // ★ Also a phantom, found by `tools/check-cited-verbs-exist.py`
-                // on its first run — I had gone looking for one and it found a
-                // second. There is no caption/label-override route on a ce
-                // dimension today: `set_dimension_style` is styling,
-                // `set_dimension_display` is the diameter/radius reading, and
-                // neither writes the text. Marked rather than re-pointed,
-                // because guessing at a near-neighbour verb would put the
-                // operator somewhere that does not do what the sentence
-                // promised — which is the failure being fixed, one step along.
-                why: "a ce dimension's text IS its measurement, so writing it must go through the verb that keeps the two agreeing. THAT VERB IS NOT BUILT YET — a ce dimension's caption is derived from the measurement, and there is no override route today",
+                // ★ NO LONGER A PHANTOM (`Pass 175.0`). This citation was
+                // written by `Pass 163.0` naming a verb that did not exist,
+                // and `tools/check-cited-verbs-exist.py` found it on its first
+                // run. Decision 097 then specified the verb and this Pass
+                // built it, so the message can stop apologising and start
+                // pointing: the sentence now promises somewhere that does
+                // exactly what it says.
+                //
+                // The gate is what makes that a mechanical fact rather than a
+                // remembered one — it fails if this string and
+                // `EditSession::set_dimension_label` ever come apart again,
+                // in either direction.
+                why: "a ce dimension's text IS its measurement, so writing it must go through the verb that keeps the two agreeing -- an override there SHADOWS the measured value rather than replacing it, and clearing the override restores the measurement exactly",
             });
         }
         if target.subtype == b"Widget" {
@@ -29464,6 +29629,221 @@ impl EditSession {
         Ok(style.count())
     }
 
+    /// The longest ce-dimension text override
+    /// [`Self::set_dimension_label`] accepts, in characters (`Pass 175.0`).
+    ///
+    /// # Where the number comes from
+    ///
+    /// It is a guard, not a drafting rule, and it is set where it stops being
+    /// a guard and starts being a nuisance. The caption's estimated width is
+    /// `chars x size x 0.5` (`dimension::author`'s `estimate_text_width`), so
+    /// at the factory 9 pt text height 128 characters is roughly 576 pt — an
+    /// annotation `/Rect` about eight inches wide, which is already past
+    /// anything a dimension caption is for and still comfortably on a page.
+    /// Twice that would put the `/Rect` off most page boxes, where readers
+    /// clip differently and nothing reports it.
+    ///
+    /// A real caption is a number and a note (`2X <DIM> TYP`, `55 5/8 REF`).
+    /// Nothing in that shape comes near this, which is the property a limit
+    /// like this needs: it must be unreachable by correct use and reachable by
+    /// a paste of the wrong buffer.
+    pub const MAX_DIMENSION_LABEL: usize = 128;
+
+    /// **Set or clear ONE ce dimension's text override**, as one undoable
+    /// command (`Pass 175.0`, decision 097 branch 1).
+    ///
+    /// `Some(text)` makes the ce dimension print `text` instead of its
+    /// measurement; `None` clears the override and restores the measured
+    /// caption **exactly, with no re-measurement**.
+    ///
+    /// # ★ The measurement is SHADOWED, never replaced — this is the point
+    ///
+    /// The operator's own words for this feature (2026-08-29): *"dimension
+    /// text override should be an option if it can be selected to be
+    /// overridden or not so the override can be undone."* The condition in
+    /// that sentence is load-bearing and is a requirement about the
+    /// reversibility of the OVERRIDE, distinct from ordinary command-level
+    /// undo — an override that were merely undoable would be reversible only
+    /// until the next edit, exactly like every other command.
+    ///
+    /// So: [`crate::dimension::DimensionKind`] keeps the measured geometry,
+    /// the group keeps its scale and format, the annotation keeps its
+    /// `/Measure` dict, and the override is stored beside them in the
+    /// `/PieceInfo` sidecar as `/LabelOverride`. It survives save-and-reopen,
+    /// and so does the measurement underneath it, so clearing it a week later
+    /// restores exactly what was there.
+    ///
+    /// # `<DIM>` keeps the measurement in the printed caption
+    ///
+    /// `text` may contain [`crate::dimension::DIM_PLACEHOLDER`] (`<DIM>`),
+    /// which is replaced at bake time by the measured caption — prefix, value
+    /// and tolerance. `set_dimension_label(id, Some("2X <DIM> TYP"))` on a
+    /// 25 mm feature prints `2X 25.00 mm TYP` and **keeps tracking the
+    /// geometry**: re-scale the group and the printed number follows, because
+    /// the substitution happens on every regeneration rather than once here.
+    /// A bare override such as `55 5/8` tracks nothing, which is the operator
+    /// saying so explicitly.
+    ///
+    /// # What comes back, and why it is not `()`
+    ///
+    /// [`DimensionLabelChange`] carries the measured caption, the caption that
+    /// will now print, and what the override was before. A shell owes the
+    /// operator a disclosure whenever a dimension's caption diverges from its
+    /// measurement (`CLAUDE.md` rule 4 — the disclosure lives off-canvas, and
+    /// the page draws the override exactly as a saved-and-reopened file will
+    /// draw it, with no provisional marking). That disclosure needs both
+    /// captions, and a shell that recomputed the measured one would be a
+    /// second derivation of a display value — the defect `Pass 68.0` shipped.
+    ///
+    /// # Setting the same override twice is a no-op
+    ///
+    /// If the requested state equals the current one, nothing is committed and
+    /// no undo entry is pushed. An empty command on the undo stack is a press
+    /// of Ctrl+Z that appears to do nothing, which reads as a broken undo.
+    /// [`DimensionLabelChange::changed`] reports which happened.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::DimensionNotFound`] for an unknown id.
+    /// - [`EditError::DimensionLabelEmpty`] for an override that is empty or
+    ///   all whitespace — pass `None` to restore the measurement instead.
+    /// - [`EditError::DimensionLabelUnprintable`] for a character outside
+    ///   `WinAnsiEncoding`, which the baked caption cannot draw and which
+    ///   would silently print as a question mark.
+    /// - [`EditError::DimensionLabelTooLong`] past
+    ///   [`Self::MAX_DIMENSION_LABEL`].
+    /// - Plus the encryption, enforced-certification and newer-sidecar guards
+    ///   every ce-dimension mutation owes.
+    ///
+    /// Every refusal happens before any mutation (rule 4).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut session: pdfce_core::edit::EditSession = unimplemented!();
+    /// # let id: pdfce_core::dimension::DimensionId = unimplemented!();
+    /// // Override the caption, keeping the measurement underneath.
+    /// let set = session.set_dimension_label(id, Some("2X <DIM> TYP"))?;
+    /// assert!(set.changed);
+    /// // ... and put it back, with no re-measurement.
+    /// let cleared = session.set_dimension_label(id, None)?;
+    /// assert_eq!(cleared.printed, cleared.measured);
+    /// # Ok(()) }
+    /// ```
+    pub fn set_dimension_label(
+        &mut self,
+        dimension: DimensionId,
+        label: Option<&str>,
+    ) -> Result<DimensionLabelChange, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+
+        // Validate the STRING before touching the model, so a rejected
+        // override leaves the document exactly as it was (rule 4).
+        if let Some(text) = label {
+            if text.trim().is_empty() {
+                return Err(EditError::DimensionLabelEmpty);
+            }
+            let count = text.chars().count();
+            if count > Self::MAX_DIMENSION_LABEL {
+                return Err(EditError::DimensionLabelTooLong {
+                    found: count,
+                    max: Self::MAX_DIMENSION_LABEL,
+                });
+            }
+            // Printability, checked HERE and nowhere else.
+            //
+            // The caption is baked with the Base-14 Helvetica declared
+            // `/WinAnsiEncoding`, and `encode_winansi` substitutes a question
+            // mark for anything it has no code for. Every caption before this
+            // Pass was machine-generated from a closed repertoire (digits, the
+            // unit words, the decimal marker, the foot and inch marks, the
+            // degree sign), which is why the baker could ignore its own
+            // substitution count and says so in a comment. An operator-typed
+            // override is the first caption that can contain anything at all,
+            // so that count becomes load-bearing and the refusal belongs where
+            // an operator is present to read it.
+            //
+            // Per character rather than on the total, so the message can NAME
+            // what is wrong. "3 characters cannot be drawn" sends an operator
+            // hunting through what they typed; naming them does not.
+            let mut offenders: Vec<char> = Vec::new();
+            for ch in text.chars() {
+                if crate::vartext::encode_winansi(&ch.to_string()).1 > 0 && !offenders.contains(&ch)
+                {
+                    // Deduplicated in first-appearance order: a caption that
+                    // pastes the same unsupported glyph forty times should say
+                    // so once.
+                    offenders.push(ch);
+                }
+            }
+            if !offenders.is_empty() {
+                let chars = offenders
+                    .iter()
+                    .map(|c| format!("{c:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(EditError::DimensionLabelUnprintable { chars });
+            }
+        }
+
+        let mut model = self.read_dimension_model();
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let group = model
+            .group(record.group)
+            .ok_or(EditError::DimensionGroupNotFound { id: record.group.0 })?;
+
+        // Both captions, from ONE producer — the baker — rather than formatted
+        // here. `Pass 68.0`'s defect was two independent derivations of a
+        // display value, and a disclosure that disagreed with the page would
+        // be that same defect wearing a different hat.
+        let style = crate::dimension::resolve_style(group, &record.style);
+        let measured = crate::dimension::author_dimension(&record.kind, style).label;
+        let printed =
+            crate::dimension::author_dimension_with_label(&record.kind, style, label).label;
+
+        let previous = record.label_override.clone();
+        let applied = label.map(str::to_owned);
+        if previous == applied {
+            // Nothing to commit. See this method's own note: an empty undo
+            // entry is a Ctrl+Z that looks broken.
+            return Ok(DimensionLabelChange {
+                measured,
+                printed,
+                previous,
+                applied,
+                changed: false,
+            });
+        }
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.label_override.clone_from(&applied);
+        }
+
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::SetDimensionLabel {
+                overridden: applied.is_some(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(DimensionLabelChange {
+            measured,
+            printed,
+            previous,
+            applied,
+            changed: true,
+        })
+    }
+
     /// **Delete a ce dimension**, as one undoable command (Pass 25.6).
     ///
     /// Removes three things together, because leaving any one of them is a
@@ -30523,7 +30903,20 @@ impl EditSession {
             // dropped. A `From<&Group>` here would make every override work in
             // the panel and vanish in the saved file.
             let style = crate::dimension::resolve_style(group, &record.style);
-            let authored = author_dimension(&record.kind, style);
+            // The text override rides through the SAME single regeneration
+            // path, for the identical reason the style cascade does: this is
+            // the only place a ce dimension's appearance is rebuilt after
+            // authoring, so it is the only place an override can be honoured
+            // and the only place one can be silently dropped. Calling the
+            // un-overridden `author_dimension` here would make the verb write
+            // a sidecar key that never reached a single pixel — a feature that
+            // stores what the operator typed, reports it back, passes its own
+            // unit tests, and prints the measured number anyway.
+            let authored = crate::dimension::author_dimension_with_label(
+                &record.kind,
+                style,
+                record.label_override.as_deref(),
+            );
 
             let mut ap_dict = authored.ap_dict;
             ap_dict.insert(

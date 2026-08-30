@@ -64,7 +64,68 @@ use crate::vector::Rgb;
 /// destructive half, and the only half worth blocking. This matters more than
 /// usual here because the operator deliberately runs two builds side by side
 /// out of two folders and WILL open a perimeter-bearing file in the older one.
-pub const SIDECAR_VERSION: i64 = 3;
+/// - **4** — `Pass 175.0` added `/LabelOverride`, the operator's ce-dimension
+///   text override (decision 097). Bumped for the reason `/Offset` and the
+///   `Pass 69.0` style keys were NOT: an older build reading a v3-shaped
+///   record drops the key, shows the measured caption instead of the
+///   operator's, and on its next regeneration re-bakes the `/AP` — so the
+///   number printed on a drawing CHANGES, silently, with nothing on screen
+///   saying it did. Losing a colour override is visible and re-settable;
+///   losing a text override alters what the document asserts. That is the
+///   `angular`/`perimeter` severity class arrived at through a defaultable
+///   key rather than an unknown kind token.
+///
+/// # ★ Version 4 is emitted PER DOCUMENT, not per build
+///
+/// [`serialize_model`] writes `4` only when some ce dimension actually
+/// carries an override, and `3` otherwise — see `model_sidecar_version`.
+/// This is the one place this constant is not the whole story, and it is
+/// deliberate on two counts. It keeps R34 minimal-diff honest: a document
+/// with no overrides re-serialises to the exact bytes it had before this
+/// Pass, so opening and saving does not rewrite every dimensioned file in
+/// existence for a feature it does not use. And it keeps the write-refusal
+/// PRECISE: the older build is blocked from saving exactly those documents
+/// that hold something it would destroy, instead of every document the newer
+/// build has ever touched. The operator deliberately runs two builds side by
+/// side, which is what makes that difference worth the extra function.
+///
+/// The earlier bumps are deliberately NOT retrofitted to this scheme. A
+/// content-dependent `2`/`3` would be strictly more accurate, but changing
+/// the version an existing file re-serialises to is a byte change to every
+/// sidecar in the corpus for no capability — the retrofit would cost exactly
+/// what this scheme was introduced to avoid.
+pub const SIDECAR_VERSION: i64 = 4;
+
+/// The schema version a document needs when no ce dimension uses a
+/// `Pass 175.0` feature — i.e. everything up to and including the `perimeter`
+/// kind.
+const SIDECAR_VERSION_PRE_OVERRIDE: i64 = 3;
+
+/// The version `model` must be written at: [`SIDECAR_VERSION`] when it uses a
+/// feature only this build's schema has, otherwise the older version that
+/// fully represents it.
+///
+/// # Why this is a function and not a constant
+///
+/// See [`SIDECAR_VERSION`]'s note. The short form: the version field exists
+/// to answer "would an older build destroy something here on save?", and for
+/// a document with no override the honest answer is no. Answering yes anyway
+/// would lock the operator's other build out of files it can handle
+/// perfectly, and would rewrite their bytes on the way.
+///
+/// Deterministic and total — same model, same answer, which is what keeps
+/// [`serialize_model`]'s no-change-is-a-no-op guarantee (R34) true.
+fn model_sidecar_version(model: &DimensionModel) -> i64 {
+    if model
+        .dimensions()
+        .iter()
+        .any(|d| d.label_override.is_some())
+    {
+        SIDECAR_VERSION
+    } else {
+        SIDECAR_VERSION_PRE_OVERRIDE
+    }
+}
 
 /// Serialise the whole [`DimensionModel`] to the `Object` pdfce stores as the
 /// `/PieceInfo /pdfce /Private` value (§14.5). Deterministic — the same model
@@ -72,7 +133,10 @@ pub const SIDECAR_VERSION: i64 = 3;
 #[must_use]
 pub fn serialize_model(model: &DimensionModel) -> Object {
     let mut d = Dict::new();
-    d.insert(Name::from(b"Version"), Object::Integer(SIDECAR_VERSION));
+    d.insert(
+        Name::from(b"Version"),
+        Object::Integer(model_sidecar_version(model)),
+    );
     d.insert(
         Name::from(b"Groups"),
         Object::Array(model.groups().iter().map(serialize_group).collect()),
@@ -341,6 +405,12 @@ pub(crate) fn serialize_overrides(style: &StyleOverrides) -> Object {
     serialize_dimension(&DimensionRecord {
         id: DimensionId(0),
         group: GroupId(0),
+        // Not a style property, and the caller reads only the style keys
+        // back. The text override travels on its own clip field
+        // (`ClipAnnotation::Dimension::label_override`) rather than smuggled
+        // through this throwaway record, because a reader of THIS function
+        // would have no reason to look for it here.
+        label_override: None,
         // Any kind will do; the caller reads only the style keys back, and
         // reusing the real encoder is the point.
         kind: DimensionKind::Linear {
@@ -392,6 +462,9 @@ pub(crate) fn serialize_kind(kind: &DimensionKind) -> Object {
         kind: kind.clone(),
         annot: None,
         ap: None,
+        // The GEOMETRY encoder. The text override is not geometry and rides
+        // its own clip field — see `serialize_overrides` above.
+        label_override: None,
         style: crate::dimension::style::StyleOverrides::default(),
     })
 }
@@ -546,6 +619,32 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
     // shape. Reusing `/Unit` inside a dimension dict would be a key that means
     // "the value" in one dict and "the override, absence meaning inherit" in
     // another - the same word for two different contracts, one grep apart.
+    // The `Pass 175.0` text override (decision 097). Optional-key discipline
+    // as everywhere else in this dict — a ce dimension that prints its
+    // measurement adds no key, so every sidecar written before this Pass
+    // re-serialises byte-identically (R34).
+    //
+    // A PDF TEXT STRING (§7.9.2.2) via `encode_text_string`, not raw UTF-8
+    // bytes: this value is operator-typed, so it is the first thing in this
+    // dict that can contain a character outside ASCII, and a raw-UTF-8 write
+    // would be read back by `decode_text_string` as PDFDocEncoding — one byte
+    // per byte — turning an e-acute into two mojibake characters on the round
+    // trip. The encoder picks PDFDocEncoding when the whole string fits and
+    // UTF-16BE otherwise, and the decoder is driven by the BOM, so the pair
+    // is self-describing.
+    //
+    // Note this is a WIDER repertoire than the caption can actually DRAW
+    // (`WinAnsiEncoding`, enforced at `EditSession::set_dimension_label`).
+    // That asymmetry is intentional: storage must be able to round-trip
+    // whatever a future font capability lets the baker draw, and a storage
+    // format that could hold less than the verb accepts would turn a
+    // widening of the verb into a silent truncation of old files.
+    if let Some(text) = dim.label_override.as_deref() {
+        d.insert(
+            Name::from(b"LabelOverride"),
+            Object::String(crate::textstring::encode_text_string(text)),
+        );
+    }
     put_override_keys(&mut d, &dim.style);
     put_style_keys(
         &mut d,
@@ -615,6 +714,18 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
         kind,
         annot: d.get(b"Annot").and_then(Object::as_reference),
         ap: d.get(b"Ap").and_then(Object::as_reference),
+        // Absent ⇒ this ce dimension prints its measurement, which is what
+        // every sidecar written before `Pass 175.0` means and what a fresh
+        // one means today. The decoder's replacement count is deliberately
+        // ignored: a malformed stored string is still the closest thing to
+        // what the operator typed that survives, and dropping the whole
+        // override because one byte was undecodable would silently restore
+        // the measured caption — the exact failure this key exists to
+        // prevent, arrived at from the reader side.
+        label_override: match d.get(b"LabelOverride") {
+            Some(Object::String(bytes)) => Some(crate::textstring::decode_text_string(bytes).text),
+            _ => None,
+        },
         style: StyleOverrides {
             unit: name_of(d.get(b"OvUnit"))
                 .and_then(|n| String::from_utf8(n).ok())

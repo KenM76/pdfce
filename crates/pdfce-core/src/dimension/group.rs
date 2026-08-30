@@ -886,6 +886,50 @@ pub struct DimensionRecord {
     /// presentation layered on top of a measurement — exactly parallel to how
     /// [`Group`] layers a [`NumberFormat`] over `measured_points`.
     pub style: super::style::StyleOverrides,
+    /// **The operator's text override** (`Pass 175.0`, decision 097) — the
+    /// caption this ce dimension PRINTS while the override is in force, or
+    /// `None` when it prints its measurement.
+    ///
+    /// # This SHADOWS the measurement; it never replaces it
+    ///
+    /// Decision 097 is explicit and the distinction is the whole point of the
+    /// feature: [`Self::kind`] keeps the measured geometry untouched, the
+    /// group keeps its scale and format, and clearing this field back to
+    /// `None` restores the measured caption **exactly, with no
+    /// re-measurement**. The operator asked for precisely that property —
+    /// *"an option if it can be selected to be overridden or not so the
+    /// override can be undone"* — which is a requirement about the
+    /// reversibility of the OVERRIDE, not about the undo stack (an override
+    /// that were merely undoable would be reversible only until the next
+    /// edit, like every other command).
+    ///
+    /// # Why it lives on the record and not in [`StyleOverrides`]
+    ///
+    /// [`StyleOverrides`] is a CASCADE tier: every field there means "this ce
+    /// dimension's answer, or inherit the group's". A text override has no
+    /// group tier and must never acquire one — a group-wide "all these
+    /// dimensions read 55 5/8" is not a thing any drafting standard has, and
+    /// modelling it as inheritable would make one operator keystroke silently
+    /// re-caption a whole drawing. It is a per-ce-dimension fact or it is
+    /// nothing.
+    ///
+    /// # `<DIM>` is substituted, so the measurement can stay visible
+    ///
+    /// The stored string may contain the token `<DIM>`, which
+    /// [`super::author_dimension_with_label`] replaces with the measured
+    /// caption (prefix + value + tolerance). `2X <DIM> TYP` therefore keeps
+    /// tracking the geometry while carrying the operator's annotation — see
+    /// that function for the full contract and for why a bare override
+    /// replaces the caption WHOLE.
+    ///
+    /// # Round-trip
+    ///
+    /// Persisted as the sidecar's `/LabelOverride` key (see
+    /// [`super::sidecar`]), so the override survives save-and-reopen — which
+    /// decision 097 requires by name, because an override that lived only in
+    /// session state would silently revert on the next open and the operator
+    /// would have no way to tell an expired override from one that never took.
+    pub label_override: Option<String>,
 }
 
 /// The authoritative dimensioning model — the whole `/PieceInfo` sidecar's
@@ -1047,6 +1091,11 @@ impl DimensionModel {
             // whole appearance from its group. Anything else would make the
             // group's default a suggestion rather than a default.
             style: super::style::StyleOverrides::default(),
+            // A newly authored ce dimension prints its MEASUREMENT. An
+            // override is something the operator asks for afterwards, on a
+            // dimension they can already see — there is no defensible way to
+            // guess one at draw time (decision 097).
+            label_override: None,
         });
         id
     }
@@ -1079,6 +1128,28 @@ impl DimensionModel {
         let d = self.dimension(id)?;
         let g = self.group(d.group)?;
         Some(d.kind.display_with(g.scale, g.format))
+    }
+
+    /// The text override in force on `id`, or `None` when that ce dimension
+    /// prints its measurement (`Pass 175.0`, decision 097).
+    ///
+    /// # Read this ALONGSIDE [`Self::display`], never instead of it
+    ///
+    /// [`Self::display`] deliberately keeps answering the MEASURED value even
+    /// while an override is in force, because that is the question it has
+    /// always answered and a surface that needs the measurement (a re-measure
+    /// check, a scale preview, an export of what the drawing actually says it
+    /// measured) still needs it. The caption that PRINTS is a different
+    /// question, answered by [`super::author_dimension_with_label`].
+    ///
+    /// A surface showing a ce dimension to an operator owes BOTH: rule 4 asks
+    /// that a caption diverging from its measurement be disclosed, and the
+    /// only way to disclose a divergence is to show the two things that
+    /// diverge. `pdfce-cli`'s `dimension-list` prints `override=…` beside the
+    /// measured `value=…` for exactly this reason.
+    #[must_use]
+    pub fn label_override(&self, id: DimensionId) -> Option<&str> {
+        self.dimension(id)?.label_override.as_deref()
     }
 
     /// Delete `group`, reassigning its members to the default group (ui-spec

@@ -75,7 +75,20 @@ use super::geometry::{Bounds, Matrix};
 /// *will* copy in one and paste in the other. `Pass 120.1` (`to_bytes`) is
 /// what makes that reachable; the version is carried from the start so the
 /// refusal exists before the payload can travel.
-pub const CLIP_VERSION: u32 = 2;
+/// # ★ The version a clip is written at is CONTENT-DEPENDENT
+///
+/// `3` (`Pass 175.0`, the ce-dimension text override) is emitted only by a
+/// clip that actually carries an override; every other clip is still written
+/// at `2` and still pastes into the build the operator has open in the other
+/// folder. Writing `3` unconditionally would make **every** copy/paste
+/// between the two builds fail from the day this Pass shipped, in exchange for
+/// protecting a field almost no clip contains — see
+/// [`ObjectClip::needed_version`] and the identical argument on the
+/// ce-dimension sidecar's `SIDECAR_VERSION`.
+pub const CLIP_VERSION: u32 = 3;
+
+/// The version a clip that uses no post-`2` feature is written at.
+pub const CLIP_VERSION_PRE_LABEL_OVERRIDE: u32 = 2;
 
 /// The seven resource categories a content stream can name (§7.8.3 Table 33).
 ///
@@ -335,6 +348,25 @@ pub enum ClipAnnotation {
         style: crate::dimension::StyleOverrides,
         /// The measured geometry.
         kind: Box<crate::dimension::DimensionKind>,
+        /// The ce dimension's **operator text override**, or `None` when it
+        /// prints its measurement (`Pass 175.0`, decision 097).
+        ///
+        /// ★ Carried for the same reason
+        /// [`Self::Dimension::scale`](ClipAnnotation::Dimension) is, and the
+        /// note there is the precedent rather than a coincidence: a field the
+        /// caption is DERIVED from, left off the clip, makes a pasted ce
+        /// dimension **read differently from the one it was copied from**,
+        /// with nothing erroring and nothing marked. `Pass 173.1` learned that
+        /// about the group's scale; an override is the same shape of fact and
+        /// was wired in the same Pass that created it, rather than after a
+        /// report.
+        ///
+        /// Applied **unconditionally** on paste, like
+        /// [`Self::Dimension::style`](ClipAnnotation::Dimension) and unlike
+        /// the group-tier fields: an override belongs to the one ce dimension
+        /// the operator typed it on, so no destination group can have an
+        /// opinion about it.
+        label_override: Option<String>,
     },
     /// Any annotation with **no registration outside the page**, carried as
     /// its own dictionary plus the closure it reaches (`Pass 170.0`).
@@ -727,6 +759,36 @@ impl ObjectClip {
     /// read back by its own [`Parser`](crate::parser::Parser), so the COS
     /// grammar has exactly one implementation on each side rather than a
     /// second one living here.
+    /// The lowest clip-format version that fully represents this clip's
+    /// annotations (`Pass 175.0`).
+    ///
+    /// [`CLIP_VERSION`] when some ce dimension carries a text override,
+    /// otherwise [`CLIP_VERSION_PRE_LABEL_OVERRIDE`]. See [`CLIP_VERSION`]'s
+    /// note for why this is content-dependent rather than a constant: the
+    /// operator runs two builds side by side out of two folders and copies in
+    /// one to paste in the other, so a blanket bump would break every paste
+    /// between them in exchange for protecting a field almost no clip has.
+    ///
+    /// A clip whose `version` field says `2` therefore round-trips to
+    /// byte-identical output through an older build, which is the property
+    /// that makes the two folders keep working.
+    #[must_use]
+    pub fn needed_version(annotations: &[ClipAnnotation]) -> u32 {
+        if annotations.iter().any(|a| {
+            matches!(
+                a,
+                ClipAnnotation::Dimension {
+                    label_override: Some(_),
+                    ..
+                }
+            )
+        }) {
+            CLIP_VERSION
+        } else {
+            CLIP_VERSION_PRE_LABEL_OVERRIDE
+        }
+    }
+
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         use crate::object::ObjId;
@@ -817,6 +879,7 @@ impl ObjectClip {
                     standard,
                     style,
                     kind,
+                    label_override,
                 } => {
                     out.push(1);
                     put_bytes(&mut out, group_name.as_bytes());
@@ -836,6 +899,21 @@ impl ObjectClip {
                         &crate::dimension::sidecar::serialize_overrides(style),
                     );
                     put_cos(&mut out, &crate::dimension::sidecar::serialize_kind(kind));
+                    // APPENDED after the three v2 fields, and read back only
+                    // when the payload declares version >= 3. Inserting it
+                    // anywhere earlier would move every following byte and
+                    // make a v2 clip and a v3 clip indistinguishable to a
+                    // reader that got the version wrong — the presence byte
+                    // is cheap; a shifted positional format is not.
+                    if self.version >= CLIP_VERSION {
+                        match label_override {
+                            Some(text) => {
+                                out.push(1);
+                                put_bytes(&mut out, text.as_bytes());
+                            }
+                            None => out.push(0),
+                        }
+                    }
                 }
                 ClipAnnotation::Raw(raw) => {
                     out.push(3);
@@ -994,6 +1072,19 @@ impl ObjectClip {
                                     "a ce dimension's geometry could not be read back".to_owned(),
                                 )
                             })?;
+                        // Version 2 payloads stop after the geometry and
+                        // carry no override; version 3 onwards do. Read
+                        // conditionally rather than refusing, exactly as the
+                        // annotation block itself is above.
+                        let label_override = if version >= CLIP_VERSION {
+                            if r.take(1)?.first().copied().unwrap_or(0) == 1 {
+                                Some(String::from_utf8_lossy(&r.bytes()?).into_owned())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
                         ClipAnnotation::Dimension {
                             group_name,
                             format,
@@ -1001,6 +1092,7 @@ impl ObjectClip {
                             standard,
                             style,
                             kind: Box::new(kind),
+                            label_override,
                         }
                     }
                     3 => {

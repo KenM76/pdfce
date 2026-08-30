@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 173 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 174 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 173 public `EditSession` methods
+## 1. Verb index — all 174 public `EditSession` methods
 
-**Count: 173.** Established by brace-matched extraction of the four
+**Count: 174.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -2108,6 +2108,7 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 | Set a group's drafting standard | `set_group_standard(&mut self, group, standard: DimStandard) -> Result<usize, EditError>` | 15983 | Count of members regenerated. |
 | Set a group's style defaults | `set_group_style(&mut self, group, style: GroupStyle) -> Result<usize, EditError>` | 16052 | ⚠️ **Count REGENERATED, not count MOVED.** See §8, trap T-00. |
 | Set one ce dimension's overrides | `set_dimension_style(&mut self, dimension, style: StyleOverrides) -> Result<usize, EditError>` | 16115 | ⚠️ Count of **properties overridden afterwards** — a different unit from the sibling above, same type. |
+| **Override / restore one ce dimension's TEXT** | `set_dimension_label(&mut self, dimension, label: Option<&str>) -> Result<DimensionLabelChange, EditError>` | 29734 | ✅ **`Some` overrides, `None` restores the measurement exactly** — the measured value is SHADOWED, never replaced, and survives in the sidecar. `<DIM>` in the text is substituted with the measured caption at bake time, so `"2X <DIM> TYP"` keeps tracking the geometry. ⚠️ **0 undo entries on a no-op** (a third granularity exception — see §3.4). Refuses empty, >128 chars, or any character outside `WinAnsiEncoding`. |
 | Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. |
 | **Translate** a ce dimension | `move_dimension(&mut self, dimension, dx, dy) -> Result<(), EditError>` | 16779 | ⚠️ Translates the **measured points** — takes the ce dimension off the feature it was measuring. |
 
@@ -2830,6 +2831,7 @@ Distinctions the enum preserves on purpose, which a label must not flatten:
 | `import_form_data` | **N entries** — one per field. Ctrl+Z after an FDF import undoes one field. | `edit.rs:13458-13460` |
 | `set_info_field` | **0 entries on a no-op.** Setting a field to its existing value, or clearing an absent one, records nothing and leaves the redo stack alone. | `edit.rs:3677-3682` |
 | `set_dimension_display` | **1 entry even on a no-op** — deliberately the inverse, so a toggle control's undo behaviour is not sometimes-present. | `edit.rs:15901-15908` |
+| `set_dimension_label` | **0 entries on a no-op** — setting the override that already holds, or clearing one that is not there, records nothing. `DimensionLabelChange::changed` reports which happened, so a shell never has to guess. | `edit.rs:29734` |
 
 A shell that keeps its own dirty counter incremented per successful call will
 drift from `undo_depth()` on the first and second of these.
