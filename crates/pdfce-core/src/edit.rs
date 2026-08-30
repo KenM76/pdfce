@@ -714,6 +714,16 @@ pub enum CommandKind {
         /// (`0` ⇒ it now inherits everything from its group again).
         overrides: usize,
     },
+    /// A form-field **widget was rotated** (`Pass 177.0`): its `/MK /R` was
+    /// written and, where pdfce authored the appearance, the `/AP` was redrawn
+    /// in the rotated frame. ONE undoable command.
+    ///
+    /// `/Rect` does not move — a rotated field turns its CONTENT inside the
+    /// box the operator placed. See [`EditSession::rotate_widget`].
+    RotateWidget {
+        /// The rotation stored, counterclockwise, reduced into `[0, 360)`.
+        degrees: i64,
+    },
     /// ONE ce dimension's **text override** was set, replaced or cleared
     /// (`Pass 175.0`, decision 097) and its baked `/AP` regenerated. ONE
     /// undoable command. See [`EditSession::set_dimension_label`].
@@ -4792,6 +4802,27 @@ pub enum EditError {
         id: u32,
         /// How many dimensions still belong to it.
         members: usize,
+    },
+    /// A widget rotation was asked for that is not a quarter turn
+    /// (`Pass 177.0`).
+    ///
+    /// ISO 32000-1 §12.5.6.19 Table 189 (= 2.0 Table 192), the `/R` entry:
+    /// *"The value shall be a multiple of 90."* That is the standard's
+    /// **entire** constraint — there is no range, so `-90`, `270` and `450`
+    /// are all conforming; only a non-multiple is not.
+    ///
+    /// Refused rather than rounded. A widget declared at 45 degrees has no
+    /// conforming meaning, and snapping it to 90 would put a rotation on an
+    /// operator's form that they did not ask for and could not see was
+    /// substituted — the free-angle transform is
+    /// [`EditSession::rotate_annotation`]'s job and it refuses widgets for the
+    /// mirror-image reason.
+    #[error(
+        "a widget's rotation is /MK /R (ISO 32000-1 12.5.6.19 Table 189), which shall be a multiple of 90 degrees; {degrees} is not one, and pdfce will not round it into a rotation you did not ask for"
+    )]
+    WidgetRotationNotQuarterTurn {
+        /// The angle that was asked for.
+        degrees: i64,
     },
     /// The **default** ce-dimension group was named for deletion
     /// (`Pass 176.0`).
@@ -14108,6 +14139,63 @@ pub struct FieldEditOutcome {
     pub sort_claim_unmet: bool,
 }
 
+/// What [`EditSession::rotate_widget`] did (`Pass 177.0`).
+///
+/// Carries the three facts a shell cannot recompute and must not guess: what
+/// the rotation WAS (the file may have been silent, which is different from
+/// zero), whether pdfce normalised the number the caller passed, and whether
+/// the appearance was actually redrawn — because a rotation whose pixels did
+/// not move is the case an operator will otherwise report as a defect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct WidgetRotation {
+    /// The fully-qualified field name.
+    pub name: String,
+    /// Which of the field's widgets was rotated.
+    pub index: usize,
+    /// `/MK /R` BEFORE the call, exactly as the file stated it.
+    ///
+    /// `None` means the file was **silent**, which is not the same fact as
+    /// `Some(0)` — see [`crate::forms::Widget::rotation`]. A shell showing
+    /// "was: 0" for a silent file and writing that back on the next press is
+    /// the invention this distinction exists to prevent.
+    pub was: Option<i64>,
+    /// `/MK /R` AFTER the call — `None` when the widget was rotated back to
+    /// upright, because `0` is the default and the key is removed rather than
+    /// written.
+    pub now: Option<i64>,
+    /// Whether pdfce reduced the caller's angle to store it.
+    ///
+    /// `true` for `-90` (stored `270`) or `450` (stored `90`). The standard
+    /// permits both unreduced forms — its whole constraint is "a multiple of
+    /// 90" — so this reports a **pdfce product rule**, not a correction of the
+    /// caller. A shell echoing the angle back should echo [`Self::now`].
+    pub normalised: bool,
+    /// Whether the widget's appearance stream was **redrawn** in the rotated
+    /// frame.
+    ///
+    /// `false` for a push button, a signature, or any field whose appearance
+    /// pdfce did not author — see [`Self::appearance_stale`], which is
+    /// `Some` exactly when this is `false`.
+    pub appearance_regenerated: bool,
+    /// The disclosure owed when [`Self::appearance_regenerated`] is `false`:
+    /// `/MK /R` was written and the pixels did not change.
+    ///
+    /// This matters more than it sounds. PDF Association erratum #56 (`ISO
+    /// approved`) puts `MK` in §12.5.2's ignore-list, so a conforming PDF 2.0
+    /// reader shows a widget with a baked `/AP` **unrotated** however `/R`
+    /// reads. Without this sentence the operator sees a command succeed and a
+    /// field that did not move, and has no way to tell that from a bug.
+    pub appearance_stale: Option<String>,
+    /// How many other widgets of the same field were left alone.
+    ///
+    /// Rotation is a **widget** property, not a field one: `/MK` lives on the
+    /// annotation. A field with several widgets on several pages can have each
+    /// rotated differently, and a shell that assumed otherwise would report a
+    /// change it did not make.
+    pub siblings_untouched: usize,
+}
+
 /// What [`EditSession::edit_widget`] changed.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
@@ -16353,6 +16441,7 @@ impl EditSession {
         field: &forms::Field,
         flags: forms::FieldFlags,
         objects: &mut Vec<ObjectWrite>,
+        pending_rotation: Option<(ObjId, i64)>,
     ) -> Result<bool, EditError> {
         let (display, multiline) = match field.field_type {
             Some(forms::FieldType::Text) => match &field.value {
@@ -16391,6 +16480,7 @@ impl EditSession {
             objects,
             &mut applied_autosize,
             &mut unencodable,
+            pending_rotation,
         )?;
         // Shape A: the field dict IS the widget, so its `/AP` `/N` is folded
         // into the dictionary write the caller is already making — found by
@@ -16405,6 +16495,194 @@ impl EditSession {
             d.insert(Name::from(b"AP"), Object::Dict(ap));
         }
         Ok(true)
+    }
+
+    /// **Rotate a form-field widget** — `/MK /R` plus a redrawn appearance,
+    /// as one undoable command (`Pass 177.0`).
+    ///
+    /// The last unbuilt carrier of pdfce's transform trio. Every other
+    /// `/Rect`-carrying annotation rotates through
+    /// [`Self::rotate_annotation`], which refuses widgets by name and points
+    /// here; a ce dimension goes to [`Self::rotate_dimension`].
+    ///
+    /// # ★ COUNTERCLOCKWISE — the page's `/Rotate` is the clockwise one
+    ///
+    /// ISO 32000-1 §12.5.6.19 Table 189 (= ISO 32000-2 Table 192): *"The
+    /// number of degrees by which the widget annotation shall be rotated
+    /// **counterclockwise** relative to the page. The value shall be a
+    /// multiple of 90. Default value: 0."*
+    ///
+    /// §7.7.3.3 Table 30, for the page: *"…rotated **clockwise** when
+    /// displayed or printed. The value shall be a multiple of 90. Default
+    /// value: 0."* **The direction word is the only difference between the two
+    /// sentences**, and the standard flags the clash exactly once, on an
+    /// unrelated row. `degrees` here is counterclockwise, matching `/R`,
+    /// §8.3.4's rotation matrix and [`crate::vector::Matrix::rotate`] — so no
+    /// sign flip happens anywhere in this path.
+    ///
+    /// # `/Rect` does not move; the CONTENT turns inside it
+    ///
+    /// That is what a rotated field is: the box stays where the operator put
+    /// it and the text runs sideways in it. The appearance is therefore
+    /// **redrawn in the rotated frame** — authored into a `w`/`h`-swapped
+    /// `/BBox` and stood upright by a quarter-turn `/Matrix` — rather than
+    /// drawn upright and spun.
+    ///
+    /// The difference is not cosmetic. §12.5.5 step (b) fits the transformed
+    /// appearance box onto `/Rect` **anisotropically**, so spinning an
+    /// already-drawn `w x h` appearance would present an `h x w` box to be
+    /// squashed back into `w x h` — rotated *and* stretched. Swapping the
+    /// authored box first makes that fit a 1:1 identity.
+    ///
+    /// # ★★ Why the appearance MUST be redrawn, and what happens when it can't
+    ///
+    /// Writing `/MK /R` alone is **not enough, and under PDF 2.0 it is a
+    /// no-op.** PDF Association erratum #56 (closed, `ISO approved`; TWG
+    /// 2021-07-08 *"OK to ignore MK for Widget"*) adds `MK` to §12.5.2's
+    /// ignore-list: *"When rendering the appearance dictionary, a PDF reader
+    /// shall ignore the values of the `C`, `IC`, `Border`, `BS`, `BE`, `CA`,
+    /// `ca`, `H`, `DA`, `Q`, `DS`, `LE`, `LL`, `LLE`, **`MK`**, and `Sy`
+    /// keys."* PDF 2.0 also makes `/AP` a `shall` on widgets and deprecates
+    /// `/NeedAppearances`. So a conforming 2.0 reader shows a widget with a
+    /// baked `/AP` **unrotated**, however `/R` reads.
+    ///
+    /// pdfce can redraw a **text** or **choice** field's appearance, because
+    /// it authored that kind of appearance in the first place. It cannot
+    /// redraw a push button's caption artwork, a signature, or any stream a
+    /// foreign producer baked — redrawing those would destroy work pdfce did
+    /// not do, which is the same line [`Self::resize_annotation`] holds.
+    ///
+    /// In that case `/MK /R` is still written — a processor that regenerates
+    /// appearances will honour it — and
+    /// [`WidgetRotation::appearance_stale`] carries a sentence saying, in as
+    /// many words, that the declaration is set and the pixels did not change.
+    /// **The rotation is not silently dropped and it is not silently
+    /// pretended.**
+    ///
+    /// # Normalisation is pdfce's rule, not the standard's
+    ///
+    /// The standard's entire constraint is *"a multiple of 90"* — unbounded,
+    /// so `-90`, `270` and `450` are all conforming. This verb refuses a
+    /// non-multiple and reduces what it writes into `[0, 360)`, and
+    /// [`WidgetRotation::normalised`] reports when that changed the number, so
+    /// a caller passing `-90` learns it stored `270`. The reader
+    /// ([`crate::forms::Widget::rotation`]) deliberately does **not**
+    /// normalise, so the model keeps agreeing with the file.
+    ///
+    /// # Rotating back to 0 removes the key
+    ///
+    /// `/R 0` is the default, so an explicit `0` is deleted rather than
+    /// written, and `/MK` itself is removed if that empties it — the same
+    /// shape [`Self::edit_widget`] uses for an emptied caption. A widget
+    /// rotated and rotated back is byte-identical to one never rotated (R34),
+    /// which is also what makes the undo test meaningful.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::WidgetRotationNotQuarterTurn`] — not a multiple of 90.
+    /// - [`EditError::FieldNotFound`] / [`EditError::WidgetIndexOutOfRange`].
+    /// - The encryption and certification guards.
+    ///
+    /// Every refusal happens before any mutation (rule 4).
+    pub fn rotate_widget(
+        &mut self,
+        fqn: &str,
+        index: usize,
+        degrees: i64,
+    ) -> Result<WidgetRotation, EditError> {
+        // The angle is checked FIRST, before the document is even consulted:
+        // a bad argument is not a document problem, and refusing it here keeps
+        // the "no mutation on refusal" promise trivially rather than by
+        // inspection.
+        if degrees % 90 != 0 {
+            return Err(EditError::WidgetRotationNotQuarterTurn { degrees });
+        }
+        let quarter = degrees.rem_euclid(360);
+
+        let (field, ()) = self.deletion_preflight(fqn)?;
+        let Some(widget) = field.widgets.get(index).cloned() else {
+            return Err(EditError::WidgetIndexOutOfRange {
+                name: fqn.to_owned(),
+                index,
+                widgets: field.widgets.len(),
+            });
+        };
+        let was = widget.rotation;
+
+        let Some(Object::Dict(dict)) = self.value(widget.id) else {
+            return Err(EditError::NotADictionary {
+                id: widget.id,
+                key: "MK",
+            });
+        };
+        let mut updated = dict.clone();
+
+        // PRESERVED-AND-PATCHED, exactly as `edit_widget` does for `/CA`:
+        // `/MK` also carries `/BC`, `/BG`, `/RC`, `/AC`, `/I`, `/RI`, `/IX`,
+        // `/IF` and `/TP`, none of which pdfce models, and writing a fresh
+        // dictionary would silently delete an operator's border colour.
+        let mut mk = updated
+            .get(b"MK")
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_default();
+        if quarter == 0 {
+            mk.remove(b"R");
+        } else {
+            mk.insert(Name::from(b"R"), Object::Integer(quarter));
+        }
+        if mk.is_empty() {
+            updated.remove(b"MK");
+        } else {
+            updated.insert(Name::from(b"MK"), Object::Dict(mk));
+        }
+
+        let mut objects = vec![ObjectWrite {
+            id: widget.id,
+            before: self.state.get(&widget.id).cloned(),
+            after: Some(Object::Dict(updated)),
+        }];
+
+        // The redraw, through the ONE regeneration path (R92). `pending`
+        // carries the new angle for THIS widget only: `field.widgets` was
+        // snapshotted before the `/MK` write above, so its `rotation` is
+        // still the old one, and a field's other widgets keep their own.
+        let mut appearance_stale = None;
+        let appearance_regenerated = self.regen_after_property_change(
+            &field,
+            field.flags,
+            &mut objects,
+            Some((widget.id, quarter)),
+        )?;
+        if !appearance_regenerated {
+            appearance_stale = Some(
+                "pdfce set this widget's /MK /R rotation but did NOT redraw its appearance -- \
+                 the stream is a push button's caption artwork, a signature, or a form built \
+                 elsewhere, and redrawing it would destroy work pdfce did not do. A PDF 2.0 \
+                 reader ignores /MK when an appearance stream is present (erratum #56), so the \
+                 field will still LOOK upright there; a processor that regenerates appearances \
+                 will honour the rotation"
+                    .to_owned(),
+            );
+        }
+
+        self.commit(Command {
+            kind: CommandKind::RotateWidget { degrees: quarter },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(WidgetRotation {
+            name: fqn.to_owned(),
+            index,
+            was,
+            now: if quarter == 0 { None } else { Some(quarter) },
+            normalised: quarter != degrees,
+            appearance_regenerated,
+            appearance_stale,
+            siblings_untouched: field.widgets.len().saturating_sub(1),
+        })
     }
 
     /// Change one widget's **widget-scope** properties — geometry, border,
@@ -16565,7 +16843,7 @@ impl EditSession {
         let mut appearance_stale = None;
         let needs_regen = resized || edit.border.is_some();
         let appearance_regenerated = if needs_regen {
-            let done = self.regen_after_property_change(&field, field.flags, &mut objects)?;
+            let done = self.regen_after_property_change(&field, field.flags, &mut objects, None)?;
             if !done {
                 // A button or signature field: this engine builds a TEXT
                 // appearance and such a field has none. Said out loud,
@@ -16881,7 +17159,7 @@ impl EditSession {
             || edit.max_len.is_some()
             || options_after.is_some();
         let appearance_regenerated = if layout_changed {
-            self.regen_after_property_change(&field, flags, &mut objects)?
+            self.regen_after_property_change(&field, flags, &mut objects, None)?
         } else {
             false
         };
@@ -18977,22 +19255,31 @@ impl EditSession {
             });
         }
         if target.subtype == b"Widget" {
-            // ★ `rotate_widget` DOES NOT EXIST, and this message used to send
-            // the operator to it as though it did — found 2026-08-29 by
-            // grepping the verb names these refusals cite. The other three
-            // (`rotate_dimension`, `move_dimension_vertex`, `edit_widget`) all
-            // resolve; this one never has.
+            // ★ `rotate_widget` EXISTS as of `Pass 177.0`, and this message
+            // had TWO factual errors besides the phantom, both found by the
+            // spec lookup that preceded building it:
             //
-            // That is worse than a dangling doc link: it is a RUNTIME message,
-            // read at the moment the operator is blocked, naming the way out.
-            // So the sentence now says plainly that there is no way out yet.
-            // It still names the verb the capability WILL be, because
-            // "unsupported" with no name is a dead end and "unsupported, and
-            // here is what it would be called" is a search term.
+            //   1. "a quantised 0/90/180/270 declaration" -- the standard's
+            //      entire constraint is "shall be a multiple of 90", UNBOUNDED
+            //      (Table 189 / 2.0 Table 192). `-90`, `270` and `450` all
+            //      conform. The quantisation into `[0, 360)` is pdfce's own
+            //      normalisation, which `rotate_widget` performs and reports.
+            //   2. "the field's appearance generator reads" -- true only while
+            //      a processor is REGENERATING. PDF Association erratum #56
+            //      (`ISO approved`) puts `MK` in 12.5.2's ignore-list, so a
+            //      conforming PDF 2.0 reader ignores `/MK` entirely when an
+            //      appearance stream is present, and most widgets have one.
+            //      That is precisely why `rotate_widget` redraws the `/AP`
+            //      rather than writing one key.
+            //
+            // The refusal itself stands unchanged in force: a widget's
+            // rotation is a quarter-turn declaration plus a redrawn
+            // appearance, and the free-angle transform this verb applies would
+            // be silently wrong for one.
             return Err(EditError::AnnotationMoveWrongVerb {
                 subtype: "form widget".to_owned(),
                 use_instead: "rotate_widget",
-                why: "a widget's rotation is /MK /R (§12.5.6.19 Table 189), a quantised 0/90/180/270 declaration the field's appearance generator reads — not a free-angle transform. THAT VERB IS NOT BUILT YET, so there is no route to rotating a widget today; the free-angle transform this verb applies would be silently wrong for one",
+                why: "a widget's rotation is /MK /R (ISO 32000-1 12.5.6.19 Table 189), a multiple-of-90 declaration COUNTERCLOCKWISE relative to the page, plus an appearance redrawn in the rotated frame -- not a free-angle transform of a rectangle. Use rotate_widget(fqn, index, degrees), which does both",
             });
         }
 
@@ -22531,6 +22818,9 @@ impl EditSession {
                 &mut objects,
                 &mut applied_autosize,
                 &mut unencodable_chars,
+                // Not a rotation call: each widget's own `/MK /R` is read
+                // inside the loop, so a rotated field stays rotated.
+                None,
             )?;
             widgets_updated += field.widgets.len();
 
@@ -23054,6 +23344,8 @@ impl EditSession {
                         &mut objects,
                         &mut None,
                         &mut 0,
+                        // Not a rotation call -- see the sibling above.
+                        None,
                     )?;
                     out.widgets_updated += field.widgets.len();
                     if let Some(ap_id) = merged_ap {
@@ -23124,6 +23416,7 @@ impl EditSession {
         objects: &mut Vec<ObjectWrite>,
         applied_autosize: &mut Option<f64>,
         unencodable: &mut usize,
+        pending_rotation: Option<(ObjId, i64)>,
     ) -> Result<Option<ObjId>, EditError> {
         let da = field
             .default_appearance
@@ -23132,7 +23425,52 @@ impl EditSession {
         let quad = field.quadding;
         let mut merged_ap: Option<ObjId> = None;
         for widget in &field.widgets {
-            let (w, h) = widget.rect.map_or((0.0, 0.0), |r| (r.width(), r.height()));
+            let (rw, rh) = widget.rect.map_or((0.0, 0.0), |r| (r.width(), r.height()));
+
+            // ★ THE WIDGET'S ROTATION IS PART OF WHAT "REGENERATE THIS
+            // APPEARANCE" MEANS (`Pass 177.0`), and threading it through HERE
+            // rather than into a second builder is deliberate.
+            //
+            // This is the one place a field's appearance is rebuilt, reached
+            // by form fill, `edit_widget`'s resize, a border change and now
+            // `rotate_widget`. Before this Pass it ignored `/MK /R`
+            // unconditionally, so filling a rotated field SILENTLY STOOD IT
+            // BACK UP — the operator's rotation survived in `/MK` and vanished
+            // from the pixels, which is the half nobody looks at.
+            //
+            // `pending` exists because `rotate_widget` stages its `/MK` write
+            // and regenerates inside the SAME command: the `forms::Widget`
+            // snapshot in `field.widgets` was read before that write, so it
+            // still carries the OLD rotation. Passing the new value explicitly
+            // is honest; reading it back out of half-applied session state
+            // would be a second source of truth for one fact.
+            let rot = pending_rotation
+                .filter(|(id, _)| *id == widget.id)
+                .map(|(_, deg)| deg)
+                .or(widget.rotation)
+                .unwrap_or(0);
+            let quarter = rot.rem_euclid(360);
+
+            // The appearance is DRAWN IN THE ROTATED FRAME and turned upright
+            // by `/Matrix`, rather than drawn upright and spun.
+            //
+            // §12.5.5 step (a) takes the `/BBox` corners through `/Matrix` and
+            // bounds them; step (b) maps that box onto `/Rect`
+            // **anisotropically**. So drawing into `[0 0 w h]` and rotating a
+            // quarter turn would present an `h x w` box to be squashed into a
+            // `w x h` rectangle — the text would render rotated AND stretched.
+            // Swapping the authored box first makes step (b) a 1:1 identity:
+            // an `h x w` BBox rotated a quarter turn bounds to `w x h`, which
+            // is exactly `/Rect`.
+            //
+            // Undistorted, and `/Rect` never moves — which is what a rotated
+            // field should do. Acrobat rotates the CONTENT inside the box; the
+            // box is where the operator put it.
+            let (w, h) = if quarter == 90 || quarter == 270 {
+                (rh, rw)
+            } else {
+                (rw, rh)
+            };
             let appearance =
                 annot_author::build_field_text_appearance(w, h, text, &da, quad, multiline, fonts)?;
             if appearance.applied_autosize.is_some() {
@@ -23142,6 +23480,22 @@ impl EditSession {
 
             let ap_id = ObjId::new(self.alloc_number()?, 0);
             let mut ap_dict = appearance.ap_dict;
+            // `/Matrix` (§8.10.1 Table 95). Written only for a real rotation,
+            // so an unrotated widget's appearance dict is byte-identical to
+            // what every earlier build produced (R34) -- the identity matrix
+            // is the default and emitting it would rewrite every appearance in
+            // every form pdfce touches, for nothing.
+            //
+            // §8.3.4's counterclockwise rotation matrix, taken at face value:
+            // `/MK /R` is counterclockwise too, so there is NO SIGN FLIP here.
+            // The instinct to negate comes from the page's `/Rotate`, which is
+            // the clockwise outlier.
+            if let Some(m) = Self::quarter_turn_matrix(quarter) {
+                ap_dict.insert(
+                    Name::from(b"Matrix"),
+                    Object::Array(m.iter().map(|v| Object::Real(*v)).collect()),
+                );
+            }
             ap_dict.insert(
                 Name::from(b"Length"),
                 Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
@@ -23162,6 +23516,55 @@ impl EditSession {
             }
         }
         Ok(merged_ap)
+    }
+
+    /// The form-XObject `/Matrix` for a quarter-turn widget rotation, or `None`
+    /// for an unrotated (or non-quarter-turn) one (`Pass 177.0`).
+    ///
+    /// `quarter` is the rotation already reduced into `[0, 360)`.
+    ///
+    /// # The sense is COUNTERCLOCKWISE, and that is not the obvious choice
+    ///
+    /// ISO 32000-1 §12.5.6.19 Table 189 (= ISO 32000-2 Table 192), the `/R` entry,
+    /// verbatim: *"The number of degrees by which the widget annotation shall be
+    /// rotated **counterclockwise** relative to the page. The value shall be a
+    /// multiple of 90. Default value: 0."*
+    ///
+    /// The page object's `/Rotate` (§7.7.3.3 Table 30) is word-for-word parallel
+    /// — *"the number of degrees by which the page shall be rotated **clockwise**
+    /// when displayed or printed. The value shall be a multiple of 90. Default
+    /// value: 0."* — and **the direction word is the only difference between the
+    /// two sentences.** The standard flags the clash exactly once, on the
+    /// transition dictionary's `/Di` row, nowhere near either of them.
+    ///
+    /// So the matrices below are §8.3.4's rotation matrix `[cos q, sin q, -sin q,
+    /// cos q, 0, 0]` used **unnegated**. §8.3.4 is itself counterclockwise
+    /// (*"rotating the coordinate system axes by an angle q counter clockwise"*)
+    /// and is literally [`crate::vector::Matrix::rotate`], so `/MK /R` and pdfce's
+    /// internal angle already agree. **Anyone who "fixes" a sign here is
+    /// remembering page rotation.**
+    ///
+    /// # No translation component, and why none is needed
+    ///
+    /// §12.5.5 step (b) computes the matrix that maps the *transformed appearance
+    /// box* — the upright box bounding the `/BBox` corners after `/Matrix` — onto
+    /// `/Rect`. That step supplies the translation, and the scale too. A rotated
+    /// `/BBox` lands with negative coordinates (a quarter turn of `[0 0 h w]`
+    /// spans `x` from `-w` to `0`); step (b) slides it into place. Adding a
+    /// translation here would be applied twice.
+    const fn quarter_turn_matrix(quarter: i64) -> Option<[f64; 6]> {
+        match quarter {
+            90 => Some([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]),
+            180 => Some([-1.0, 0.0, 0.0, -1.0, 0.0, 0.0]),
+            270 => Some([0.0, -1.0, 1.0, 0.0, 0.0, 0.0]),
+            // 0 -- and any non-quarter-turn value a non-conforming file might
+            // carry. Emitting nothing for `0` is what keeps an unrotated
+            // appearance dict byte-identical to every earlier build's (R34); a
+            // non-multiple of 90 is refused at the verb, so reaching here means a
+            // file stated one, and honouring it with a free-angle matrix would
+            // distort the field rather than report the file's non-conformance.
+            _ => None,
+        }
     }
 
     /// Set a **choice** field's selection(s) and regenerate its appearance
@@ -23362,6 +23765,9 @@ impl EditSession {
                 &mut objects,
                 &mut applied_autosize,
                 &mut unencodable_chars,
+                // Not a rotation call: each widget's own `/MK /R` is read
+                // inside the loop, so a rotated field stays rotated.
+                None,
             )?;
             widgets_updated += field.widgets.len().max(objects.len() - before_len);
 
@@ -23700,6 +24106,8 @@ impl EditSession {
                 &mut objects,
                 &mut applied_autosize,
                 &mut unencodable,
+                // Not a rotation call -- see the sibling above.
+                None,
             )?;
             regenerated += 1;
             // Shape A: fold the new /AP /N into the field dictionary.

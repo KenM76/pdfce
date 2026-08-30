@@ -447,6 +447,53 @@ pub struct Widget {
     /// any widget annotation, and a type-gated reader would mean the model
     /// silently disagreeing with the file for the non-button case.
     pub caption: Option<Vec<u8>>,
+    /// `/MK` `/R` — the widget's **rotation**, in degrees **counterclockwise**
+    /// relative to the page (ISO 32000-1 §12.5.6.19 Table 189 / ISO 32000-2
+    /// Table 192), **as the file states it**. `None` when the file is silent
+    /// (`Pass 177.0`).
+    ///
+    /// # ★ COUNTERCLOCKWISE — and the page's `/Rotate` is CLOCKWISE
+    ///
+    /// The two entries are otherwise word-for-word parallel — *"the number of
+    /// degrees by which … shall be rotated … The value shall be a multiple of
+    /// 90. Default value: 0"* — and **the direction word is the only
+    /// difference between them**. The standard flags the clash exactly once,
+    /// on the transition dictionary's `/Di` row, nowhere near either of these.
+    ///
+    /// `/MK /R` agrees with PDF's own positive-angle convention (§8.3.4's
+    /// rotation matrix is counterclockwise, and is literally
+    /// [`crate::vector::Matrix::rotate`]); the page's `/Rotate` is the
+    /// outlier. **So no sign flip is needed between this value and pdfce's
+    /// internal angle** — which is the opposite of what a reader who
+    /// remembers page rotation would assume.
+    ///
+    /// # `None` means the FILE IS SILENT, not that the widget is upright
+    ///
+    /// The same distinction [`Self::border`] makes, and it matters for the
+    /// same reason. Table 189 does give `/R` a default of `0`, so a silent
+    /// file *renders* upright — but writing `/R 0` into a widget whose `/MK`
+    /// never had the key changes the saved bytes for no visible change, which
+    /// is an R34 minimal-diff violation invisible until somebody diffs two
+    /// saves. A control seeded from `Some(0)` would write that invention on
+    /// the operator's first press.
+    ///
+    /// ⇒ Display `None` as *"not set (upright)"*, not as `0`. `Some(0)` is a
+    /// different fact: the file says so explicitly.
+    ///
+    /// # Not normalised, deliberately
+    ///
+    /// Reported exactly as the file states it. The standard's whole constraint
+    /// is *"shall be a multiple of 90"* — **unbounded**, so `-90`, `270` and
+    /// `450` are all conforming and all mean the same rendered result.
+    /// [`crate::edit::EditSession::rotate_widget`] normalises what it WRITES
+    /// into `[0, 360)` as a pdfce product rule and says so; a reader that
+    /// normalised as well would make the model disagree with the file and hide
+    /// that a producer wrote `-90`.
+    ///
+    /// A value that is **not** a multiple of 90 is reported unchanged too: it
+    /// is non-conforming, and silently rounding it here would be pdfce
+    /// inventing a rotation the file does not state.
+    pub rotation: Option<i64>,
     /// `/BS` (Table 166) or the older `/Border` array (Table 164) — the
     /// widget's border **as the file states it**, or `None` when the file
     /// states none (`Pass 146.0`).
@@ -1474,12 +1521,26 @@ fn model_widget<G: ObjectGraph + ?Sized>(
     // key here, because a producer is free to make `/MK` an indirect object
     // and a direct-only read would report "no caption" for a file that has
     // one.
-    let caption = dict
+    let mk = dict
         .get(b"MK")
         .map(|o| graph.resolve(o))
-        .and_then(Object::as_dict)
+        .and_then(|o| o.as_dict().cloned());
+    let caption = mk
+        .as_ref()
         .and_then(|mk| mk.get(b"CA").map(|o| graph.resolve(o)))
         .and_then(string_bytes);
+    // `/MK` `/R` (Table 189 / 2.0 Table 192), `Pass 177.0`. Read now that
+    // something CONSUMES it -- `EditSession::rotate_widget` writes it, and a
+    // property pdfce can write and cannot read is exactly the asymmetry
+    // `pdfceGUI` refused to ship a control for (see `Self::border`). The
+    // rationale on `Self::caption` for reading only `/CA` out of `/MK` is
+    // amended by that: it said the other keys are cosmetic and "nothing
+    // consumes them", which was a claim about callers and stopped being true
+    // the moment the rotation verb shipped.
+    let rotation = mk
+        .as_ref()
+        .and_then(|mk| mk.get(b"R").map(|o| graph.resolve(o)))
+        .and_then(|o| o.as_int());
     let (has_normal_appearance, on_states, has_off_appearance) = appearance_of(graph, dict);
     let border = read_widget_border(graph, dict);
     let annot_flags = AnnotFlags(
@@ -1497,6 +1558,7 @@ fn model_widget<G: ObjectGraph + ?Sized>(
         has_off_appearance,
         page,
         caption,
+        rotation,
         border,
         visibility: visibility_of(annot_flags),
         annot_flags,

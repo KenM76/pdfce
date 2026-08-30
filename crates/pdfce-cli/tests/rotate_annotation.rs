@@ -263,13 +263,23 @@ fn index_selects_one_annotation_and_leaves_its_neighbours_alone() {
 /// ★★ A form widget is refused, and — since `Pass 163.0` — the message says
 /// the verb it names is **not built yet**.
 ///
-/// It used to say *"use `rotate_widget` instead"* with no qualification, and
-/// `rotate_widget` has never existed. That is a runtime message read at the
-/// moment the operator is blocked, naming a way out that was not there.
-/// `tools/check-cited-verbs-exist.py` is the structural guard; this pins the
-/// operator-visible half.
+/// # ★ THIS TEST'S ASSERTION WAS INVERTED BY `Pass 177.0`, DELIBERATELY
+///
+/// It used to require the message to contain **"NOT BUILT YET"**. That was
+/// right when written: the sentence said *"use `rotate_widget` instead"* and
+/// `rotate_widget` did not exist — a runtime message, read at the moment the
+/// operator is blocked, naming a way out that was not there
+/// (`tools/check-cited-verbs-exist.py` is the structural guard for that
+/// class; this pinned the operator-visible half).
+///
+/// `Pass 177.0` built the verb, so the old assertion became a test **pinning a
+/// temporary state as though it were a contract** — and it failed, correctly,
+/// the moment the state changed. That is the right failure mode and it is why
+/// the assertion is rewritten rather than deleted: the message must now name a
+/// verb that RESOLVES, and must not drift back into apologising for one that
+/// does not exist.
 #[test]
-fn a_form_widget_is_refused_and_the_message_does_not_promise_a_phantom_verb() {
+fn a_form_widget_is_refused_and_the_message_names_a_verb_that_exists() {
     let out_path = temp_path("widget");
     let out = run(&[
         "rotate-annotation",
@@ -291,13 +301,24 @@ fn a_form_widget_is_refused_and_the_message_does_not_promise_a_phantom_verb() {
     let err = stderr(&out);
     assert!(
         err.contains("/MK /R"),
-        "the refusal must say WHY — a widget's rotation is a quantised \
-         declaration, not a free-angle transform: {err}"
+        "the refusal must say WHY -- a widget's rotation is a quarter-turn \
+         declaration plus a redrawn appearance, not a free-angle transform \
+         of a rectangle: {err}"
     );
     assert!(
-        err.to_uppercase().contains("NOT BUILT YET"),
-        "★ and must not send the operator to a verb that does not exist. \
-         `rotate_widget` has never been written: {err}"
+        err.contains("rotate_widget(fqn, index, degrees)"),
+        "★ and must name the verb WITH ITS SIGNATURE, so the sentence is a \
+         usable instruction rather than a search term: {err}"
+    );
+    assert!(
+        !err.to_uppercase().contains("NOT BUILT"),
+        "★★ and must NOT still apologise for a verb that now exists -- \
+         `Pass 177.0` built it: {err}"
+    );
+    assert!(
+        err.to_uppercase().contains("COUNTERCLOCKWISE"),
+        "the direction is the trap worth naming here: /MK /R is \
+         counterclockwise and the page's /Rotate is clockwise: {err}"
     );
     assert!(!out_path.exists(), "a refusal must write no output file");
 }

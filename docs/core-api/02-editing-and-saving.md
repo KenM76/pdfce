@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 174 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 175 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 174 public `EditSession` methods
+## 1. Verb index — all 175 public `EditSession` methods
 
-**Count: 174.** Established by brace-matched extraction of the four
+**Count: 175.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1072,6 +1072,7 @@ only creation verb whose successful result is a control that does not work"*
 | Delete ONE widget of a field | `delete_widget(&mut self, fqn, index: usize) -> Result<FieldDeletion, EditError>` | 8764 | Siblings survive. |
 | Rename a field | `rename_field(&mut self, fqn, new_partial: &str) -> Result<FieldRename, EditError>` | 8889 | `new_partial` is **one path segment**, never an FQN; a period is refused. |
 | Move one widget's `/Rect` | `move_widget(&mut self, fqn, index, dx, dy) -> Result<WidgetMove, EditError>` | 9032 | **No appearance regeneration** — §12.5.5 step b makes matrix **A** a pure translation. |
+| **Rotate one widget** | `rotate_widget(&mut self, fqn, index, degrees: i64) -> Result<WidgetRotation, EditError>` | 16588 | ✅ **`/MK /R` + a REDRAWN appearance** (`Pass 177.0`). ⚠️ **COUNTERCLOCKWISE** — the page's `/Rotate` is the clockwise one. Multiples of 90 only, reduced into `[0, 360)` and the reduction reported. **`/Rect` does not move**; the appearance is redrawn into a `w`/`h`-swapped `/BBox` and stood upright by `/Matrix`. Rotating to `0` **removes** the key. Refuses a non-multiple of 90 with `WidgetRotationNotQuarterTurn`. |
 | Read an existing field's copyable properties | `field_defaults(&self, source: &str) -> Result<FieldDefaults, EditError>` | 9211 | For `--defaults-from` / "copy style from". |
 | **Change a field's field-scope properties** | `edit_field(&mut self, fqn, edit: &FieldEdit) -> Result<FieldEditOutcome, EditError>` | — | `Pass 134.0`. Flags, `/MaxLen`, `/TU`, `/Opt`. **Shared by every widget the field owns.** |
 | **Change ONE widget's properties** | `edit_widget(&mut self, fqn, index, edit: &WidgetEdit) -> Result<WidgetEditOutcome, EditError>` | — | `Pass 134.0`. `/Rect` (move **and resize**), `/BS`, `/F`, `/MK` `/CA`. **Per placement.** ★ All four are **readable** too since `Pass 146.0` — `forms::Widget::rect` / `border` / `visibility` + `annot_flags` / `caption`. This row listed four writable properties for months while only two could be read, which is how a consuming shell ended up with two controls it could not honestly populate. See `03-capabilities.md`'s `Widget` block. |
@@ -2092,6 +2093,39 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 > A grey-out on the default group in a group list is the right shell
 > behaviour; the refusal is the backstop, not the UI.
 >
+### ★★ `rotate_widget` — three things a shell will otherwise get wrong
+
+**1. It is COUNTERCLOCKWISE, and the page's `/Rotate` is CLOCKWISE.**
+ISO 32000-1 §12.5.6.19 Table 189 (= 2.0 Table 192) and §7.7.3.3 Table 30 are
+word-for-word parallel — *"the number of degrees by which … shall be rotated …
+The value shall be a multiple of 90. Default value: 0"* — and **the direction
+word is the only difference between them.** The standard flags the clash
+exactly once, on the transition dictionary's `/Di` row, nowhere near either.
+`/MK /R` agrees with PDF's own positive-angle convention (§8.3.4) and with
+pdfce's internal angle, so **no sign flip belongs anywhere in this path**.
+
+**2. `was: None` means the file is SILENT, and it is not `Some(0)`.**
+Table 189 defaults `/R` to `0`, so a silent file renders upright — but writing
+`0` into a widget whose `/MK` never carried the key changes the saved bytes for
+no visible change. A control seeded from `Some(0)` writes that invention on the
+operator's first press. Same distinction, same reasoning, as
+`forms::Widget::border`. `forms::Widget::rotation` is the read side, added in
+the same Pass so this is not a write-without-read.
+
+**3. `appearance_regenerated: false` is the case to build UI for.**
+pdfce redraws text and choice appearances because it authored them; it will not
+redraw a push button's caption artwork, a signature, or a form built elsewhere.
+In that case `/MK /R` is written and **the pixels do not move** — and PDF
+Association erratum #56 (`ISO approved`; TWG 2021-07-08 *"OK to ignore MK for
+Widget"*) adds `MK` to §12.5.2's ignore-list, so **a conforming PDF 2.0 reader
+shows that widget upright however `/R` reads.** `WidgetRotation::appearance_stale`
+carries the sentence; show it, do not paraphrase it. A processor that
+regenerates appearances will still honour the rotation.
+
+Rotation is a **widget** property, not a field one — `/MK` lives on the
+annotation, so a field with widgets on several pages can have each rotated
+differently. `siblings_untouched` reports how many were left alone.
+
 > ★★ **`set_dimension_group` is not a field assignment, and a shell must not
 > treat it as one.** A ce dimension's label is derived from its GROUP's scale,
 > precision, unit and standard (the decision 011 §2.3 cascade). Re-parenting

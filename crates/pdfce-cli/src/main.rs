@@ -4356,6 +4356,52 @@ enum Command {
         #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
         mode: SaveMode,
     },
+    /// **Rotate a form-field widget** (Pass 177.0): write `/MK /R` and redraw
+    /// the field's appearance in the rotated frame.
+    ///
+    /// COUNTERCLOCKWISE. The page's `/Rotate` is the CLOCKWISE one -- the two
+    /// entries are word-for-word parallel in the standard and the direction
+    /// word is the only difference between them (ISO 32000-1 12.5.6.19
+    /// Table 189 against 7.7.3.3 Table 30).
+    ///
+    /// `--degrees` must be a multiple of 90. The standard sets no range, so
+    /// `-90` and `450` are accepted and reduced into 0..360, and the result
+    /// line says when that happened.
+    ///
+    /// The `/Rect` does NOT move. A rotated field turns its content inside the
+    /// box you placed, so the appearance is redrawn into a width/height
+    /// swapped box and stood upright by the appearance stream's own `/Matrix`.
+    ///
+    /// pdfce can only redraw appearances it authored -- text and choice
+    /// fields. For a push button's caption artwork, a signature, or a form
+    /// built elsewhere, `/MK /R` is written, the picture is left alone, and
+    /// the result line SAYS SO: a conforming PDF 2.0 reader ignores `/MK`
+    /// entirely when an appearance stream is present, so the field will still
+    /// look upright there.
+    RotateWidget {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name, as `list-fields` reports it.
+        #[arg(long)]
+        name: String,
+        /// Which widget to rotate, numbered from 0 in the order `list-fields`
+        /// reports the field's widgets. Rotation is a WIDGET property, so a
+        /// field with several widgets can have each rotated differently.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// Degrees counterclockwise. Must be a multiple of 90.
+        #[arg(long, allow_negative_numbers = true)]
+        degrees: i64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Move a form field's widget** — translate its `/Rect` (§12.5.2).
     ///
     /// MOVES ONE APPEARANCE, NOT THE FIELD. A field can own widgets on
@@ -8399,6 +8445,23 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_widget(&input, &name, index, dx, dy, &output, mode),
+        Command::RotateWidget {
+            input,
+            name,
+            index,
+            degrees,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_rotate_widget(&RotateWidgetArgs {
+            input: &input,
+            name: &name,
+            index,
+            degrees,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::MoveAnnotation {
             input,
             page,
@@ -17065,9 +17128,15 @@ widgets={} ap={} fillable={} readonly={} aa={} caption={caption} rich={rich}",
                     || "-".to_owned(),
                     |n| String::from_utf8_lossy(n).into_owned(),
                 );
+                // `/MK /R` (Table 189), `Pass 177.0`. `-` means the file is SILENT,
+                // which is not the same fact as `0`: Table 189 defaults `/R` to 0, so
+                // a silent file renders upright -- but a control seeded from `0` would
+                // write that invention back on the first press. The same distinction
+                // `border` makes one column to the left.
+                let rotation = w.rotation.map_or_else(|| "-".to_owned(), |d| d.to_string());
                 println!(
-                    "  widget {i} obj={} rect={rect} border={border} visibility={visibility} \
-flags=0x{:X} state={state} merged={}",
+                    "  widget {i} obj={} rect={rect} border={border} rotation={rotation} \
+visibility={visibility} flags=0x{:X} state={state} merged={}",
                     w.id.num,
                     w.annot_flags.0,
                     u32::from(w.merged),
@@ -25455,6 +25524,91 @@ fn cmd_rename_field(
         u32::from(outcome.undo_identical),
     );
     finish_edit(input, &outcome)
+}
+
+/// The `rotate-widget` argument bundle -- seven parameters, past the point
+/// where same-typed positionals stay readable.
+struct RotateWidgetArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    index: usize,
+    degrees: i64,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `rotate-widget` -- set a form-field widget's `/MK /R` and redraw its
+/// appearance in the rotated frame (Pass 177.0).
+///
+/// ## Contract
+///
+/// - Emits one `rotate-widget ...` line carrying `was=` / `now=`,
+///   `normalised=`, `regenerated=` and `siblings_untouched=`, then defers the
+///   exit code to [`finish_edit`].
+/// - **`was=-` means the file was SILENT**, which is a different fact from
+///   `was=0`. Table 189 defaults `/R` to 0, so a silent file renders upright
+///   -- but writing `0` into a widget whose `/MK` never had the key changes
+///   the saved bytes for no visible change. The CLI prints the distinction
+///   because a script that treated them as equal would write that invention
+///   back.
+/// - **`regenerated=0` gets a second line, always.** It means `/MK /R` was
+///   written and the pixels did not move, which is the outcome most likely to
+///   be reported as a defect: a conforming PDF 2.0 reader ignores `/MK` when
+///   an appearance stream is present (PDF Association erratum #56), so the
+///   field still looks upright there. The engine's own sentence is printed
+///   verbatim rather than paraphrased.
+/// - A non-multiple of 90 is refused through [`report_edit_error`] with the
+///   engine's message.
+fn cmd_rotate_widget(args: &RotateWidgetArgs) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let rotation = match session.rotate_widget(args.name, args.index, args.degrees) {
+        Ok(r) => r,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "rotate-widget {} name={} index={} was={} now={} normalised={} regenerated={} siblings_untouched={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        args.index,
+        // `-` for "the file said nothing", never `0`.
+        rotation
+            .was
+            .map_or_else(|| "-".to_owned(), |d| d.to_string()),
+        rotation
+            .now
+            .map_or_else(|| "-".to_owned(), |d| d.to_string()),
+        u32::from(rotation.normalised),
+        u32::from(rotation.appearance_regenerated),
+        rotation.siblings_untouched,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    if let Some(note) = &rotation.appearance_stale {
+        println!("  note: {note}");
+    }
+    finish_edit(args.input, &outcome)
 }
 
 /// `move-widget` — translate one widget annotation's `/Rect`.
