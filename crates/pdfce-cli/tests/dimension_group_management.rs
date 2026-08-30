@@ -786,3 +786,92 @@ fn hiding_the_default_group_and_naming_an_unknown_one_are_both_refused() {
         "and the input document is untouched by any of it"
     );
 }
+
+/// ★★ **Authoring into a group that does not exist is refused — it used to
+/// report the group it did NOT use.**
+///
+/// # What it did before, measured on the release binary
+///
+/// On a document whose only group is `0`:
+///
+/// ```text
+///   dimension-add --group 99 ...
+///   -> "dimension-add ... group=99 ... dim=1"   (exit 0)
+///   -> dimension-list: dim 1 group=0
+/// ```
+///
+/// **The success line named a group the ce dimension did not go into.**
+///
+/// `DimensionModel::add_dimension` falls back to the default group for an
+/// unknown id, which is reasonable IN THE MODEL — a record whose `group`
+/// resolved to nothing would be an orphan every reader would have to handle.
+/// But it is a model invariant expressed as a silent substitution, and the
+/// verb passed it through.
+///
+/// # Why it is worse than a wrong label
+///
+/// The group is the authority for scale, unit, precision and drafting
+/// standard. A ce dimension that lands in the wrong group is **measured at
+/// the wrong scale** — a wrong number on a drawing, from a mistyped id, with
+/// a green exit code. This fixture's two groups differ by exactly 2x, so the
+/// substitution is visible in the value rather than only in the id.
+///
+/// Third instance of the shape `Pass 176.0` and `Pass 178.0` fixed.
+#[test]
+fn authoring_into_an_unknown_group_is_refused_rather_than_silently_redirected() {
+    let src = two_groups("addgrp");
+    let before = list(&src);
+
+    let out = temp_out("addgrp-out.pdf");
+    let (code, stdout, err) = run(&[
+        "dimension-add",
+        src.to_str().unwrap(),
+        "--page",
+        "1",
+        "--kind",
+        "linear",
+        "--points",
+        "100,300 300,300",
+        "--group",
+        "99",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        code, EDIT_REFUSED,
+        "an unknown group is refused, not silently swapped for the default: {err}{stdout}"
+    );
+    assert!(!out.exists(), "a refusal writes no output file");
+    assert_eq!(list(&src), before, "and the input document is untouched");
+
+    // ★ The contrast case: a REAL non-default group still works, and the ce
+    // dimension is measured at ITS scale. Without this the refusal above
+    // would be indistinguishable from a verb that stopped accepting a
+    // `--group` argument at all.
+    let ok = temp_out("addgrp-ok.pdf");
+    let (code, _, err) = run(&[
+        "dimension-add",
+        src.to_str().unwrap(),
+        "--page",
+        "1",
+        "--kind",
+        "linear",
+        "--points",
+        "100,300 300,300",
+        "--group",
+        "1",
+        "-o",
+        ok.to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "a real group still works: {err}");
+    let listing = list(&ok);
+    assert!(
+        listing.contains("group=1"),
+        "the ce dimension belongs to the group that was named: {listing}"
+    );
+    assert!(
+        listing.contains("value=\"2.500 m\""),
+        "and is measured at THAT group's scale -- half the default's, which is \
+         what the silent fallback used to get wrong: {listing}"
+    );
+}

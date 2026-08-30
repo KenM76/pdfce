@@ -27326,6 +27326,39 @@ impl EditSession {
 
         self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
+
+        // ★ THE NAMED GROUP MUST EXIST (`Pass 178.1`), refused before
+        // anything is written.
+        //
+        // `DimensionModel::add_dimension` FALLS BACK to the default group for
+        // an unknown id -- reasonable in the pure model, where a record whose
+        // `group` resolved to nothing would be an orphan every reader would
+        // then have to handle. But it is a model invariant expressed as a
+        // SILENT SUBSTITUTION, and this verb passed it through.
+        //
+        // Measured on the release binary before the fix, on a document whose
+        // only group is `0`:
+        //
+        //   dimension-add --group 99 ...
+        //     -> "dimension-add ... group=99 ... dim=1"   (exit 0)
+        //     -> dimension-list: dim 1 group=0
+        //
+        // So the success line NAMED A GROUP THE DIMENSION DID NOT GO INTO.
+        // And the group is the authority for scale, unit, precision and
+        // standard, so the ce dimension was measured against a scale the
+        // caller did not choose -- a wrong number on a drawing, from a
+        // mistyped id, with a green exit code.
+        //
+        // Third instance of the shape `Pass 176.0` and `Pass 178.0` fixed: a
+        // rule or policy living in the pure model, which has no channel to
+        // refuse, wrapped by a verb that did not add one.
+        //
+        // Safe to refuse: the only other caller is `paste_objects`, which
+        // passes a group it has just matched or created.
+        if model.group(group).is_none() {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        }
+
         // `.clone()` because `DimensionKind` stopped being `Copy` at
         // `Pass 107.0` (a perimeter carries a vertex list) and `kind` is
         // needed again below, by `author_dimension`.
