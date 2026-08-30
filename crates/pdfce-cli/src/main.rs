@@ -4455,20 +4455,20 @@ enum Command {
         #[arg(long)]
         name: String,
         /// Reset every field in the form.
-        #[arg(long, conflicts_with_all = ["reset_only", "reset_except", "clear", "submit", "goto_page", "named", "uri"])]
+        #[arg(long, conflicts_with_all = ["reset_only", "reset_except", "clear", "submit", "goto_page", "named", "uri", "hide", "show"])]
         reset: bool,
         /// Reset ONLY these fields (comma-separated fully-qualified names).
-        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_except", "clear", "submit", "goto_page", "named", "uri"])]
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_except", "clear", "submit", "goto_page", "named", "uri", "hide", "show"])]
         reset_only: Vec<String>,
         /// Reset everything EXCEPT these fields.
-        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "clear", "submit", "goto_page", "named", "uri"])]
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "clear", "submit", "goto_page", "named", "uri", "hide", "show"])]
         reset_except: Vec<String>,
         /// Send the form to this URL when the button is pressed.
         ///
         /// Must be absolute and ASCII. Any host, any scheme -- the operator
         /// set destination policy open. The result line states in full what
         /// this button would send.
-        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "goto_page", "named", "uri"])]
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "goto_page", "named", "uri", "hide", "show"])]
         submit: Option<String>,
         /// The submission format (ISO 32000-1 Table 237 bits 3, 6, 9).
         ///
@@ -4518,19 +4518,34 @@ enum Command {
         #[arg(long)]
         embed_form: bool,
         /// Jump to this page (0-based) in THIS document when pressed.
-        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "named", "uri"])]
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "named", "uri", "hide", "show"])]
         goto_page: Option<usize>,
         /// How the page is positioned on arrival.
         #[arg(long, value_enum, default_value_t = GotoViewArg::WholePage)]
         goto_view: GotoViewArg,
+        /// Hide these fields (comma-separated fully-qualified names).
+        ///
+        /// Every widget of each named field, including ones on other pages.
+        /// A grouping name is refused: the standard states no descendant rule
+        /// for a hide action, so pdfce will not guess which of the two
+        /// readings you meant.
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "named", "uri", "show"])]
+        hide: Vec<String>,
+        /// Show these fields — the same action with its flag cleared.
+        ///
+        /// A SEPARATE FLAG, not a modifier, because `/H`'s default is "hide":
+        /// an action that omits the flag hides, so "show" has to be written
+        /// out and is easy to lose.
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "named", "uri", "hide"])]
+        show: Vec<String>,
         /// One of the four reader-predefined navigation actions.
-        #[arg(long, value_enum, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "uri"])]
+        #[arg(long, value_enum, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "uri", "hide", "show"])]
         named: Option<NamedActionArg>,
         /// Open this URI. Authored as data -- pdfce never follows one.
-        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "named"])]
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "clear", "submit", "goto_page", "named", "hide", "show"])]
         uri: Option<String>,
         /// Remove the button's action, leaving it inert.
-        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "submit", "goto_page", "named", "uri"])]
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except", "submit", "goto_page", "named", "uri", "hide", "show"])]
         clear: bool,
         /// Output path.
         #[arg(short, long)]
@@ -8724,6 +8739,8 @@ fn run() -> ExitCode {
             embed_form,
             goto_page,
             goto_view,
+            hide,
+            show,
             named,
             uri,
             clear,
@@ -8751,6 +8768,8 @@ fn run() -> ExitCode {
             embed_form,
             goto_page,
             goto_view,
+            hide: &hide,
+            show: &show,
             named,
             uri: uri.as_deref(),
             clear,
@@ -26034,6 +26053,8 @@ struct SetButtonActionArgs<'a> {
     embed_form: bool,
     goto_page: Option<usize>,
     goto_view: GotoViewArg,
+    hide: &'a [String],
+    show: &'a [String],
     named: Option<NamedActionArg>,
     uri: Option<&'a str>,
     clear: bool,
@@ -26242,6 +26263,16 @@ something about a file that is not true.",
             page_index,
             view: args.goto_view.into(),
         })
+    } else if !args.hide.is_empty() {
+        Some(ButtonAction::SetHidden {
+            targets: args.hide.to_vec(),
+            hidden: true,
+        })
+    } else if !args.show.is_empty() {
+        Some(ButtonAction::SetHidden {
+            targets: args.show.to_vec(),
+            hidden: false,
+        })
     } else if let Some(named) = args.named {
         Some(ButtonAction::Named(named.into()))
     } else if let Some(uri) = args.uri {
@@ -26251,7 +26282,7 @@ something about a file that is not true.",
     } else {
         eprintln!(
             "pdfce-cli: say what the button should do: --reset, --reset-only A,B, \
---reset-except A,B, --submit URL, --goto-page N, --named next-page, --uri URL, or --clear to \
+--reset-except A,B, --submit URL, --hide A,B, --show A,B, --goto-page N, --named next-page, --uri URL, or --clear to \
 remove its action"
         );
         return exit::EDIT_REFUSED;
@@ -26282,6 +26313,8 @@ remove its action"
         Some(ButtonAction::ResetForm { .. }) => "ResetForm",
         Some(ButtonAction::SubmitForm(_)) => "SubmitForm",
         Some(ButtonAction::GoToPage { .. }) => "GoTo",
+        Some(ButtonAction::SetHidden { hidden: true, .. }) => "Hide",
+        Some(ButtonAction::SetHidden { hidden: false, .. }) => "Show",
         Some(ButtonAction::Named(_)) => "Named",
         Some(ButtonAction::Uri { .. }) => "URI",
         // `ButtonAction` is `#[non_exhaustive]`: a variant added in core and
@@ -26308,7 +26341,42 @@ remove its action"
     if let Some(d) = &change.submit {
         report_submit_disclosure(args.input, d);
     }
+    if let Some(d) = &change.hide {
+        report_hide_disclosure(args.input, d);
+    }
     finish_edit(args.input, &outcome)
+}
+
+/// **State what a `/Hide` button just authored would move** (`Pass 183.1`).
+///
+/// ## Contract
+///
+/// - Goes to **stderr**, like every other disclosure here.
+/// - Names the direction explicitly. `/H`'s default is *hide*, so "show" is
+///   the case a file can lose by omission, and an operator reading a caption
+///   has no way to check which was written.
+/// - Reads **every** field of `HideDisclosure`, per
+///   `tools/check-outcome-disclosed.py`.
+fn report_hide_disclosure(input: &Path, d: &pdfce_core::edit::HideDisclosure) {
+    eprintln!(
+        "pdfce-cli: {}: this button {} {} field(s) -- {} -- affecting {} widget(s).",
+        input.display(),
+        if d.shows { "SHOWS" } else { "HIDES" },
+        d.targets.len(),
+        d.targets.join(", "),
+        d.widgets_affected,
+    );
+    if !d.targets_without_widgets.is_empty() {
+        eprintln!(
+            "  {} of them own no widget, so for those the button does nothing: {}",
+            d.targets_without_widgets.len(),
+            d.targets_without_widgets.join(", ")
+        );
+    }
+    eprintln!(
+        "  a hide action ASSIGNS, it does not toggle -- pressing it twice does not put things \
+back. A field's widgets on every page move together."
+    );
 }
 
 /// **State what the button just authored would send** (`Pass 183.0`).

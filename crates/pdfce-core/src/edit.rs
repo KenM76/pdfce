@@ -4905,6 +4905,43 @@ pub enum EditError {
         /// Which gate was violated, and what to set instead.
         why: &'static str,
     },
+    /// A `/Hide` action was asked to target a **non-terminal** (grouping)
+    /// field (`Pass 183.1`).
+    ///
+    /// # ★ Refused because the standard is silent HERE and explicit NEXT DOOR
+    ///
+    /// `/ResetForm` and `/SubmitForm` both state descendant expansion in
+    /// their flag rows — *"all descendants of the specified fields in the
+    /// field hierarchy"*. **Table 210 says no such thing about `/Hide`'s
+    /// `/T`**, and the phrase was measured as appearing exactly twice per
+    /// edition, both times on a `/Fields` row and never here.
+    ///
+    /// So what a grouping name means to a `/Hide` action is genuinely
+    /// undefined, and the two available readings — hide the subtree, or hide
+    /// nothing — differ by everything. pdfce refuses rather than picking one
+    /// silently: naming the terminal fields is unambiguous, costs the caller
+    /// one expansion they can see, and cannot be wrong.
+    ///
+    /// This is **not** the same posture as a spec ambiguity pdfce settles
+    /// with a default. A default is defensible when both readings produce a
+    /// document the operator can inspect; here one reading produces a button
+    /// that silently does nothing.
+    #[error(
+        "field {name} is a grouping node, not a terminal field, and ISO 32000-1 12.6.4.10 Table 210 says nothing about whether a hide action reaches a named field's descendants -- unlike /ResetForm and /SubmitForm, whose flag rows state it explicitly. Name the terminal fields instead; pdfce will not guess which of the two readings you meant"
+    )]
+    ButtonActionHideTargetNotTerminal {
+        /// The grouping-node name that was supplied.
+        name: String,
+    },
+    /// A `/Hide` action was asked to target nothing at all (`Pass 183.1`).
+    ///
+    /// `/T` is **`(Required)`** in Table 210, so there is no such thing as a
+    /// hide action with no target — an empty list is a caller bug, not a
+    /// document pdfce can write.
+    #[error(
+        "a hide action needs at least one field to hide or show; /T is Required (ISO 32000-1 12.6.4.10 Table 210) and there is no hide action with no target"
+    )]
+    ButtonActionHideNoTargets,
     /// The **default** ce-dimension group was asked to be HIDDEN
     /// (`Pass 178.0`).
     ///
@@ -13361,6 +13398,43 @@ pub enum PageView {
 ///   [`ButtonActionChange::submit`] plus the refusals listed on
 ///   [`EditSession::set_button_action`].
 ///
+/// # ★ TWO PREDICATES, NOT ONE — and collapsing them is how this list stops
+/// making sense
+///
+/// The operator's words were *"the … options that don't need javascript"*.
+/// **Script-free** and **reaches-nothing** are different tests, and the
+/// variants here do not all pass both:
+///
+/// | | script-free | reaches nothing |
+/// |---|---|---|
+/// | `ResetForm`, `GoToPage`, `Named`, `SetHidden` | ✓ | ✓ |
+/// | `SubmitForm` | ✓ | **✗ — sends data to a host the file names** |
+/// | `Uri` | ✓ | **✗ — names a host, though pdfce never follows it** |
+///
+/// That is deliberate and it is the whole reason [`SubmitDisclosure`] exists.
+/// A reader who assumes one predicate will conclude the selection is
+/// arbitrary; a reader who assumes the *other* will conclude a submit is as
+/// inert as a reset.
+///
+/// # The closed set, so this is a selection with a boundary rather than five
+/// arbitrary picks
+///
+/// ISO 32000-1 defines **eight** action types that are both script-free and
+/// reach nothing (ISO 32000-2 adds a ninth). pdfce authors **four** of them —
+/// `GoTo`, `Hide`, `ResetForm`, `Named` — and the four it does not are
+/// unbuilt for stated, sized reasons rather than by oversight:
+///
+/// - **`/SetOCGState`** — needs a run-length sequence grammar over
+///   `/OCProperties /OCGs`, plus `/PreserveRB` against `/RBGroups`.
+/// - **`/Trans`** — needs Table 162, and is **pointless standalone**: it only
+///   acts *"during a sequence of actions"*, so it is a `/Next` companion
+///   rather than a button's action.
+/// - **`/GoTo3DView`** — needs 3D annotations pdfce does not model.
+/// - **`/GoToDp`** — PDF 2.0 only; needs the whole document-part model.
+///
+/// `/Sound` is **excluded from that count**, not overlooked: any stream may
+/// carry `/F` (Table 5), so it can reach a file, and 2.0 deprecates it.
+///
 /// # What stays refused, by name and permanently
 ///
 /// - **`/JavaScript`** — pdfce recognises scripts, never runs them and never
@@ -13420,6 +13494,64 @@ pub enum ButtonAction {
     /// No reach, no parameters, no destination to break — the cheapest working
     /// button in the format.
     Named(NamedAction),
+    /// §12.6.4.10. Hide or show the widgets of named fields (`Pass 183.1`).
+    ///
+    /// # ★ An ASSIGNMENT, not a toggle, and the standard chose that
+    /// deliberately
+    ///
+    /// Table 210: the action works *"by setting or clearing their `Hidden`
+    /// flags"*, and `/H` is a value rather than a verb. **A second press does
+    /// not reverse it.** The standard owns a toggle — `/SetOCGState`'s
+    /// `/State` has one — and did not use it here, so a genuinely toggling
+    /// show/hide button requires JavaScript and is therefore out of pdfce's
+    /// scope entirely rather than merely unbuilt.
+    ///
+    /// # Reaches nothing
+    ///
+    /// `/T` names annotations in **this** document and the action carries no
+    /// file specification, no URL and no script. `forms::scan_javascript`
+    /// already classifies `Hide` as reaching nothing, so authoring one does
+    /// not move any hazard count.
+    ///
+    /// # What a name in `/T` reaches, and what it does not
+    ///
+    /// A fully-qualified **field** name reaches *"the associated widget
+    /// annotation or annotations"* — **every widget of that field**, which is
+    /// sourced, not inferred. That is the useful case and is what this
+    /// variant offers.
+    ///
+    /// Two consequences a caller should know before wiring a control:
+    ///
+    /// - **The name form reaches WIDGETS ONLY.** A `/Text` note, a stamp, or
+    ///   a ce dimension's `/Line` is a non-widget annotation and can be named
+    ///   only by indirect reference. Hiding one is therefore **not**
+    ///   expressible here, deliberately: an object-id-valued target is not a
+    ///   thing a form editor's UI can offer safely, and it is not what was
+    ///   asked for.
+    /// - **A field with no widgets is authored anyway and DISCLOSED.** The
+    ///   standard states no reader rule for that case, so refusing would be
+    ///   pdfce inventing one; [`HideDisclosure::targets_without_widgets`]
+    ///   names them instead.
+    SetHidden {
+        /// Fully-qualified names of **terminal** fields, written to `/T`.
+        ///
+        /// A non-terminal (grouping) name is **refused** —
+        /// [`EditError::ButtonActionHideTargetNotTerminal`]. Unlike
+        /// `/ResetForm`'s and `/SubmitForm`'s `/Fields`, whose flag rows
+        /// state descendant expansion explicitly, **Table 210 says nothing
+        /// about descendants**, so what a grouping name means here is
+        /// undefined and pdfce will not pick a meaning silently.
+        targets: Vec<String>,
+        /// `/H` — `true` hides, `false` shows.
+        ///
+        /// ★ **Written explicitly in every case, because the default is
+        /// `true`.** Table 210's own row: *"A flag indicating whether to hide
+        /// the annotation (true) or show it (false). **Default value:
+        /// true.**"* An implementation that omits the key for the `false`
+        /// case — the "absent means off" reflex — authors a button that does
+        /// the **opposite** of its caption.
+        hidden: bool,
+    },
     /// §12.6.4.7. A URI for the reader to resolve — authored as **data only**.
     ///
     /// **pdfce never follows one.** Recognising a `/URI` and refusing to
@@ -13615,6 +13747,41 @@ impl SubmitDisclosure {
     }
 }
 
+/// **What a `/Hide` button would affect**, computed when it is authored
+/// (`Pass 183.1`, ISO 32000-1 §12.6.4.10 Table 210).
+///
+/// Much smaller than [`SubmitDisclosure`] because a hide action reaches
+/// nothing and sends nothing. What it still owes the operator is the gap
+/// between *what they named* and *what will move*, and there are exactly two
+/// ways those differ.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct HideDisclosure {
+    /// The field names written into `/T`, in the order given.
+    pub targets: Vec<String>,
+    /// `true` when the button hides, `false` when it shows.
+    ///
+    /// Worth stating back rather than assuming the caller remembers, because
+    /// `/H`'s **default is `true`** — a file that omits the key hides — and
+    /// an operator reading a "Show section" caption has no way to check which
+    /// was written.
+    pub shows: bool,
+    /// How many widget annotations the named fields own between them.
+    ///
+    /// The number of things that will actually change on screen. A field can
+    /// own widgets on several pages and all of them move together (Table 210:
+    /// *"whose associated widget annotation **or annotations** are to be
+    /// affected"*), which is rarely what a caller pictures from one name.
+    pub widgets_affected: usize,
+    /// Named fields that own **no widget at all**.
+    ///
+    /// The action is still authored — the standard states no reader rule for
+    /// this case and refusing would be pdfce inventing one — but for these
+    /// names the button does nothing, and that is exactly the kind of silence
+    /// an operator discovers by clicking.
+    pub targets_without_widgets: Vec<String>,
+}
+
 /// What [`EditSession::set_button_action`] did (`Pass 182.0`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -13650,6 +13817,12 @@ pub struct ButtonActionChange {
     /// touching the button. That is the standard's design, not pdfce's, and a
     /// shell that caches this string across edits will show a stale one.
     pub submit: Option<SubmitDisclosure>,
+    /// **What the button would hide or show**, if the action is a `/Hide`
+    /// (`Pass 183.1`).
+    ///
+    /// `Some` exactly when [`Self::applied`] is a
+    /// [`ButtonAction::SetHidden`]. See [`HideDisclosure`].
+    pub hide: Option<HideDisclosure>,
 }
 
 /// What [`EditSession::set_dimension_label`] did, and the two captions a
@@ -24157,6 +24330,10 @@ impl EditSession {
     ///   pdfce cannot state unambiguously (relative, non-ASCII, empty).
     /// - [`EditError::ButtonActionSubmitFlags`] — a Table 237 gate the type
     ///   system could not close.
+    /// - [`EditError::ButtonActionHideNoTargets`] /
+    ///   [`EditError::ButtonActionHideTargetNotTerminal`] — a hide action with
+    ///   no target, or one naming a grouping node whose meaning Table 210
+    ///   leaves undefined.
     /// - [`EditError::PageOutOfRange`] — a `GoToPage` index past the end.
     /// - The encryption and certification guards.
     pub fn set_button_action(
@@ -24235,6 +24412,28 @@ impl EditSession {
         // same reason a submit destination is -- see `ButtonActionDestination`.
         if let Some(ButtonAction::Uri { uri }) = &action {
             Self::check_destination(uri)?;
+        }
+
+        // Hide: `/T` is Required, every name must exist, and every name must
+        // be TERMINAL -- Table 210 states no descendant rule, so a grouping
+        // node has no defined meaning here. All three before any write.
+        if let Some(ButtonAction::SetHidden { targets, .. }) = &action {
+            if targets.is_empty() {
+                return Err(EditError::ButtonActionHideNoTargets);
+            }
+            for name in targets {
+                match forms_author::resolve_field_path(&self.graph(), name)? {
+                    forms_author::FieldPath::Terminal { .. } => {}
+                    forms_author::FieldPath::Grouping { .. } => {
+                        return Err(EditError::ButtonActionHideTargetNotTerminal {
+                            name: name.clone(),
+                        });
+                    }
+                    forms_author::FieldPath::Vacant { .. } => {
+                        return Err(EditError::FieldNotFound { name: name.clone() });
+                    }
+                }
+            }
         }
 
         let widget = field
@@ -24362,6 +24561,28 @@ impl EditSession {
                 a.insert(Name::from(b"D"), Object::Array(d));
                 updated.insert(Name::from(b"A"), Object::Dict(a));
             }
+            Some(ButtonAction::SetHidden { targets, hidden }) => {
+                let mut a = Dict::new();
+                a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
+                a.insert(Name::from(b"S"), Object::Name(Name::from(b"Hide")));
+                // Table 210 permits a single reference, a single name string,
+                // or an array of either. One target is written as a bare
+                // string -- the form the clause states first and the form real
+                // producers emit -- and several as an array. A one-element
+                // array would be equally legal and needlessly unlike every
+                // other file.
+                let t = match targets.as_slice() {
+                    [one] => Object::String(encode_text_string(one)),
+                    many => Self::fqn_array(many),
+                };
+                a.insert(Name::from(b"T"), t);
+                // ★ `/H` WRITTEN IN BOTH CASES. Its default is TRUE (hide),
+                // so omitting it for the `false` case -- the "absent means
+                // off" reflex -- would author a button that does the OPPOSITE
+                // of its caption.
+                a.insert(Name::from(b"H"), Object::Boolean(*hidden));
+                updated.insert(Name::from(b"A"), Object::Dict(a));
+            }
             Some(ButtonAction::Named(named)) => {
                 let mut a = Dict::new();
                 a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
@@ -24390,6 +24611,34 @@ impl EditSession {
             Some(ButtonAction::SubmitForm(spec)) => Some(Self::disclose_submit(&form, spec)),
             _ => None,
         };
+        let hide = match &action {
+            Some(ButtonAction::SetHidden { targets, hidden }) => {
+                // Counted off the same parsed form the refusals used, so the
+                // disclosure describes the document the action was written
+                // into rather than a re-parse of it.
+                let mut widgets_affected = 0;
+                let mut targets_without_widgets = Vec::new();
+                for name in targets {
+                    let count = form
+                        .fields
+                        .iter()
+                        .filter(|f| &f.fully_qualified_name == name)
+                        .map(|f| f.widgets.len())
+                        .sum::<usize>();
+                    if count == 0 {
+                        targets_without_widgets.push(name.clone());
+                    }
+                    widgets_affected += count;
+                }
+                Some(HideDisclosure {
+                    targets: targets.clone(),
+                    shows: !*hidden,
+                    widgets_affected,
+                    targets_without_widgets,
+                })
+            }
+            _ => None,
+        };
 
         let objects = vec![ObjectWrite {
             id: widget.id,
@@ -24410,6 +24659,7 @@ impl EditSession {
             replaced,
             applied: action,
             submit,
+            hide,
         })
     }
 

@@ -145,6 +145,12 @@ OUTCOME_STRUCTS: list[tuple[str, str]] = [
     # the machine, the document's own path. A field dropped on the floor here
     # is not an unstated number, it is an undisclosed exfiltration.
     ("crates/pdfce-core/src/edit.rs", "SubmitDisclosure"),
+    # `Pass 183.1`. Smaller than its sibling and on the list for the same
+    # reason: every field is the gap between what the operator NAMED and what
+    # will actually move -- widgets on pages they were not looking at, and
+    # named fields that own no widget at all, for which the button they just
+    # made does nothing.
+    ("crates/pdfce-core/src/edit.rs", "HideDisclosure"),
 ]
 
 # `Struct::field` -> why no shell reads it. A reason is mandatory: see the

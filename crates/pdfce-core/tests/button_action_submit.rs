@@ -75,13 +75,13 @@ fn form_with_every_field_shape() -> Vec<u8> {
     let content = "BT /Helv 12 Tf 60 700 Td (form) Tj ET\n";
     let bodies = [
         "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields \
-         [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R] \
+         [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 15 0 R 17 0 R 20 0 R] \
          /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 14 0 R >> >> >> >>"
             .to_owned(),
         "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>".to_owned(),
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 750] /Resources \
          << /Font << /Helv 14 0 R >> >> /Contents 5 0 R /Annots \
-         [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R] >>"
+         [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 16 0 R 18 0 R 19 0 R] >>"
             .to_owned(),
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 750] /CropBox [10 20 290 700] \
          /Resources << >> >>"
@@ -124,6 +124,23 @@ fn form_with_every_field_shape() -> Vec<u8> {
             .to_owned(),
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
             .to_owned(),
+        // 15 - a NON-TERMINAL grouping node. `/Hide` must refuse it: Table 210
+        // states no descendant rule, unlike /ResetForm's and /SubmitForm's
+        // /Fields flag rows.
+        "<< /T (Group) /Kids [16 0 R] >>".to_owned(),
+        // 16 - the terminal beneath it, so the refusal above can be shown to be
+        // about the node's KIND rather than about the dotted name.
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (Inner) /Parent 15 0 R /Rect [220 700 280 720] /P 3 0 R /F 4 /DA (/Helv 12 Tf 0 g) >>".to_owned(),
+        // 17 - ONE field, TWO widgets. A hide action names the field and moves
+        // both appearances (Table 210: "widget annotation OR ANNOTATIONS"),
+        // which is what makes a widget count different from a name count.
+        "<< /FT /Tx /T (Twin) /V (t) /Kids [18 0 R 19 0 R] >>".to_owned(),
+        "<< /Type /Annot /Subtype /Widget /Parent 17 0 R /Rect [220 660 280 680] /P 3 0 R /F 4 >>".to_owned(),
+        "<< /Type /Annot /Subtype /Widget /Parent 17 0 R /Rect [220 620 280 640] /P 3 0 R /F 4 >>".to_owned(),
+        // 20 - a terminal field with NO widget at all. Legal, and a hide action
+        // naming it does nothing; the standard states no reader rule, so pdfce
+        // authors it and discloses instead of refusing.
+        "<< /FT /Tx /T (Nameless) /V (n) >>".to_owned(),
     ];
     let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
     let mut offsets = Vec::new();
@@ -688,4 +705,199 @@ fn a_deleted_page_breaks_a_button_action_and_the_census_says_so() {
     );
     assert_eq!(outcome.dangling.links, 0, "there are no link annotations");
     assert!(!outcome.dangling.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// `/Hide` — `Pass 183.1`, ISO 32000-1 §12.6.4.10 Table 210
+//
+// Table 210 has exactly three rows (`/S`, `/T`, `/H`) and two of them carry a
+// trap a plausible implementation walks into:
+//
+//   * `/H`'s DEFAULT IS TRUE. Omitting it authors a HIDE. The "absent means
+//     off" reflex therefore ships a Show button that hides.
+//   * `/T` has NO DESCENDANT RULE. The phrase "all descendants of the
+//     specified fields" appears twice per edition and both times on a
+//     `/Fields` row — never here — so a grouping name is undefined rather
+//     than "obviously the subtree".
+// ---------------------------------------------------------------------------
+
+/// **`/H` is written in BOTH directions, and `false` is the one that matters.**
+///
+/// The failure this catches is not a wrong value; it is an ABSENT key. An
+/// implementation that writes `/H` only when hiding produces a Show button
+/// that hides, because the default is `true` — and the file is perfectly
+/// conforming, so nothing else would flag it.
+#[test]
+fn the_hide_flag_is_written_explicitly_in_both_directions() {
+    for (hidden, expected) in [(true, "/H true"), (false, "/H false")] {
+        let mut s = session();
+        s.set_button_action(
+            "Go",
+            Some(ButtonAction::SetHidden {
+                targets: vec!["Name".to_owned()],
+                hidden,
+            }),
+        )
+        .expect("authors");
+        let text = saved(&s);
+        assert!(text.contains("/S /Hide"), "{text}");
+        assert!(text.contains(expected), "expected {expected} in: {text}");
+        assert!(
+            text.contains("/T (Name)"),
+            "a single target is a string: {text}"
+        );
+    }
+}
+
+/// **Several targets become an array; one stays a bare string.**
+///
+/// Table 210 permits either. One target is written the way the clause states
+/// it first and the way real producers emit it; a one-element array would be
+/// equally legal and needlessly unlike every other file.
+#[test]
+fn several_hide_targets_become_an_array() {
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::SetHidden {
+            targets: vec!["Name".to_owned(), "Secret".to_owned()],
+            hidden: true,
+        }),
+    )
+    .expect("authors");
+    let text = saved(&s);
+    assert!(text.contains("/T [(Name) (Secret)]"), "{text}");
+}
+
+/// **A grouping node is refused rather than expanded.**
+///
+/// `/ResetForm` and `/SubmitForm` state descendant expansion in their flag
+/// rows; Table 210 states nothing. The two available readings — hide the
+/// subtree, or hide nothing — differ by everything, and one of them produces
+/// a button that silently does nothing. So pdfce refuses instead of guessing.
+///
+/// The fixture's `Group.Inner` gives a real grouping node to name.
+#[test]
+fn a_grouping_node_is_refused_because_table_210_has_no_descendant_rule() {
+    let mut s = session();
+    let err = s
+        .set_button_action(
+            "Go",
+            Some(ButtonAction::SetHidden {
+                targets: vec!["Group".to_owned()],
+                hidden: true,
+            }),
+        )
+        .expect_err("refused");
+    assert!(
+        matches!(err, EditError::ButtonActionHideTargetNotTerminal { .. }),
+        "{err:?}"
+    );
+    assert!(!saved(&s).contains("/S /Hide"));
+
+    // …and the terminal beneath it is accepted, so the refusal is about the
+    // node's KIND and not about the dotted name.
+    let mut s2 = session();
+    s2.set_button_action(
+        "Go",
+        Some(ButtonAction::SetHidden {
+            targets: vec!["Group.Inner".to_owned()],
+            hidden: true,
+        }),
+    )
+    .expect("a terminal is fine");
+    assert!(saved(&s2).contains("/T (Group.Inner)"));
+}
+
+/// **No targets, and an unknown target, are both refused before any write.**
+#[test]
+fn an_empty_or_unknown_hide_target_is_refused() {
+    let mut s = session();
+    let err = s
+        .set_button_action(
+            "Go",
+            Some(ButtonAction::SetHidden {
+                targets: Vec::new(),
+                hidden: true,
+            }),
+        )
+        .expect_err("refused");
+    assert!(
+        matches!(err, EditError::ButtonActionHideNoTargets),
+        "{err:?}"
+    );
+
+    let mut s2 = session();
+    let err = s2
+        .set_button_action(
+            "Go",
+            Some(ButtonAction::SetHidden {
+                targets: vec!["NoSuchField".to_owned()],
+                hidden: true,
+            }),
+        )
+        .expect_err("refused");
+    assert!(matches!(err, EditError::FieldNotFound { .. }), "{err:?}");
+    assert!(!saved(&s2).contains("/S /Hide"));
+}
+
+/// **The disclosure counts WIDGETS, not names, and says which names move
+/// nothing.**
+///
+/// Table 210 affects *"the associated widget annotation or annotations"* — so
+/// one name can move several appearances, on pages the operator was not
+/// looking at. And a field with no widget at all is authored anyway (the
+/// standard states no reader rule, so refusing would be pdfce inventing one)
+/// with the button doing nothing for that name.
+#[test]
+fn the_hide_disclosure_counts_widgets_and_names_the_ones_that_move_nothing() {
+    let mut s = session();
+    let d = s
+        .set_button_action(
+            "Go",
+            Some(ButtonAction::SetHidden {
+                targets: vec!["Twin".to_owned(), "Nameless".to_owned()],
+                hidden: false,
+            }),
+        )
+        .expect("authors")
+        .hide
+        .expect("a hide discloses");
+
+    assert!(d.shows, "`hidden: false` is a SHOW");
+    assert_eq!(
+        d.widgets_affected, 2,
+        "Twin owns two widgets and Nameless owns none"
+    );
+    assert_eq!(d.targets_without_widgets, vec!["Nameless".to_owned()]);
+    assert_eq!(d.targets.len(), 2);
+}
+
+/// **A hide action moves no hazard count.**
+///
+/// `/T` names annotations in this document; there is no file specification,
+/// no URL and no script. Asserted rather than assumed, because the counter
+/// that would be wrong here is the one an operator asks *"is this document
+/// going to phone home?"*.
+#[test]
+fn authoring_a_hide_reaches_nothing() {
+    let mut s = session();
+    s.set_button_action(
+        "Go",
+        Some(ButtonAction::SetHidden {
+            targets: vec!["Name".to_owned()],
+            hidden: true,
+        }),
+    )
+    .expect("authors");
+    let bytes = s.to_incremental_bytes(&SaveOptions::identity()).unwrap().0;
+    let doc = Document::from_bytes(bytes).unwrap();
+    let js = pdfce_core::forms::scan_javascript(&doc);
+    assert_eq!(js.network_action_count, 0);
+    assert_eq!(js.launch_action_count, 0);
+    assert_eq!(js.javascript_actions, 0);
+    assert_eq!(
+        js.annotation_actions, 1,
+        "it IS counted as an annotation action"
+    );
 }

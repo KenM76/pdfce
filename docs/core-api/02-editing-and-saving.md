@@ -1078,7 +1078,7 @@ only creation verb whose successful result is a control that does not work"*
 | **Change a field's field-scope properties** | `edit_field(&mut self, fqn, edit: &FieldEdit) -> Result<FieldEditOutcome, EditError>` | — | `Pass 134.0`. Flags, `/MaxLen`, `/TU`, `/Opt`. **Shared by every widget the field owns.** |
 | **Change ONE widget's properties** | `edit_widget(&mut self, fqn, index, edit: &WidgetEdit) -> Result<WidgetEditOutcome, EditError>` | — | `Pass 134.0`. `/Rect` (move **and resize**), `/BS`, `/F`, `/MK` `/CA`. **Per placement.** ★ All four are **readable** too since `Pass 146.0` — `forms::Widget::rect` / `border` / `visibility` + `annot_flags` / `caption`. This row listed four writable properties for months while only two could be read, which is how a consuming shell ended up with two controls it could not honestly populate. See `03-capabilities.md`'s `Widget` block. |
 
-#### ★ 1.12b Button actions (`Pass 183.0`) — and the one disclosure a shell MUST surface
+#### ★ 1.12b Button actions (`Pass 183.0`/`Pass 183.1`) — and the one disclosure a shell MUST surface
 
 `ButtonAction` is `#[non_exhaustive]`. Five variants:
 
@@ -1089,6 +1089,34 @@ only creation verb whose successful result is a control that does not work"*
 | `GoToPage { page_index, view: PageView }` | `/S /GoTo` | The page is written as an **indirect reference**, so it survives a reorder. `PageView` is `WholePage` / `FullWidth` / `TopLeft`; coordinates are computed from the target page's crop box, so you supply none. |
 | `Named(NamedAction)` | `/S /Named` | The four of Table 211: `NextPage`, `PrevPage`, `FirstPage`, `LastPage`. |
 | `Uri { uri }` | `/S /URI` | **Authored as data. pdfce never follows one.** |
+| `SetHidden { targets, hidden }` | `/S /Hide` | See below. Reaches nothing. |
+
+**★ `SetHidden` has two traps and both are in Table 210's three rows.**
+
+- **`/H`'s default is `true`.** An action that omits the key **hides**. pdfce
+  writes `/H` explicitly in both directions, so a Show button cannot become a
+  Hide button by omission — but a shell reading somebody *else's* file must
+  not read an absent `/H` as "show". `HideDisclosure::shows` states the
+  direction back.
+- **A grouping (non-terminal) field name is REFUSED**
+  (`ButtonActionHideTargetNotTerminal`). `/ResetForm` and `/SubmitForm` state
+  descendant expansion in their flag rows; **Table 210 states nothing**, so
+  "hide the subtree" and "hide nothing" are both readings and one of them is
+  a button that silently does nothing. Name the terminals.
+
+It is an **assignment, not a toggle** — Table 210 works *"by setting or
+clearing their `Hidden` flags"*, and the standard owns a toggle elsewhere
+(`/SetOCGState`'s `/State`) and did not use it here. A genuinely toggling
+show/hide button needs JavaScript and is therefore out of scope, not unbuilt.
+
+A name in `/T` reaches **every widget of that field**, including ones on other
+pages — `HideDisclosure::widgets_affected` is the number that will actually
+move, and it is usually larger than the number of names.
+`targets_without_widgets` names fields the button will do nothing for.
+
+**The name form reaches widgets only.** A `/Text` note, a stamp or a ce
+dimension's `/Line` can be named only by indirect reference, so hiding one is
+not expressible here — deliberately.
 
 **`SubmitSpec` is `#[non_exhaustive]`** — build it with `SubmitSpec::new(url)`
 and assign fields; a struct literal will not compile from outside the crate.
