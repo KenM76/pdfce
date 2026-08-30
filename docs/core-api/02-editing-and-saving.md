@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 175 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 177 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 175 public `EditSession` methods
+## 1. Verb index — all 177 public `EditSession` methods
 
-**Count: 175.** Established by brace-matched extraction of the four
+**Count: 177.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1072,6 +1072,7 @@ only creation verb whose successful result is a control that does not work"*
 | Delete ONE widget of a field | `delete_widget(&mut self, fqn, index: usize) -> Result<FieldDeletion, EditError>` | 8764 | Siblings survive. |
 | Rename a field | `rename_field(&mut self, fqn, new_partial: &str) -> Result<FieldRename, EditError>` | 8889 | `new_partial` is **one path segment**, never an FQN; a period is refused. |
 | Move one widget's `/Rect` | `move_widget(&mut self, fqn, index, dx, dy) -> Result<WidgetMove, EditError>` | 9032 | **No appearance regeneration** — §12.5.5 step b makes matrix **A** a pure translation. |
+| **Give a push button an action** | `set_button_action(&mut self, fqn, action: Option<ButtonAction>) -> Result<ButtonActionChange, EditError>` | 23480 | ✅ **`ResetForm` only** (`Pass 182.0`, operator ruling). `None` removes any action, including one pdfce would never author — `ButtonActionChange::replaced` NAMES it, so a form editor knows it destroyed a script. Refuses a non-push-button, and a reset target that does not exist, before writing. |
 | **Rotate one widget** | `rotate_widget(&mut self, fqn, index, degrees: i64) -> Result<WidgetRotation, EditError>` | 16588 | ✅ **`/MK /R` + a REDRAWN appearance** (`Pass 177.0`). ⚠️ **COUNTERCLOCKWISE** — the page's `/Rotate` is the clockwise one. Multiples of 90 only, reduced into `[0, 360)` and the reduction reported. **`/Rect` does not move**; the appearance is redrawn into a `w`/`h`-swapped `/BBox` and stood upright by `/Matrix`. Rotating to `0` **removes** the key. Refuses a non-multiple of 90 with `WidgetRotationNotQuarterTurn`. |
 | Read an existing field's copyable properties | `field_defaults(&self, source: &str) -> Result<FieldDefaults, EditError>` | 9211 | For `--defaults-from` / "copy style from". |
 | **Change a field's field-scope properties** | `edit_field(&mut self, fqn, edit: &FieldEdit) -> Result<FieldEditOutcome, EditError>` | — | `Pass 134.0`. Flags, `/MaxLen`, `/TU`, `/Opt`. **Shared by every widget the field owns.** |
@@ -2159,6 +2160,43 @@ Rotation is a **widget** property, not a field one — `/MK` lives on the
 annotation, so a field with widgets on several pages can have each rotated
 differently. `siblings_untouched` reports how many were left alone.
 
+### ⚡ `page_objects` — what it is worth, and the two things it does NOT fix
+
+Measured on a 5.6 MB / 129,758-object CAD drawing, release build
+(`crates/pdfce-core/tests/edit_latency.rs`, runnable in this repo):
+
+| | before | after |
+|---|---:|---:|
+| `decompose_page` | 484 ms | — |
+| `move_objects` (one object) | **385 ms** | **0 ms** |
+| decompose again after the edit | 510 ms | 510 ms |
+
+**Route your decomposition through `EditSession::page_objects` and the verb
+stops re-parsing.** It is the same model `vector::decompose_page` returns for
+`session.view()`; the difference is that the verbs consult the same entry.
+
+**1. The post-edit rebuild is NOT removed and cannot be.** The edit changed the
+content, so the post-edit model is one nobody has yet. A frequently-proposed
+fix — *"return the model the verb already built"* — **is not available**: the
+verb decomposes the **pre-edit** content, plans against it, and commits. What
+it holds is the model the caller already has.
+
+**2. `&mut self` is deliberate.** An interior-mutability cache reachable
+through `&self` would make `EditSession` no longer `Sync`.
+
+### ⚡⚡ `EditSession` is `Send` AND `Sync` — the 500 ms can leave the UI thread
+
+This is not a change; it has always been true and is stated here because a
+consuming shell assumed the opposite and built around it. Both halves of an
+edit can run on a worker thread today:
+
+- the **verb** needs `&mut EditSession` — move the session to the worker, or
+  hold it in `Arc<Mutex<_>>` and lock there;
+- the **rebuild** needs only `&EditSession`, which `Sync` permits directly.
+
+Nothing in the session assumes it is never observed mid-command; a command is
+constructed, then committed, under one `&mut`.
+
 > ★★ **`set_dimension_group` is not a field assignment, and a shell must not
 > treat it as one.** A ce dimension's label is derived from its GROUP's scale,
 > precision, unit and standard (the decision 011 §2.3 cascade). Re-parenting
@@ -2186,6 +2224,7 @@ differently. `siblings_untouched` reports how many were left alone.
 | Create a group | `add_dimension_group(&mut self, name, unit: Unit) -> Result<GroupId, EditError>` | 15523 | Scale-never-set, visible, OCG allocated lazily. |
 | Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** ⚠️ **Refuses an unknown `group` since `Pass 178.2`** — it used to return `Ok` and change nothing. |
 | Toggle a group's layer | `toggle_dimension_layer(&mut self, group, visible) -> Result<bool, EditError>` | 15600 | Resulting visibility. The default group is un-hideable. |
+| **The page's vector objects, memoised** | `page_objects(&mut self, page_index) -> Result<Arc<PageObjects>, EditError>` | 11400 | ⚡ **Use this instead of `vector::decompose_page`** (`Pass 181.0`). The editing verbs share the same cache, so a shell that decomposes to get object indices does not pay for the identical parse again inside `move_objects` — measured **385 ms → 0 ms** on a 130k-object CAD page. `&mut self` because populating a cache is a mutation; see below. |
 | Hit-test ce dimensions on a page | `dimension_rects(&self, page_index) -> Vec<(DimensionId, [f64;4])>` | 15645 | `[llx, lly, urx, ury]` page space. |
 | List groups present on a page | `dimension_groups_on_page(&self, page_index) -> Vec<GroupId>` | 15725 | Model order. |
 | **Drag** a ce dimension | `place_dimension(&mut self, dimension, offset: f64, text_along: f64) -> Result<(), EditError>` | 15804 | ✅ **This, not `move_dimension`, is what dragging does.** Value-preserving by construction. |

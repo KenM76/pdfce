@@ -4403,6 +4403,57 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Make a push button actually do something** (Pass 182.0,
+    /// ISO 32000-1 12.7.5.3): attach a Reset action, or take one away.
+    ///
+    /// Until now pdfce authored push buttons that were valid and INERT, and
+    /// said so on every creation, because writing `/A` reaches launch
+    /// actions, network submits and JavaScript. The operator moved that
+    /// boundary exactly one notch on 2026-08-30 -- "a reset button should
+    /// actually reset" -- so this attaches a Reset and nothing else.
+    ///
+    /// `--reset` resets every field. `--reset-only A,B` resets just those.
+    /// `--reset-except A,B` resets everything else. `--clear` removes
+    /// whatever action the button had, which is what you want when you open
+    /// somebody else's form and want the button inert; the result line names
+    /// what it removed, including a script pdfce would never write back.
+    ///
+    /// A field that is not a push button is refused by name, and so is a
+    /// reset target that does not exist -- checked BEFORE anything is
+    /// written, so a typo cannot leave a button pointing at a field that is
+    /// not there.
+    ///
+    /// SUBMIT AND JAVASCRIPT ARE NOT OFFERED. A submit sends data somewhere
+    /// and no shell can audit the address; JavaScript pdfce recognises and
+    /// never runs or writes.
+    SetButtonAction {
+        /// Input PDF.
+        input: PathBuf,
+        /// The push button's fully-qualified name, as `list-fields` reports.
+        #[arg(long)]
+        name: String,
+        /// Reset every field in the form.
+        #[arg(long, conflicts_with_all = ["reset_only", "reset_except", "clear"])]
+        reset: bool,
+        /// Reset ONLY these fields (comma-separated fully-qualified names).
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_except", "clear"])]
+        reset_only: Vec<String>,
+        /// Reset everything EXCEPT these fields.
+        #[arg(long, value_delimiter = ',', conflicts_with_all = ["reset", "reset_only", "clear"])]
+        reset_except: Vec<String>,
+        /// Remove the button's action, leaving it inert.
+        #[arg(long, conflicts_with_all = ["reset", "reset_only", "reset_except"])]
+        clear: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Move a form field's widget** — translate its `/Rect` (§12.5.2).
     ///
     /// MOVES ONE APPEARANCE, NOT THE FIELD. A field can own widgets on
@@ -8475,6 +8526,27 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_widget(&input, &name, index, dx, dy, &output, mode),
+        Command::SetButtonAction {
+            input,
+            name,
+            reset,
+            reset_only,
+            reset_except,
+            clear,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_set_button_action(&SetButtonActionArgs {
+            input: &input,
+            name: &name,
+            reset,
+            reset_only: &reset_only,
+            reset_except: &reset_except,
+            clear,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::RotateWidget {
             input,
             name,
@@ -25726,6 +25798,101 @@ fn cmd_rotate_widget(args: &RotateWidgetArgs) -> u8 {
     if let Some(note) = &rotation.appearance_stale {
         println!("  note: {note}");
     }
+    finish_edit(args.input, &outcome)
+}
+
+/// The `set-button-action` argument bundle.
+struct SetButtonActionArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    reset: bool,
+    reset_only: &'a [String],
+    reset_except: &'a [String],
+    clear: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `set-button-action` -- attach a Reset action to a push button, or remove
+/// one (Pass 182.0).
+///
+/// ## Contract
+///
+/// - Emits one `set-button-action ...` line carrying `action=` and
+///   `replaced=`, then defers the exit code to [`finish_edit`].
+/// - **`replaced=` names what was destroyed**, including an action pdfce
+///   would never author -- a script, a submit. A form editor overwriting
+///   somebody else's button should know what it took out, and reporting a
+///   removed script as "nothing" is the failure that reads as safe.
+/// - Exactly one of the four mode flags is required; clap enforces the
+///   exclusivity and this function refuses the empty case by name rather
+///   than defaulting to one, because every default here is a different
+///   document.
+fn cmd_set_button_action(args: &SetButtonActionArgs) -> u8 {
+    use pdfce_core::edit::{ButtonAction, ResetScope};
+
+    let action = if args.clear {
+        None
+    } else if args.reset {
+        Some(ButtonAction::ResetForm {
+            scope: ResetScope::All,
+        })
+    } else if !args.reset_only.is_empty() {
+        Some(ButtonAction::ResetForm {
+            scope: ResetScope::Only(args.reset_only.to_vec()),
+        })
+    } else if !args.reset_except.is_empty() {
+        Some(ButtonAction::ResetForm {
+            scope: ResetScope::Except(args.reset_except.to_vec()),
+        })
+    } else {
+        eprintln!(
+            "pdfce-cli: say what the button should do: --reset, --reset-only A,B, \
+--reset-except A,B, or --clear to remove its action"
+        );
+        return exit::EDIT_REFUSED;
+    };
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let change = match session.set_button_action(args.name, action) {
+        Ok(c) => c,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "set-button-action {} name={} action={} replaced={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        if change.applied.is_some() {
+            "ResetForm"
+        } else {
+            "none"
+        },
+        change.replaced.as_deref().unwrap_or("-"),
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
     finish_edit(args.input, &outcome)
 }
 

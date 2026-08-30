@@ -506,6 +506,13 @@ pub enum CommandKind {
     FillTextField,
     /// [`EditSession::reset_form`] — §12.7.5.3.
     ResetForm,
+    /// A push button's `/A` action was set, replaced or removed
+    /// (`Pass 182.0`). ONE undoable command. See
+    /// [`EditSession::set_button_action`].
+    SetButtonAction {
+        /// `true` when the action was REMOVED, leaving the button inert.
+        removed: bool,
+    },
     /// A check-box or radio-button field's state was selected (Pass 7,
     /// §12.7.4.2.3): the field's `/V` and the widgets' `/AS` set together,
     /// with no appearance regeneration (state selection, not generation).
@@ -4823,6 +4830,20 @@ pub enum EditError {
     WidgetRotationNotQuarterTurn {
         /// The angle that was asked for.
         degrees: i64,
+    },
+    /// [`EditSession::set_button_action`] was called on a field that is not
+    /// a push button (`Pass 182.0`).
+    ///
+    /// An `/A` on a text field or a check box is legal PDF and is not what
+    /// that verb is for. Refused by name rather than written, because an
+    /// action on a field the operator does not think of as clickable is
+    /// behaviour they cannot see and did not ask for.
+    #[error(
+        "field {name} is not a push button, so it has no click to attach an action to; set_button_action is for push buttons only"
+    )]
+    ButtonActionWrongFieldType {
+        /// The fully-qualified field name.
+        name: String,
     },
     /// The **default** ce-dimension group was asked to be HIDDEN
     /// (`Pass 178.0`).
@@ -12903,6 +12924,98 @@ struct PageObjectsCache {
     stream: std::sync::Arc<crate::content::ContentStream>,
     /// The decomposition of that content.
     objects: std::sync::Arc<crate::vector::PageObjects>,
+}
+
+/// Which fields a [`ButtonAction::ResetForm`] touches
+/// (ISO 32000-1 §12.7.5.3, Tables 238–239).
+///
+/// The spec expresses this as an optional `/Fields` array plus an
+/// `Include/Exclude` flag, with the array's absence meaning "everything". That
+/// is three states carried by two keys, and a caller who set `/Fields` without
+/// the flag would silently get the opposite of `Except`. Modelling it as one
+/// enum makes the illegal combinations unrepresentable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ResetScope {
+    /// Every field in the document's interactive form.
+    ///
+    /// Written by **omitting** `/Fields`, which §12.7.5.3 defines as
+    /// resetting everything and — explicitly — as making the
+    /// `Include/Exclude` flag ignored. pdfce therefore writes neither key,
+    /// rather than writing an empty array, which would mean "reset exactly
+    /// these zero fields" and is a different document.
+    All,
+    /// Only these fields, by fully-qualified name.
+    ///
+    /// `/Fields` with the flag CLEAR. Note §12.7.5.3's own parenthesis: *"All
+    /// descendants of the specified fields in the field hierarchy are reset as
+    /// well"* — naming a grouping node resets its whole subtree, which is
+    /// usually what an operator means and is worth knowing before it surprises
+    /// them.
+    Only(Vec<String>),
+    /// Everything EXCEPT these fields.
+    ///
+    /// `/Fields` with the `Include/Exclude` flag SET (bit 1, value 1).
+    Except(Vec<String>),
+}
+
+/// What a push button does when clicked (`Pass 182.0`).
+///
+/// # ★ Deliberately one variant, and the boundary is the point
+///
+/// `/A` reaches launch actions, network submits, embedded-file opens and
+/// JavaScript. Authoring that surface is a security decision, and pdfce's
+/// standing posture (decision 009 posture A) was to author **no** action at
+/// all — which is why `add_push_button` has always created a valid button that
+/// does nothing, and says so.
+///
+/// The operator moved that boundary on 2026-08-30, and moved it exactly one
+/// notch: *"a reset button should actually reset."* So this enum carries
+/// `ResetForm` and nothing else.
+///
+/// `/SubmitForm` is **refused by omission**, on the consuming shell's own
+/// argument rather than over its objection: its whole purpose is to send data
+/// somewhere, which is a network capability wearing a form control's clothes,
+/// and no shell can audit the URL an operator types. `/JavaScript` is refused
+/// for the reason it has always been — pdfce recognises scripts and never
+/// runs or writes them (`NF4`).
+///
+/// A future variant is a decision, not an omission. Adding one should say
+/// which operator sentence authorises it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ButtonAction {
+    /// §12.7.5.3. Sets fields back to their `/DV` default value.
+    ///
+    /// Reaches nothing outside the document: the spec RAG's action-carrier
+    /// survey classifies `ResetForm` as **no reach** alongside `GoTo` and
+    /// `Hide`, verified against the type's own table.
+    ResetForm {
+        /// Which fields. See [`ResetScope`].
+        scope: ResetScope,
+    },
+}
+
+/// What [`EditSession::set_button_action`] did (`Pass 182.0`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ButtonActionChange {
+    /// The field whose widget was changed.
+    pub name: String,
+    /// The action the widget carried BEFORE, described in one word
+    /// (`"ResetForm"`, `"JavaScript"`, …), or `None` if it had none.
+    ///
+    /// # Why a description rather than a [`ButtonAction`]
+    ///
+    /// The button may have carried an action pdfce cannot author and would
+    /// not choose to — a submit, a launch, a script. Returning
+    /// `Option<ButtonAction>` would make that inexpressible and force a
+    /// replaced JavaScript action to be reported as `None`, i.e. as *"there
+    /// was nothing there"*. A shell overwriting somebody else's form needs to
+    /// know it destroyed a script, even though pdfce will not write one back.
+    pub replaced: Option<String>,
+    /// The action in force afterwards, or `None` if it was removed.
+    pub applied: Option<ButtonAction>,
 }
 
 /// What [`EditSession::set_dimension_label`] did, and the two captions a
@@ -23343,6 +23456,186 @@ impl EditSession {
                 }
             })
             .collect()
+    }
+
+    /// **Give a push button an action, or take one away** — as one undoable
+    /// command (`Pass 182.0`).
+    ///
+    /// # ★ This moves a deliberate boundary, one notch, on an operator ruling
+    ///
+    /// `add_push_button` has always authored a button that does nothing, and
+    /// `push_button_inert` says so on every creation. That was decision 009
+    /// posture A: `/A` reaches launch actions, network submits, embedded-file
+    /// opens and JavaScript, and pdfce authored **none** of them.
+    ///
+    /// The operator moved it on 2026-08-30: *"a reset button should actually
+    /// reset."* So [`ButtonAction`] carries `ResetForm` and nothing else —
+    /// `/SubmitForm` is a network capability wearing a form control's clothes,
+    /// and `/JavaScript` is `NF4`.
+    ///
+    /// # On an EXISTING button, deliberately
+    ///
+    /// [`crate::annot_author::NewPushButton`] is untouched: creation still
+    /// authors an inert button. Giving a button behaviour is a separate,
+    /// named, undoable act a shell has to go out of its way to call. A button
+    /// that gained an action as a side effect of being drawn is precisely what
+    /// posture A protects against, and this is not that.
+    ///
+    /// # `None` removes an action, including one pdfce would not write
+    ///
+    /// The half a form editor needs when it opens somebody else's document
+    /// and wants the button inert. [`ButtonActionChange::replaced`] names what
+    /// was there — including a script — because a shell overwriting another
+    /// tool's form should know it destroyed one, even though pdfce will not
+    /// write one back.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::FieldNotFound`] — no such field, or a named reset target
+    ///   that does not exist. Checked **before** anything is written, the same
+    ///   discipline [`Self::reset_form`] uses, so a typo cannot leave a button
+    ///   pointing at a field that is not there.
+    /// - [`EditError::ButtonActionWrongFieldType`] — the field is not a push
+    ///   button.
+    /// - The encryption and certification guards.
+    pub fn set_button_action(
+        &mut self,
+        fqn: &str,
+        action: Option<ButtonAction>,
+    ) -> Result<ButtonActionChange, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let field = form
+            .fields
+            .iter()
+            .find(|f| f.fully_qualified_name == fqn)
+            .ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?
+            .clone();
+
+        // A push button and nothing else. An action on a text field is legal
+        // PDF and is not what this verb is for; refusing by name beats writing
+        // something an operator cannot see and did not mean.
+        if field.field_type != Some(forms::FieldType::Button)
+            || !field.flags.has(forms::FieldFlags::PUSHBUTTON)
+        {
+            return Err(EditError::ButtonActionWrongFieldType {
+                name: fqn.to_owned(),
+            });
+        }
+
+        // Every named reset target must exist, checked BEFORE any write.
+        if let Some(ButtonAction::ResetForm { scope }) = &action {
+            let named: &[String] = match scope {
+                ResetScope::All => &[],
+                ResetScope::Only(v) | ResetScope::Except(v) => v,
+            };
+            for name in named {
+                if !form.fields.iter().any(|f| &f.fully_qualified_name == name) {
+                    return Err(EditError::FieldNotFound { name: name.clone() });
+                }
+            }
+        }
+
+        let widget = field
+            .widgets
+            .first()
+            .ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?
+            .clone();
+
+        let Some(Object::Dict(dict)) = self.value(widget.id) else {
+            return Err(EditError::NotADictionary {
+                id: widget.id,
+                key: "A",
+            });
+        };
+        let mut updated = dict.clone();
+
+        // What was there, named rather than modelled -- see
+        // `ButtonActionChange::replaced`.
+        let replaced = {
+            let g = self.graph();
+            updated
+                .get(b"A")
+                .map(|a| g.resolve(a))
+                .and_then(Object::as_dict)
+                .and_then(|d| d.get(b"S").and_then(Object::as_name))
+                .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+        };
+
+        match &action {
+            None => {
+                updated.remove(b"A");
+            }
+            Some(ButtonAction::ResetForm { scope }) => {
+                let mut a = Dict::new();
+                a.insert(Name::from(b"Type"), Object::Name(Name::from(b"Action")));
+                a.insert(Name::from(b"S"), Object::Name(Name::from(b"ResetForm")));
+                match scope {
+                    // `/Fields` OMITTED, not an empty array. §12.7.5.3: "If
+                    // this entry is omitted, the Include/Exclude flag shall be
+                    // ignored; all fields ... are reset." An empty array would
+                    // mean "reset exactly these zero fields" -- a different
+                    // document, and the opposite of what was asked for.
+                    ResetScope::All => {}
+                    ResetScope::Only(names) => {
+                        a.insert(Name::from(b"Fields"), Self::fqn_array(names));
+                    }
+                    ResetScope::Except(names) => {
+                        a.insert(Name::from(b"Fields"), Self::fqn_array(names));
+                        // Table 239 bit 1 = Include/Exclude. Set = exclude.
+                        a.insert(Name::from(b"Flags"), Object::Integer(1));
+                    }
+                }
+                updated.insert(Name::from(b"A"), Object::Dict(a));
+            }
+        }
+
+        let objects = vec![ObjectWrite {
+            id: widget.id,
+            before: self.state.get(&widget.id).cloned(),
+            after: Some(Object::Dict(updated)),
+        }];
+        self.commit(Command {
+            kind: CommandKind::SetButtonAction {
+                removed: action.is_none(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(ButtonActionChange {
+            name: fqn.to_owned(),
+            replaced,
+            applied: action,
+        })
+    }
+
+    /// `/Fields` as text strings (§12.7.5.3 Table 238).
+    ///
+    /// The entry permits indirect field references OR fully-qualified name
+    /// strings, mixed. pdfce writes strings: a name survives the field being
+    /// rewritten, renumbered or copied into another document, and an indirect
+    /// reference does not — and this project's own clipboard work re-parents
+    /// fields between documents routinely.
+    fn fqn_array(names: &[String]) -> Object {
+        Object::Array(
+            names
+                .iter()
+                .map(|n| Object::String(encode_text_string(n)))
+                .collect(),
+        )
     }
 
     /// **Reset form fields to their default values** (§12.7.5.3).
