@@ -80174,3 +80174,311 @@ push because the repository is public.
    `docs/core-api/03-capabilities.md` posture table specifically.
 6. **`Pass 179.0`** is the next real engineering item, and the only one left in
    the bold cluster.
+
+---
+
+## 2026-08-30 (343rd filing) — **FOUR UNFILED CODE COMMITS DISCHARGED IN ONE FILING: `Pass 180.0` (`90e7265`), `Pass 181.0` (`a24868e`), `Pass 182.0` (`bc49a8e`) and `Pass 183.0` (`cff102a`).** ★★★ **`Pass 183.0` DELIVERS `Pass 131.0`, WHICH IS NARROWED IN *Backlog* TO ITS TWO UNBUILT APPEARANCE ITEMS SO THE TWO DOCUMENTS STOP BOTH CLAIMING IT AS FUTURE WORK.** ★★ **`R54` AND `R12` ARE BOTH UN-ENGAGED BY A PASS TITLED "SUBMIT", AND THE FILING SAYS SO IN PLAIN WORDS IN THREE PLACES BECAUSE A FUTURE AUDIT WILL ASSUME OTHERWISE.** ★ **`v0.17.0` IS COMPLETED FROM CUT-BUT-NOT-OBSERVED TO OBSERVED — AND THE ONE FACT THE 342nd FILING DECLINED TO GUESS AT IS THE ONE THAT HAD GONE WRONG**
+
+**Shipped, filed to *Shipped* this filing:**
+
+- **`Pass 180.0`** (`90e7265`) — the OneDrive deploy could not delete a folder
+  OneDrive will never let go of, and **left the fallback slot half-emptied
+  trying**. Three measurements, first two wrong.
+- **`Pass 181.0`** (`a24868e`) — one drag parsed the same 5.6 MB **twice**;
+  `EditSession::page_objects` memoises it and **the verb went 385 ms → 0 ms**.
+  The first two fixes were both wrong.
+- **`Pass 182.0`** (`bc49a8e`) — **a reset button that actually resets.**
+  Decision `009` posture A's authoring boundary moved **exactly one notch**, on
+  an operator ruling.
+- **`Pass 183.0`** (`cff102a`) — **submit, and every other button action that
+  needs no JavaScript**, with the payload disclosure the plan named. **Delivers
+  `Pass 131.0`.**
+
+**Also completed this filing:** the **`v0.17.0`** entry, from
+*cut-but-not-yet-observed* (342nd filing) to **observed** — tag, tag target,
+push, GitHub release and OneDrive deploy each measured with the command that
+measured it.
+
+**Files edited by this role:** `docs/ROADMAP.md`, `docs/FEATURES.md`,
+`docs/ARCHITECTURE.md`, `docs/SESSION_LOG.md`, and three new findings in
+`D:/dev/rag/rust/` plus its `index.md`. ★ **`crates/`, `tools/`,
+`docs/core-api/` and `docs/plan-scripting-submit-and-plugins.md` UNTOUCHED**
+(hard rule 11) — the first three were the engineer's and were edited by him in
+the four commits; **the fourth is reported back as owed work.**
+
+**Sourcing — `R228`.** A shell was held and used. **Run here, not relayed:**
+`python tools/check-commits-filed.py`, `python tools/check-passes-filed.py`,
+`python tools/check-ledger-numbers.py`, `python
+tools/check-suite-name-absent.py`, `git log`/`git show`/`git diff
+--shortstat`/`git status --porcelain`/`git rev-list --count`/`git tag
+--list`/`git rev-list -n1 v0.17.0`, `gh release list --limit 3`, `gh run list
+--limit 5`, `ls -lt /d/Dev/pdfce-backups/`, plus live `grep`s over `crates/`
+(`non_link_annotations`, and a `#[test]` count of
+`button_action_submit.rs` = **19**) and over `docs/`+`tools/`+`.claude/` for
+the hard-rule-11 sweep. **Relayed and NOT re-run:** `cargo test --workspace
+--all-features`, `cargo fmt --check`, `cargo clippy --workspace --all-targets
+-- -D warnings`, `bash tools/run-gates.sh`, `check-clap-help`,
+`check-cli-help-leads`, `check-outcome-disclosed`, `check-core-api-verbs`, and
+every end-to-end binary measurement in the four commit messages.
+
+---
+
+### ★★★ THE BOUNDARY, FIRST — BECAUSE ONE WORD IN A PASS TITLE WILL BE MISREAD
+
+**`Pass 183.0` authors a `/SubmitForm` declaration. It does NOT submit
+anything, and nothing in pdfce moved toward submitting anything.**
+
+| rule | **why it is NOT engaged** |
+|---|---|
+| **`R54`** — *"no trigger event ever fires"* | **authoring is writing bytes.** No trigger is dispatched anywhere; the honouring half is `Pass 131.1`, **still Backlog**. ★ **`R54`'s decision-`088` amendment is NOT relied on** — the Pass would be byte-identical if that amendment had never been filed |
+| **`R12`** — the network prohibition | ★ **no network code exists in any crate this Pass touched**, and the `no-network` job is green. `crates/pdfce-fetch` is still a workspace member **no shell links** |
+
+⇒ **What shipped is a FILE-FORMAT capability.** pdfce writes a declaration a
+*viewer* will act on, and pdfce itself does nothing with it. **Stated in
+`ROADMAP.md`, in `ARCHITECTURE.md` §12 decision `107`, and here** — three
+places, on purpose, because the assumption is cheap to form and expensive to
+correct.
+
+### ★★★ `Pass 183.0` DELIVERS `Pass 131.0` — RESOLVED, NOT LEFT FOR A READER TO NOTICE
+
+The operator's phrase *"the safeguards like we had planned"* is a **citation**:
+it resolves to `docs/plan-scripting-submit-and-plugins.md` §8 **Phase 1**,
+which is filed in `ROADMAP.md` as **`Pass 131.0`**. The engineer read it that
+way and built to it.
+
+**Every item on `131.0`'s acceptance list has shipped EXCEPT two** — the `/AP`
+`/D` pressed appearance and the `/MK` icon/label layout. So:
+
+- **`ROADMAP.md`:** `Pass 131.0` is **NARROWED in *Backlog*** to exactly those
+  two items, with the shipped half enumerated and pointed at `182.0`/`183.0`.
+  **Not deleted** — Backlog entries are how future work is found, and the
+  appearance half is real.
+- **`FEATURES.md`:** the action-authoring row **moved *Planned* → *Implemented*
+  and was rewritten**; a **new *Planned* row** carries the appearance
+  remainder.
+
+★ **The remainder is a DIFFERENT KIND OF WORK and the filing says so**: it is
+an appearance-generation obligation (`R43`'s neighbourhood), not a continuation
+of the action work. **A future session scoping it as "the rest of the button
+actions" will scope the wrong thing.**
+
+**`Pass 131.1` (in-app dispatch, the `R54` allow-list) and `Pass 131.2`
+(`pdfceNet`) are UNTOUCHED and still Backlog.**
+
+### ★★ THE FINDING MOST WORTH CARRYING — A CENSUS THAT WENT FROM COMPLETE TO UNDER-REPORTING INSIDE ONE COMMIT
+
+`pageops::references::census_dangling` walked **`/Link` annotations only** —
+**complete, and correct, right up until a push button could carry a `/GoTo`**,
+which is the thing `Pass 183.0` makes possible. **The commit introducing the
+carrier would have made its own census under-report in the same commit.**
+
+**Caught while implementing, not afterwards**, and fixed in the **general**
+direction: ask **every** annotation subtype rather than add `/Widget` and wait
+for the next carrier. New `DanglingReport::non_link_annotations`, kept
+**separate** from `links` **because the operator sentence differs** — *"a link
+goes nowhere"* versus *"a button on the form stopped working"*.
+
+★★ **Same shape as `Pass 133.0`'s `/A`-versus-`/AA` network-hazard
+blindness: an under-reporting counter reads exactly like a clean bill of
+health.** No natural alarm — nothing fails, the number is small, and small is
+what the reader wanted.
+
+**MINT CONSIDERED AND DECLINED, with the argument recorded rather than the
+decline merely asserted.** Third instance of the class (`Pass 133.0`;
+`check-outcome-disclosed.py`'s too-narrow **input list**, 2026-08-19; this).
+★ **No mechanical gate can content-check a census's own completeness** — it
+would have to already know the set of carriers, which is the fact the census
+exists to establish. `R235` stays the ceiling. **Trigger stated for the next
+session so the bar is not re-derived: a fourth instance whose fix IS
+mechanically checkable warrants the mint.**
+
+### ★★ THE `v0.17.0` COMPLETION — AND WHY THE 342nd FILING'S REFUSAL TO GUESS PAID FOR ITSELF
+
+| fact | 342nd filing (13:46Z) | **measured HERE** | command |
+|---|---|---|---|
+| `v0.17.0` tag | **NO TAG** | ★ **exists** | `git tag --list 'v0.17*'` |
+| tag target | *predicted* the filing commit | ★★ **`9281068`** — the 342nd filing's own commit, **exactly as planned** | `git rev-list -n1 v0.17.0` |
+| unpushed commits | **6** | ★ **0** | `git rev-list --count origin/main..HEAD` |
+| newest GitHub release | `v0.16.0` | ★ **`v0.17.0`**, `2026-08-30T14:00:25Z`, `Latest` | `gh release list --limit 3` |
+| CI at the tagged commit | *not asked* | ★ **`success`** at `9281068` | `gh run list --limit 5` |
+| OneDrive | ★ **stated UNKNOWN, not absent** | ★★★ **deployed — but it CRASHED first** | `Pass 180.0` |
+
+★★★ **The item that filing declined to guess at is the one that had gone
+wrong.** The deploy failed with `WinError 5`, took three measurements to
+diagnose, and **left the `pdfce1` slot inconsistent on the way past** — `LICENSE`
+deleted, `models/ocrs` emptied, and the previous `pdfce-cli.exe` **and its
+`VERSION.txt` still in place.** ⇒ **A folder that still looks populated, naming
+a version an operator would trust, over a payload that is no longer that
+version's.** **A filing that had written "presumably deployed" would have
+recorded a working A/B fallback that did not exist.** Hard rule 8 paid for
+itself inside one filing.
+
+★★ **And the tag decision is vindicated by measurement rather than argument.**
+The 342nd filing moved the tag off `71d13aa` because both filing gates were red
+there; CI at `9281068` is **green**, so `verify-release.py`'s *"is CI green at
+the tagged commit?"* had a green commit to find. `v0.10.0` cost a tag delete, a
+retag, a force-push and a rebuilt asset for getting this exact thing wrong.
+
+### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string (clause (e))
+
+**The claim:** *"pdfce recognises and preserves actions but never authors
+one"* / *"no `/A` action is authored on any field anywhere in pdfce"* — **false
+since `Pass 182.0`.** The engineer found and fixed **three** copies in
+`crates/` by running the release binary. **This sweep looked for the claim, not
+his phrasing**, case-insensitively on the bare keywords `inert`, `never
+author`, `authors no`, `does not author`, `no /A`, over `docs/`, `tools/` and
+`.claude/`.
+
+**Corrected this filing (2):**
+
+1. ★ **`docs/FEATURES.md`'s field-creation row — THE FOURTH COPY.** First half
+   true and deliberate (creation is still inert); second half false. Rewritten
+   so the surviving half is unmistakable and the reader is pointed at
+   `set-button-action`.
+2. **`docs/ROADMAP.md`'s `Pass 131.0`–`131.4` Backlog block** — *"pdfce authors
+   no `/A` action on any field and dispatches no trigger for one."* ★ **Struck
+   in place with the original kept legible**, because it is the scoping insight
+   that split five Passes out of one question. **The dispatch half of that
+   sentence is still TRUE** and the correction says so explicitly — a struck
+   claim with nothing put in its place reads as a capability withdrawn.
+
+**Survivors LEFT and recorded so the next sweep does not "fix" them (3):**
+
+- **`ARCHITECTURE.md`, decision `088`'s record** — *"scoping … surfaced that
+  pdfce authors no `/A` action on anything."* ★ **Correct as dated**, inside an
+  append-only decision record. **Do not correct a dated measurement into
+  agreement with today** — the same call the 342nd filing made about decision
+  `106`'s measurement list.
+- **`docs/decisions/020-form-field-authoring.md`** — *"creation authors no
+  action"*, *"F3 authors none"*. **Still true** (creation; `/AA` copy).
+- **`ROADMAP.md`'s `/AA`-exclusion note.** **Still true, same reason.**
+
+**Survivor REPORTED, not edited — outside this role's remit (1):**
+
+- ★★ **`docs/plan-scripting-submit-and-plugins.md` §0, *Reader's
+  orientation***: *"pdfce can already create push buttons … that do **nothing**
+  when pressed, because pdfce authors no action on them and fires no trigger
+  for one."* **First clause now FALSE; second still true.** Engineer-owned —
+  reported as **owed work**, the same boundary this role held for
+  `docs/core-api/` in the 341st and 342nd filings. ★ **It is the document the
+  operator's own ruling CITED**, so it is the highest-traffic surviving copy.
+
+### Findings escalated to `D:/dev/rag/rust/` (3 new files + index)
+
+1. **`a_cache_key_that_must_be_computed_from_the_work_it_avoids_makes_every_hit_cost_the_work.md`** —
+   `Pass 181.0`'s self-defeating first fix. **A cache HIT cost 292 ms** because
+   the key was a digest of the decoded bytes and the decode was the larger
+   half. ★ **A correctness argument for a cache key says nothing about whether
+   the key is affordable, and the two look alike on the page.**
+2. **`a_counter_scoped_to_todays_carriers_under_reports_the_moment_a_new_carrier_ships.md`** —
+   the census. ★ **Third instance in this project, mint declined with its
+   warrant.** Includes the design half: ask the general question rather than
+   extend the enumeration.
+3. **`a_claim_about_what_a_program_can_never_do_ages_differently_from_a_claim_about_what_it_just_did.md`** —
+   why the doc correction was struck-and-dated in the core type and plainly
+   rewritten in the CLI strings. ★ **The distinction decides whether a
+   correction needs an audit trail or is just noise.**
+
+★ **Deliberately NOT written to `personal_rag/pdf`:** the six §12.7.5.2 payload
+facts and the sixteen spec negatives (including *`https` appears zero times in
+ISO 32000-1*). **Those are "what the standard says", which is
+`pdfce-spec-librarian`'s exclusive territory** (hard rule 6), and they are
+already in the spec corpus at `iso32000__s__12.7.5.2.md` §7 — which is where
+`Pass 183.0` read them from rather than recalling them. **Their implementation
+consequences are filed in `ROADMAP.md` instead.**
+
+### Git, CI and backup state — MEASURED, not inferred (hard rule 8)
+
+| fact | command | result |
+|---|---|---|
+| `HEAD` | `git log --oneline -1` | **`cff102a`** (`Pass 183.0`) |
+| working tree at filing start | `git status --porcelain` | ★ **one untracked file: `.tmp_bench.py`** — recorded as an observation, not an explanation (`R201`); nothing here claims to know what put it there or whether it is wanted |
+| divergence from `origin` | `git rev-list --count origin/main..HEAD` | **0** — everything through `cff102a` is pushed |
+| `v0.17.0` tag target | `git rev-list -n1 v0.17.0` | **`9281068`** |
+| CI at `cff102a` | `gh run list --limit 5` | ★★ **`in_progress` at filing time — NOT read as green and NOT read as red.** The two filing gates were red on it, which is what this filing discharges; **the engineer must read CI's colour from GitHub after this filing lands**, not from this line |
+| CI at `9281068` | same | **`success`** |
+| backup bundle | `ls -lt /d/Dev/pdfce-backups/` | newest **`pdfce-20260830-0940-9281068-full.bundle`**, **09:40**, at `9281068` |
+| bundle staleness | `git rev-list --count 9281068..HEAD` | ★★ **4 commits behind.** ★ **A bundle WAS taken since the 342nd filing** — that filing reported 8 behind and asked for one, and it happened. **The counter reset and has re-grown to 4** |
+| GUI-core separation | *not re-run this filing* | ★ **stated as not measured, NOT as clean.** No `Cargo.toml` moved in any of the four commits, so the invariant had no route to change |
+| public-facing scrub | `python tools/check-suite-name-absent.py` | **clean, exit 0** |
+| ledger uniqueness | `python tools/check-ledger-numbers.py` | **clean — no duplicate Pass, rule, or decision numbers** |
+
+### Ledger
+
+Pass ceiling `179.3` → **`183.0`**; next free `183.1` / new major `184.0`.
+Standing rules **`R235` unchanged**; next free `R236` (**one mint considered,
+declined, argued**). Decision ceiling `106` → **`107`** (minted this filing);
+next free `108`. `FEATURES.md`: **three rows changed** — one corrected, one
+moved *Planned* → *Implemented* and rewritten, one new *Planned* row. `Pass
+131.0` **narrowed** in *Backlog*. `v0.17.0` **completed**. Filing ordinal `342`
+→ **`343`**.
+
+### Still in flight
+
+- ★★★ **`docs/plan-scripting-submit-and-plugins.md` §0 carries a now-false
+  claim** — *"pdfce authors no action on them"*. **Engineer-owned; owed.** It
+  is the document the operator's ruling cited, so it is read.
+  ★★ **Measured at commit time by `git diff`, not assumed:** an **uncommitted**
+  working-tree edit by the engineer adds a *"PHASE 1 IS BUILT AND SHIPPED"*
+  banner to that file's **head** — **and §0's sentence is byte-unchanged.**
+  ⇒ **The correction reached the STATUS BLOCK and stopped short of the
+  PROSE**, the same shape as `Pass 174.10`'s correction that reached the
+  rustdoc and stopped three lines short of the only copy an operator reads.
+  **Still owed, and now with a specific target: §0's second clause, not the
+  header.**
+- ★★ **`Pass 131.0`'s remainder is REAL and is APPEARANCE work**, not action
+  work: `/AP` `/D` and `/MK` icon/label layout. Filed as a *Planned*
+  `FEATURES.md` row and as the narrowed Backlog entry.
+- **`Pass 131.1` (in-app dispatch, `R54` allow-list) and `Pass 131.2`
+  (`pdfceNet`) remain Backlog and untouched.** ★ **pdfce authors a declaration
+  and fires no trigger — that is still true after this filing and is the
+  sentence most likely to be assumed false.**
+- **`Pass 179.0` — the automatic bold ladder — is still `NOT STARTED`**, and is
+  still the only remaining item in the bold cluster. **Rung 2 does not exist.**
+  The cross-family rung is still **OPEN** and Acrobat cannot settle it.
+- ★★ **CI at `cff102a` was `in_progress` when this filing was written.** The
+  two filing gates were its known red; **this filing is the discharge**. **Read
+  the colour from GitHub after this filing's commit lands** — do not carry this
+  line forward as a result.
+- **Backup bundle is 4 commits behind** (`9281068`, 09:40). ★ **One was taken
+  since the 342nd filing's third consecutive ask** — the practice worked; the
+  counter has simply re-grown.
+- ★ **`.tmp_bench.py` is untracked in the working tree.** Almost certainly
+  `Pass 181.0`'s scratch benchmark. **Not deleted by this role, not committed** —
+  the engineer's to dispose of, and **the repository is public**, so it should
+  not land by a `git add -A`.
+- **`D:\dev\pdfceGUI` notification is now TEN items deep** — the eight carried
+  from the 339th–342nd filings, **plus (new)**: (9) **`EditSession` is `Send`
+  AND `Sync`** — their stated premise that it is not `Sync` is **wrong**, and
+  both the verb and their rebuild can run off the UI thread **today**, no engine
+  change needed; and (10) **`page_objects` memoises the decode + decomposition,
+  so the verb went 385 ms → 0 ms — but the post-edit rebuild (510 ms) REMAINS
+  and their option (A) is not available.** ★ **Item 9 is the one that changes
+  what they can do this week**, and item 10 is the one that prevents them
+  expecting a win that is not there.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+  open, a **ninth** filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — an **eighth** filing.
+- **The two broken markdown tables in `ROADMAP.md`** — the `a2`/`a3` row
+  (em-dash where a pipe belongs) and the soft-wrapped `Pass 48.3` row — **still
+  unrepaired, deliberately**, because the correct split is a guess about the
+  author's column intent. ★ **Line numbers deliberately not restated**: this
+  filing inserted well over a thousand lines above them. `grep` for the `a2`
+  row and for `` `Pass 48.3` | **GUI drag-and-drop image placement ``.
+
+### For next session
+
+1. **Push this filing, then read CI's colour from GitHub.** Both filing gates
+   should go green; `check-suite-name-absent.py` is **already clean**, measured
+   here. Pushing `main` is standing-authorized (decision `090`, *"always
+   push"*).
+2. ★ **Correct `docs/plan-scripting-submit-and-plugins.md` §0** — one false
+   clause, in the document the operator's own ruling cited. **Engineer-owned.**
+3. ★ **Send the `pdfceGUI` note — now TEN items**, and lead with **`EditSession`
+   is `Send` + `Sync`** and the **385 ms → 0 ms / 510 ms-remains** pair. Their
+   boundary finding is what produced `Pass 181.0`; they should get the answer.
+4. **Dispose of `.tmp_bench.py`** — commit it deliberately or delete it, but do
+   not let a `git add -A` publish it to a public repository.
+5. **Take a backup bundle** — 4 commits behind, measured.
+6. **`Pass 179.0`** is the next real engineering item in the bold cluster;
+   `Pass 131.0`'s appearance remainder is the next one in the forms cluster.

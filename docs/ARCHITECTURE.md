@@ -28035,3 +28035,107 @@ free 072.**
   two independent occurrences. `R235` stays the ceiling, next free `R236`.
   **`R90` is AMENDED, not minted**, in `ROADMAP.md`'s *Standing rules*, in this
   same filing.
+
+- **2026-08-30 — Decision `107`: pdfce NOW AUTHORS DECLARED `/A` ACTIONS ON
+  PUSH BUTTONS. DECISION `009` POSTURE A's *AUTHORING* BOUNDARY MOVED TWICE IN
+  ONE DAY, ON TWO OPERATOR RULINGS HOURS APART — AND THE POSTURE ITSELF DID
+  NOT MOVE AT ALL, BECAUSE POSTURE A IS ABOUT EXECUTION AND THIS IS ABOUT
+  WRITING BYTES.** Filed in the **343rd filing** (librarian; a shell was held
+  and used; **no code was written in this filing**). Shipped as `Pass 182.0`
+  (`bc49a8e`) and `Pass 183.0` (`cff102a`); `ROADMAP.md`'s *Shipped* section
+  carries the engineering detail and is not restated here.
+
+  **★★★ THE TWO RULINGS, VERBATIM AND DATED.**
+
+  **Ruling 1 (Ken, 2026-08-30):**
+
+  > *"a reset button should actually reset."*
+
+  **Ruling 2 (Ken, 2026-08-30, hours later, same day):**
+
+  > *"I am telling you to make the submit and other options that don't need
+  > javascript available for buttons with the safeguards like we had planned."*
+
+  **★★ WHY THIS IS ONE RECORD AND NOT TWO, AND WHY IT IS A NEW RECORD RATHER
+  THAN AN AMENDMENT TO `009`.** Decision `106`'s own amendment set the
+  precedent for the first half — *same operator, same conversation, same
+  capability, hours apart: one decision arriving in two sentences.* Filing
+  ruling 2 as `108` would leave `107` standing in the corpus as *"only Reset is
+  ever authored"*, which is the reading it would invite and which is **wrong
+  within the same day.** The second half is the opposite call from `106`'s:
+  **this is NOT an amendment to decision `009`**, because `009` decides what
+  pdfce **EXECUTES** and nothing about execution changed. Folding an authoring
+  decision into an execution record is how a future session comes to believe
+  the JavaScript posture moved. ⇒ **`009` is cited, not edited.**
+
+  **★★★ THE BOUNDARY, STATED PLAINLY, BECAUSE THE WORD "SUBMIT" WILL MAKE A
+  FUTURE AUDIT ASSUME OTHERWISE.**
+
+  | | before | after |
+  |---|---|---|
+  | pdfce **recognises** an `/A` action | ✅ every subtype (`classify_action_hazard_dict`) | unchanged |
+  | pdfce **preserves** an `/A` action byte-exactly through save | ✅ incremental **and** full rewrite, measured | unchanged |
+  | pdfce **authors** an `/A` action | ❌ **none, of any kind** — measured, not recalled: a `grep` for an `/A` insert across `pdfce-core` returned three hits and all three were unrelated | ✅ **`/ResetForm`, `/SubmitForm`, `/GoTo`, `/Named`, `/URI`** |
+  | pdfce authors `/JavaScript` or `/Launch` | ❌ | ❌ **refused by name, permanently** (`R53`, `R13`) |
+  | pdfce **FIRES** a trigger | ❌ | ❌ **UNCHANGED — `R54` is not engaged and its decision-`088` amendment is NOT relied on** |
+  | pdfce opens a network connection | ❌ | ❌ **UNCHANGED — `R12` is not engaged; no network code exists in any crate touched, `no-network` green** |
+  | **creating** a button authors an action | ❌ | ❌ **UNCHANGED, deliberately** |
+
+  **★★ THE ONE INVARIANT THAT SURVIVED BOTH RULINGS INTACT, AND IT IS THE ONE
+  WORTH PROTECTING: CREATION STAYS INERT.** `add_push_button` is untouched.
+  Giving a button behaviour is a **separate, named, undoable command a shell
+  must go out of its way to call**. A button that gained an action **as a side
+  effect of being DRAWN** is precisely the hazard posture A exists to prevent,
+  and neither ruling asked for it. **A future session that "simplifies" this by
+  letting creation take an action parameter has undone the decision without
+  noticing it existed.**
+
+  **★★ WHAT MADE THE OVERRIDE CHEAP, AND IT IS THE REUSABLE PART.**
+  `Pass 182.0` refused `/SubmitForm` **by omission**, and **wrote in the enum's
+  own doc block that a future variant would be a DECISION rather than an
+  omission, and that a new one must name the operator sentence authorising
+  it.** Hours later ruling 2 did exactly that. ⇒ **A refusal recorded with the
+  shape of its own overturn cost a design conversation instead of a rewrite.**
+  Contrast a refusal recorded as a bare absence, which the next session cannot
+  distinguish from an oversight and either re-argues from scratch or "fixes"
+  silently.
+
+  **★ RULE 4 (fuzzy, never sneaky) — HOW IT BINDS HERE.** Nothing is inferred
+  and nothing is provisional, so decision `059`'s prohibitions do not bite:
+  there is **no accept/reject gate, no provisional marking, and nothing renders
+  differently.** What rule 4 *does* require is **non-silence about what the
+  operator cannot see**, and a submit's payload is the purest case of that —
+  hidden fields, `Password` values, the document's own local path and trailer
+  `/ID` are all transmitted and are otherwise undetectable. The disclosure is
+  **off-canvas by construction** (a CLI report; `ButtonActionChange::submit`
+  for a shell) and is **always shown, never one gesture away**.
+
+  **★ CONFORMANCE COST, NAMED RATHER THAN IMPLIED.** ISO 32000-1 imposes **no**
+  consent, privacy, TLS, redirect, timeout or size rule on `/SubmitForm`, and
+  **`https` appears zero times in the standard.** ⇒ **Every safety control here
+  is pdfce's own product decision.** Destination policy is **open by operator
+  ruling** (O4) — `http` is **allowed and said**, never blocked, because
+  refusing it would be pdfce inventing a conformance requirement. What *is*
+  refused (relative, non-ASCII, empty destinations) is refused for
+  **decidability**, not for who is at the other end: **a disclosure whose
+  subject is undecidable is worse than none.** **This is not a whitelist and
+  must not be recorded as one.**
+
+  **Body-section counterpart: none required.** No crate boundary is redrawn and
+  no §4.2 published guarantee moves; §4.1 was retired 2026-08-29 (decision
+  `102`), so a hand-maintained second account of `ButtonAction`'s surface here
+  would be `R232`'s next instance. **The living account is `docs/core-api/`**
+  (`02-editing-and-saving.md` §1.12b, added in `cff102a` — engineer-owned) and
+  the types' own doc comments.
+
+  **GUI-core separation:** **not re-verified and NOT claimed** — no code was
+  written in this filing, no crate manifest was touched by either Pass, and no
+  dependency was added, so `cargo tree` was neither run nor asserted (hard
+  rule 8).
+
+  **Decision ceiling moves `106` → `107`; next free `108`. No standing rule
+  minted** — `R235` stays the ceiling, next free `R236`. ★ **One mint was
+  considered and DECLINED with its argument recorded** (the
+  under-reporting-census class, third instance; see `ROADMAP.md`'s `Pass 183.0`
+  entry, Finding 1), on the standing warrant that **no mechanical gate can
+  content-check a census's own completeness.**

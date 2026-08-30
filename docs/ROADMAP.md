@@ -96,6 +96,737 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 183.0` (`cff102a`, 2026-08-30) — **SUBMIT, AND EVERY OTHER BUTTON ACTION THAT NEEDS NO JAVASCRIPT** — ★★★ **THIS DELIVERS `Pass 131.0`, WHICH IS THEREFORE NARROWED IN *Backlog* TO ITS TWO GENUINELY UNBUILT ITEMS RATHER THAN LEFT CLAIMING WORK THAT HAS SHIPPED** — ★★ **A CENSUS WENT FROM COMPLETE TO UNDER-REPORTING INSIDE THIS ONE COMMIT AND WAS CAUGHT WHILE IMPLEMENTING, NOT AFTERWARDS — THIRD INSTANCE OF THAT SHAPE HERE** — ★ **`R54` IS NOT ENGAGED AND `R12` IS NOT ENGAGED, AND THIS ENTRY SAYS SO IN PLAIN WORDS BECAUSE A READER WHO SEES "SUBMIT" IN A PASS TITLE WILL REASONABLY ASSUME OTHERWISE** — filed 2026-08-30 (343rd filing)
+
+**Sourcing — `R228`.** This filing held a shell and used it. **Run here, not
+relayed:** `python tools/check-commits-filed.py`, `python
+tools/check-passes-filed.py`, `python tools/check-ledger-numbers.py`, `python
+tools/check-suite-name-absent.py`, `git log`/`git show`/`git diff
+--shortstat`/`git status --porcelain`/`git rev-list --count`/`git tag --list`,
+`gh release list --limit 3`, `gh run list --limit 5`,
+`ls -lt /d/Dev/pdfce-backups/`, plus a `grep` over live `crates/` source for
+`non_link_annotations` and a `#[test]` count of
+`crates/pdfce-core/tests/button_action_submit.rs` (**19**, counted here, not
+carried from the dispatch). **Relayed and NOT re-run:** `cargo test --workspace
+--all-features`, `cargo fmt --check`, `cargo clippy --workspace --all-targets
+-- -D warnings`, `bash tools/run-gates.sh`, and every end-to-end binary
+measurement quoted below.
+
+#### ★★★ THE OPERATOR RULING, AND WHY THE PHRASE IN IT IS A CITATION
+
+**Ken, 2026-08-30, hours after the ruling that produced `Pass 182.0`,
+verbatim:**
+
+> *"I am telling you to make the submit and other options that don't need
+> javascript available for buttons with the safeguards like we had planned."*
+
+`Pass 182.0` had refused `/SubmitForm` **by omission**, on the shell's own
+argument — *a submit is a network capability wearing a form control's
+clothes*. **This ruling overrides that.**
+
+★ **"The safeguards like we had planned" is a CITATION, not a general
+instruction.** It resolves to `docs/plan-scripting-submit-and-plugins.md`,
+whose §8 **Phase 1** is filed in this document as **`Pass 131.0`**. The
+engineer read it that way and built to it, which is why this entry can
+discharge a Backlog item rather than merely resemble one.
+
+★★ **Three of the plan's four safeguard rungs are UNREACHABLE from an
+authoring Pass** — pdfce authors a declaration and honours nothing, has no
+network code, and fires no trigger. **What survives into authoring is rung 3,
+the payload disclosure**, and it turns out to be the rung with the most in it.
+
+#### ★★★ THE `Pass 131.0` RELATIONSHIP, RESOLVED HERE RATHER THAN LEFT FOR A READER TO NOTICE
+
+⇒ **`Pass 183.0` DELIVERS `Pass 131.0`.** Two entries describing one body of
+work is the exact drift `FEATURES.md`'s maintenance contract exists to stop,
+so it is settled in this filing, in both documents, in one place each.
+
+| `Pass 131.0`'s acceptance list | disposition |
+|---|---|
+| `/ResetForm` (Table 238 `/Fields` + Table 239 `Include`/`Exclude`) | **SHIPPED** — `Pass 182.0` (`bc49a8e`) |
+| `/GoTo`, in-document, riding `pageops/references.rs` so page ops keep destinations correct | **SHIPPED** — `Pass 183.0`, and it is what broke the census below |
+| `/Named` (`NextPage`/`PrevPage`/`FirstPage`/`LastPage`) | **SHIPPED** — `Pass 183.0` |
+| `/URI`, authored as data only, never followed, disclosed | **SHIPPED** — `Pass 183.0` |
+| `/SubmitForm`, authored as data | **SHIPPED** — `Pass 183.0`, with the payload disclosure the plan's rung 3 named |
+| `/JavaScript` and `/Launch` refused by name, permanently | **HELD** — refused by name in the type's own doc block, unchanged |
+| **`/AP` `/D` — the pressed appearance** | ★ **NOT BUILT** |
+| **`/MK` icon and label layout** | ★ **NOT BUILT** |
+
+**`Pass 131.0` is therefore NARROWED in *Backlog*, not deleted**, and its
+remaining text is exactly those two items — *a button looks like a button when
+held*. That is a **rendering/appearance** obligation, not an action-authoring
+one, and nothing in this Pass touched it. **Anyone reading the narrowed entry
+gets the truth in one line; anyone reading this entry gets the accounting.**
+
+**`Pass 131.1` (honouring an action in-app — the `R54` dispatch allow-list) is
+UNTOUCHED and still *Backlog*. `Pass 131.2` (`pdfceNet`) likewise.** pdfce
+authors a declaration and fires no trigger.
+
+#### ★★ THE TWO STANDING RULES A READER WILL ASSUME WERE ENGAGED, AND WERE NOT
+
+Stated in plain words at the engineer's own request, because *"submit"* in a
+Pass title is exactly the sort of word that makes a future audit assume a rule
+moved.
+
+| rule | why a reader assumes it | **why it is NOT engaged** |
+|---|---|---|
+| **`R54`** — *"no trigger event ever fires"* | the Pass authors `/SubmitForm`, `/GoTo`, `/Named`, `/URI` | ★ **authoring is writing bytes.** No trigger is dispatched anywhere in this Pass; the honouring half is `Pass 131.1`, still unbuilt. **`R54`'s decision-`088` amendment is NOT relied on** — the Pass would be identical if that amendment had never been filed |
+| **`R12`** — the network prohibition | the word *submit* | ★ **no network code exists in any crate this Pass touched**, and the `no-network` CI job is green. `crates/pdfce-fetch` remains what `Pass 131.2`'s entry says it is: a workspace member **no shell links** |
+
+⇒ **What shipped is a FILE-FORMAT capability.** pdfce writes a declaration a
+*viewer* will act on, and pdfce itself does nothing with it.
+
+#### ★★★ FINDING 1 — A CENSUS THAT WENT FROM COMPLETE TO UNDER-REPORTING INSIDE ONE COMMIT
+
+`pageops::references::census_dangling` walked **`/Link` annotations only**.
+
+★ **That was COMPLETE, and correct, right up until a push button could carry a
+`/GoTo` — which is the thing this Pass makes possible.** The commit that
+introduced the new carrier would, unchanged, have made its own census
+under-report **in the same commit**.
+
+**Caught while implementing, not afterwards**, and fixed in the general
+direction rather than the local one: **ask every annotation subtype** rather
+than add `/Widget` to the list and wait for the next carrier to arrive.
+
+- New field **`DanglingReport::non_link_annotations`**
+  (`crates/pdfce-core/src/pageops/references.rs:361`, read live here), kept
+  **separate** from `links` — **because the operator sentence differs**: *"a
+  link goes nowhere"* and *"a button on the form stopped working"* are
+  different reports to a person, and folding them into one counter would make
+  the second unsayable.
+- `is_clean()` accounts for it (`references.rs:382`), so the new class cannot
+  be silently excluded from the clean verdict.
+- **`delete-pages` surfaces it** (`crates/pdfce-cli/src/main.rs:32831`,
+  `:32849`).
+
+★★ **SAME SHAPE AS `Pass 133.0`'s `/A`-VERSUS-`/AA` NETWORK-HAZARD
+BLINDNESS**, and the reason it is worth naming twice: **an under-reporting
+counter reads exactly like a clean bill of health.** There is no natural
+alarm — nothing fails, the number is small, and small is what the reader
+wanted.
+
+**Disposition — NO RULE MINTED, and the decline is argued rather than
+assumed.** This is at least the **third** instance of the class in this
+project (`Pass 133.0`; `check-outcome-disclosed.py`'s too-narrow **input list**
+on 2026-08-19; and this). ★ **The mint is declined on the same warrant three
+prior mint requests were declined on: no mechanical gate can content-check a
+census's own completeness**, because such a gate would have to already know the
+set of carriers — the very fact the census exists to establish. What *would*
+have caught this is what did catch it: **the engineer noticing that the commit
+adding a carrier is the commit that must widen the counter.** ⇒ **Recorded as
+a third instance in hard rule 11's neighbourhood, with the trigger stated so
+the next session does not re-derive the bar: a FOURTH instance whose fix is
+mechanically checkable warrants the mint.**
+
+#### ★★ FINDING 2 — SIX PAYLOAD FACTS A NAIVE DISCLOSURE GETS WRONG (§12.7.5.2)
+
+All read from the spec corpus (`iso32000__s__12.7.5.2.md` §7), **not
+recalled**. Filed here because the *implementation* consequence is this
+project's, even though the *statements themselves* are the spec-librarian's
+territory (hard rule 6) and are **not** copied into `personal_rag/pdf`.
+
+| # | fact | why a naive disclosure gets it wrong |
+|---|---|---|
+| 1 | **Hidden fields ARE submitted** | `Hidden` is an **annotation** flag; every submit selector addresses **field** dictionaries. ★ **Different objects** — not a spec silence to interpret |
+| 2 | **`Password` values ARE submitted** | that flag's NOTE constrains **storage**, not transmission |
+| 3 | **The baseline `/Flags 0` payload already ships the source document's local PATH and the trailer `/ID`** | "nothing configured" reads as "nothing extra sent". `ExclFKey` (bit 12) is the **only** privacy-narrowing bit in the entire flag word |
+| 4 | **A `FileSelect` text field submits THE CONTENTS OF A LOCAL FILE** | a field that looks like text is an upload |
+| 5 | **`IncludeAppendSaves` (bit 7) turns a submit into a SAVE** | an incremental update `shall` be written immediately before transmission; the payload is **every byte since the document was opened, signatures included** |
+| 6 | **`SubmitPDF` (bit 9) ignores `/Fields` entirely** | there is no partial-PDF submission, so a **field count** there would understate — ★ **in the reassuring direction**. The disclosure is categorical instead |
+
+★★★ **`NoExport` HAS EXPLICIT PRECEDENCE OVER BOTH `/Fields` AND THE
+`Include`/`Exclude` FLAG, SO IT IS APPLIED LAST.** An implementation that
+applies it earlier **exports a field its author marked non-exportable, and does
+it silently**. **Sabotage-checked**: honouring it only in the no-array case is
+caught.
+
+#### ★★ FINDING 3 — A SPEC-DERIVED API SHAPE WORTH REUSING: THE FLAG WORD IS A TYPE, NOT A `u32`
+
+**Nine of Table 237's flags carry a *"shall be used only when…"* gate, and NOT
+ONE states what a reader does when the gate is violated.** ⇒ a file that breaks
+one is **non-conforming with no defined outcome** — the worst kind of value to
+make easy to write.
+
+- Modelling the flag word as a `u32` of bools would make **a dozen
+  non-conforming files trivially authorable**.
+- Modelling **format selection as an enum** — `SubmitFormat` =
+  `Fdf(FdfOptions)` / `Html { get, coordinates }` / `Xfdf` / `WholeDocument` —
+  makes **most of the gates unrepresentable**: `--submit-get` has nowhere to
+  live in an FDF submit. The precedence chain the enum encodes is the spec's
+  own, stated with a `shall`: **`SubmitPDF` > `XFDF` > `ExportFormat`**.
+- The one gate a type could not close — `ExclNonUserAnnots` without
+  `IncludeAnnotations` — is **refused by name**.
+- ★★ **The one genuine internal contradiction is refused BY OMISSION, with the
+  reasoning recorded in the type's own doc block rather than left as an
+  apparent gap.** `SubmitPDF` + `GetMethod`: bit 9 contemplates `/Flags 264`,
+  bit 4 forbids it with a `shall`, **no stated precedence**. Both spellings are
+  non-conforming under one clause or the other, so `WholeDocument` is
+  **POST-only**. ★ **An omission that explains itself is a decision; an
+  omission that does not is a defect waiting to be "fixed".**
+- **`/Flags` is written EXPLICITLY even at `0`**, because `0` means
+  *FDF-by-POST* — **a decision the standard makes, not an absence of one**.
+- **`/F` is a FILESPEC DICTIONARY, never a bare string.** Table 236 types it as
+  a file specification and constrains it to a URL **only in prose**; 7.11.1
+  lets a file specification be a bare string, and a bare string is a
+  **file-system path** by 7.11.2, **with no reader rule stated for that case**.
+  pdfce writes `<< /Type /Filespec /FS /URL /F (…) >>`, 13.3's minimum
+  conformant object. ★ **The convenient spelling is the ambiguous one.**
+
+#### ★★★ FINDING 4 — EVERY SAFETY CONTROL HERE IS pdfce's, NOT THE STANDARD'S
+
+The §12.7.5.2 ingestion recorded **sixteen explicit negatives**: no consent
+rule, no privacy rule, no TLS rule, no redirect rule, no timeout, no size
+limit — and **`https` appears ZERO times in ISO 32000-1**.
+
+⇒ **The payload disclosure is a PRODUCT decision with a named conformance
+cost**, and this entry says so rather than letting it read as compliance.
+
+**What is NOT refused — and this must not be recorded as a whitelist:**
+
+- **No host, scheme or port is refused anywhere.** Destination policy is
+  **open by operator ruling** (O4, *"wherever the document's author said"*).
+- **`http` is ALLOWED and SAID, never blocked** — refusing it would be pdfce
+  **inventing a conformance requirement** the standard does not contain.
+
+**What IS refused is refused for DECIDABILITY, not for who is at the other
+end** — a destination pdfce cannot *state*:
+
+| refused | why |
+|---|---|
+| **relative** | 7.11.2.2 resolves it against the document's own location, and ISO issue #256 records readers disagreeing about `/Base` badly enough that *"only the host portion gets used"* in some |
+| **non-ASCII** | 7.11.5 requires RFC 1738 encoding; PDF 2.0 then calls `/URI` an ASCII string in one column and UTF-8 in the next |
+| **empty** | there is nothing to state |
+
+★ **A disclosure whose subject is undecidable is worse than none.**
+`/JavaScript` and `/Launch` stay refused **permanently, by name**.
+
+#### ★★ WHERE pdfce EXCEEDS ACROBAT, WITH THE MEASUREMENT BESIDE IT
+
+**Acrobat's own submit warning was MEASURED on the local Reader on
+2026-08-26** and names **scheme and host ONLY** — **not the port, not the
+path** — and says **nothing whatever about the payload**. Its own hover tooltip
+is more informative than its security prompt.
+
+**pdfce states the full URL and the payload**, computed **at the moment the
+button is written, because that is the moment a person is deciding**
+(`ButtonActionChange::submit -> Option<SubmitDisclosure>`).
+
+★ **`SubmitDisclosure` was added to `tools/check-outcome-disclosed.py`'s
+list**, which is how that gate grows. The engineer's reason is worth preserving
+verbatim: **every field describes something the operator cannot otherwise see,
+so a field no shell reads is not an unstated number — it is an undisclosed
+exfiltration.**
+
+#### ★ FINDING 5 — A DOC CLAIM THAT AGED INTO A FALSEHOOD, THREE COPIES, FOUND BY RUNNING THE BINARY
+
+*"pdfce recognises and preserves actions but never authors one"* — **false
+since `Pass 182.0`**, roughly two hours earlier.
+
+| # | copy | channel |
+|---|---|---|
+| 1 | `add-push-button`'s `--help` | ★ in clap-derive a `///` **is** the shipped UI |
+| 2 | `add-push-button`'s **runtime disclosure line** | the only copy an operator reads on a real run |
+| 3 | `FieldAuthorOutcome::push_button_inert`'s doc block — *"there is no state in which a pdfce-authored push button HAS an action"* | the contract a shell builds against |
+
+**The FLAG is unchanged and still always true for a *created* button.** Only
+the sentences were wrong. All three now point at `set-button-action`.
+
+★★ **The correction is RECORDED rather than silently rewritten, and the reason
+is the reusable part: a claim about what pdfce can NEVER do ages differently
+from a claim about what it DID on this call.** The first is a standing promise
+a reader plans around; the second is a receipt. **Struck-and-dated is right for
+the first and noise for the second.**
+
+★ **Found by RUNNING THE RELEASE BINARY, not by review** — the same instrument
+that found `Pass 178.2`'s fourth instance in about a minute.
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string (clause (e): narrow the file set, widen the pattern)
+
+Grepped **case-insensitively** for the bare keywords `inert`, `never author`,
+`authors no`, `does not author`, `no /A` over `docs/`, `tools/` and `.claude/`,
+and **read every hit** rather than matching the engineer's exact phrasing.
+
+**Survivors found and CORRECTED in this filing:**
+
+| # | location | what it claimed | disposition |
+|---|---|---|---|
+| **1** | `docs/FEATURES.md`, field-creation row | *"Every push button pdfce creates is inert — **no `/A` action is authored on any field anywhere in pdfce**"* | ★ **THE FOURTH COPY** of the claim the engineer found three of. First half **true and deliberate** (creation is still inert); second half **false since `Pass 182.0`**. **Corrected this filing** |
+| **2** | `docs/ROADMAP.md`, the `Pass 131.0`–`131.4` Backlog block | *"pdfce authors no `/A` action on any field and dispatches no trigger for one"* | **Corrected this filing, in place, with the original kept legible** — it was the scoping insight that split five Passes out of one question, and deleting it would remove the reason those five exist |
+
+**Survivors found and DELIBERATELY LEFT — recorded per clause (e) so the next
+sweep does not "fix" them:**
+
+- **`docs/ARCHITECTURE.md`, decision `088`'s record** — *"Scoping 'make push
+  buttons work' for the operator surfaced that pdfce authors no `/A` action on
+  anything."* ★ **Correct as dated.** It is an account of what a **2026-08-26**
+  scoping *surfaced*, inside an **append-only** decision record. **Do not
+  "correct" a dated measurement into agreement with today** — the same ruling
+  the 342nd filing made about decision `106`'s own measurement list.
+- **`docs/decisions/020-form-field-authoring.md`** — *"creation authors no
+  action"* and *"F3 authors none"*. **Still true**: both are about **creation**
+  and about **`/AA` copy**, neither of which this Pass moved.
+- **`docs/ROADMAP.md`'s `/AA`-exclusion note** (*"F3 authors no action, and
+  copying one would…"*) — **still true, same reason.**
+
+**Survivor REPORTED, not edited — outside this role's remit:**
+
+- ★ **`docs/plan-scripting-submit-and-plugins.md` §0, *Reader's
+  orientation*** — *"pdfce can already create push buttons that are
+  structurally correct in every viewer and that do **nothing** when pressed,
+  because pdfce authors no action on them and fires no trigger for one."*
+  **The first clause is now FALSE**; the second remains true. That document is
+  **engineer-owned** and is reported as **owed work**, not edited here — the
+  same boundary this role held for `docs/core-api/` in the 341st and 342nd
+  filings.
+  ★★ **MEASURED AT COMMIT TIME, and it sharpens the report rather than
+  retiring it:** `git diff` shows an **uncommitted working-tree edit** to that
+  file by the engineer, adding a *"PHASE 1 IS BUILT AND SHIPPED"* status
+  banner at the head — **and §0's sentence is byte-unchanged.** ⇒ **The
+  correction reached the document's STATUS BLOCK and stopped short of its
+  PROSE**, which is this project's recurring shape (`Pass 174.10`: a
+  correction that reached the rustdoc and stopped **three lines short** of the
+  only copy an operator reads). **Reported, not edited — the file is
+  engineer-owned and was mid-edit by its owner while this filing was being
+  written.**
+
+#### Verification
+
+**Relayed from `cff102a`, not re-run this filing:**
+
+- `cargo test --workspace --all-features` — **green**, including **19 new core
+  tests** in `crates/pdfce-core/tests/button_action_submit.rs`. ★ **19 counted
+  here** by `grep -c '#\[test\]'` on the live file, not taken from the dispatch.
+- **Four sabotages, all four caught**: the `NoExport`-last ordering; Table 237
+  bit 1 (`Include`/`Exclude`); the *push-buttons-ride-only-when-`/Fields`-is-
+  present* rule; and the relative-destination refusal.
+- `cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D
+  warnings` — **clean**.
+- `bash tools/run-gates.sh` — **red only on the two filing gates**, i.e. on
+  **exactly this filing**. `check-string-gaps.sh` was also red on a
+  **pre-existing** gap from `Pass 181.0`, and is **fixed in `cff102a`**.
+- **GUI-core separation and `no-network`: untouched — no dependency changed in
+  any crate**, so the invariant had no route to move. ★ **Stated as
+  not-re-measured, NOT as clean** (hard rule 8).
+
+**MEASURED END TO END on the shipped RELEASE binary**, not merely in unit
+tests. The list is filed because a **negative** result is the expensive one to
+re-derive:
+
+| probe | result |
+|---|---|
+| `add-push-button`, then a submit to `https://forms.example.com:8443/collect?x=1` | discloses the **full URL, WITH port and path** |
+| `--submit-format pdf` | prints the **categorical** sentence and **no count** |
+| a **relative** destination | refused **by name**, nothing written |
+| an **out-of-range page** | refused by name, nothing written |
+| an **FDF-only flag on an HTML submit** | refused by name, nothing written |
+| a **submit flag given WITHOUT `--submit`** | refused by name, nothing written |
+| `--clear` | reports `replaced=URI` |
+| `list-fields` on the result | reports the submit as a **network action** — ★ **`Pass 133.0`'s repair agreeing with this Pass's authoring** |
+
+**Diffstat, read here from `git diff --shortstat cff102a^ cff102a`:** **9
+files, +2,428 / −87** — `crates/pdfce-core/src/edit.rs` (+1,098),
+`crates/pdfce-core/tests/button_action_submit.rs` (+691),
+`crates/pdfce-cli/src/main.rs` (+610),
+`crates/pdfce-core/src/pageops/references.rs` (41 lines — the census),
+`crates/pdfce-core/tests/form_push_buttons.rs`,
+`crates/pdfce-core/tests/edit_latency.rs`,
+`docs/core-api/02-editing-and-saving.md` (+54), `docs/core-api/index.md`,
+`tools/check-outcome-disclosed.py` (+7).
+
+**`docs/core-api/` — engineer-owned; recorded here for completeness and NOT
+edited by this role.** `02-editing-and-saving.md` gained **§1.12b**, the block
+a consuming shell must read before wiring a submit control, and `index.md`'s
+counts were updated to **107 `EditError` variants · 3,871 lines · 98 clauses**
+— ★ **read live from `index.md` in this filing and confirmed to match.**
+`tools/check-core-api-verbs.py` passes.
+
+---
+
+### `Pass 182.0` (`bc49a8e`, 2026-08-30) — **A RESET BUTTON THAT ACTUALLY RESETS: decision `009` POSTURE A MOVED EXACTLY ONE NOTCH, ON AN OPERATOR RULING** — ★★★ **THE ANSWER TO WHAT HE ACTUALLY ASKED WAS NOT WHAT ANYONE ASSUMED — MEASURED, NOT RECALLED: pdfce AUTHORED NO ACTION OF ANY KIND, AND THE REASSURING HALF (IT RECOGNISES AND PRESERVES EVERY KIND) IS ALSO MEASURED** — ★★ **CREATION IS DELIBERATELY LEFT INERT: A BUTTON THAT GAINED BEHAVIOUR AS A SIDE EFFECT OF BEING *DRAWN* IS EXACTLY WHAT POSTURE A PROTECTS AGAINST** — ★ **AND THE REFUSAL IT SHIPPED WAS WRITTEN IN A FORM THAT TOLD THE NEXT SESSION HOW TO OVERTURN IT, WHICH IS WHY `Pass 183.0` COST A CONVERSATION AND NOT A REWRITE** — filed 2026-08-30 (343rd filing)
+
+**Operator, 2026-08-30, verbatim: *"a reset button should actually reset."***
+
+`add_push_button` had **always** authored a valid button that does **nothing**,
+and `push_button_inert` said so on every creation. ★ **That was deliberate, not
+an oversight**: `/A` reaches launch actions, network submits, embedded-file
+opens and JavaScript, and pdfce authored none of them. **The consuming shell
+put the question back rather than working around it**, and the operator
+answered.
+
+    EditSession::set_button_action(fqn, Option<ButtonAction>)
+        -> Result<ButtonActionChange, EditError>
+    pdfce-cli set-button-action --name B (--reset | --reset-only A,B
+                                         | --reset-except A,B | --clear)
+
+#### ★★★ FIRST, THE ANSWER TO THE QUESTION HE ACTUALLY ASKED
+
+He asked whether the **other non-JavaScript button actions were already built**.
+
+**MEASURED, not recalled: pdfce authored NO action of any kind.** Not Reset,
+not navigation, not show/hide, not links. A `grep` for an `/A` insert across
+`pdfce-core` returned **three hits, and all three were unrelated** — a
+`/Measure` area array and two ce-dimension sidecar point arrays.
+
+★ **The reassuring half is true and is ALSO measured.** pdfce **recognises**
+every action type (`classify_action_hazard_dict` covers `GoTo`, `GoToDp`,
+`Hide`, `ResetForm`, `SetOCGState`, `Trans`, `GoTo3DView` and the rest) and
+**preserves** them: a hand-built form carrying `/A << /S /ResetForm >>`
+round-trips **with the action intact through BOTH an incremental save and a
+full rewrite**, verified on the shipped binary. ⇒ **Buttons in somebody else's
+form kept working when pdfce saved it. Only pdfce's OWN were inert.**
+
+**Both halves are filed, because a question answered with only the alarming
+half produces a different decision than the truth would have.**
+
+#### WHAT IS AND IS NOT AUTHORED — AND THE OMISSION THAT LASTED HOURS
+
+**`/ResetForm` only.** `/SubmitForm` was **refused by omission, on the shell's
+own argument rather than over its objection** — *its purpose is to send data
+somewhere, a network capability wearing a form control's clothes, and no shell
+can audit a URL an operator types.* `/JavaScript` is `NF4`, unchanged.
+
+★★ **The enum's docs said a future variant is a DECISION, not an omission, and
+that a new one should name the operator sentence that authorises it. Hours
+later `Pass 183.0` did exactly that.** ⇒ **The refusal was written in a form
+that told the next session how to overturn it**, which is why the override cost
+a design conversation and not a rewrite. **That is the reusable move here, and
+it is worth more than the refusal it recorded.**
+
+#### ON AN EXISTING BUTTON, DELIBERATELY
+
+**`NewPushButton` is untouched; creation still authors an inert button.**
+Giving one behaviour is a **separate, named, undoable command a shell must go
+out of its way to call.** ★ **A button that gained an action as a side effect of
+being DRAWN is exactly what decision `009` posture A protects against**, and
+that boundary survives this Pass intact.
+
+#### ★★ THREE PLACES THE SPEC SAYS SOMETHING A PLAUSIBLE IMPLEMENTATION GETS WRONG (§12.7.5.3, Tables 238–239, read from the corpus rather than recalled)
+
+1. **`ResetScope::All` OMITS `/Fields`.** *"If this entry is omitted, the
+   Include/Exclude flag shall be ignored; all fields … are reset."* ★ An
+   **empty array** would mean *"reset exactly these zero fields"* — **the
+   opposite of what was asked for, and a button that silently does nothing.**
+   The test asserts the **ABSENCE**, which is the only assertion that can catch
+   it.
+2. **`Only` and `Except` differ by ONE INTEGER** — Table 239 bit 1 — **and it
+   inverts the meaning**: clear = *reset these*, set = *reset everything except
+   these*. **Sabotaging that one line makes `Except` reset precisely the fields
+   it was meant to spare**; one test catches it.
+3. **`/Fields` is written as TEXT STRINGS, not indirect references.** The entry
+   permits either, mixed. ★ **A name survives the field being rewritten,
+   renumbered or copied into another document; a reference does not** — and
+   this project's clipboard work (`Pass 167.0`–`173.1`) **re-parents fields
+   between documents routinely.**
+
+#### REFUSALS, ALL BEFORE ANY WRITE
+
+- **A non-push-button** (`ButtonActionWrongFieldType`) — an `/A` on a text
+  field is **legal PDF**, and is behaviour an operator **cannot see and did not
+  ask for**.
+- **A reset target that does not exist** — the same discipline `reset_form`
+  already uses, *because a button pointing at a missing field does less than it
+  says, and the operator finds out by clicking it somewhere else.*
+
+#### ★ `replaced` NAMES WHAT WAS DESTROYED, AND IS A STRING FOR A REASON
+
+`Option<ButtonAction>` would make **a removed JavaScript action
+inexpressible** and force it to be reported as `None` — as *"there was nothing
+there"*. **A form editor opening somebody else's document needs to know it
+deleted a script, even though pdfce will not write one back.** ⇒ **The
+reporting type is deliberately WIDER than the authoring type.**
+
+#### Verification
+
+**Relayed from `bc49a8e`, not re-run this filing.** `cargo test --workspace
+--all-features` **green**; **7 core tests**, sabotage-checked on the
+`Include`/`Exclude` flag; `cargo fmt --check` and `clippy` **clean**;
+`check-clap-help` (**124 subcommands**), `check-cli-help-leads`,
+`check-outcome-disclosed` and `check-core-api-verbs` **all PASS**.
+
+**MEASURED END TO END on the shipped binary:** an inert button goes
+`annot_actions=0` → `1` with `js_actions_anywhere=0`; the bytes carry
+`/S /ResetForm`; `--clear` reports `replaced=ResetForm`; and ★ **the reset the
+button now declares is the one pdfce itself performs** — `reset-form` takes the
+field from *typed* to *factory* and **skips the button as a pushbutton**.
+
+**Diffstat, read here from `git diff --shortstat bc49a8e^ bc49a8e`:** **5
+files, +798 / −4** — `crates/pdfce-core/src/edit.rs` (+293),
+`crates/pdfce-core/tests/button_action.rs` (+295),
+`crates/pdfce-cli/src/main.rs` (+167),
+`docs/core-api/02-editing-and-saving.md` (+45), `docs/core-api/index.md`.
+**`docs/core-api` also gained `page_objects` from `Pass 181.0`** — its
+measurement table and the `Send + Sync` note the shell needed — recorded here
+because that is where a reader will go looking for it.
+
+---
+
+### `Pass 181.0` (`a24868e`, 2026-08-30) — **ONE DRAG PARSED THE SAME 5.6 MB TWICE, AND THE FIRST TWO FIXES FOR IT WERE BOTH WRONG** — ★★★ **THE SHELL'S READING WAS RIGHT ABOUT THE WASTE AND WRONG ABOUT THE CAUSE, AND THE ENGINEER REPRODUCED IT RATHER THAN TAKING IT** — ★★ **THE FIRST FIX DEFEATED ITSELF AND THE INSTRUMENT CAUGHT IT: A CACHE *HIT* COST 292 ms, BECAUSE COMPUTING THE KEY REQUIRED DOING THE LARGER HALF OF THE WORK THE CACHE EXISTED TO AVOID** — ★ **A GENERATION COUNTER WAS REJECTED FOR A DIFFERENT REASON, AND THE COST OF ONE FORGOTTEN BUMP WOULD HAVE BEEN SILENT CORRUPTION OF THE OPERATOR'S DRAWING, REPORTED AS SUCCESS** — filed 2026-08-30 (343rd filing)
+
+**`pdfceGUI` reported a boundary finding (2026-08-30):** one content edit costs
+**two decompositions of the same page** — one inside the verb, one in their
+cache rebuild — and **neither side can see the other's**. They asked the
+engineer to **check their reading**.
+
+★ **He reproduced it in `crates/pdfce-core/tests/edit_latency.rs` rather than
+take it**, and their numbers were near-exact:
+
+| step | cost | denominator ⇒ per-item |
+|---|---|---|
+| `Document::from_bytes` | **2.6 ms** | — |
+| `decompose_page` | **484.0 ms** | **129,758 objects ⇒ 3.7 µs each** |
+| `move_objects` (**ONE** object) | **385.2 ms** | one object |
+| decompose **again** after the edit | **510.3 ms** | 129,758 objects ⇒ **3.9 µs each** |
+
+*(Hard rule 10(a): every total is filed beside its per-item form **with the
+denominator**, so the two can disagree with each other.)*
+
+**`EditSession::page_objects` now memoises the decode + decomposition, and the
+editing verbs consult the same entry:**
+
+> **the verb went 385 ms → 0 ms.**
+
+#### ★★★ THEIR READING WAS RIGHT ABOUT THE WASTE AND WRONG ABOUT THE CAUSE
+
+They inferred *"the verb's cost is essentially one decomposition"* from **434
+and 501 being within 15 % of each other**.
+
+★ **Two numbers being close is not evidence they are the same work**, and here
+they were not: **with the decomposition removed, the verb still cost 292 ms.**
+Decomposition was **~30 %** of it. **The rest was the flate DECODE of the
+content stream — which both sides were also paying twice, and which neither had
+separated.**
+
+⇒ **A fix built on their causal reading would have removed 30 % and reported
+success.** That is why the reproduce-don't-take reflex is filed here as the
+finding rather than as procedure.
+
+#### ★★ THE FIRST FIX DEFEATED ITSELF — AND THE INSTRUMENT CAUGHT IT IMMEDIATELY
+
+The cache was first keyed on **a digest of the decoded content bytes**.
+**Provably correct, and nearly worthless:**
+
+> **A CACHE HIT COST 292 ms**, because computing the key **requires decoding
+> the stream**, and **the decode is the larger half**.
+
+★★★ **A cache had been built that avoided the CHEAPER part of the work it
+existed to avoid.** **No amount of re-reading would have shown that; the
+measurement did, immediately.** ⇒ **The reusable half: a correctness argument
+for a cache key says nothing about whether the key is AFFORDABLE, and those are
+different properties that look alike on the page.**
+
+**The key is now the STAGED SPAN.** `stage_bytes` is **strictly
+append-only** — it takes `start` as the current end and **only ever extends** —
+so a `ByteSpan` **identifies one immutable payload**, and **span equality
+implies byte equality**. Content absent from `state` comes from the **base
+document, which is immutable**, so `content_id` alone identifies it. ★ **Costs
+nothing and decodes nothing.**
+
+#### ★★ A GENERATION COUNTER WAS REJECTED, AND FOR A DIFFERENT REASON
+
+**It would have been free too.** It is correct **only if every mutation site
+remembers to bump it** — ★ **a claim about CALLERS, which this project has
+repeatedly measured to be wrong** (`R222`'s whole neighbourhood; the
+twice-drifted `looks_styled` comment recorded in the 342nd filing).
+
+★★★ **And the cost of ONE forgotten site here is not a slow path.**
+`PageObjects` addresses content **BY INDEX**, so a stale model makes
+`move_objects(page, &[7], …)` **edit whatever object 7 is in the WRONG
+model** ⇒ **silent corruption of the operator's drawing, reported as success.**
+
+⇒ **The span key is correct BY CONSTRUCTION, including through UNDO** —
+restoring an earlier span restores **exactly those bytes**, so serving the
+model built from them is **right rather than accidentally right.**
+
+#### CORRECTNESS IS TESTED SEPARATELY FROM SPEED, AND MATTERS MORE
+
+`crates/pdfce-core/tests/page_objects_cache.rs` asserts four properties:
+
+1. an **unmodified** page returns **the very same model** — asserted by
+   `Arc::ptr_eq`, ★ **not by value; a value comparison would PASS on a cache
+   that never fired**;
+2. an edit **invalidates** it;
+3. **UNDO and REDO both invalidate** it — ★ **the case a cheaper key gets
+   wrong**;
+4. the verb **edits the object the accessor named** — the property a shell
+   depends on when it passes indices from one into the other.
+
+**Sabotage-checked:** keying on `content_id` alone — **the plausible
+"simplification"** — **fails 3 of the 4.**
+
+#### ★★ WHAT THIS DOES NOT FIX, STATED SO IT IS NOT ASSUMED
+
+**The post-edit rebuild (510 ms) REMAINS.** The edit changed the content, so
+**the post-edit model is one nobody has yet; caching cannot conjure it.**
+
+- **Their option (A)** — *"return the post-edit model the verb already
+  built"* — **IS NOT AVAILABLE**: the verb decomposes the **PRE-edit** content,
+  plans against it, and commits. What it holds is **the model the caller
+  already has.**
+- **Their option (B)** — handing one in — **is what shipped**, ★ **in the form
+  of a cache, so that no caller can hand in a stale one.**
+
+#### ★ THEIR REMAINING QUESTION IS ANSWERED AND NEEDS NO ENGINE CHANGE
+
+**`EditSession` is `Send` AND `Sync`** — ★ **their premise that it is not
+`Sync` is wrong** — so **both the verb and the rebuild can run off the UI
+thread today.**
+
+★★ **The cache is deliberately a plain field behind `&mut self` and NOT a
+`RefCell`**, because **interior mutability reachable through `&self` would take
+`Sync` away**, which is worth more than the ergonomics. ⇒ **A performance fix
+that quietly removed a thread-safety guarantee would have cost the shell more
+than the 385 ms it bought.**
+
+#### Verification
+
+**Relayed from `a24868e`, not re-run this filing.** `cargo test --workspace
+--all-features`: **162 suites green**. `cargo fmt --check` and `cargo clippy
+--all-targets --all-features -D warnings` **clean**.
+
+**Diffstat, read here from `git diff --shortstat a24868e^ a24868e`:** **3
+files, +577 / −42** — `crates/pdfce-core/src/edit.rs` (241 lines touched),
+`crates/pdfce-core/tests/edit_latency.rs` (+200),
+`crates/pdfce-core/tests/page_objects_cache.rs` (+178).
+
+★ **`check-string-gaps.sh` was left RED by this commit** — a pre-existing gap
+introduced here and **fixed two Passes later, in `cff102a`**. Filed rather than
+elided: **a gate that goes red on one Pass and green on another is exactly the
+history a future bisect needs**, and a filing that quietly repaired the timeline
+would have removed it.
+
+★ **No `FEATURES.md` row.** This Pass changed **how fast** an existing
+capability is, not **what** pdfce can do; `page_objects`'s contract is filed
+where a consuming shell reads it (`docs/core-api/`, added in `bc49a8e`).
+**Stated rather than silently omitted**, so the next filing does not read the
+absence as drift.
+
+---
+
+### `Pass 180.0` (`90e7265`, 2026-08-30) — **THE OneDrive DEPLOY COULD NOT DELETE A FOLDER OneDrive WILL NEVER LET GO OF, AND LEFT THE FALLBACK SLOT HALF-EMPTIED TRYING** — ★★★ **THE DIAGNOSIS TOOK THREE MEASUREMENTS AND THE FIRST TWO WERE WRONG — BOTH WERE CONSISTENT WITH EVERY OBSERVATION ANYONE HAD BOTHERED TO TAKE** — ★★ **WHAT THE FAILURES LEFT BEHIND IS THE PART THAT MATTERS: TWO HEALTHY-LOOKING FOLDERS, AND THE A/B PROPERTY GONE** — ★ **FOUND CUTTING `v0.17.0`; THE RELEASE ARTEFACT IS UNAFFECTED AND THIS FIX CHANGES NO SHIPPED BYTE** — filed 2026-08-30 (343rd filing)
+
+Found cutting `v0.17.0`. `tools/deploy-onedrive.py` cleared the target slot
+with `shutil.rmtree` and failed:
+
+    PermissionError: [WinError 5] Access is denied:
+      'C:\Users\Ken\OneDrive\pdfce1\models\ocrs'
+
+#### ★★★ THE DIAGNOSIS TOOK THREE MEASUREMENTS AND THE FIRST TWO WERE WRONG
+
+| # | reading | why it was believed | why it was wrong |
+|---|---|---|---|
+| **1** | *"Transient sync lock."* | **plausible** — a manual `rmdir` of that exact path **seconds later SUCCEEDED**. Retry-with-backoff was added on the strength of it | **the retry failed too**, six seconds of it |
+| **2** | *"The lock walks with the collapsing tree."* | the failing path had moved **OUTWARD**: `models/ocrs` → `models` → the slot root | ★ **a story that fits and is still wrong** |
+| **3** | ★ **the discriminating test, which should have been first** | in that same folder, **deleting a FILE succeeded** and **`rmdir` of an EMPTY SUBDIRECTORY succeeded** | — |
+
+⇒ **Only the slot ROOT refuses.** It is a **top-level synced folder**, and the
+sync engine holds it open **for as long as OneDrive runs**. **Not transient,
+not a flake, and no amount of retrying clears it.**
+
+★★★ **Both earlier readings were consistent with every observation that had
+been bothered with**, which is the finding worth carrying: **a hypothesis that
+explains all the data you have collected is not thereby correct — it is a
+statement about how little you collected.** The discriminating test cost one
+command and would have ended it at measurement 1.
+
+#### THE FIX IS TO STOP ASKING
+
+`rmtree` **insists on unlinking the root it is given.** ★ **The requirement was
+never "remove the directory"** — it is *"no stale file survives a payload that
+shrank between versions"*, and **the comment at the call site said exactly
+that.**
+
+`_empty_slot` **empties in place, bottom-up, and never touches the root.**
+**Empty subdirectories left behind are tolerated ON PURPOSE**: the payload copy
+recreates them, and **an empty directory is not a stale file and cannot be
+mistaken for part of this build**. What it **does** assert is that **no FILE
+survived.**
+
+★ **The general move worth reusing: when a primitive refuses, check whether the
+requirement was the PRIMITIVE'S postcondition or something weaker.** Here it
+was weaker — and the weaker property was **already written down at the call
+site**, unread.
+
+#### ★★ WHAT THE FAILURES LEFT BEHIND IS THE PART THAT MATTERS
+
+**The first crash left `pdfce1` INCONSISTENT** — **measured, not inferred; both
+slots were listed before anything else was touched:**
+
+- `LICENSE` **deleted**
+- `models/ocrs` **emptied**
+- the previous `pdfce-cli.exe` **and its `VERSION.txt` STILL IN PLACE**
+
+★★★ **That folder still LOOKS populated, and its `VERSION.txt` still names a
+version an operator would trust — while the payload beside it is no longer that
+version's payload.**
+
+⇒ **The entire point of two slots is that the other one is a WORKING
+fallback.** So this is **the double-deploy guard's own quiet-failure shape,
+arriving through the FILESYSTEM instead of through the alternation**: **two
+healthy-looking folders, property gone.** ★ **Same class as `Pass 166.0`'s
+`a_directory_mtime_is_not_a_builds_age` finding — an A/B rotation that has
+stopped rotating while every surface still reads normal.**
+
+**So `_empty_slot` RAISES rather than continuing into a partly-emptied slot**,
+and **its message says the slot is now untrustworthy and why** — including
+★ **the one cause a retry genuinely cannot fix: a RUNNING `pdfce-cli.exe`,
+which Windows will not let anything replace.** ⇒ **The failure now names the
+operator's actual next action instead of a generic permission error.**
+
+#### MEASURED AFTER THE FIX
+
+| slot | version | state |
+|---|---|---|
+| `pdfce1` | **0.17.0** | deployed — **5 items, 31,335,858 bytes** |
+| `pdfce2` | **0.16.0** | **untouched, still the fallback** |
+
+★ **Both binaries RUN from OneDrive, not merely present:** `pdfce1` reports
+`0.17.0` **and performs a real `dimension-label` edit**; `pdfce2` reports
+`0.16.0`.
+
+`verify-release.py v0.17.0` is **green on all eight release checks**, including
+its second OneDrive check — *"a PREVIOUS version is still on OneDrive
+(0.16.0)"* — ★★ **which is the operator's actual property, and the one a naive
+is-it-deployed test cannot see.**
+
+#### ★ THE RELEASE ARTEFACT IS UNAFFECTED
+
+`v0.17.0` is tagged at **`9281068`** — confirmed in this filing by
+`git rev-list -n1 v0.17.0` — and the deployed build was produced from that
+commit. **This fix lands AFTER the tag and changes NO shipped byte**: it is
+deployment tooling, not product.
+
+#### Verification
+
+**Diffstat, read here from `git diff --shortstat 90e7265^ 90e7265`:** **1 file,
++89 / −1** — `tools/deploy-onedrive.py` **only**. **No crate touched**, so
+GUI-core separation, `no-network` and the test suite had **no route** to change,
+and **none is claimed** (hard rule 8).
+
+★ **No `FEATURES.md` row.** A deployment-tooling repair is not a pdfce
+capability, and inventing a row for it would make that file something other
+than the scan it is contracted to be. **Stated rather than silently omitted**,
+so the next filing does not read the absence as drift.
+
+**Ledger.** Pass ceiling `179.3` → **`183.0`**; next free `183.1` / new major
+`184.0`. ★ **Four Pass IDs land in one filing** — `180.0`, `181.0`, `182.0`,
+`183.0` — because four code commits were pushed ahead of their filing and both
+filing gates went red on `main`; **that is the gate working, not a new debt
+class** (`check-commits-filed.py`'s docstring names this exact transient case
+and distinguishes it from the unsatisfiable tip). **Standing rules ceiling
+`R235` — UNCHANGED**; next free `R236`. ★ **One mint was CONSIDERED and
+DECLINED with its argument recorded** (the under-reporting-census class, third
+instance — see `Pass 183.0`'s Finding 1), and the trigger for a future mint is
+stated there rather than left to be re-derived. **Decision ceiling `106` →
+**`107`** (`ARCHITECTURE.md` §12, minted this filing); next free `108`.
+`FEATURES.md`: **three rows changed** (one corrected, one moved *Planned* →
+*Implemented* and rewritten, one new *Planned* row for the narrowed
+remainder). **`Pass 131.0` NARROWED in *Backlog*** rather than deleted.
+**`v0.17.0` COMPLETED** from cut-but-not-observed to observed. Filing ordinal
+`342` → **`343`**.
+
+---
+
 ### `v0.17.0` VERSION BUMP (`71d13aa`, 2026-08-30) — `0.16.0` → **`0.17.0`, MINOR** — ★★★ **CUT-BUT-NOT-YET-OBSERVED: AT FILING TIME THERE IS NO `v0.17.0` TAG, NO PUSH, NO GITHUB RELEASE AND NOTHING CONFIRMED ON ONEDRIVE — MEASURED FROM A SHELL, NOT INFERRED** — ★★ **AND THE RELEASE NOTES' OWN SCOPE FIGURES WERE MEASURED THREE COMMITS BEFORE THE COMMIT THAT CARRIES THEM; THE TRUE FIGURES ARE FILED HERE BESIDE THEM** — ★ **THE TAG GOES ON THIS FILING'S OWN COMMIT, NOT ON `71d13aa`, BECAUSE BOTH FILING GATES WERE RED AT `2c93f6a` AND CI RUNS BOTH** — filed 2026-08-30 (342nd filing)
 
 **Sourcing — hard rule 8. This filing held a shell and used it.** Every git,
@@ -235,6 +966,44 @@ is precisely why the tag moves to the filing commit rather than to `71d13aa`.
 **Dependencies unchanged since `v0.16.0`**, so `THIRD_PARTY_LICENSES.md` is
 correctly left unregenerated (rule 13). *Carried forward from `v0.16.0`'s
 entry; not independently re-measured this filing, and said so.*
+
+---
+
+#### ★★★ COMPLETED 2026-08-30 (343rd filing) — `v0.17.0` HAS NOW BEEN OBSERVED. THE FOUR FACTS THE 342nd FILING RECORDED AS *UNKNOWN* ARE MEASURED HERE, AND ALL FOUR LANDED.
+
+The entry above was filed **cut-but-not-yet-observed on purpose**, and it said
+so: *"completing this record is a later filing's job."* **This is that filing.**
+Nothing above is altered; the observation is appended, as the append-only
+convention requires.
+
+| fact | 342nd filing (13:46Z) | **command run HERE** | **measured now** |
+|---|---|---|---|
+| a `v0.17.0` tag exists? | **empty — NO TAG** | `git tag --list 'v0.17*'` | ★ **`v0.17.0` EXISTS** |
+| what the tag points at | *predicted*: "this filing's own commit" | `git rev-list -n1 v0.17.0` | ★★ **`9281068`** — **the 342nd filing's own commit, exactly as planned.** The tag did **not** land on `71d13aa` |
+| commits unpushed | **6**, `71d13aa` among them | `git rev-list --count origin/main..HEAD` | ★ **0** — everything through `cff102a` is on `origin/main` |
+| newest GitHub release | **`v0.16.0`**, still flagged `Latest` | `gh release list --limit 3` | ★ **`v0.17.0`**, `2026-08-30T14:00:25Z`, flagged **`Latest`** |
+| OneDrive deploy | ★ stated as **unknown**, not absent | *see `Pass 180.0`* | ★★★ **DEPLOYED, AND IT TOOK A FIX TO GET THERE** — `pdfce1` = **0.17.0**, `pdfce2` = **0.16.0** (fallback intact), `verify-release.py v0.17.0` **green on all eight checks**. **The deploy CRASHED on the first attempt**; the repair is `Pass 180.0` (`90e7265`), filed at the head of this section |
+
+★★★ **THE ONE THING NOBODY PREDICTED, AND IT IS THE ITEM THE 342nd FILING
+DECLINED TO GUESS AT.** That filing wrote OneDrive as **unknown rather than
+absent** — hard rule 8, exactly as intended — and **it was right to**: the
+deploy did not merely lag, **it failed with `WinError 5`, took three
+measurements to diagnose, and left the `pdfce1` slot inconsistent on the way
+past** while still *looking* populated with a `VERSION.txt` an operator would
+have trusted. **A filing that had written "presumably deployed" would have
+recorded a working A/B fallback that did not exist.** ⇒ **The discipline paid
+for itself in one filing.**
+
+★★ **The tag decision is vindicated by measurement, not by argument.** The
+342nd filing moved the tag off `71d13aa` because **both filing gates were red
+there**. CI at `9281068` is **`success`**, read here from `gh run list` — so
+`tools/verify-release.py`'s *"is CI green at the tagged commit?"* check had a
+green commit to find. **Recorded because `v0.10.0` cost a tag delete, a retag,
+a force-push and a rebuilt release asset for getting this exact thing wrong.**
+
+**⇒ `v0.17.0` is now a RELEASE record, not a version-bump record.** Tag, push,
+GitHub release and OneDrive deploy are all **observed**, each with the command
+that observed it.
 
 ---
 
@@ -102613,9 +103382,20 @@ own framing, *"plan only, we wont start it yet,"* still governs; O8's
 *"plan to deliver the first 3 phases"* sets a target, not a start order.
 
 **The scoping insight that splits five Passes out of one question.**
-pdfce can already **create** push buttons that are structurally correct
+~~pdfce can already **create** push buttons that are structurally correct
 in every viewer and do **nothing** when pressed, because pdfce authors no
-`/A` action on any field and dispatches no trigger for one — this is a
+`/A` action on any field and dispatches no trigger for one~~ — ★★
+**CORRECTED 2026-08-30 (343rd filing): the struck half was true when
+written on 2026-08-26 and is FALSE from `Pass 182.0` (`bc49a8e`) onward.
+pdfce now authors `/ResetForm`, `/SubmitForm`, `/GoTo`, `/Named` and
+`/URI` via `set_button_action` (`Pass 182.0` + `Pass 183.0`). What
+SURVIVES unchanged is the rest of the sentence: `add_push_button` still
+creates an INERT button — giving one behaviour is a separate, named,
+undoable command — and pdfce still dispatches NO trigger for one
+(`Pass 131.1`, below, is still Backlog).** The original wording is kept
+legible rather than rewritten, because it is the observation that split
+five Passes out of one question and a reader needs to see what was
+believed at the time — this is a
 capability the project has never had, not a regression. Making a button
 work splits into three genuinely separate problems: **(a)** authoring an
 action into the file, **(b)** honouring it when pressed, **(c)** executing
@@ -102725,31 +103505,51 @@ not rediscovered per-Pass:**
 
 ---
 
-#### `Pass 131.0` — Action authoring, safe subset (core + cli). No plugin, no network, no interpreter, no standing rule touched.
+#### `Pass 131.0` — ★★★ **SUBSTANTIALLY DELIVERED 2026-08-30 by `Pass 182.0` (`bc49a8e`) and `Pass 183.0` (`cff102a`). NARROWED HERE TO THE TWO ITEMS THAT ARE GENUINELY UNBUILT — the pressed appearance and the `/MK` icon/label layout.**
 
-Author a declared `/A` action on a push button (the same primitive serves
-a future link-annotation Pass for free): `/ResetForm` (Table 238 `/Fields`
-+ Table 239 `Include`/`Exclude`), `/GoTo` (in-document — must ride the
-existing `pageops/references.rs` rewrite machinery so page ops keep
-destinations correct across insert/delete/reorder), `/Named`
-(`NextPage`/`PrevPage`/`FirstPage`/`LastPage`), `/URI` (**authored as
-data only, never followed by pdfce**, disclosed), `/SubmitForm`
-(**authored** here as data; **honoured** only in `Pass 131.1`, blocked on
-prerequisite 1 above). Also: `/AP` `/D` (the pressed appearance) and
-`/MK` icon/label layout, neither of which pdfce builds today, so a
-button looks like a button when held.
+★★ **NARROWED 2026-08-30 (343rd filing), and the narrowing is the whole
+point of this edit: `Pass 183.0`'s Shipped entry and this Backlog entry
+must NOT both claim the same work as future.** The operator's ruling
+(*"the safeguards like we had planned"*) was a **citation of this
+entry's own plan doc**, so `Pass 183.0` built §8 Phase 1 directly. The
+full item-by-item accounting is in the `Pass 183.0` Shipped entry at the
+head of this document; the one-line version is below.
 
-**`/JavaScript` and `/Launch` are refused by name, permanently** —
-authoring either would put bytes on disk that either collide with `R13`
-(`/Launch`) or ask pdfce to author something `R53` refuses to run
-(`/JavaScript`). Not a gap; a standing refusal.
+**SHIPPED — do not re-scope, do not re-plan:** `/ResetForm` (Table 238
+`/Fields` + Table 239 `Include`/`Exclude`) in `Pass 182.0`; `/GoTo`
+in-document — **riding `pageops/references.rs` exactly as this entry
+required**, which is what surfaced the `/Link`-only census defect —
+plus `/Named` (`NextPage`/`PrevPage`/`FirstPage`/`LastPage`), `/URI`
+(**authored as data only, never followed by pdfce**, disclosed) and
+`/SubmitForm` (**authored as data**, with the payload disclosure this
+plan's rung 3 named) in `Pass 183.0`. Reached from **`pdfce-core` +
+`pdfce-cli`**, as scoped. **`/JavaScript` and `/Launch` are refused by
+name, permanently** — authoring either would put bytes on disk that
+either collide with `R13` (`/Launch`) or ask pdfce to author something
+`R53` refuses to run (`/JavaScript`). **Not a gap; a standing refusal**,
+and it is held in the shipped type's own doc block.
 
-**Touches no standing rule.** Authoring is writing bytes, not firing
-triggers — `R54` governs dispatch, `Pass 131.1`, below. Ships to
-`pdfce-core` + `pdfce-cli`; the GUI request channel is `pdfceGUI`, a
-separate project (see `docs/FEATURES.md`'s ownership note).
+**★ WHAT REMAINS, AND IT IS ALL THIS ENTRY STILL MEANS:** `/AP` `/D`
+(**the pressed appearance**) and **`/MK` icon/label layout**, neither of
+which pdfce builds today, *so a button looks like a button when held*.
+★ **Note the shape of the remainder: it is an APPEARANCE obligation, not
+an action-authoring one** — nothing about it depends on `/A`, and it
+would be equally owed if no action had ever been authored. A future
+session scoping it should treat it as appearance-generation work
+(`R43`'s neighbourhood), not as a continuation of the action work.
 
-Full design: plan doc §8 Phase 1.
+**Touches no standing rule** — and that held in delivery, measured
+rather than predicted. **Authoring is writing bytes, not firing
+triggers**: `R54` governs dispatch (`Pass 131.1`, below, still Backlog)
+and **`R54`'s decision-`088` amendment was NOT relied on**; `R12` is
+untouched because **no network code exists in any crate `Pass 183.0`
+touched**. The GUI request channel is `pdfceGUI`, a separate project
+(see `docs/FEATURES.md`'s ownership note) — **`gui` remains `[ ]`**.
+
+Full design: plan doc §8 Phase 1. ★ **That document's §0 still says
+pdfce "authors no action" — reported to the engineer as owed work in
+the 343rd filing; it is engineer-owned and was not edited by the
+librarian.**
 
 ---
 
