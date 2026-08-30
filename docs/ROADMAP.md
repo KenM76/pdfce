@@ -96,6 +96,307 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 184.0` **criterion A ONLY** (`92b9f99`, 2026-08-30) — **RENAMING A FIELD NOW SAYS IT MAY HAVE BROKEN YOUR BUTTONS** — ★★★★ **`Pass 184.0` IS *PARTIALLY DELIVERED*, NOT SHIPPED: ONE OF SEVEN CRITERIA LANDED, AND THE OTHER SIX — INCLUDING THE ENTIRE REPAIR — ARE STILL OPEN IN *Next up*** — ★★★ **THE APPARENT CONFLICT BETWEEN DECISION `090` ("always push") AND `R217` DOES NOT EXIST, AND THE THREE RED CI RUNS OFFERED AS EVIDENCE FOR IT WERE MISREAD: MEASURED FROM GitHub HERE, ONE OF THE THREE NAMED COMMITS NEVER HAD A CI RUN AT ALL AND ANOTHER IS GREEN** — ★★ **A CI JOB NAME THAT MISDIRECTS WAS ALREADY DIAGNOSED AND FILED IN THE RAG ON 2026-08-12, WITH A REMEDY, AND NOBODY EXECUTED IT — THE JOB HAS SINCE GROWN FROM 3 STEPS TO 19** — ★ **THE RULE-11 SWEEP FOUND TWO SURVIVORS AND BOTH ARE IN THIS ROLE'S OWN TREE, WRITTEN BY THE 344th FILING FOUR HOURS EARLIER** — filed 2026-08-30 (345th filing)
+
+**Sourcing — `R228`.** A shell was held and used; **no code was written in this
+filing.** Run here, not relayed: `git log` / `git show --stat` /
+`git rev-parse` / `git remote -v` / `git status --porcelain`; `gh run list`,
+`gh run view --json jobs`, `gh run view --log-failed` against
+`github.com/KenM76/pdfce`; live greps of `crates/pdfce-core/src/edit.rs`,
+`crates/pdfce-cli/src/main.rs`, `docs/core-api/02-editing-and-saving.md`,
+`.github/workflows/ci.yml`; and a step count of the `ui-strings` job
+(**19 named steps**, counted here with `awk`). **`run-gates.sh` PASS on all 29
+commands at `92b9f99` is RELAYED from the engineer, not re-run here.**
+
+#### What landed
+
+`FieldRename` gains **`actions_not_retargeted: usize`**, surfaced by
+`pdfce-cli rename-field` as a `key=value` token on the metrics line **and** as
+a prose line on stderr when it exceeds zero. `FieldRename` also gains
+`#[non_exhaustive]` and joins `tools/check-outcome-disclosed.py`'s input list —
+it had carried `descendants_renamed`, a rule-4 disclosure, since it was written
+and had never been on that list.
+
+★★ **THE NUMBER IS AN UPPER BOUND AND IS LABELLED CATEGORICAL IN THREE PLACES**
+— the field's doc block (`edit.rs:15384`), the CLI's prose, and
+`docs/core-api/02-editing-and-saving.md`. It is counted off
+`forms::scan_javascript(...).actions_scanned` (`edit.rs:18513`), which already
+walks all seventeen carrier sites and follows `/Next` with its own guards. ⇒ It
+answers *"how many actions does this document carry"*, **not** *"how many name
+THIS field"*. **Borrowing a correct traversal rather than adding a second one
+that would drift from it is the right call and is criterion B's whole
+argument** — but it is also exactly why this is criterion A and not the fix.
+
+★ **Reporting a weaker true thing now beats reporting nothing until the
+stronger one exists** — that is the 344th filing's ruling, discharged. **An
+overestimate presented as a count would be its own defect**, which is why the
+three labels are load-bearing rather than decorative.
+
+**Measured on the shipped release binary** (relayed): a rename in a document
+with a Reset button reports `actions_not_retargeted=1` plus the prose line; the
+same rename in a form with no actions reports `0` and says nothing. 1 new core
+test (**27** in `crates/pdfce-core/tests/button_action_submit.rs`, up from 25
+counted in the 344th filing), sabotage-checked.
+
+#### ★★★★ THE STATUS, WRITTEN IN THE SHAPE THAT SURVIVES A STALE READ
+
+**The engineer asked for `184.0` to be recorded as partially delivered in
+whatever shape survives a future session seeing "184.0" in *Shipped* and
+concluding the refactor happened. This is that shape, and it has four parts:**
+
+1. **This heading says `criterion A ONLY`.** The Pass ID never appears in
+   *Shipped* unqualified.
+2. **`Pass 184.0` remains in *Next up*** — it is not moved. A Pass with open
+   criteria stays where the work is tracked; only the discharged criterion is
+   struck there.
+3. **The criteria ledger below is stated positively and negatively**, so a
+   reader who skims either column gets the same answer.
+4. ★ **`FEATURES.md` gets the disclosure and NOT a repair claim**, checked
+   word by word in this filing.
+
+| criterion | what it is | status at `92b9f99` |
+|---|---|---|
+| **A** | the categorical disclosure, no traversal needed | ★ **DISCHARGED** — this entry |
+| **B** | generalise the 17-site action-carrier walk to a **visitor**, byte-identical | **OPEN** |
+| **C** | `rename_field` **REPAIRS** the name strings and reports an exact count | ★★ **OPEN — nothing is repaired today** |
+| **D** | `delete_field` / `delete_field_group` **DISCLOSE** (the `Pass 38.5` **C8** debt) | ★★ **OPEN — delete still says nothing** |
+| **E** | C9 (`/StructParent` / `/OBJR`) explicitly out of scope | **scoped out, reason recorded** |
+| **F** | `census_dangling`'s blindness **stated** in rustdoc + `docs/core-api/` | **OPEN** |
+| **G** | sabotage checks across the visitor and both verbs | **partial** — criterion A's own sabotage check is in |
+
+⇒ **ONE of seven landed. `184.0` is `PARTIALLY DELIVERED`, and the sentence a
+future session most needs is this one: *renaming a field still does not repair
+anything, and deleting a field still discloses nothing.***
+
+#### ★★★ FINDING 1 — DECISION `090` AND `R217` DO NOT CONFLICT, AND THE EVIDENCE FOR THE CONFLICT WAS MISREAD
+
+**The dispatch asked this role to either reconcile the two in the rule text or
+record the conflict explicitly. It does NEITHER, because there is no conflict —
+and reconciling a conflict that does not exist would weaken `R217` on false
+evidence, which is precisely how the `code → code` runs come back.**
+
+**The claim, quoted so the correction is checkable:** *"I pushed `cff102a`,
+`3762b5d` and `92b9f99` each before its filing existed, and CI went red on each
+one."*
+
+★★★ **MEASURED FROM GitHub IN THIS FILING** (`gh run list`, `gh run view
+--json jobs`, `gh run view --log-failed`) — **the claim is wrong on all three
+commits, in three different ways:**
+
+| commit | is there a CI run at this head? | filing gate | ★ what actually happened |
+|---|---|---|---|
+| `cff102a` | yes — run `33325723019` | **RED** | ★★ **`cff102a` ITSELF WAS DEFERRED AND THE GATE SAID SO** — verbatim: *"commits-filed: tip cff102a is DEFERRED, not yet filed."* The red was caused by **three OLDER commits** — `bc49a8e` (`182.0`), `a24868e` (`181.0`), `90e7265` (`180.0`) — stacked with no filing between them. **Pushing `cff102a` before its filing was not the fault.** |
+| `3762b5d` | ★★★ **NO — there is no CI run at this head at all** | — | The red run is `33328613196`, at head **`5d87a5f`** — the spec-librarian's `chore(agent-memory)` commit, made **10 seconds later** and pushed with it. `5d87a5f` is docs-only and **exempt itself**, but it **consumed the tip position** and shielded `3762b5d` out of the one-commit deferral window. |
+| `92b9f99` | yes — run `33330500289` | ★★★ **GREEN** | The `ui-strings` job — the one carrying `check-commits-filed.py` — concluded **`success`**. **Nothing went red on `92b9f99`.** It was pushed alone, as the tip, with everything behind it filed by `8456c45`. |
+
+★★★★ **`92b9f99` IS THE PROOF BY CONSTRUCTION.** It was pushed under decision
+`090`'s *"always push"*, **before its filing existed** — the exact act the
+dispatch believed `R217` forbids — **and its filing gate is green.**
+
+★★★ **AND `R217` NEVER SAID "HOLD THE PUSH UNTIL THE FILING COMMITS."** Read
+from the rule's own text in this filing, its working orders are:
+
+> **One unfiled commit may sit at the tip of `main`. Never two.** …
+> `code → file, then stop`, or `code → file → code → file → …` — never
+> `code → code` without a filing landing between them.
+
+⇒ **`R217` constrains what may land ON TOP OF a code commit. Decision `090`
+authorises the PUSH. These are different acts and they were never in
+tension.** Every red run today was a `code → code` or `code → other-commit`
+sequence — a **second** commit landing before the filing — and not one of them
+was caused by pushing early.
+
+★★ **THE ONE GENUINELY NEW SUB-SHAPE, AND IT IS WORTH THE FILING ON ITS OWN.**
+`R217`'s 298th-filing amendment says the deferral window closes when the
+librarian is **dispatched**, and its worked example is the *engineer's own*
+commit landing in the window. **Today's `3762b5d` red was caused by a commit
+the engineer did not make**: a **subagent's own agent-memory chore commit**
+(`5d87a5f`, `pdfce-spec-librarian`). ⇒ **The window can be closed by any
+process with write access to the tree, including an agent whose work has
+nothing to do with the code commit it buries.** A docs-only commit is exempt
+**from the gate** and is **not** exempt **from the window** — those are
+different exemptions and this is the first occurrence separating them.
+
+★★ **THE DISPOSITION, AND THE DECLINES ARE ARGUED.**
+
+- **`R217` is NOT weakened, NOT reconciled, and NOT renumbered.** Its text was
+  already correct. It gains a **third amendment note** recording the
+  non-conflict and the subagent sub-shape, so the next session does not
+  rediscover either. **Ceiling unaffected: `R235`, next free `R236`.**
+- **No decision is minted.** The decision log is for architectural decisions;
+  *"these two rules never conflicted"* is a **finding**, not a decision, and
+  filing it as `109` would put a correction into a list readers consult for
+  commitments. **Decision ceiling stays `108`, next free `109`.**
+- ★ **The transferable half, which is bigger than this project:** **an operator
+  ruling and a standing rule that appear to conflict usually disagree about a
+  FACT, not a POLICY.** Here the fact was *"which commit was the tip when CI
+  ran"*, and it was available from `gh run list` in one command. **The apparent
+  conflict was an artefact of not having looked.** ⇒ Escalated to
+  `D:/dev/rag/rust/`.
+- ★★ **And note the shape, because it is hard rule 8 pointed at CI instead of
+  at git:** one observed red run was generalised to three pushes, and that
+  generalisation very nearly bought a standing-rule amendment. **A confident
+  figure inferred from one observation is the middle option hard rule 8
+  forbids.**
+
+#### ★★ FINDING 2 — THE CI JOB NAME WAS DIAGNOSED, FILED AND REMEDIED IN THE RAG EIGHTEEN DAYS AGO, AND NOBODY EXECUTED THE REMEDY
+
+**The dispatch reported this as a new finding and asked whether it deserves a
+Pass. It is not new. `D:/dev/rag/rust/a_ci_job_name_describes_its_first_step_not_the_gate_that_failed.md`
+was written on 2026-08-12 — it names this exact job, quotes its YAML, and its
+fix list ends: *"**Never** leave a multi-gate job named after one of its
+gates."***
+
+★★★ **AND THE SITUATION HAS DEGRADED SINCE.** Measured here against that
+file's own record:
+
+| | 2026-08-12 (RAG file) | 2026-08-30 (measured here, `awk` over `ci.yml`) |
+|---|---|---|
+| steps in the `ui-strings` job | **3** | ★★ **19** |
+| steps the job's `name:` describes | 1 | ★★ **1 of 19** |
+| observed red runs misattributed | 5 | **7** (those 5, plus `cff102a` and `5d87a5f` today) |
+
+⇒ **The lesson was correct, complete, actionable, and inert.** It cost the
+engineer another diagnostic cycle today — and, as that file predicted in
+advance, *"the expensive direction, because the instrument is the thing you
+check the report against"*: the engineer briefly believed CI and his own
+machine disagreed, which impugns `run-gates.sh`.
+
+★★ **THIS IS THE `oxidize-pdf` / XFA SHAPE, AND IT IS THE THIRD TIME THIS
+PROJECT HAS RECORDED IT:** *the answer was already sourced in one document
+while another still asked the question.* **A RAG entry with no Pass and no gate
+behind it decays into a record of a problem rather than a fix.** ⇒ **It
+deserves a Pass, and gets one — `Pass 185.0`, minted in *Next up*.** The RAG
+file gains a dated recurrence footer rather than a second file (hard rule 4).
+
+★ **Note what this says about RAG discipline generally**, since it is the
+uncomfortable half: **this role wrote that file and this role did not find it
+until it grepped the index before writing a duplicate.** The grep is the whole
+control. Hard rule 4 earned its keep today.
+
+#### ★ FINDING 3 — "ATTENTION FOLLOWS STRUCTURE" IS AT THE PROMOTION BAR, AND THE MINT IS DECLINED TO THIS ROLE
+
+**Two instances, hours apart, both the same shape:** the 343rd filing's plan-doc
+§0 survivor, and the 344th filing's `Pass 183.1` *"five variants"* sitting **one
+line above a six-row table whose rows were correct**. In both, a correction
+reached **the heading** and **the table** and stopped in **the prose between
+them**.
+
+★★ **The mechanism, stated so it is actionable rather than merely observed:**
+headings and tables are **visually salient** — an editor's eye lands on them,
+and the act of correcting one *feels* like having corrected the region.
+**Running prose between two corrected structures is the lowest-salience,
+highest-risk location in any document**, and it is the half that travels,
+because prose is what gets quoted.
+
+⇒ **The concrete sweep refinement, one sentence:** ***when you correct a
+heading and a table, read the prose between them before you stop.***
+
+★★★ **THE MINT IS DECLINED, AND THE DECLINE IS THE POINT.** This would be
+clause **(f)** of this role's own hard rule 11 — and hard rule 11 already
+records, **twice**, that this role drafted a clause and correctly declined to
+add it unilaterally, the engineer asking for it being what made it real.
+**Amending `pdfce-librarian.md` is the engineer's act, not this role's.** ⇒
+**Clause (f) is DRAFTED above and RECOMMENDED; it is not applied.** The
+derivation is escalated to `D:/dev/rag/rust/` so it survives the recommendation
+being declined.
+
+#### ★ The rule-11 sweep — two survivors, both in this role's own tree
+
+**Swept per clause (e)** — bare keywords, case-insensitive, over the narrow
+file set this feature touches (`edit.rs`, `main.rs`,
+`docs/core-api/02-editing-and-saving.md`, `FEATURES.md`, `NEXT_SESSION.md`,
+`ROADMAP.md`, `check-outcome-disclosed.py`), not the exact phrase over the
+tree.
+
+★★ **Both survivors are in `ROADMAP.md`, and the 344th filing wrote both of
+them four hours before `92b9f99` falsified them:**
+
+1. **`Pass 183.1`'s *Shipped* entry** — *"silently breaks every reset, submit
+   and hide button that names it"* and *"`FieldRename` … has exactly **three**
+   fields … ⇒ **There is no field in which such a disclosure could even be
+   returned***. **`FieldRename` has FOUR fields now, and the rename is no
+   longer silent.** ⇒ **Amended with a dated footer, not rewritten** — it is a
+   dated measurement in an append-only section and correcting it into agreement
+   with today would destroy the evidence the `184.0` ruling was made on.
+2. **`Pass 184.0`'s *Next up* table, row 1** — the same two claims, in a live
+   work item. ⇒ **Corrected in place with the original left legible**, because
+   *Next up* is a plan a reader acts on rather than a record.
+
+★ **Survivors that are CORRECT and were deliberately left alone**, reported so
+the next sweep does not "fix" them (clause (e)'s closing requirement):
+`edit.rs:13423`–`:13424` — ***"pdfce authors **four** of them"*** and ***"the
+four it does not"***. **Verified untouched by `92b9f99` and verified correct
+here.** **Six, four and eight are three different facts**: six `ButtonAction`
+variants, four of the eight script-free reach-nothing action types authored,
+eight such types defined. **A sweep that "reconciles" them breaks two correct
+sentences.**
+
+★ **The three stale counts the 344th filing reported are all fixed**, verified
+by live grep here, not relayed: `docs/core-api/02-editing-and-saving.md:1083`
+now reads *"Six variants:"*; `edit.rs:13397` now reads *"the other five
+variants"*; `edit.rs:13419` now reads *"…rather than six"*.
+
+#### Invariants
+
+- **GUI-core separation: not re-verified and NOT claimed.** No code was written
+  in this filing and no crate manifest was touched, so `cargo tree` was neither
+  run nor asserted (hard rule 8). The engineer's own gate sweep at `92b9f99`
+  covers it.
+- **Round-trip / minimal-diff:** unaffected — `actions_not_retargeted` is a
+  **report**, and criterion A **writes nothing**. ★ **That is worth stating
+  plainly because the Pass title contains the word *retargeted*: pdfce
+  retargets nothing today.**
+- **Rule 4:** satisfied **off-canvas**, in both shells — a `key=value` token
+  and a stderr line in the CLI, where the invocation is the commit. No gate, no
+  badge, no page marking.
+- **`git status --porcelain` here: `?? .tmp_bench.py`** — **a third filing**
+  carrying it. Still untracked, still not deleted by this role, and **the
+  repository is public**.
+- ★★★★ **AND, MEASURED AT THE END OF THIS FILING AND NOT AT ITS START:
+  `crates/pdfce-core/src/edit.rs` AND `crates/pdfce-core/src/forms.rs` ARE
+  MODIFIED IN THE WORKING TREE — UNCOMMITTED, AND NOT BY THIS ROLE.**
+  `git diff --stat` reports **+424 / −51 across the two files**, and the new
+  public items are `forms::retarget_action_field_names`,
+  `forms::retarget_target_list` and `forms::DeferredTargetList`, all
+  doc-tagged `Pass 184.0`. ⇒ **This is criteria B and C being written while
+  this filing was in flight.** The tree was clean of these at dispatch
+  (`git status --porcelain` returned only `?? .tmp_bench.py` on this filing's
+  first command).
+  - ★★★ **NOTHING ABOUT THIS FILING IS FALSIFIED BY IT.** Every status claim
+    above is anchored to **`92b9f99`**, by commit, not to "today" — and at
+    `92b9f99` the repair does not exist. ★ **Uncommitted work has no hash, so
+    it CANNOT be filed** (the 298th filing's own finding); it can only be
+    reported, and this is the report.
+  - ★★★★ **THE LIVE HAZARD, AND IT IS `R217`'S WINDOW FROM THE OTHER SIDE.**
+    `92b9f99` is currently **the tip and DEFERRED** — its filing gate is green
+    *because* nothing sits on top of it. **The moment this work is committed
+    ahead of this filing, `92b9f99` is shielded out of the deferral window and
+    CI goes red naming it** — the identical mechanism that produced today's
+    `3762b5d` failure, with nobody having done anything they thought was
+    wrong. ⇒ **This filing's commit must land BEFORE the criteria-B/C commit.**
+    **Not a hypothetical: it is the third instance of this window closing
+    today.**
+- **Backup currency: NOT checked in this filing** and therefore not asserted.
+- ★ **CI colour at `92b9f99`: run `33330500289` was `in_progress` when read
+  here.** The `ui-strings` job (both filing gates) had **already concluded
+  `success`**; the build and test jobs had not finished. **Read the final
+  colour from GitHub after this filing's commit lands** — do not carry this
+  sentence forward as a verdict.
+
+### Ledger
+
+Pass ceiling **`184.0` — UNCHANGED by the shipped work** (criterion A carries
+no new ID), then ★ **`185.0` MINTED** in *Next up*; ceiling **`185.0`**, next
+free `185.1` / new major `186.0`. **Standing rules ceiling `R235` —
+UNCHANGED**, next free `R236`; **`R217` given a third amendment note, no
+number.** **Decision ceiling `108` — UNCHANGED**, next free `109` (one mint
+considered and declined, argued). **`FEATURES.md`: one row changed** (the
+rename-a-field row — disclosure added, repair explicitly not claimed). **No new
+`FEATURES.md` row.** **`D:/dev/rag/rust/`: four new files + two dated footers +
+index entries.** **One hard-rule-11 clause DRAFTED and DECLINED** (clause (f),
+recommended to the engineer). Filing ordinal `344` → **`345`**.
+
 ### `Pass 183.1` (`3762b5d`, 2026-08-30) — **A SHOW/HIDE BUTTON, AND THE DEFAULT THAT MAKES *SHOW* THE EASY ONE TO GET WRONG** — ★★★ **THE COUNT IN THE DISPATCH WAS WRONG AND THE COUNT IN TWO TREES IS STILL WRONG: THE ACTION SET IS SIX, NOT FIVE, COUNTED HERE FROM THE LIVE `enum` RATHER THAN CARRIED** — ★★ **AN AMBIGUITY WAS *REFUSED* RATHER THAN MADE A SETTING, WHICH IS A CARVE-OUT FROM A STANDING OPERATOR DIRECTIVE AND IS THEREFORE FILED AS DECISION `108` RATHER THAN LEFT AS A CODE COMMENT** — ★ **AND THE PASS LEAVES A KNOWN, SILENT DEFECT STANDING; THIS FILING RULES THAT THE *REPAIR* MAY BE SEQUENCED BUT THE *DISCLOSURE* MAY NOT, AND SAYS SO AGAINST THE OPERATOR'S OWN "NEVER FILE A BUG FOR LATER" RULE** — filed 2026-08-30 (344th filing)
 
 **Sourcing — `R228`.** This filing held a shell and used it, and the dispatch's
@@ -394,6 +695,29 @@ not.* But:
   `from`, `to`, `descendants_renamed`. ⇒ **There is no field in which such a
   disclosure could even be returned**, so this is a *type-level* absence, not a
   forgotten `if`.
+
+  > **★★ AMENDED 2026-08-30 (345th filing) — THE TWO CLAIMS IMMEDIATELY ABOVE
+  > ARE A DATED MEASUREMENT AND ARE LEFT VERBATIM; BOTH WERE FALSIFIED FOUR
+  > HOURS LATER BY `92b9f99`.** `Pass 184.0` **criterion A** shipped:
+  > `FieldRename` now has **FOUR** fields — `from`, `to`,
+  > `descendants_renamed`, **`actions_not_retargeted`** — and carries
+  > `#[non_exhaustive]`. ⇒ **The "type-level absence" is closed and the rename
+  > is NO LONGER SILENT.**
+  >
+  > **What is still TRUE of the struck sentences, stated so this reads as a
+  > narrowing rather than a withdrawal:** ★ **the rename still REPAIRS
+  > NOTHING.** A button naming the old name still stops working; pdfce now
+  > *says so* instead of saying nothing. The disclosure is also **categorical**
+  > — an upper bound over every action in the document, not a count of the
+  > affected ones — so *"silently breaks"* has become *"breaks, and discloses
+  > that it may have"*, which is criterion A's entire scope. **Criteria B, C,
+  > D, F and G remain OPEN.**
+  >
+  > **This entry is NOT rewritten**, per the project's standing treatment of
+  > dated measurements in append-only records: the ruling that produced
+  > `Pass 184.0` was made on these figures, and correcting them into agreement
+  > with today destroys the evidence for it. **Found by this filing's own
+  > rule-11 sweep, in this role's own tree.**
 - **`delete_field` does not disclose them either** — and the spec corpus
   **already asked for this**: `iso32000__ref__annotation_deletion_semantics.md`
   **C8** requires a deleted target be *"detect and disclose"*, and its §5
@@ -92107,7 +92431,31 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### `Pass 184.0` — **A FIELD NAME IS A REFERENCE, AND NOTHING IN pdfce TREATS IT AS ONE: RENAME REPAIRS, DELETE DISCLOSES, AND THE ACTION-CARRIER WALK BECOMES A VISITOR** — ★★★ **THIS IS AN OWED FOLLOW-UP DISCLOSED BY THE ENGINEER, NOT A DEFECT FOUND IN REVIEW — AND THIS FILING RULES THAT ITS *DISCLOSURE* HALF IS DUE IMMEDIATELY WHILE ITS *REPAIR* HALF MAY BE SEQUENCED** — ★★ **`census_dangling` IS STRUCTURALLY BLIND HERE AND NO WIDENING OF IT CAN EVER HELP: A NAME STRING LEAVES NO REFERENCE IN THE GRAPH** — ★ **DISCHARGES THE `Pass 38.5` C8 DEBT, OWED SINCE THE SPEC CORPUS SPECIFIED IT** — filed 2026-08-30 (344th filing), **NOT STARTED**
+### `Pass 184.0` — **A FIELD NAME IS A REFERENCE, AND NOTHING IN pdfce TREATS IT AS ONE: RENAME REPAIRS, DELETE DISCLOSES, AND THE ACTION-CARRIER WALK BECOMES A VISITOR** — ★★★ **THIS IS AN OWED FOLLOW-UP DISCLOSED BY THE ENGINEER, NOT A DEFECT FOUND IN REVIEW — AND THIS FILING RULES THAT ITS *DISCLOSURE* HALF IS DUE IMMEDIATELY WHILE ITS *REPAIR* HALF MAY BE SEQUENCED** — ★★ **`census_dangling` IS STRUCTURALLY BLIND HERE AND NO WIDENING OF IT CAN EVER HELP: A NAME STRING LEAVES NO REFERENCE IN THE GRAPH** — ★ **DISCHARGES THE `Pass 38.5` C8 DEBT, OWED SINCE THE SPEC CORPUS SPECIFIED IT** — filed 2026-08-30 (344th filing), ★★★★ **PARTIALLY DELIVERED at `92b9f99` — CRITERION A ONLY, 1 OF 7. THE REPAIR HAS NOT HAPPENED AND NEITHER HAS THE REFACTOR.**
+
+> **★★★★ STATUS BLOCK, ADDED 2026-08-30 (345th filing). READ THIS BEFORE
+> ANYTHING BELOW.**
+>
+> **`92b9f99` shipped criterion A and nothing else.** The Pass **stays here in
+> *Next up*** rather than moving to *Shipped*, deliberately — a Pass with six
+> open criteria belongs where the work is tracked. *Shipped* carries an entry
+> headed **`Pass 184.0` criterion A ONLY**, which is the only form in which
+> this ID appears there.
+>
+> | criterion | status |
+> |---|---|
+> | **A** — categorical disclosure on rename | ★ **DISCHARGED** (`92b9f99`) |
+> | **B** — carrier walk → visitor, byte-identical | **OPEN** |
+> | **C** — `rename_field` **REPAIRS** + exact count | ★★ **OPEN** |
+> | **D** — `delete_field` / `delete_field_group` **DISCLOSE** (`Pass 38.5` C8) | ★★ **OPEN** |
+> | **E** — C9 out of scope | scoped out |
+> | **F** — `census_dangling` blindness **stated** | **OPEN** |
+> | **G** — sabotage checks | **partial** (A's own is in) |
+>
+> ★★★ **THE ONE SENTENCE A STALE READ MOST NEEDS: renaming a field still
+> repairs nothing, and deleting a field still discloses nothing.** What
+> changed is that a rename now **reports an upper bound** on how many actions
+> it may have broken. **That is a disclosure, not a fix.**
 
 **★ ID assignment.** `CLAUDE.md` rule 5 makes the ID the engineer's act; this
 filing's dispatch **explicitly delegated it** (*"Please mint it — my proposed
@@ -92128,7 +92476,7 @@ references.**
 
 | # | site | today | ★ what it should be |
 |---|---|---|---|
-| 1 | `EditSession::rename_field` (`crates/pdfce-core/src/edit.rs:18387`) | ★ **silently breaks** every reset, submit and hide button naming the field. `FieldRename` (`:15372`) has exactly **three** fields — `from`, `to`, `descendants_renamed` — so **there is no field in which a disclosure could even be returned** | **REPAIRS** the name strings and **REPORTS** the count |
+| 1 | `EditSession::rename_field` (`crates/pdfce-core/src/edit.rs:18387`) | ★★ **UPDATED 2026-08-30 (345th filing), criterion A shipped at `92b9f99`: still **breaks** every reset, submit and hide button naming the field, but **no longer silently** — `FieldRename` now has **FOUR** fields, the new one being `actions_not_retargeted`, a **categorical upper bound** over every action in the document. ~~*"has exactly three fields … there is no field in which a disclosure could even be returned"*~~ — that type-level absence is **closed**. **Nothing is repaired.** | **REPAIRS** the name strings and **REPORTS** an **exact** count — ★ **both still OPEN**; today's number is an upper bound, not the count this column asks for |
 | 2 | `EditSession::delete_field` (`:17151`) / `delete_field_group` (`:17261`) | no disclosure of actions left naming a deleted field | **DISCLOSES, does NOT repair** |
 | 3 | `pageops::references::census_dangling` | ★★ **structurally blind** — a name string leaves **no dangling object reference**, so the census `Pass 183.0` correctly widened to non-link annotations **cannot reach this class at any width** | unchanged; the blindness is **stated**, not patched |
 
@@ -92161,6 +92509,17 @@ and disappear**, which is the failure mode that produced this Pass.
   of one sentence per surface, and it is **shippable ahead of the rest of this
   Pass**. See `Pass 183.1`'s Shipped entry for the full ruling on why the
   disclosure half is due immediately while the repair half may be sequenced.
+
+  > ★ **DISCHARGED 2026-08-30 at `92b9f99`** (345th filing). Shipped as
+  > `FieldRename::actions_not_retargeted` plus a CLI token and a stderr prose
+  > line, counted off `forms::scan_javascript(...).actions_scanned` — **an
+  > upper bound over every action in the document, labelled categorical in the
+  > field's doc block, the CLI prose and `docs/core-api/`.** ★★ **It went
+  > FURTHER than this criterion asked** (which was a stated limitation in
+  > prose) **and NOT AS FAR as criterion C** (an exact count of the affected
+  > actions). **`delete_field` and `delete_field_group` did NOT receive their
+  > half of this criterion** — the categorical sentence there is still owed and
+  > rides with criterion D.
 - **B — Generalise the action-carrier walk to a VISITOR**, keeping
   `forms::scan_javascript`'s behaviour **byte-identical**. The 17-site walk
   with `/Next` chains currently threads `&mut FormJavaScript` throughout.
@@ -92212,6 +92571,80 @@ second walker would ship the class the refactor exists to remove. ★ **This
 filing's dissent is narrow and is criterion A**: the *disclosure* is not
 refactor-blocked and should not have waited. See `Pass 183.1`'s Shipped entry
 for the full ruling.
+
+### `Pass 185.0` — **THE CI JOB NAMED FOR ONE OF ITS NINETEEN STEPS: SPLIT IT, OR RENAME IT TO WHAT IT HAS BECOME** — ★★★ **THIS WAS DIAGNOSED, FILED AND REMEDIED IN THE RAG ON 2026-08-12 AND THE REMEDY WAS NEVER EXECUTED; THE JOB HAS SINCE GROWN FROM 3 STEPS TO 19** — ★★ **SEVEN OBSERVED RED RUNS HAVE NOW BEEN MISATTRIBUTED IN PUBLIC, AND THE MISATTRIBUTION IMPUGNS `run-gates.sh`** — filed 2026-08-30 (345th filing), **NOT STARTED**
+
+**★ ID assignment.** `CLAUDE.md` rule 5 makes the ID the engineer's act; this
+filing's dispatch **explicitly delegated the judgement** (*"Your call whether
+it deserves a Pass"*). Highest Pass ID before this filing was `184.0`. ⇒
+**`185.0` is minted here; ceiling `185.0`, next free `185.1` / new major
+`186.0`.**
+
+#### What is wrong today, measured
+
+**Measured in this filing** from `.github/workflows/ci.yml` (`awk`) and from
+GitHub (`gh run view --json jobs`):
+
+| fact | value |
+|---|---|
+| job key | `ui-strings` |
+| job `name:` | `verify pdfce-gui strings live in ui_text.rs` |
+| **named steps in the job** | ★★ **19** |
+| steps that name describes | ★★ **1** |
+| gates it actually runs | `check-ui-strings.sh`, `check-disclosure-channel.sh`, `check-outcome-disclosed.py`, **`check-commits-filed.py`**, **`check-passes-filed.py`**, `check-bypass-paths.sh`, `check-core-api-verbs.py`, `check-clap-help.py`, `check-cited-verbs-exist.py`, `check-metrics-line-contract.py`, `check-ledger-numbers.py`, `check-suite-name-absent.py`, `check-cli-help-leads.py`, `check-one-commit-per-command.py`, `check-cited-commits-exist.py`, `check-settings-consumed.py`, `check-string-gaps.sh`, `check-theme-colors.sh`, `check-ci-parity.py` |
+
+**GitHub's checks list, the PR status rollup and the commit status badge all
+show JOB names and never step names.** ⇒ **Every one of those nineteen gates
+fails in public under the label of the first one.**
+
+★★ **Two red runs today, both misattributed** — `33325723019` (`cff102a`) and
+`33328613196` (`5d87a5f`), both actually `check-commits-filed.py`. **Plus the
+five recorded on 2026-08-12. Seven observed occurrences, zero exceptions.**
+
+#### ★★★ Why this is a Pass and not a note
+
+**The finding is eighteen days old and already carries its own remedy.**
+`D:/dev/rag/rust/a_ci_job_name_describes_its_first_step_not_the_gate_that_failed.md`
+(2026-08-12) names this job, quotes its YAML, and closes: *"**Never** leave a
+multi-gate job named after one of its gates."*
+
+⇒ **The RAG entry was correct, complete, actionable and inert.** It changed
+nothing because **nothing was scheduled against it** — no Pass, no gate, no
+owner. **This Pass is the scheduling.** ★ **The general shape, recorded because
+this project has now hit it three times** (`oxidize-pdf`, XFA deprecation, this):
+*an answer sourced in one document while another still asks the question.* **A
+RAG finding with no work item behind it decays into a record of a problem.**
+
+★ **The cost is not cosmetic.** Today it cost a diagnostic cycle **in the
+expensive direction** — the engineer ran `check-ui-strings.sh` locally, got
+clean, and briefly believed CI and his machine disagreed. **The instrument is
+the thing a report is checked against**, so a misleading instrument does not
+merely fail to help; it argues against a correct local result.
+
+#### Acceptance criteria
+
+- **A — Fix the attribution.** Either **(1) split** the unrelated gates into
+  separate jobs — correct attribution in the one place everyone looks, at the
+  cost of a checkout + toolchain install per job — or **(2) rename** the job to
+  what it has become (`project gates`, or similar). ★ **The RAG file ranks
+  split above rename and says why: rename is honest and free, but the red X
+  still does not say WHICH gate.** **Either is acceptable; leaving it is not.**
+- **B — If (2) is chosen, say so in the RAG file**, so the next reader does not
+  re-file the split as still-owed.
+- ★ **C — The trigger, which is the durable half.** *Whenever a step is
+  appended to an existing job, re-read that job's `name:` and ask whether it
+  still describes the whole job.* **This job went 3 → 19 steps without anyone
+  asking once.**
+- **D — No new standing rule.** `R209`'s gate-sweep discipline and the RAG file
+  already cover the ground; what was missing was a **work item**, and this Pass
+  is it.
+
+#### ★ Scope note
+
+**`.github/workflows/` is engineer-owned and was NOT edited by this filing** —
+the misdirection was measured and filed, not fixed. **The RAG file received a
+dated recurrence footer** (hard rule 4: a dated footer on the existing lesson,
+never a second file).
 
 ### `Pass 179.0` — **BOLD BECOMES AUTOMATIC: A FALLBACK LADDER THAT BINDS A REAL FACE WHEN ONE EXISTS AND SYNTHESISES WHEN ONE DOES NOT, WITH NO OPERATOR INTERVENTION** — ★★★ **OPERATOR RULING, 2026-08-30; DECISION `106`. REVERSES THREE CLAUSES OF pdfce's OWN DOCUMENTED POSTURE AND AMENDS `R90`** — filed 2026-08-30 (340th filing), **NOT STARTED**
 
@@ -124463,6 +124896,69 @@ same cause (hashes exist only at commit time), two different failure modes.
   > — 13 of 19 scripts on disk.** *The two gates whose entire job is this
   > invariant were the two missing from the sweep meant to catch it.* Filed
   > as **`R209` clause (e)**.
+
+  > **★★★ THIRD AMENDMENT NOTE, 2026-08-30, 345th filing — `R217` DOES NOT
+  > CONFLICT WITH DECISION `090` ("ALWAYS PUSH"), AND THIS ROLE WAS ASKED TO
+  > RECONCILE THEM. IT DECLINES, BECAUSE THE CONFLICT WAS AN ARTEFACT OF A
+  > MISREAD CI RECORD. NO NEW NUMBER; NO TEXT WEAKENED.**
+  >
+  > **The engineer reported the two rules as being in live conflict**, on the
+  > evidence that three code commits (`cff102a`, `3762b5d`, `92b9f99`) were
+  > each pushed before its filing existed and *"CI went red on each one"*.
+  > **Measured from GitHub in the 345th filing** (`gh run list`,
+  > `gh run view --json jobs`, `gh run view --log-failed`), **that evidence is
+  > wrong on all three:**
+  >
+  > - **`cff102a`** — red, but the gate printed *"commits-filed: tip cff102a
+  >   is **DEFERRED**, not yet filed"* and failed on **three older commits**
+  >   (`bc49a8e`, `a24868e`, `90e7265`) stacked with no filing between them.
+  >   ★ **The deferral worked exactly as designed; `code → code → code` is what
+  >   failed.**
+  > - **`3762b5d`** — ★★ **had no CI run at all.** The red run is at head
+  >   `5d87a5f`, pushed **10 seconds later**, which shielded `3762b5d` out of
+  >   the window.
+  > - **`92b9f99`** — ★★★ **GREEN.** Pushed alone, as the tip, before its
+  >   filing existed — **the exact act believed to be forbidden** — with the
+  >   `ui-strings` job carrying both filing gates concluding `success`.
+  >
+  > ★★★ **THE RECONCILIATION IS THAT THERE IS NOTHING TO RECONCILE.** `R217`
+  > has never constrained **pushing**; it constrains **what may land on top of
+  > an unfiled code commit**. Decision `090` authorises the push. **Different
+  > acts.** The working orders are unchanged and remain sufficient:
+  > **`code → file, then stop`**, or **`code → file → code → file → …`** —
+  > **one unfiled commit may sit at the tip of `main`; never two.** ⇒ **"Always
+  > push" and `R217` are jointly satisfiable, and `92b9f99` is the proof by
+  > construction.**
+  >
+  > **★★ THE ONE GENUINELY NEW SUB-SHAPE, AND IT WIDENS THE 298th FILING'S
+  > CLAUSE WITHOUT CHANGING IT.** That clause says the window closes when the
+  > librarian is *dispatched*, and its worked example is **the engineer's own**
+  > commit landing inside it. **`3762b5d` was buried by a commit the engineer
+  > did not make** — `5d87a5f`, `pdfce-spec-librarian`'s own
+  > `chore(agent-memory)`. ⇒ ***The window can be closed by ANY process with
+  > write access to the tree, including a subagent whose work is unrelated to
+  > the code commit it buries.*** ★ **A docs-only commit is exempt from the
+  > GATE and is NOT exempt from the WINDOW** — two different exemptions, and
+  > this is the first occurrence that separates them. **Practical order,
+  > unchanged in form:** between a code commit and its filing, **nothing else
+  > lands — including an agent's own memory commit.**
+  >
+  > **★ THE TRANSFERABLE HALF, which is larger than this rule.** *An operator
+  > ruling and a standing rule that appear to conflict usually disagree about a
+  > **FACT**, not a **POLICY**.* The fact here was *"which commit was the tip
+  > when CI ran"*, available from `gh run list` in one command. **The apparent
+  > conflict was an artefact of not having looked** — hard rule 8's failure
+  > mode pointed at CI instead of at git, and it very nearly bought an
+  > amendment weakening `R217`. **Escalated:**
+  > `D:/dev/rag/rust/an_operator_ruling_and_a_standing_rule_that_seem_to_conflict_usually_disagree_about_a_fact.md`.
+  >
+  > **No new rule number, and the decline is argued:** this is `R217`'s own
+  > subject and its text was already correct — **the third consecutive
+  > amendment note in which that has been true.** ★ **Note that shape too:
+  > `R217` has now been reported as defective three times and corrected zero
+  > times; every occurrence was a compliance or measurement failure, not a rule
+  > failure.** **Ceiling unaffected: rules `R235`, next free `R236`; decisions
+  > `108`, next free `109`.**
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 

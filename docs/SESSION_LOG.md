@@ -80731,3 +80731,184 @@ index entry.** Filing ordinal `343` → **`344`**.
 6. **Send the `pdfceGUI` note — ten items**, still owed.
 7. **Then `Pass 184.0` proper** (the visitor + repair + disclose), or
    `Pass 179.0`, or `Pass 131.0`'s appearance remainder.
+
+## 2026-08-30 (345th filing) — **`Pass 184.0` criterion A (`92b9f99`) filed as PARTIALLY DELIVERED — 1 of 7 criteria.** ★★★★ **THE REPORTED CONFLICT BETWEEN DECISION `090` ("always push") AND `R217` DOES NOT EXIST: MEASURED FROM GitHub HERE, ONE OF THE THREE COMMITS OFFERED AS EVIDENCE NEVER HAD A CI RUN AND ANOTHER IS GREEN.** ★★★ **THE CI JOB-NAME MISDIRECTION WAS ALREADY DIAGNOSED, FILED AND REMEDIED IN THE RAG ON 2026-08-12 AND NOBODY EXECUTED THE REMEDY — THE JOB HAS GROWN FROM 3 STEPS TO 19.** ★★ **THE RULE-11 SWEEP FOUND TWO SURVIVORS AND BOTH ARE IN THIS ROLE'S OWN TREE, WRITTEN FOUR HOURS EARLIER BY THE 344th FILING**
+
+**Sourcing — `R228`.** A shell was held and used; **no code was written in this
+filing.** Run here, not relayed: `git log` / `git show --stat` /
+`git rev-parse` / `git remote -v` / `git status --porcelain`; `gh run list`,
+`gh run view --json jobs`, `gh run view --log-failed`; live greps of `edit.rs`,
+`main.rs`, `docs/core-api/02-editing-and-saving.md` and
+`.github/workflows/ci.yml`; an `awk` step count of the `ui-strings` job
+(**19**). **`run-gates.sh` PASS on all 29 commands at `92b9f99` is RELAYED, not
+re-run here.**
+
+**Shipped:**
+
+- **`Pass 184.0` criterion A** (`92b9f99`) — `FieldRename::actions_not_retargeted`,
+  a **categorical upper bound** on how many action targets a rename did not
+  update, surfaced as a CLI `key=value` token plus a stderr prose line;
+  `FieldRename` also gains `#[non_exhaustive]` and joins
+  `check-outcome-disclosed.py`. **Labelled categorical in three places.**
+  ★★ **Filed as PARTIALLY DELIVERED, not Shipped** — see below.
+
+**Decisions made this session:**
+
+- ★★★ **`R217` is NOT reconciled with decision `090` and NOT weakened, because
+  they never conflicted.** The dispatch asked for one or the other; this filing
+  ruled that **reconciling a phantom conflict would weaken `R217` on false
+  evidence**, which is how the `code` → `code` runs return. `R217` gains a
+  **third amendment note**, no new number. **Rules ceiling `R235` unchanged.**
+- **No decision minted.** *"These two rules never conflicted"* is a **finding**,
+  not an architectural decision; filing it as `109` would put a correction into
+  a list readers consult for commitments. **Decision ceiling `108` unchanged.**
+- ★★ **`Pass 185.0` MINTED** for the CI job-name misdirection — **because the
+  RAG entry alone demonstrably did not work.** Judgement delegated by the
+  dispatch (*"Your call whether it deserves a Pass"*).
+- ★ **Hard-rule-11 clause (f) DRAFTED and DECLINED.** *"When you correct a
+  heading and a table, read the prose between them."* **Amending
+  `pdfce-librarian.md` is the engineer's act**, per that rule's own
+  twice-recorded minting precedent. Recommended, not applied; derivation
+  escalated to the RAG so it survives a declined recommendation.
+
+**Findings + decisions:**
+
+- ★★★★ **FINDING 1 — the CI evidence was misread, on all three commits.**
+  `cff102a`: red, but the gate printed *"tip cff102a is **DEFERRED**"* and
+  failed on **three older commits** (`bc49a8e`, `a24868e`, `90e7265`) stacked
+  with no filing between them. `3762b5d`: ★ **no CI run at this head at all** —
+  the red run is at `5d87a5f`, pushed 10 seconds later. `92b9f99`: ★★ **GREEN** —
+  the `ui-strings` job carrying both filing gates concluded `success`.
+  ⇒ **`92b9f99` is a proof by construction that "always push" and `R217` are
+  jointly satisfiable**: pushed alone, as the tip, *before its filing existed*.
+  **`R217` never constrained pushing** — it constrains what may land **on top
+  of** an unfiled code commit.
+- ★★ **New sub-shape:** `3762b5d` was buried by **a subagent's own
+  `chore(agent-memory)` commit** (`pdfce-spec-librarian`), not by the
+  engineer's. **A docs-only commit is exempt from the GATE and not exempt from
+  the WINDOW** — two different exemptions, first occurrence separating them.
+- ★ **The transferable half:** an operator ruling and a standing rule that seem
+  to conflict usually disagree about a **fact**, not a **policy**. The fact was
+  *"which commit was the tip when CI ran"*, one `gh run list` away. **Hard rule
+  8's failure mode pointed at CI instead of git**, and it nearly bought a rule
+  amendment.
+- ★★★ **FINDING 2 — the CI job-name misdirection is EIGHTEEN DAYS OLD.**
+  `a_ci_job_name_describes_its_first_step_not_the_gate_that_failed.md`
+  (2026-08-12) names this exact job, quotes its YAML, and ends *"**Never** leave
+  a multi-gate job named after one of its gates."* **Measured here: 3 steps →
+  19; 1 of 19 described by the job's name; 5 misattributed red runs → 7.**
+  ⇒ **The lesson was correct, complete, actionable and inert, because nothing
+  was scheduled against it.** ★ **Third occurrence of "an answer sourced in one
+  document while another still asks the question"** (`oxidize-pdf`, XFA, this).
+  **A RAG finding with no work item behind it decays into a record of a
+  problem.**
+- ★ **FINDING 3 — "attention follows structure" is at the n=2 promotion bar.**
+  The plan-doc §0 survivor and `Pass 183.1`'s *"five variants"* one line above a
+  six-row table are the **same shape**: a correction reaching the heading and
+  the table and stopping in the prose between. **The skipped half is the half
+  that travels**, because prose is what gets quoted. Mint declined to this role;
+  drafted and recommended.
+- ★★ **Rule-11 sweep — two survivors, both in `ROADMAP.md`, both written by the
+  344th filing four hours before `92b9f99` falsified them:** `Pass 183.1`'s
+  Shipped entry (*"silently breaks…"*, *"exactly **three** fields"*) — **amended
+  with a dated footer, not rewritten**, because it is a dated measurement the
+  `184.0` ruling was made on; and `Pass 184.0`'s *Next up* table row 1 —
+  **corrected in place with the original left legible**, because *Next up* is a
+  plan.
+- ★ **Survivors verified CORRECT and deliberately left alone** (clause (e)):
+  `edit.rs:13423`–`:13424`, *"pdfce authors **four** of them"* and *"the four it
+  does not"*. **Six, four and eight are three different facts.** A sweep that
+  "reconciles" them breaks two correct sentences.
+- **All three stale counts from the 344th filing are fixed**, verified by live
+  grep here, not relayed: `docs/core-api/…:1083` → *"Six variants:"*;
+  `edit.rs:13397` → *"the other five variants"*; `edit.rs:13419` → *"…rather
+  than six"*.
+
+**Invariants:**
+
+- **GUI-core separation: NOT re-verified and NOT claimed** — no code written, no
+  manifest touched, so `cargo tree` was neither run nor asserted (hard rule 8).
+- **Round-trip / minimal-diff: unaffected** — criterion A **writes nothing**.
+  ★ Worth stating because the Pass title contains *retargeted*: **pdfce
+  retargets nothing today.**
+- **Rule 4:** satisfied off-canvas in both shells; no gate, no page marking.
+- **`git status --porcelain`: `?? .tmp_bench.py` only** — **a third filing**
+  carrying it. The repository is **public**.
+- **Backup currency: NOT checked in this filing** and therefore not asserted.
+- ★ **CI at `92b9f99`: run `33330500289` was `in_progress` when read.** The
+  `ui-strings` job (both filing gates) had **already concluded `success`**;
+  build and test jobs had not finished. **Read the final colour from GitHub
+  after this filing lands** — do not carry this sentence forward as a verdict.
+
+### Ledger
+
+Pass ceiling **`184.0` unchanged by the shipped work** (criterion A carries no
+new ID), then **`185.0` MINTED**; ceiling **`185.0`**, next free `185.1` / new
+major `186.0`. **Standing rules ceiling `R235` — UNCHANGED**, next free `R236`;
+**`R217` given a third amendment note, no number.** **Decision ceiling `108` —
+UNCHANGED**, next free `109` (one mint considered and declined, argued).
+**`FEATURES.md`: one row changed** (rename-a-field — disclosure added, repair
+explicitly not claimed). **No new `FEATURES.md` row.** **`D:/dev/rag/rust/`:
+four new files + two dated footers + four index entries (281 → 285 files).**
+**One hard-rule-11 clause drafted and declined.** Filing ordinal `344` →
+**`345`**.
+
+### Still in flight
+
+- ★★★ **`Pass 184.0` is 1 of 7 — the REPAIR has not happened.** Criteria B
+  (visitor), C (rename repairs + exact count), D (delete discloses — the
+  `Pass 38.5` **C8** debt), F (`census_dangling` blindness stated) and part of G
+  are **OPEN**. **Renaming a field still repairs nothing; deleting a field still
+  discloses nothing.** ★ **`delete_field`/`delete_field_group` did NOT receive
+  their half of criterion A either** — the categorical sentence there rides with
+  D.
+- ★★★★ **CRITERIA B AND C ARE BEING WRITTEN RIGHT NOW, UNCOMMITTED, AND THIS
+  FILING MUST COMMIT FIRST.** Measured at the end of this filing (the tree was
+  clean of it at the start): `edit.rs` and `forms.rs` are modified, **+424 /
+  −51**, adding `forms::retarget_action_field_names`,
+  `forms::retarget_target_list` and `forms::DeferredTargetList`, all doc-tagged
+  `Pass 184.0`. ★ **Nothing above is falsified** — every status claim is
+  anchored to **`92b9f99`** by commit, and **uncommitted work has no hash, so
+  it cannot be filed, only reported.** ★★★ **THE HAZARD:** `92b9f99` is the tip
+  and **DEFERRED**, which is the only reason its filing gate is green. **Commit
+  that work ahead of this filing and `92b9f99` is shielded out of the window
+  and CI goes red naming it** — the exact mechanism that produced today's
+  `3762b5d` failure. **Third instance of this window closing today.**
+- ★★ **`Pass 185.0` NOT STARTED** — the CI job rename/split.
+  `.github/workflows/` is engineer-owned and was not edited here.
+- **The `Pass 38.5` C9 debt** (`/StructParent` / `/OBJR`) — **owed and
+  un-minted**, deliberately excluded from `184.0` with the reason stated.
+- **`Pass 179.0`** — the automatic bold ladder — still `NOT STARTED`.
+- **`Pass 131.0`'s remainder is APPEARANCE work**; `131.1` / `131.2` untouched.
+- ★ **`.tmp_bench.py` still untracked — THIRD filing.** Should not land via
+  `git add -A`; the repository is public.
+- **`D:\dev\pdfceGUI` notification still TEN items deep** — unchanged, still
+  unsent as far as this role can see.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — an
+  **eleventh** filing; Reader only on this machine.
+- **`ARCHITECTURE.md` §4 sweep still unfinished** — a **tenth** filing.
+- **The two broken markdown tables in `ROADMAP.md`** — still unrepaired,
+  deliberately. ★ Line numbers not restated — this filing inserted several
+  hundred lines above them.
+
+### For next session
+
+1. ★★★ **Decide `Pass 185.0`: split the `ui-strings` job, or rename it.** One
+   line of YAML for the rename; the RAG file ranks *split* higher and says why.
+   **Seven misattributed red runs and eighteen days say this is overdue.**
+2. ★★ **Then `Pass 184.0` proper** — criterion B (the visitor) first, since C, D
+   and F all depend on it. ★ **Criterion A's cheap half is still owed on
+   `delete_field`/`delete_field_group`** and needs no visitor either — the same
+   argument that split A out of the refactor applies to it unchanged.
+3. **Read CI's final colour at `92b9f99`/this filing from GitHub** — it was
+   `in_progress` here, with the filing gates already green.
+4. ★ **Consider hard-rule-11 clause (f)** — *"when you correct a heading and a
+   table, read the prose between them"* — drafted in
+   `attention_follows_structure_so_a_correction_stops_in_the_prose_between_a_heading_and_a_table.md`.
+   **This role declined to add it unilaterally; it is the engineer's act.**
+5. **Take a backup bundle** — currency not measured in this filing.
+6. **Dispose of `.tmp_bench.py`** — third filing carrying it.
+7. **Send the `pdfceGUI` note — ten items**, still owed.
+8. ★ **A working-orders reminder that survived this filing:** between a code
+   commit and its filing, **nothing else lands — including a subagent's own
+   memory commit.** That is what turned `3762b5d` red.
