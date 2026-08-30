@@ -37,3 +37,33 @@ anchor is chosen right the first time.
 Related: [[inserting-before-an-anchor-orphans-its-doc-comment]] recorded the
 original instance; this is the generalised rule plus the derive-collision
 variant it did not cover.
+
+**★★ 2026-08-30 — THE CLASS SPLITS IN TWO, AND ONLY THE CHEAP HALF IS GATED.**
+Three instances in one day, then the librarian measured `clippy-driver` against
+hand-built fixtures. The result inverts the reassuring reading:
+
+| shape | what ships | clippy |
+|---|---|---|
+| **A — blank line** between the spliced doc run and the item | the item ends up **undocumented**; the orphaned run is a bare comment | **CAUGHT** (`empty_line_after_doc_comments`) — even **through** an intervening `#[inline]` |
+| **B — contiguous weld**: the run attaches to the *wrong* item | that item ships a **WRONG DESCRIPTION**, and in clap-derive that is shipped `--help` | **SILENT. Zero warnings.** |
+
+Two consequences worth carrying:
+
+- **The dangerous variant is the invisible one.** A missing description is a
+  gap somebody notices; a *confidently wrong* one on a `pub` item is read and
+  believed.
+- **★ The observed catch rate is inflated by the very mechanism that hides B.**
+  Both of my instances that day were variant A, agents produce A far more often
+  (a blank line is the natural artefact of a splice), so "clippy caught it both
+  times" reads as *the class is gated* when only half of it is. **Do not let a
+  green clippy run stand in for reading the splice site.**
+
+**A third variant, from the same day, that neither lint sees:** inserting a doc
+block and forgetting the `pub` line under it. The doc lands on top of the NEXT
+field's doc block and the struct is simply missing a field. The **compiler**
+caught it — but only because a constructor referenced the missing name. **A
+doc-only insertion of that shape ships silently.**
+
+**How to apply, unchanged and now with a reason:** anchor on the FIRST LINE OF
+THE DOC BLOCK, and after any splice into a type or an enum, read the three
+lines above and below the insertion. `cargo clippy` is not the check here.

@@ -172,3 +172,21 @@ up: a gate whose output is wrong reads as a gate that passed.
 [[feedback_run_the_projects_own_gates]] — `check-string-gaps.sh` is the only
 thing that has ever caught this, and it is not one of the gates I reach for
 by habit.
+
+**★ 2026-08-30 — A SECOND MECHANISM, AND THE TRAVELLING ADVICE DOES NOT COVER
+IT.** Everything above is about a continuation backslash being **lost in
+transit** (a heredoc, `sed`, an inline Python string). This one **survived
+transit intact** and was destroyed afterwards:
+
+`cargo fmt` **rejoined** a correctly-continued Rust string literal onto a
+single line and left the eaten indentation in place as a **ten-space run**
+inside the message. The source I wrote was right; the formatter made it wrong.
+
+⇒ Two causes, one signature, and *"never use a heredoc"* prevents only one of
+them. **The only reliable detector is the gate** —
+`bash tools/check-string-gaps.sh` — and it must be run **after** `cargo fmt`,
+not before, because before the fmt the literal is clean.
+
+**How to apply:** in the shutdown sweep, order matters: `cargo fmt` **then**
+`tools/run-gates.sh`. Running the gate first certifies a tree the formatter is
+about to change.

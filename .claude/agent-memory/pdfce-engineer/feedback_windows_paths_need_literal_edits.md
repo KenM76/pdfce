@@ -398,3 +398,24 @@ anything else goes green.
 
 ⇒ **Restore in a `try`/`finally`, never after the loop**, and **validate every
 anchor up front** before touching the file at all. Both are one line each.
+
+**★ 2026-08-30, live instance while WRITING THIS FILE'S SIBLING.** A
+`python -c "..."` one-liner containing backticks — ordinary Markdown code spans
+in a memory-index line — was **command-substituted by bash**: `` `pub struct` ``
+became an attempt to run `pub`, and the resulting string never matched, so the
+edit silently did nothing while the heredoc in the *same command* succeeded.
+
+Two things that makes concrete:
+
+- **The hazard is not only the backslash.** A **backtick** inside a
+  DOUBLE-quoted shell string is substitution, and Markdown prose is full of
+  them. `python -c "..."` is therefore as unsafe as a heredoc, and it *looks*
+  safer because it is one line.
+- **A mixed command can half-succeed.** The `<<'MD'` heredoc appended
+  correctly; the `python -c` beside it did not. **The visible output was a
+  Python traceback for the second half only**, which reads as "that one edit
+  failed" rather than "check what did land".
+
+⇒ **`python -c` with any prose payload is the same mistake as a heredoc.**
+Write the script to a file (`Write`), run it, delete it. That path has no shell
+interpretation at all.

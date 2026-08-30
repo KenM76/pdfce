@@ -120,6 +120,7 @@ LOCAL = {
     "tools/check-theme-colors.sh": "bash tools/check-theme-colors.sh",
     "tools/check-cited-commits-exist.py": "python tools/check-cited-commits-exist.py",
     "tools/check-ci-parity.py": "python tools/check-ci-parity.py",
+    "tools/check-ci-job-names.py": "python tools/check-ci-job-names.py",
 }
 
 # Not in the sweep, but a local command catches the same failure class.

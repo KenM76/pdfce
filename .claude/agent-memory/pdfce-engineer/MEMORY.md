@@ -46,7 +46,7 @@
 - [Two defensible answers? Ship both, pick the default](feedback_spec_ambiguity_defaults_are_mine.md) — NOT just spec ambiguity; Ken refused to be asked twice, and never ask a consuming project either
 - [A gate that under-reports looks green](feedback_a_gate_that_underreports_looks_green.md) — found only by forecasting its output; fix the CLASS, not the spelling that failed
 - [Inserting before an anchor orphans its doc comment](feedback_inserting_before_an_anchor_orphans_its_doc_comment.md) — splicing before `fn`/variant lands inside the preceding `///`; clap ships it as wrong `--help`
-- [Anchor on the DOC BLOCK, not the item](feedback_anchor_on_the_doc_block_not_the_item.md) — 3 recurrences in one session; on a `pub struct` it re-parents the `#[derive]`s and the compiler rejects it
+- [Anchor on the DOC BLOCK, not the item](feedback_anchor_on_the_doc_block_not_the_item.md) — clippy gates ONLY the blank-line variant; a contiguous weld ships a WRONG description silently, and a forgotten `pub` line ships a missing field
 - [A splice's END marker must be searched from START](feedback_splice_end_marker_must_be_searched_from_start.md) — `s.index(END)` from 0 silently DUPLICATED 141 doc lines; every gate green, a reading agent caught it
 - [Form-XObject text editing state](project_form_xobject_editing.md) — shipped 2026-08-20; shared forms edit IN PLACE by decision 076; the real CAD file found two defects 20 green tests could not
 - [A correct fix can be unreachable](feedback_a_correct_fix_can_be_unreachable.md) — A/B the counters on a pre-fix binary; a plan's ORDERING of two items is its least-checked claim
@@ -79,7 +79,7 @@
 - [Never `rm -rf` a directory you only assumed you created](feedback_never_rm_rf_a_directory_you_only_assumed_you_created.md) — `mkdir -p` + `rm -rf` ate two committed files; only `git status` saw it
 - [Two shipping functions are not an inverse pair](feedback_two_shipping_functions_are_not_an_inverse_pair.md) — a writer+reader that both ship can still drift a shape 7.5pt per round trip; measure before building on it
 - [Count what committed, not what you intended](feedback_count_what_committed_not_what_you_intended.md) — an early-returning callee makes an intent counter over-count, and the undo fold then silently does not happen
-- [A sweep is only as good as its spelling](feedback_a_sweep_is_only_as_good_as_its_spelling.md) — punctuation is the failure surface; narrow the FILE SET and widen the pattern, and a claim in a comment is not a check
+- [A sweep is only as good as its spelling](feedback_a_sweep_is_only_as_good_as_its_spelling.md) — punctuation AND synonym are the failure surface; two agents' sweeps of one claim came back disjoint, so name your keyword set before believing a clean result
 - [State your premises in a dispatch](feedback_state_your_premises_in_a_dispatch.md) — four agents returned corrections to the thing that sent them, every one landing on a stated premise
 - [A worked example is a claim](feedback_a_worked_example_is_a_claim.md) — a doc example shipped the defect value it was written to replace; take the number from a test or a live run, never from prose
 - [A plan's list is a snapshot, not the ruling](feedback_a_plan_list_is_a_snapshot_not_the_ruling.md) - a cited plan resolves the SAFEGUARDS; the operator's sentence defines the SCOPE, and mine omitted an action he'd asked for

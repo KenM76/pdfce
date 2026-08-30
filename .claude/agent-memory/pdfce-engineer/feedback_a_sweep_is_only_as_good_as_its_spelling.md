@@ -49,3 +49,35 @@ thing that would have caught that.
 - Related: [[feedback_absence_needs_an_unscoped_query]] is the same shape with
   the scope in the path rather than in the pattern, and
   [[feedback_a_gate_that_underreports_looks_green]] is what this produces.
+
+**★★ 2026-08-30 — TWO SWEEPS OF THE SAME CLAIM, BY TWO AGENTS, AND THE SETS
+WERE DISJOINT.** `Pass 184.0` made a rename REPAIR the button actions naming a
+field, falsifying a sentence that had been true for months. Both the librarian
+and I swept for survivors. It swept six keywords; I swept the phrase
+**"submit mapping"**. **Neither keyword set contained the other's spelling**,
+so each of us would have missed *every one* of the other's survivors — and each
+sweep reported clean in the meantime. Two clean reports, one incomplete
+document.
+
+Two things this adds to the rule above:
+
+- **The failure surface is not only punctuation, it is SYNONYM.** The same
+  claim was spelled *"submit mapping"*, *"submit mappings"*, and via the
+  neighbouring nouns *"FDF"*, *"JavaScript reference"*. Widening the pattern
+  around one noun does nothing about the sentence that used a different one.
+- **★ A second sweeper is not redundancy unless the sets overlap.** Two agents
+  sweeping independently *feels* like double cover and can be zero cover. If
+  you dispatch one, **state the keyword set you already used**, so the other
+  can deliberately choose a different one rather than accidentally choosing the
+  same one.
+
+⇒ **When a sweep returns clean, the question is not "did I find them all?" but
+"what could my keyword set not have matched?"** Answer it by naming the set out
+loud before believing the result.
+
+**A third scoping failure from the same day, different axis:** a criterion
+asked that a limitation be documented "in its rustdoc and in `docs/core-api/`".
+It was documented in every file the FIX touched and in none of the files the
+CHECKER lives in — because the sweep started from *"what did I change?"* rather
+than from *"who reads this claim?"*. **The reader who most needs a limitation
+stated is the one who never opens the file where you fixed it.**

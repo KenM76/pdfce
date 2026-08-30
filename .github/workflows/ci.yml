@@ -296,8 +296,20 @@ jobs:
           done
           exit $fail
 
-  ui-strings:
-    name: verify pdfce-gui strings live in ui_text.rs
+  # ★ RENAMED 2026-08-30 (`Pass 185.0`). This job was `ui-strings` and was
+  # named after its FIRST step, which it had been since the day it ran only
+  # that step. It now runs twenty, spanning strings, disclosures, docs,
+  # filings and the ledger -- and CI reports failures BY JOB, so a filing
+  # gate going red announced itself as a string check that was perfectly
+  # clean. That cost a diagnostic cycle and, worse, made the local gate
+  # runner look wrong.
+  #
+  # The count in the name is enforced by `tools/check-ci-job-names.py`,
+  # the last step below: an honest collective name is easy to write once
+  # and the COUNT is the part that decays, so the count is the part a gate
+  # can falsify.
+  audits:
+    name: repository audits (20 checks)
     runs-on: ubuntu-latest
     steps:
       # ★ FULL HISTORY REQUIRED, and its absence was SILENT.
@@ -547,6 +559,19 @@ jobs:
       # grep one YAML is a job people delete.
       - name: check every CI command has a local runner
         run: python tools/check-ci-parity.py
+
+      # A job's name is the first thing anybody reads when CI goes red, and
+      # this job's name described one of its nineteen steps for eighteen days
+      # -- during which the finding was already written up in
+      # `D:/dev/rag/rust/`, correct and complete and scheduled against
+      # nothing. This step is the scheduling.
+      #
+      # It checks two decidable things: a job over the threshold declares a
+      # count, and a declared count is right. It deliberately does NOT judge
+      # whether a name is a fair description -- that is not decidable from
+      # text, and the gate says so rather than pretending.
+      - name: check a many-check job says how many
+        run: python tools/check-ci-job-names.py
 
   cross-check:
     name: cross-target compile check (macOS / wasm32)
