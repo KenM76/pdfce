@@ -78224,3 +78224,267 @@ fmt, clippy, `check-clap-help` (122 subcommands), `check-cli-help-leads`, the
    figure was found by reading for the claim; the block it sits in lists
    several modules' surfaces the same way, and nothing derives any of them.
    Worth one deliberate pass rather than waiting for the next accident.
+
+## 2026-08-30 (337th filing) — `Pass 177.0` (`a27ae08`) filed: `rotate_widget` closes the transform trio, and the spec lookup that preceded it is what stopped a **no-op** shipping. ★★★ The filing's own finding is that the testing fact this Pass re-derived from a failing test **was already on disk as a HIGH-severity `personal_rag` lesson, seventeen days old** — and two of that lesson's own worked examples are load-bearing in this repo's test suite right now. **No mint, no decision record; both cited-verb phantoms discharged**
+
+**Shipped:**
+- **`Pass 177.0`** (`a27ae08`) — `EditSession::rotate_widget(fqn, index,
+  degrees)` → `WidgetRotation`, `EditError::WidgetRotationNotQuarterTurn`,
+  `CommandKind::RotateWidget`, **plus the read half**
+  `forms::Widget::rotation: Option<i64>`; `pdfce-cli rotate-widget`, and
+  `list-fields --widgets` now prints `rotation=`. **7 files, +1,217 / −34;
+  test-file share 536 of 1,217 = 44.0 %**; 9 new integration tests driving the
+  binary, both load-bearing claims sabotage-checked.
+
+**★★ Both cited-verb phantoms are now discharged.** `rotate_widget` was the
+second of the two `tools/check-cited-verbs-exist.py` found on its **first
+run** (`Pass 163.0`); `set_dimension_label` went in `Pass 175.0`. Re-run here:
+**PASS, 7 of 7 cited verbs resolve, none marked unbuilt.** `rotate_widget`
+**leaves every "remains unbuilt" carry from this filing forward** — prior
+entries naming it stay exactly as written (hard rule 1), including `Pass
+175.0`'s *"★★ `rotate_widget` IS STILL UNBUILT … only one shipped."*
+`docs/NEXT_SESSION.md` §A item 4 discharged.
+
+**★★★ The substance, because the order of operations is the finding:**
+
+1. **The spec lookup CHANGED the design; it did not validate it.**
+   `FEATURES.md` had recorded for weeks that the mechanism was **unsourced**
+   and that a spec-RAG lookup was required before scoping.
+   `pdfce-spec-librarian` built
+   `D:/Dev/Rag-Specialized/PDF_Spec/iso32000/iso32000__s__12.5.6.19.md` (**607
+   lines**, seven-step recipe, a source per step) and returned three facts a
+   from-memory build would have got wrong:
+   **(a) `/MK /R` is COUNTERCLOCKWISE while the page's `/Rotate` is
+   CLOCKWISE** — the two sentences are otherwise word-for-word identical and
+   the direction word is the only difference; the standard flags the clash
+   **once**, on the transition dict's `/Di` row, nowhere near either locus,
+   and the *movie* dict's `/Rotate` uses the identical phrase *"relative to
+   the page"* with the opposite sense, so **that phrase carries no convention
+   at all**. `/MK /R` agrees with §8.3.4's own positive-angle matrix, so
+   **there is no sign flip anywhere on this path** — the opposite of what a
+   reader who remembers page rotation assumes.
+   **(b) ★★ Writing `/MK /R` alone is a NO-OP under PDF 2.0** — PDF
+   Association erratum **#56** (`ISO approved`, TWG 2021-07-08) puts `/MK` on
+   §12.5.2's ignore-list when an `/AP` is present, and 2.0 makes `/AP` a
+   `shall` on widgets. A one-key write would have **appeared to succeed and
+   changed nothing a conforming reader shows.** The verb is
+   write-**plus**-regenerate *because of* this, not adjusted after it.
+   **(c)** *"quantised 0/90/180/270"* was **pdfce's own rule stated as the
+   standard's** — the constraint is *"a multiple of 90"*, unbounded. Accepted,
+   reduced into `[0, 360)`, and the reduction **reported**; the reader
+   deliberately does not normalise, so the model keeps agreeing with the file.
+2. **The obvious implementation distorts.** §12.5.5 step (b) fits the
+   transformed appearance box onto `/Rect` **anisotropically**, so spinning an
+   already-drawn `w × h` appearance gets squashed back by `w/h`. The
+   appearance is therefore **redrawn** into a `w`/`h`-swapped `/BBox` and
+   stood upright by `/Matrix`, making step (b) a **1:1 identity**. **`/Rect`
+   never moves** — the opposite of `rotate_annotation`, where §12.5.2 forces
+   `/Rect` to grow. Measured on the shipped binary: `/Rect [20 150 250 172]`
+   unchanged, `/BBox [0 0 22 230]` swapped, `/Matrix [0 1 -1 0 0 0]`.
+3. **★★ It fixed a second bug nobody was looking for.**
+   `regen_field_appearance` — the **single** place a field's appearance is
+   rebuilt, reached by fill, resize and border change — **ignored `/MK /R`
+   unconditionally, so FILLING A ROTATED FIELD SILENTLY STOOD IT BACK UP**:
+   the rotation survived in `/MK` and vanished from the pixels. Every
+   regeneration now honours it.
+
+**Decisions made this session:** none minted. **Two dispositions, both
+judged here rather than deferred:**
+
+- **★★ Standing rule — MINT DECLINED.** The candidate the dispatch offered for
+  judgement was *"a spec lookup that changes the design must precede the
+  build, not validate it."* **Declined on the strongest available ground:
+  project rule 1 (spec-fidelity discipline) already says exactly that, and
+  rule 1 WAS APPLIED HERE AND WORKED** — the lookup was ordered, the corpus
+  file was built, and a no-op verb was **prevented**. The bar `R232`, `R233`
+  and `R234` all state for a sharpening mint is *the parent's remedy is
+  correct and **does not reach** the case*; **here it reached the case.** A
+  rule minted from a **success** has no failure to prevent and would restate
+  `CLAUDE.md` rule 1 for the price of a ledger number. ★ **What is filed
+  instead is the evidence**, in `Pass 177.0`'s entry §2 — rule 1's warrant has
+  until now consisted entirely of failures, and this is the first Pass where
+  the lookup's value is measurable as *"the shipped design differs from the
+  from-memory one in three named ways, one of them a no-op."*
+  **`R234` stays the ceiling; `R235` is free.**
+- **Decision log — NO ENTRY.** Nothing moves a crate boundary, an invariant
+  definition or a library choice. The redraw-rather-than-compose choice is
+  **verb-level**, argued in `docs/core-api/02-editing-and-saving.md`'s new
+  *"three things a shell will otherwise get wrong"* section (shipped in the
+  commit); the read-half symmetry follows the 2026-08-27 border/visibility
+  precedent rather than establishing anything. Same test and same disposition
+  as the 336th filing's. **Ceiling stays `105`; next free `106`.**
+- **The engineer's own `R222` question, answered: neighbourhood, not
+  instance, and no mint.** A test of his required the widget refusal to
+  contain **"NOT BUILT YET"** — correct when written, and it **correctly
+  failed** the moment the verb shipped, because it had become a test pinning a
+  **temporary state as a contract**. `R222` governs a doc-comment claim that
+  was **wrong**; **this string was never wrong — it expired.** His read was
+  *"neither, `n = 1`"* and this filing agrees; the note lives in the test,
+  which is where a future reader of that assertion is standing. **If a second
+  expiring-contract test appears, mint on it** — the count is recorded so it
+  can be added to rather than re-derived.
+
+**Findings + decisions:**
+
+- **★★★ THE FINDING OF THIS FILING — the lesson was already written, seventeen
+  days ago, marked HIGH.** The engineer's second self-correction was that an
+  assertion scanned the output bytes for an **absent** `/Matrix`, and **an
+  incremental save keeps every earlier revision forever**, so a byte scan can
+  answer *"did pdfce ever write this"* and never *"is this in force"*. He
+  offered it as this session's main RAG candidate. It is
+  `C:\personal_rag\pdf\lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`
+  — **2026-08-13, `methodology`, `severity: high`**, same asymmetry table,
+  same mechanism, plus a *Limits* section naming two companion lessons.
+  **Nothing was wrong and nothing contradicted anything**: the fact was on
+  disk, in the subject the project's own `CLAUDE.md` says to *"grep before
+  re-deriving anything about producer behaviour"*, and it was re-derived from
+  a failing test instead.
+- **★★ That is `R234` instance 1's shape in a THIRD tree.** `R234` was minted
+  on *"the answer was already sourced in one document while another still
+  asked the question"*, twice, eighteen days apart, **both times in the spec
+  corpus**. This is the **third occurrence and the first in `personal_rag`**
+  ⇒ the shape is not a property of the spec RAG; it is a property of **any
+  corpus this project reads less often than it writes.** ★ **`R234` is
+  deliberately NOT widened**: it is scoped to *claims about what a standard
+  says*, and **nobody made a wrong claim here — the check simply did not
+  run.** Widening a rule about wrong claims to cover unrun checks would blunt
+  the clause that makes it enforceable. Filed as evidence.
+- **★★ The re-derivation came back STRONGER than the record, and that is the
+  half worth keeping.** The 2026-08-13 lesson's remedy is *"the test saves
+  with `--mode full`"* — sound about the **file**. The engineer's remedy is a
+  **render comparison** — sound about what is **in force**, because even after
+  a full rewrite an object can be present-but-unreferenced or
+  present-and-overridden. ⇒ **the asymmetry table gains a third row: a full
+  rewrite makes an absence assertion answerable about the BYTES; only a render
+  makes it answerable about the RESULT.** Written as a dated footer on the
+  existing lesson, **not a second file** (hard rule 4).
+- **★★★ And the sharpest form the finding takes: two of that lesson's own
+  worked examples are load-bearing in this repository's test suite RIGHT
+  NOW.** `crates/pdfce-cli/tests/dimension_style.rs:335` (`--mode full`) and
+  `crates/pdfce-core/tests/form_field_hierarchy.rs:630` (`save_full`) are
+  both absence assertions that **explicitly force a full rewrite, each with a
+  comment saying why** — and `dimension_style.rs` is the file the lesson's own
+  *Implementation* section names. **The record was not merely on disk; it was
+  already working, in this repo, while the same fact was being rebuilt from
+  scratch a few directories away.**
+- **`Widget::caption`'s doc comment said the other `/MK` keys are cosmetic and
+  *"nothing consumes them"*.** A claim about **callers**, and it stopped being
+  true here. Amended in place by the engineer — **`R223` exactly**.
+- **The `gui` box is `[ ]` and is CITED, not blank.**
+  `D:/dev/pdfceGUI/FEATURES.md` line 202 (2026-08-28) states the rotate grip's
+  scope in terms — annotations and ce dimensions get the circle, and **"a form
+  field gets no circle at all."** A **stated exclusion in that shell**, dated,
+  which is the row's own falsifier rather than a verdict about a repo this
+  project does not build (`R203`/`R196`).
+
+**★★ Hard-rule-11 sweep — TWO survivors corrected, FIVE reported as
+surviving-and-correct, ONE reported as owed.** Claim: *"a widget's `/MK /R`
+is unbuilt / unread."* Swept per clause (e) — bare keyword,
+case-insensitive, over the files the feature touches — not the exact phrase
+over the tree.
+
+- **Survivor 1**, `docs/FEATURES.md` `rotate_annotation` row: *"a widget's
+  `/MK /R` remains **genuinely unbuilt** (own *Planned* row)"* — named by the
+  dispatch, and **the *Planned* row it points at is deleted by this filing**,
+  so the sentence would have been stale *and* dangling. **Corrected**: both
+  refusals are routing decisions and **both routes now exist**, each named.
+- **★★ Survivor 2**, `docs/FEATURES.md` `/MK` read-scope row: *"Read a choice
+  field's `/I`/`/TI` and a widget's caption (`/MK /CA`). **Other `/MK` keys
+  are not read.**"* — **not named by the dispatch**, and false the moment
+  `Widget::rotation` shipped. **Corrected, and the remaining unread keys are
+  now ENUMERATED** (`/BC`, `/BG`, `/RC`, `/AC`, `/I`, `/RI`, `/IX`, `/IF`,
+  `/TP`) rather than left as a bare *"other"* — a bare negative over an
+  unnamed set is unfalsifiable by a reader, which is how it survived.
+- **Surviving-and-correct** (do not "fix" these): `docs/ROADMAP.md`'s `Pass
+  175.0` entry saying `rotate_widget` is still unbuilt (**history, true as of
+  its date, append-only**); `crates/pdfce-core/tests/pdf15_streams.rs:302`
+  (hand-built fixture, not a saved output);
+  `crates/pdfce-core/tests/edit_undo.rs:834` (scoped to the appended revision
+  only); and the two full-rewrite absence assertions above.
+- **★ OWED, not fixed — `crates/` is outside this role's remit.**
+  `crates/pdfce-core/tests/object_clipboard.rs:147-150` asserts
+  `!text.contains("/F1 12 Tf")` over `saved(&session)` =
+  `to_incremental_bytes`. **Sound today, and its soundness is UNSTATED**: it
+  holds only because the destination fixture's content is `"0 0 5 5 re f"`
+  with no text operator at all, while the *source* document that does carry
+  `/F1 12 Tf` is a **different `Document`** and never enters the haystack. A
+  future edit giving that fixture any text makes the assertion vacuous **with
+  nothing going red**. One comment line, or `to_full_bytes`. Found by this
+  sweep, by no gate.
+
+**Sourcing — `R228`; this filing had a shell and used it.** Re-run here:
+`check-cited-verbs-exist` **PASS (7/7)**, `check-core-api-verbs` **PASS at
+175 public `EditSession` methods** (up from the 336th filing's 174, agreeing
+with the commit message), `check-ledger-numbers` **clean**,
+`check-suite-name-absent` **clean**, `check-commits-filed` naming **`a27ae08`
+DEFERRED** before these entries were written. `git show --numstat`: **7 files,
++1,217 / −34**. Spec file confirmed by `ls`: `iso32000__s__12.5.6.19.md`,
+**607 lines**. **Relayed, not re-run:** `cargo test --workspace
+--all-features`, fmt, clippy, wasm32 check, `fuzz` check, `cargo tree`,
+`check-clap-help` (**123** subcommands), `check-cli-help-leads`, the 9
+integration tests and both sabotage results.
+
+**Cross-project RAG — ONE dated footer, ZERO new lesson files, ONE pointer,
+and the zero is deliberate:**
+- `C:/personal_rag/pdf/lesson_20260813_absence_assertion_vacuous_under_incremental_save.md`
+  — **footer 2026-08-30**: the third row of the asymmetry table (full rewrite
+  answers about **bytes**, render answers about **what is in force**), the
+  `/Matrix` instance, the observation that two of the lesson's own worked
+  examples are live in the same repo, and the re-derivation itself recorded as
+  the finding. **Amended rather than duplicated, per hard rule 4.**
+- **`/MK /R`'s counterclockwise sense — POINTER ONLY, no lesson.** The spec
+  corpus already covers it exhaustively (`iso32000__s__12.5.6.19.md` §7.1's
+  six-row direction table, the `/Di` warning, and a **spelling** note that
+  `grep counterclockwise` misses two hits per edition because the standard
+  also writes *"counter clockwise"* with a space — use
+  `counter[ -]?clockwise`, and `anticlockwise` returns nothing). That is
+  `pdfce-spec-librarian`'s territory (hard rule 6) and duplicating it would
+  violate hard rule 4. ★ **The empirical half — whether Acrobat, Chrome and
+  pdf.js actually honour or ignore `/MK /R` against a disagreeing `/AP` — is
+  UNMEASURED**, and the spec file explicitly hands that question to
+  `personal_rag`. **Not asserted in either direction**; recorded in
+  `C:/personal_rag/pdf/index.md`'s *Candidate topics not yet covered* with the
+  spec pointer, so the next session that has a reader in front of it knows
+  exactly what to measure.
+
+**Still in flight:**
+- **Backup bundle is 6 commits behind `HEAD`** —
+  `pdfce-20260830-0122-e49619f-full.bundle`, by `ls -lt` and `git rev-list
+  --count e49619f..HEAD` = **6**.
+- **`main` is 6 commits ahead of `origin/main`**; pushing is
+  standing-authorized (decision 090) and `check-suite-name-absent` is clean.
+- **★ The tree did NOT move under this filing** — ending a three-filing
+  streak, and recorded only because the streak was. At first reading:
+  four modified `.claude/agent-memory/` files plus one untracked one, **no
+  `crates/` or `docs/` changes outstanding.** The 336th filing's in-flight
+  `edit.rs` / `forms.rs` / `main.rs` work is exactly what `a27ae08` committed
+  — **reconciled, not assumed.**
+- `bash tools/run-gates.sh` has **not** been run against `a27ae08`; five
+  gates were run individually here.
+- **`Acrobat_Features/measure__distance_tool.md` re-verification** — still
+  open, unchanged: single-sourced at moderate confidence, its own author asked
+  for a live-Acrobat check, and this machine has Reader only.
+
+**For next session:**
+1. **★ Notify `D:\dev\pdfceGUI` of `rotate_widget` / `rotate-widget`** —
+   their own `FEATURES.md` line 202 records *"a form field gets no circle at
+   all"* as a **deliberate** exclusion made when no engine verb existed. The
+   premise has changed; the exclusion may still be the right call, but it is
+   now a choice rather than a constraint and they should get to make it. **Add
+   it to the 336th filing's still-unsent item 2** (`group-rename` /
+   `group-delete` / `dimension-group` / `dimension-label`) rather than sending
+   two notes.
+2. **One comment line on `object_clipboard.rs:147-150`** — the owed sweep item
+   above. Cheapest possible discharge of a live, unstated test dependency.
+3. **The `ARCHITECTURE.md` §4 sweep is still not finished** — carried
+   unchanged from the 336th filing. One stale re-export figure was found by
+   reading for the claim; the block it sits in lists several modules' surfaces
+   the same way and nothing derives any of them.
+4. **★ Consider whether the RAG-consultation step deserves a place in the Pass
+   checklist rather than a rule.** §8's finding is that the corpus held the
+   answer and was not read. A mint was declined (the check exists; it did not
+   run), but *"grep `personal_rag` for the subject before deriving a
+   methodology claim"* is a **procedural** step of exactly the species hard
+   rules 8, 10 and 11 already are — commitments on behaviour, not machinery —
+   and the engineer's own Pass checklist is where such a step would actually
+   be read. **Operator/engineer's call, not this role's to add.**
