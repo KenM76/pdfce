@@ -27558,3 +27558,124 @@ free 072.**
   diverges from) is recorded here; the procedural half (how a claim about a
   standard's silence is sourced, and what a divergence owes that an ambiguity
   does not) is the rule.
+
+- **2026-08-30 — Decision `105`. A SCHEMA VERSION IS EMITTED **PER DOCUMENT**,
+  NOT PER BUILD: the version a file declares tracks what that file actually
+  USES, rises when the new key appears and FALLS AGAIN when the last one is
+  cleared — in both of pdfce's independent private formats.** `Pass 175.0`
+  (`c7ac578`), the ce-dimension text override. **Not specified by decision
+  097**, which fixed the *shape* of the verb and said nothing about
+  versioning; recorded here because the obvious default is the opposite and a
+  future session would otherwise re-derive it, or contradict it.
+
+  **The two formats, and the constants, read from live source.**
+
+  | format | constant | before | after | emitted `after` only when |
+  |---|---|---|---|---|
+  | `/PieceInfo` ce-dimension sidecar | `SIDECAR_VERSION` (`dimension/sidecar.rs:97`) | `3` | `4` | the document carries at least one `/LabelOverride` |
+  | `ObjectClip` clipboard file | `CLIP_VERSION` (`vector/clip.rs:88`) | `2` | `3` | the clip carries at least one `ClipAnnotation::Dimension` with a `label_override` |
+
+  Each keeps a named predecessor constant beside it
+  (`SIDECAR_VERSION_PRE_OVERRIDE = 3`, `CLIP_VERSION_PRE_LABEL_OVERRIDE = 2`)
+  and the clip's choice is made by a function, `ObjectClip::needed_version(&[
+  ClipAnnotation]) -> u32`, rather than by a branch at the write site — so
+  there is **one** place that answers *"what version is this content?"*, and
+  a second key added later cannot be wired into the writer while missing the
+  decider.
+
+  **★ THE BUMP IS EARNED — on a SEVERITY argument, and the severity is
+  specific.** An older build reading a version it does not know **drops the
+  unknown key**, shows the measured caption, and — this is the half that
+  matters — **re-bakes the `/AP` on its next regeneration.** So the number
+  **printed on a drawing changes, silently, in a file the operator never
+  edited that field of.** Contrast the precedent the sidecar has been bumped
+  for before: losing a colour or `/Offset` override is **visible and
+  re-settable**. Losing a text override **alters what the document asserts**,
+  and a drawing is the one artefact where a wrong number is the whole cost.
+  ⇒ **Bump when the older build's loss CHANGES WHAT THE DOCUMENT ASSERTS;
+  do not bump when it loses a preference.** That is the discriminator, and it
+  is the reusable half of this decision.
+
+  **★★ BUT A BLANKET BUMP WOULD HAVE BEEN WORSE THAN THE DEFECT IT GUARDS,
+  AND THIS IS WHY THE DECISION EXISTS.** `SIDECAR_VERSION = 4` emitted
+  unconditionally would lock the older build — **which the operator
+  deliberately runs out of the other folder** — out of **writing every
+  document the new build had ever touched**, in exchange for protecting a
+  field those documents **do not contain**. The cost lands entirely on files
+  that never used the feature. A version is a **compatibility claim about the
+  content**, not a **build stamp**, and conflating the two exports one build's
+  release date into every file it opens.
+
+  **The symmetry is deliberate and is the part most likely to be "simplified"
+  away later: it falls again.** Clearing the last override lowers the emitted
+  version back to `3`. A monotonic version would mean *"this file was once
+  touched by a build that has the feature"* — a fact about **history**, which
+  is not what a reader needs; a reader needs to know **whether it can read
+  what is in front of it.**
+
+  **It also keeps `R34` honest, and that is a correctness consequence rather
+  than a courtesy.** The round-trip / minimal-diff invariant says objects
+  pdfce did not logically touch are re-emitted byte-identical. A document with
+  **no** override re-serialises to the **exact bytes** it had before
+  `Pass 175.0`. An unconditional bump would have broken that for **every
+  ce-dimension document in existence** — a one-integer diff in a file nobody
+  edited, which is exactly the class §5 exists to forbid.
+
+  **★ WHAT THIS COSTS, stated so it is not discovered as a surprise.** The
+  writer now has to **look at the content before it can state its version**,
+  so `serialize_model` and `ObjectClip::to_bytes` are no longer
+  content-independent in their header. Every future optional key in either
+  format inherits that obligation — and inherits it **silently**, because
+  omitting it produces a file that is merely *over-versioned*, which no test
+  fails on. The named `*_PRE_*` constants and `needed_version` are the guard
+  against that, and they are the reason the mechanism was built as a function
+  rather than an `if`.
+
+  **★★ STANDING-RULE DISPOSITION — MINT DECLINED, AND THE DECLINE IS ARGUED,
+  BECAUSE THIS DECISION LOOKS LIKE IT ALREADY HAS TWO INSTANCES AND DOES
+  NOT.** The sidecar and the clip are **two formats**, but they are **one
+  application**: the same author, in the same commit, applying one ruling
+  twice on purpose. This project's mint bar is **two occurrences**, and an
+  occurrence is an **independent** encounter — a later session, facing the
+  same choice, reaching the same or a different answer. Counting
+  simultaneous co-authored applications would let any decision self-certify
+  as a rule at the moment it is made, which is precisely the inflation the
+  bar exists to prevent. **Recorded as the FIRST instance.** ⇒ **The mint
+  trigger is named in advance:** the **next** format in this project that
+  gains an optional key whose loss changes what a document asserts — a third,
+  independent encounter — is the second instance, and the rule should be
+  minted then rather than re-argued from scratch. `R235` is the number it
+  would take; **it is NOT claimed here and the ceiling does not move.**
+
+  **Body-section counterpart: none required, and the reason is decision
+  102.** No crate boundary is redrawn, no published guarantee in §4.2 moves,
+  and §4.1 — where a sidecar-schema note would once have gone — was
+  **retired** on 2026-08-29 precisely to stop a hand-written second account
+  of a gate-enforced surface accumulating there. Writing one here would be
+  `R232`'s third instance, committed deliberately. **The living account is
+  `docs/core-api/` plus the constants' own doc comments**; the
+  `SIDECAR_VERSION` figure in `docs/core-api/03-capabilities.md` and
+  `02-editing-and-saving.md` is **stale in three places** and reported to the
+  engineer in `Pass 175.0`'s *Shipped* entry (hard-rule-11 sweep, survivors
+  1–3) rather than corrected here.
+
+  **★ A SECOND, SMALLER RULING RECORDED IN THE SAME ENTRY — decision 097's
+  two owed body-section updates are DISCHARGED BY SUPERSESSION.** 097 (this
+  same day-1 earlier) said the shipping Pass owed **§4's `EditSession`
+  verb-surface table** a row and **§4.1's dimension-model description** a
+  line. **Decision 102 retired §4.1 five filings later, the same day**, and
+  moved the surface account to `docs/core-api/`. The verb row went there
+  instead — `docs/core-api/02-editing-and-saving.md`, with
+  `tools/check-core-api-verbs.py` passing on it — and no §4/§4.1 edit was
+  made. ⇒ **An obligation written into an append-only decision record can be
+  superseded by a LATER decision before it is ever discharged, and nothing
+  tells the discharging session**, because the owed clause cannot update
+  itself. The remedy is not a gate; it is that the discharging filing **says
+  where the obligation actually went**, which is what this paragraph is.
+
+  **GUI-core separation:** re-verified in the filing, not merely assumed —
+  `cargo tree -p pdfce-core -p pdfce-render` filtered for
+  `egui`/`eframe`/`winit`/`wgpu`/`reqwest`/`hyper` returns **no match**.
+
+  **Decision ceiling moves 104 → 105; next free 106.** **No standing rule
+  minted; `R234` stands, next free `R235`.**

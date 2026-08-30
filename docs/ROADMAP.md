@@ -96,6 +96,379 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 175.0` (`c7ac578`, 2026-08-30) — THE ce-DIMENSION TEXT OVERRIDE **SHADOWS** THE MEASUREMENT INSTEAD OF REPLACING IT: decision 097 branch 1 discharged, `<DIM>` ships as a parity-plus, and BOTH schema versions are emitted **per document** rather than per build — filed 2026-08-30 (335th filing)
+
+> ### ★★★ THE TREE MOVED UNDER THIS FILING — every figure below is stamped to `c7ac578` as tip, and it no longer is
+>
+> **Read this before reading the sourcing block.** When these checks were run,
+> `c7ac578` was `HEAD` and `git status --short` was **empty**. Both facts
+> expired mid-filing: the engineer committed **`Pass 175.1`** — the commit
+> immediately after `c7ac578`, one file
+> (`crates/pdfce-core/src/settings/mod.rs`, +84 / −4), no behaviour change —
+> and left **+388 uncommitted lines in `crates/pdfce-cli/src/main.rs`**.
+> `git rev-list --count origin/main..main` is now **2**, not 1.
+>
+> ★★ **`Pass 175.1`'s SHORT HASH IS DELIBERATELY NOT WRITTEN ANYWHERE IN THIS
+> FILING, AND THAT OMISSION IS THE POINT.** `tools/check-passes-filed.py` and
+> `tools/check-commits-filed.py` join `git log` to these documents by **a bare
+> grep for the short hash**, and both files' own headers say so: *"a hash
+> cited in a [prose sentence] counts as filed — that is the honest limit of a
+> hash grep."* Writing `Pass 175.1`'s hash in a *"still unfiled"* sentence
+> would therefore have **marked it filed** and turned both gates green on a
+> Pass with no *Shipped* entry. **Measured, not reasoned about:** a draft of
+> this entry did cite it, and both gates flipped from naming it to `clean`.
+> ⇒ **In this project, naming a commit's hash is an ACT, not a reference.**
+> Describe an unfiled commit by its Pass ID and its position; give the hash
+> only in the entry that actually files it.
+>
+> **Nothing in this entry is invalidated** — every figure is about `c7ac578`,
+> which is immutable, and `Pass 175.1` touches a different file with no
+> behaviour change. What *is* invalidated is the shape of the claim: a
+> librarian's *"the tree is clean"* is a statement with a **timestamp**, not a
+> property, and this is the first filing in this project to catch it expiring
+> while being written. **`Pass 175.1` is UNFILED and is not this entry's
+> subject** — it needs its own dispatch.
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
+here, on disk, not relayed, **all with `c7ac578` as tip** (see the banner
+above): `git status --short` (**empty at the time of the check**);
+`git remote -v` (**`github.com/KenM76/pdfce.git`** — a push publishes);
+`git rev-list --count origin/main..main` = **1** (`c7ac578` unpushed;
+**now 2**, `Pass 175.1` having landed since);
+the commit message read **in full**; `git show --stat c7ac578` = **11 files,
++1,559 / −23**; **the four version constants read from live source**, not from
+the commit message — `SIDECAR_VERSION = 4` and `SIDECAR_VERSION_PRE_OVERRIDE
+= 3` at `crates/pdfce-core/src/dimension/sidecar.rs:97,102`, `CLIP_VERSION = 3`
+and `CLIP_VERSION_PRE_LABEL_OVERRIDE = 2` at
+`crates/pdfce-core/src/vector/clip.rs:88,91`, `DIM_PLACEHOLDER = "<DIM>"` at
+`crates/pdfce-core/src/dimension/author.rs:73`, `MAX_DIMENSION_LABEL = 128` at
+`crates/pdfce-core/src/edit.rs:29650`; **the repaired refusal read from live
+source** at `edit.rs:20166-20180`; `cargo test -p pdfce-core --test
+dimension_label_override` **re-run here: 10 passed, 0 failed**, agreeing with
+`grep -c` on that file's `#[test]` attributes = **10** (so the "10 new tests"
+figure is the file's whole population, not a subset);
+`cargo tree -p pdfce-core -p pdfce-render` filtered for
+`egui|eframe|winit|wgpu|reqwest|hyper` **re-run here — NO MATCH**, so the
+GUI/network separation invariant is **verified**, not merely unchallenged;
+`python tools/check-core-api-verbs.py` **PASS — 174 public `EditSession`
+methods**, agreeing with the figure the commit moved `02-editing-and-saving.md`
+to; `python tools/check-ledger-numbers.py` **clean** (`R234` → next free
+`R235`; decisions `104` → next free `105`; filings `334` → next free `335`);
+`python tools/check-suite-name-absent.py` **clean**; both filing gates
+**confirmed DEFERRED-on-tip here before this entry was written** —
+`check-commits-filed.py` and `check-passes-filed.py` each naming `c7ac578` and
+nothing else; `ls -lt D:/Dev/pdfce-backups/` (newest
+**`pdfce-20260830-0122-e49619f-full.bundle`**, and
+`git rev-list --count e49619f..HEAD` = **1** at the time of the check — **now
+2**, `Pass 175.1` having landed since, so the bundle is **2 commits behind
+`HEAD`**).
+**Relayed, not re-run:** `cargo test --workspace --all-features`,
+`cargo fmt --all --check`, `cargo clippy --workspace --all-targets
+--all-features -- -D warnings`, `cargo check … --target
+wasm32-unknown-unknown`, the `fuzz` crate's `cargo check --bins`, the
+release-binary run on `fixtures/synthetic/dimension/linear-dim.pdf`, and the
+three sabotage results (5 of 10 / 1 / 1).
+★ **`bash tools/run-gates.sh` was NOT re-run and NO pass count is claimed for
+this filing** — the engineer's `29 of 29` sweep ran *before* `c7ac578`
+existed, so it cannot have covered it, and the two filing gates are red
+*because of* this filing; the engineer runs the sweep after it.
+
+---
+
+#### WHAT SHIPPED
+
+```text
+EditSession::set_dimension_label(dimension, Option<&str>)
+    -> Result<DimensionLabelChange, EditError>
+EditSession::MAX_DIMENSION_LABEL: usize = 128
+pdfce-cli dimension-label --dimension N (--text "…" | --clear) -o OUT
+                          [--mode] [--verify-undo]
+```
+
+`Some(text)` overrides the caption; `None` restores the **measured** caption
+exactly, with **no re-measurement**, including after save-and-reopen. New
+alongside it: `DimensionLabelChange { measured, printed, previous, applied,
+changed }` (`#[non_exhaustive]`), `CommandKind::SetDimensionLabel { overridden:
+bool }`, three `EditError` variants (`DimensionLabelEmpty`,
+`DimensionLabelUnprintable { chars }`, `DimensionLabelTooLong { found, max }`),
+`dimension::author_dimension_with_label(kind, style, Option<&str>)` +
+`dimension::DIM_PLACEHOLDER`, `DimensionModel::label_override(id)`,
+`DimensionRecord::label_override`, `ObjectClip::needed_version(&[ClipAnnotation])`,
+`CLIP_VERSION_PRE_LABEL_OVERRIDE`, and `label_override` on
+`ClipAnnotation::Dimension`. `author_dimension` now **delegates** to
+`author_dimension_with_label(.., None)` — **one baker, not two**, which is the
+structural reason the un-overridden path cannot drift away from the overridden
+one.
+
+`dimension-list` prints `label="…"` **beside** the measured `value="…"`,
+absent when there is no override — so an un-overridden listing is
+byte-identical to before and no existing script breaks.
+
+#### 1. THE OVERRIDE SHADOWS THE MEASUREMENT, IT NEVER REPLACES IT — AND THAT IS THE WHOLE OF DECISION 097
+
+The measured geometry, the group's scale and number format, and the
+annotation's `/Measure` dict are **untouched**. The override is a key stored
+**beside** them in the `/PieceInfo` sidecar (`/LabelOverride`), never a write
+over them. That is what satisfies the operator's condition — *"if it can be
+selected to be overridden or not so the override can be undone"* — which is a
+requirement about the **reversibility of the OVERRIDE**, distinct from
+command-level undo. An override that were merely undoable would be reversible
+only until the next edit, exactly like every other command.
+
+Two consequences worth carrying, because they are the load-bearing half:
+
+- **The measured value persists in the sidecar** rather than being recomputed
+  on clear. Recomputation would be reversibility by re-derivation, which is a
+  different guarantee and a weaker one.
+- **The clearing test compares against the appearance BYTES captured before
+  the override existed**, not against a freshly formatted string — an equality
+  on a re-formatted string would pass on an implementation that re-derived the
+  value from a rounded copy.
+
+**Branch 2 (a manual dimension tool, a typed value that was never measured) is
+NOT built and is NOT needed.** Decision 097 named it a fallback only, and a
+different object class; branch 1 was achievable, so branch 2 was never
+reached.
+
+#### 2. `<DIM>` IS A PARITY-PLUS — AND ITS ACROBAT COLUMN IS **NOT** WHAT THIS PASS'S DISPATCH ASSUMED
+
+The override string may contain the literal token `<DIM>`, substituted **at
+bake time** with the measured caption (prefix + value + tolerance). `"2X <DIM>
+TYP"` on a 25 mm feature prints `2X 25.00 mm TYP` and **keeps tracking the
+geometry**: a later `set_group_scale` regenerates and the printed number
+follows, because the substitution happens on **every regeneration** rather than
+once at the verb. A bare `"55 5/8"` tracks nothing — which is the operator
+saying so, and both behaviours are tested, because the difference between them
+is the entire user-facing meaning of the placeholder.
+
+> ### ★★★ CORRECTION TO THIS PASS'S OWN DISPATCH — THE ACROBAT COLUMN
+>
+> The dispatch instructed this filing to record `<DIM>` as a divergence on the
+> grounds that *"Acrobat's measurement tools have no text override with a
+> tracking placeholder"*, and told this role to verify that against
+> `D:\Dev\Rag-Specialized\Acrobat_Features\` first. **Verified — and the RAG
+> says the opposite of the first half.**
+> `Acrobat_Features/measure__distance_tool.md:52-57` records that an Acrobat
+> measurement *"can carry either an auto-generated label … or an
+> operator-supplied custom label string overriding the computed text — i.e.
+> the displayed label and the underlying measured value are decoupled fields,
+> not the same thing."* It carries its own confidence caveat verbatim —
+> *"Confidence: moderate — single-source; corroborate before treating the
+> override as unconditionally always-available"* — and the file's parity notes
+> flag that same claim for re-verification against a live Acrobat Pro install,
+> which **this machine does not have** (Reader only).
+>
+> ⇒ **The base capability is `[x]` in the Acrobat column, not `[ ]`.** Writing
+> `[ ]` would have contradicted this project's own Acrobat RAG on the strength
+> of a sentence in a dispatch.
+>
+> ⇒ **The `<DIM>` placeholder is NOT COVERED by the RAG in either direction**,
+> so this filing **asserts no "exceeds Acrobat" claim for it.** `FEATURES.md`'s
+> new row says the RAG is silent, per rule 12 and the claim-bearing-copy rule.
+> The "exceed the parity reference" preference is about **taking** the better
+> option, which this Pass did — not about **asserting** that the reference
+> lacks it. **A divergence claim needs a source for the other side, and there
+> is none.** The honest form: pdfce ships a placeholder that keeps a custom
+> caption tracking the geometry, and whether Acrobat's custom label does the
+> same is **unmeasured**. Flagged to the engineer as an `Acrobat_Features`
+> re-verification that the RAG's own author already asked for.
+
+#### 3. A REFUSAL THE BAKER'S OWN COMMENT PREDICTED, SEVEN PASS FAMILIES EARLY
+
+`crates/pdfce-core/src/dimension/author.rs` has said since **`Pass 68.0`** that
+it ignores `encode_winansi`'s substitution count, because nothing a
+ce-dimension label could contain was outside WinAnsi — and that a miss *"would
+mean the formatter had started emitting something new, which is a change that
+should come with its own disclosure decision rather than inherit one guessed at
+here."*
+
+**An operator-typed override IS that change.** It is the first caption that can
+contain anything at all, so the count became load-bearing, and
+`EditError::DimensionLabelUnprintable` is that decision: a character with no
+WinAnsi code is **refused by name, listing the offenders**, rather than printed
+as a question mark. Accepting it would be a silent value corruption in the one
+place on a drawing where a wrong value costs the most. Two siblings guard the
+same surface — `DimensionLabelEmpty` (a blank caption is indistinguishable from
+one that failed to draw; pass `None` instead) and `DimensionLabelTooLong` at
+**128** characters (the caption width drives the ANSI line break, the `/AP`
+`/BBox` and the annotation `/Rect`).
+
+★ **The reusable shape:** a comment that names the condition under which its
+own shortcut stops being safe is a **deferred decision with a trigger**, and it
+fired correctly, unprompted, many Passes later. That is worth more than a
+`TODO`, because it says *what would have to become true*, not merely *that
+someone should look again*.
+
+#### 4. FOUR ROUTES WIRED IN THE SAME PASS, NOT AFTER THE BUG REPORTS
+
+Per the standing lesson that fixing one route makes the others look broken:
+
+| # | Route | Why it is on the list |
+|---|---|---|
+| **1** | **`regenerate_dimension_writes`** | ★ **THE ONE THAT WOULD HAVE SHIPPED BROKEN.** The only place a ce dimension's appearance is rebuilt after authoring ⇒ the only place an override can be honoured, and the only place one can be silently dropped. Wiring the verb without it yields a feature that **stores what the operator typed, reports it back, passes every unit test, and prints the measured number anyway.** Sabotaging this single line fails **5 of the 10** new tests. |
+| **2** | **The clipboard, both directions, through the serialised bytes** | `ClipAnnotation::Dimension` gains `label_override`. `Pass 173.1` is the precedent *and* the warning: the group's **scale** was left off the clip, so a pasted ce dimension read differently from the one it was copied from, with nothing erroring and nothing marked. Applied on paste **through the verb**, not written into the model, so a clip arriving from a file on disk gets the same printability check a typed override does; a clip whose override cannot be drawn here is pasted **without it and says so**, rather than losing a correct geometry over one character. |
+| **3** | **`dimension-list` disclosure** | Prints `label="…"` **beside** the measured `value="…"`, never instead of it. Replacing `value=` would make the listing agree with the page and disagree with the geometry; omitting `label=` would make a caption that is not its measurement **silent**, which is what rule 4 forbids. **Absent when there is no override**, so no existing script breaks. |
+| **4** | **The fuzz target** | `/LabelOverride` is the first sidecar key whose value reaches the appearance baker as **arbitrary text**, so `dimension_sidecar` now drives `author_dimension_with_label` with the file-supplied string. The interesting input is not a long string on its own but the **product** of a file-supplied caption width and a file-supplied `/TextHeight`, which meet in the `/Rect`. |
+
+#### 5. ★★ BOTH SCHEMA VERSIONS ARE **CONTENT-DEPENDENT** — THE MECHANISM DECISION OF THIS PASS (decision `105`)
+
+`SIDECAR_VERSION` rises **3 → 4**, but `serialize_model` emits `4` **only for a
+document that actually carries an override**, and `3` otherwise — **including
+after the last override is cleared**. `ObjectClip` does the same thing for the
+same reason (`CLIP_VERSION` **2 → 3**, decided by the new
+`ObjectClip::needed_version`).
+
+**The bump is earned**, on the angular/perimeter severity argument rather than
+the `/Offset` one: an older build **drops the unknown key, shows the measured
+caption, and re-bakes the `/AP` on its next regeneration** — so the number
+printed on a drawing **changes, silently**. Losing a colour override is visible
+and re-settable; losing a text override **alters what the document asserts**.
+
+**But a blanket bump would have been worse than the defect it guards.** The
+operator deliberately runs an older build out of the other folder; a
+version-4-always sidecar would lock that build out of **writing every document
+the new build had ever touched**, in exchange for protecting a field those
+documents do not contain. So the version tracks what the document **uses**, in
+both directions.
+
+It also keeps **`R34`** honest: a document with **no** override re-serialises
+to the **exact bytes** it had before this Pass. That is not a nicety — it is
+the round-trip invariant, and a blanket bump would have broken it for every
+ce-dimension document in existence.
+
+**Filed as `ARCHITECTURE.md` §12 decision `105`.** **No standing rule minted** —
+see that entry for the argued decline.
+
+#### 6. THE `set_dimension_label` PHANTOM IS DISCHARGED
+
+`Pass 163.0` (`69689c1`) made a refusal cite `set_dimension_label` by name and
+state it is **NOT BUILT YET**; `tools/check-cited-verbs-exist.py` found it on
+its **first run**. Read from live source here, at
+`crates/pdfce-core/src/edit.rs:20166-20180`, the refusal now points at a verb
+that does what the sentence promises:
+
+```text
+use_instead: "set_dimension_label"
+why: "a ce dimension's text IS its measurement, so writing it must go through
+      the verb that keeps the two agreeing -- an override there SHADOWS the
+      measured value rather than replacing it, and clearing the override
+      restores the measurement exactly"
+```
+
+★ **`set_dimension_label` is REMOVED from every "remains unbuilt" carry from
+this filing forward.** Prior `ROADMAP.md`/`SESSION_LOG.md` entries that name it
+as unbuilt are **history and stay exactly as written** (hard rule 1) — they
+were true as of their dates.
+
+★★ **`rotate_widget` IS STILL UNBUILT.** The pair was carried together for a
+dozen filings and the temptation is to discharge both; **only one shipped.**
+Its own *Planned* row in `FEATURES.md` (widget `/MK /R`) is untouched.
+
+#### 7. A NEAR-MISS RECORDED AS A METHOD NOTE, NOT A DEFECT
+
+Rendering the override to PNG *looked* like a renderer defect — the dimension
+line appearing to run through the caption. **Measuring the pixels showed the
+fixture's own page content is `1 w 100 200 m 300 200 l S`** — the object being
+dimensioned — and the ce dimension sits **collinear with it**. A freshly
+authored ANSI dimension shows the break correctly (row 600 runs `(300,523)` and
+`(676,899)`). **No defect; the eyeball was wrong and the measurement caught it
+before a false report went out.** Filed to `C:\personal_rag\pdf\` because the
+fixture corpus will keep producing this shape.
+
+#### VERIFICATION
+
+| check | result | run by |
+|---|---|---|
+| `cargo test -p pdfce-core --test dimension_label_override` | **10 passed, 0 failed** (= the file's whole `#[test]` population) | **re-run in this filing** |
+| Sabotage: revert `regenerate_dimension_writes` to the un-overridden baker | **5 of 10 fail** | engineer, relayed |
+| Sabotage: neuter the clip serialiser | **1 of 10 fails** | engineer, relayed |
+| Sabotage: make `needed_version` unconditional | **1 of 10 fails** | engineer, relayed |
+| `cargo test --workspace --all-features` | green, run in the **foreground** | engineer, relayed |
+| `bash tools/run-gates.sh` | **PASS, 29 commands** — ★ **ran BEFORE `c7ac578` existed**, so it did not cover this commit and the filing gates were not exercised against it | engineer, relayed |
+| `cargo check -p pdfce-core -p pdfce-render --target wasm32-unknown-unknown` | clean | engineer, relayed |
+| `fuzz` crate: `cargo check --bins` | clean | engineer, relayed |
+| `cargo fmt --all --check` · `cargo clippy --workspace --all-targets --all-features -- -D warnings` | clean | engineer, relayed |
+| `cargo tree -p pdfce-core -p pdfce-render`, filtered for `egui`/`eframe`/`winit`/`wgpu`/`reqwest`/`hyper` | **no match — GUI/network separation VERIFIED** | **re-run in this filing** |
+| `python tools/check-core-api-verbs.py` | **PASS — 174 verbs** | **re-run in this filing** |
+| Shipped **release binary** on `fixtures/synthetic/dimension/linear-dim.pdf` | set · list · clear · all four refusals, with `undo_verified=1 undo_identical=1` on the incremental save | engineer, relayed |
+| Packaging smoke test | **not applicable** — no manifest, no packaging script and no shipped asset touched | — |
+
+`docs/core-api/02-editing-and-saving.md` gained the verb row, a **fourth**
+undo-granularity-exception row (`set_dimension_label`: **0 entries on a
+no-op**, joining `set_info_field`), and corrected figures — **174** public
+verbs (was 173) and **101** `EditError` variants (was 98); `index.md`'s
+line/clause figures moved with them (**3,671 → 3,673 lines · 91 → 92 clauses**
+for part 2).
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string; FOUR SURVIVORS, THREE OWED TO THE ENGINEER
+
+Method per clause (e): **narrow the file set, widen the pattern.**
+Case-insensitive greps for the bare keywords `sidecar version` /
+`SIDECAR_VERSION` / `clip version` / `CLIP_VERSION` / `its measurement` /
+`not built` / `unbuilt`, over `docs/core-api/`, `docs/FEATURES.md`,
+`docs/NEXT_SESSION.md` and `tools/` — **every hit read.** The claims that
+changed meaning this Pass are *"`SIDECAR_VERSION` is N"*, *"`CLIP_VERSION` is
+N"*, *"there is no verb that writes a ce dimension's text"* and *"the clip
+carries a ce dimension's scale and style"*.
+
+| # | Location | The stale claim | Note |
+|---|---|---|---|
+| **1** | `docs/core-api/03-capabilities.md:510` | *"refuses if the document's `/PieceInfo` sidecar version exceeds `SIDECAR_VERSION` (**currently `2`**, `sidecar.rs:44`)"* | **Wrong on both the value and the line.** Live source: **`4`**, at `sidecar.rs:97`. ★ **Already stale before this Pass** — it missed the `2 → 3` bump as well. Now additionally **incomplete**, because the emitted version is content-dependent. |
+| **2** | `docs/core-api/02-editing-and-saving.md:3098` | Guard table, *Sidecar version* row: *"above `SIDECAR_VERSION` (**currently 2**, `dimension/sidecar.rs:44`)"* | The **same** claim, in a **table cell** rather than prose — the shape clause (e) warns about, and the reason two readings of that guard walked past it. |
+| **3** | `docs/core-api/02-editing-and-saving.md:3637` | Stability table: *"**ce dimensions (14 verbs)**"* and, in the same cell, *"`SIDECAR_VERSION` is 2"* | **Two** stale figures in one cell. The verb count is now **15** with `set_dimension_label`; the version is `4`. A count **inside a row label**, again. |
+| **4** | `docs/FEATURES.md:201` | The `set_markup_note` row's ce-dimension refusal, glossed only as *"its text **is** its measurement"* | **The refusal is correct and stays.** What changed is that it now **routes somewhere**: `Pass 163.0` wrote it pointing at a verb that did not exist. **FIXED IN THIS FILING** (this file is mine) — the row now names `set_dimension_label`. |
+
+**Survivors 1–3 are `docs/core-api/`, gate-enforced engineer territory —
+reported, not edited**, per hard rule 11's *report; do not edit* boundary.
+★ **`tools/check-core-api-verbs.py` PASSES with all three present**, which is
+the finding worth carrying: the gate derives the **verb count** and the
+**`EditError` variant count** from the crate, and derives **neither
+`SIDECAR_VERSION` nor a per-family verb count** — so three wrong numbers sit
+inside a document whose accuracy a green gate is read as attesting. That is
+**gate-shaped false reassurance**, not a documentation lapse, and it is the
+same species as `R232`: a hand-written copy of a derivable figure, sitting
+beside an enforced one.
+
+★ **Hits that SURVIVE and are CORRECT — do not "fix" these on the next
+sweep:** `docs/core-api/02-editing-and-saving.md:875` (*"`to_bytes` CARRIES
+annotations as of `Pass 169.0` (clip format version 2)"*) is **dated history
+and accurate as of its date** — it records when annotations started
+travelling, not what the version is today; `docs/core-api/03-capabilities.md:957`
+(*"It is not built"*) is about a **deliberate field promotion**, a different
+verb entirely; and `crates/pdfce-core/src/edit.rs:18937` / `:19387` (*"a ce
+dimension's orientation / extent IS its measurement"*) are the **rotate** and
+**resize** refusals, untouched by this Pass and still correct.
+
+#### DISCHARGES AND CEILINGS
+
+- **Decision 097 branch 1: DISCHARGED IN FULL.** Its Backlog entry
+  (*"ce-dimension text override — a selectable, reversible divergence from the
+  measured value — unscoped, no Pass ID"*) carries a shipped banner as of this
+  same filing; the entry itself is left intact.
+- ★★ **Decision 097's two owed BODY-SECTION updates are DISCHARGED BY
+  SUPERSESSION, not by edit, and the reason matters.** 097 said the shipping
+  Pass owed *"§4's `EditSession` verb-surface table a new row"* and *"a
+  one-line update to §4.1's dimension-model description of `/PieceInfo`'s
+  contents"*. **Decision 102 retired §4.1 five filings later, on the same
+  day**, and moved the surface account to `docs/core-api/`. Writing either
+  update today would manufacture exactly the second, unenforced account of a
+  gate-enforced fact that 102 was minted to prevent — **`R232`'s third
+  instance, committed on purpose.** The verb row went to
+  `docs/core-api/02-editing-and-saving.md` **and the gate passes on it**; the
+  sidecar-schema line is owed to `docs/core-api/03-capabilities.md` and is
+  **survivor 1 above**. Recorded here rather than silently skipped, because an
+  owed item discharged somewhere else looks identical to one that was
+  forgotten. ★ **The general shape: an obligation written into a decision
+  record can be superseded by a LATER decision before it is ever discharged,
+  and nothing tells the discharging session** — the owed clause reads as live
+  because append-only records do not update.
+- **`set_dimension_label` leaves the "remains unbuilt" carry.**
+  **`rotate_widget` stays on it.**
+- **Standing rules ceiling UNCHANGED: `R234`; next free `R235`.**
+  **Decision ceiling moves `104` → `105`; next free `106`.**
+- **`FEATURES.md`: THREE rows change** — one new, two amended. Enumerated in
+  this date's `SESSION_LOG.md` entry.
+
 ### `Pass 174.10` (`5a60fae`, 2026-08-30) — THE FIVE SURVIVORS DISCHARGED, AND THE ONE THAT MATTERED WAS `#[error(transparent)]`: the correction reached the rustdoc and stopped **three lines short** of the only copy an operator reads — filed 2026-08-30 (334th filing)
 
 **Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
@@ -106215,7 +106588,30 @@ parity as an outcome — veraPDF's own PDF/A rule counts alone total well
 over a thousand across eleven levels, and UA-2 leans on 1,636 further
 ISO/TS 32005 rules.
 
-### ce-dimension text override — a selectable, reversible divergence from the measured value — unscoped, no Pass ID
+### ce-dimension text override — a selectable, reversible divergence from the measured value — ★ **SHIPPED as `Pass 175.0` (`c7ac578`), 2026-08-30**
+
+> ### ★★ DISCHARGED — read the *Shipped* entry, not this scope
+>
+> **Branch 1 shipped in full as `Pass 175.0` (`c7ac578`), filed 2026-08-30
+> (335th filing).** `EditSession::set_dimension_label(dimension,
+> Option<&str>)` and `pdfce-cli dimension-label`; the override is stored as
+> `/LabelOverride` **beside** the measured value in the `/PieceInfo` sidecar,
+> so clearing it restores the measured caption **exactly**, with no
+> re-measurement, across save-and-reopen. **The naming constraint below was
+> honoured** — the verb took the name `set_dimension_label` and
+> `tools/check-cited-verbs-exist.py` now holds the refusal and the verb
+> together in both directions.
+>
+> **Branch 2 was never reached and is NOT built** — it was a fallback for a
+> branch 1 that turned out unachievable, and branch 1 was achievable.
+>
+> **The scope text below is left exactly as filed** (hard rule 1): it is the
+> record of what was asked for before anything existed, and every clause of
+> it is discharged. Two things the shipped Pass added that this scope did not
+> name: the `<DIM>` placeholder (a custom caption that keeps **tracking** the
+> geometry through a later `set_group_scale`), and a **content-dependent**
+> schema version in two independent formats (`ARCHITECTURE.md` §12 decision
+> `105`).
 
 **Filed 2026-08-29 (323rd filing), from an operator ruling; see
 `ARCHITECTURE.md` decision 097 for the full derivation, including the

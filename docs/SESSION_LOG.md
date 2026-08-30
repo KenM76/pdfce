@@ -77773,3 +77773,226 @@ of `NEXT_SESSION.md` §A and the only item on it Ken has personally specified.
    (`ls -lt D:/Dev/pdfce-backups/`, run here), **5 commits behind `HEAD`**
    (`git rev-list --count 3d71ad2..HEAD` = 5). Was 3 behind at the last
    filing; it is drifting one commit per Pass. A fresh bundle is cheap.
+
+## 2026-08-30 (335th filing) — `Pass 175.0` (`c7ac578`): the ce-dimension text override **shadows** the measurement instead of replacing it. Decision 097 branch 1 discharged in full, branch 2 never reached; `<DIM>` ships as a placeholder that keeps a custom caption **tracking** the geometry; both schema versions are emitted **per document** rather than per build (decision `105`). ★ The dispatch's Acrobat verdict was checked against the project's own Acrobat RAG and **reversed**; a hard-rule-11 sweep found **four** survivors, three of them inside a document a green gate is read as attesting
+
+**Shipped:**
+- **`Pass 175.0`** (`c7ac578`, 2026-08-30) — `EditSession::set_dimension_label(
+  dimension, Option<&str>) -> Result<DimensionLabelChange, EditError>` and
+  `pdfce-cli dimension-label --dimension N (--text "…" | --clear)`. Full entry,
+  with every figure and its source, at the head of `ROADMAP.md`'s *Shipped*.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12 decision `105` — a schema version is emitted PER
+  DOCUMENT, not per build.** `SIDECAR_VERSION` **3 → 4** and `CLIP_VERSION`
+  **2 → 3**, but each is written **only for content that uses the new key**
+  and **falls again** when the last one is cleared. The bump is earned on a
+  severity discriminator worth carrying: **bump when the older build's loss
+  changes what the DOCUMENT ASSERTS, not when it loses a preference** — an
+  older build drops the unknown `/LabelOverride`, shows the measured caption
+  and **re-bakes the `/AP` on its next regeneration**, so the number printed
+  on a drawing changes silently; losing a colour override is visible and
+  re-settable. A **blanket** bump would have locked the older build the
+  operator deliberately runs out of the other folder out of **writing every
+  document the new build had ever touched**, to protect a field those files do
+  not contain — and would have broken **`R34`** for every ce-dimension
+  document, since a file with no override now re-serialises to the **exact
+  bytes** it had before the Pass.
+- **No standing rule minted, and the decline is argued.** The sidecar and the
+  clip look like two instances and are **one application**: same author, same
+  commit, one ruling applied twice. An occurrence is an **independent**
+  encounter; counting simultaneous co-authored applications would let any
+  decision self-certify as a rule the moment it is made. **Recorded as the
+  first instance, with the mint trigger named in advance** — the next format
+  in this project that gains an optional key whose loss changes what a document
+  asserts. **`R234` stands; next free `R235`; not claimed.**
+- **Decision 097's two owed BODY-SECTION updates are discharged by
+  SUPERSESSION, not by edit.** 097 said the shipping Pass owed `ARCHITECTURE.md`
+  §4's verb-surface table a row and §4.1's dimension-model description a line.
+  **Decision 102 retired §4.1 five filings later, the same day**, moving the
+  surface account to `docs/core-api/`. Writing either update today would
+  manufacture the second, unenforced account of a gate-enforced fact that 102
+  exists to prevent — **`R232`'s third instance, committed on purpose.** The
+  verb row went to `docs/core-api/02-editing-and-saving.md` and the gate passes
+  on it. ⇒ **The general shape: an obligation written into an append-only
+  decision record can be superseded by a LATER decision before it is ever
+  discharged, and nothing tells the discharging session**, because the owed
+  clause cannot update itself. Remedy is not a gate — it is that the
+  discharging filing says **where the obligation actually went**.
+
+**Findings + decisions:**
+- **★★★ THE DISPATCH'S ACROBAT VERDICT WAS WRONG, AND CHECKING IT IS THE
+  REASON RULE 12 EXISTS.** The dispatch asked for the new row's Acrobat column
+  to record *"Acrobat's measurement tools have no text override"* — and told
+  this role to verify it against `D:\Dev\Rag-Specialized\Acrobat_Features\`
+  first. **The RAG says the opposite.**
+  `measure__distance_tool.md:52-57` records that an Acrobat measurement *"can
+  carry either an auto-generated label … or an operator-supplied custom label
+  string overriding the computed text — i.e. the displayed label and the
+  underlying measured value are decoupled fields, not the same thing"*, with
+  its own caveat verbatim: *"Confidence: moderate — single-source; corroborate
+  before treating the override as unconditionally always-available."* ⇒ **The
+  base capability is `[x]`, not `[ ]`.** Writing `[ ]` would have contradicted
+  this project's own parity RAG on the strength of one sentence in a dispatch.
+  ⇒ **The `<DIM>` tracking placeholder is NOT covered by the RAG in either
+  direction, so NO "exceeds Acrobat" claim is asserted for it.** The
+  "exceed the parity reference" preference is about **taking** the better
+  option — which this Pass did — not about **asserting** the reference lacks
+  it. **A divergence claim needs a source for the other side.** Flagged to the
+  engineer: the RAG's own author already asked for that entry to be
+  re-verified against a live Acrobat Pro, which **this machine does not have**
+  (Reader only).
+- **★★ HARD-RULE-11 SWEEP — four survivors, three of them owed to the
+  engineer, and all three sit behind a GREEN GATE.** Method per clause (e):
+  narrow the file set, widen the pattern — case-insensitive greps for
+  `sidecar version` / `SIDECAR_VERSION` / `clip version` / `CLIP_VERSION` /
+  `its measurement` / `not built` / `unbuilt` over `docs/core-api/`,
+  `docs/FEATURES.md`, `docs/NEXT_SESSION.md`, `tools/`; every hit read.
+  1. `docs/core-api/03-capabilities.md:510` — *"`SIDECAR_VERSION` (currently
+     `2`, `sidecar.rs:44`)"*. Live source: **`4`, at `sidecar.rs:97`**. Wrong
+     on the value **and** the line, and **already stale before this Pass** — it
+     missed the `2 → 3` bump too.
+  2. `docs/core-api/02-editing-and-saving.md:3098` — the **same** claim, in a
+     **table cell**. The shape clause (e) warns about.
+  3. `docs/core-api/02-editing-and-saving.md:3637` — *"ce dimensions (**14
+     verbs**)"* and *"`SIDECAR_VERSION` is 2"* in **one cell**. The count is
+     now **15**; a stale number **inside a row label**, again.
+  4. `docs/FEATURES.md:201` — the `set_markup_note` row's ce-dimension refusal.
+     The refusal is correct and stays; what changed is that it now **routes
+     somewhere**. **Fixed in this filing.**
+  ★ **`tools/check-core-api-verbs.py` PASSES with survivors 1–3 present.** The
+  gate derives the **verb count** and the **`EditError` variant count** from
+  the crate and derives **neither `SIDECAR_VERSION` nor a per-family verb
+  count** — so three wrong numbers sit inside a document whose accuracy a green
+  gate is read as attesting. **Gate-shaped false reassurance**, and the same
+  species as `R232`: a hand-written copy of a derivable figure sitting beside
+  an enforced one. Reported, not edited — `docs/core-api/` is gate-enforced
+  engineer territory.
+  ★ **Hits that survive and are CORRECT, so the next sweep does not "fix"
+  them:** `02-editing-and-saving.md:875` (*"clip format version 2"* — dated
+  history, accurate as of `Pass 169.0`), `03-capabilities.md:957` (*"It is not
+  built"* — a different verb, deliberate field promotion), and
+  `edit.rs:18937`/`:19387` (the **rotate** and **resize** refusals, untouched).
+- **★★ THE TREE MOVED UNDER THIS FILING, and the claim that expired was this
+  role's own.** When the sourcing checks ran, `c7ac578` was `HEAD` and
+  `git status --short` was **empty**. Both facts expired mid-filing: the
+  engineer committed **`Pass 175.1`** — the commit immediately after
+  `c7ac578`, one file (`settings/mod.rs`, +84 / −4), no behaviour change —
+  and left **+388 uncommitted lines in `crates/pdfce-cli/src/main.rs`**.
+  Nothing in the `Pass 175.0` entry is invalidated — every figure is about an
+  immutable commit — but the **shape** of the claim is: *"the tree is clean"*
+  is a statement with a **timestamp**, not a property. A banner at the head of
+  the *Shipped* entry stamps every figure to `c7ac578` as tip and says so.
+  This is hard rule 8's own failure mode arriving from the other direction:
+  the rule was written against **inferring** disk state from documents; this is
+  **measuring** it correctly and having it go stale before the paragraph
+  finished.
+- **A comment that names the condition under which its own shortcut stops
+  being safe is a deferred decision with a TRIGGER, and it fired.**
+  `dimension/author.rs` has said since **`Pass 68.0`** that it ignores
+  `encode_winansi`'s substitution count because nothing a ce-dimension label
+  could contain was outside WinAnsi, and that a miss *"would mean the formatter
+  had started emitting something new — a change that should come with its own
+  disclosure decision rather than inherit one guessed at here."* An
+  operator-typed override **is** that change; `EditError::DimensionLabelUnprintable`
+  is the decision. Worth more than a `TODO`, because it names **what would have
+  to become true**, not merely that someone should look again.
+- **The route that would have shipped broken was the regenerator, and the
+  failure mode is the quiet kind.** Wiring the verb without
+  `regenerate_dimension_writes` yields a feature that **stores what the
+  operator typed, reports it back, passes every unit test, and prints the
+  measured number anyway.** Sabotaging that one line fails **5 of the 10** new
+  tests — which is the measurement that makes "four routes in the same Pass"
+  a finding rather than a slogan.
+- **A near-miss recorded as method, not defect.** Rendering the override to PNG
+  *looked* like a renderer bug — the dimension line running through the
+  caption. Pixel measurement showed the fixture's own page content is
+  `1 w 100 200 m 300 200 l S`, the object being dimensioned, and the ce
+  dimension sits **collinear with it**. A freshly authored ANSI dimension shows
+  the break correctly. **The eyeball was wrong and the measurement caught it
+  before a false report went out.**
+- **A maintenance-contract gap found while filing, in this role's own
+  output.** The 323rd filing filed the ce-dimension-text-override **Backlog**
+  entry with **no matching `FEATURES.md` *Planned* row** — the contract says
+  every Pass filed under *Backlog*/*Next up* gets one, with all boxes unticked.
+  The consequence was small only because the capability shipped within a day;
+  had it sat, the features scan would have shown no sign that it was coming.
+  Noted rather than back-filled: the row now exists under *Implemented*.
+
+**`FEATURES.md` — three rows changed (the same-filing maintenance contract):**
+1. **NEW row**, *Implemented → ce dimensions*: **`[x]` core · `[x]` cli ·
+   `[ ]` gui · `[x]` Acrobat.** Override or clear a ce dimension's printed
+   text; the override **shadows** rather than replaces; `--clear` restores the
+   measurement exactly with no re-measurement; `<DIM>` tracks the geometry;
+   three refusals by name; `dimension-list` prints `label=` beside `value=`;
+   the content-dependent version bump. ★ **`gui` is `[ ]` and was NOT rounded
+   up** — the column tracks `D:\dev\pdfceGUI`, which **has not been notified**
+   as of 2026-08-30, and the ticking bar is *an operator can reach it in a real
+   `pdfceGUI` build*. The Acrobat column carries its own sourcing and its own
+   silence, per the finding above.
+2. **The copy/cut/paste row** — a ce dimension now travels with its **text
+   override** as well as its group's scale/format/standard and its own style
+   overrides; the override is applied on paste **through the verb** (so a clip
+   from disk gets the same printability check a typed override does), the paste
+   **discloses** that the pasted caption is not its measurement, and a clip
+   whose override cannot be drawn here is pasted **without it and says so**.
+3. **The `set_markup_note` row** — its ce-dimension refusal now **names where
+   to go instead** (`set_dimension_label`), which was a phantom citation from
+   `Pass 163.0` until this Pass built the verb.
+
+**Cross-project RAG — two lessons written to `C:\personal_rag\pdf\`:**
+- `lesson_20260830_schema_version_emitted_per_document_not_per_build.md` —
+  **format-spec / HIGH.** The mechanism, the severity discriminator, the
+  symmetry (it falls again), the round-trip consequence, and the cost it moves
+  onto every future optional key.
+- `lesson_20260830_ce_dimension_collinear_with_measured_object_reads_as_broken_break.md`
+  — **methodology / MEDIUM.** Why a fixture that draws the measured line at the
+  dimension line's own coordinates makes a correct render read as a defect, and
+  the pixel measurement that separates them.
+
+**Still in flight:**
+- **`Pass 175.1` is UNFILED** — landed mid-filing (the commit immediately
+  after `c7ac578`), one file (`crates/pdfce-core/src/settings/mod.rs`,
+  +84 / −4), no behaviour change. Needs its own dispatch.
+  ★★ **Its short hash is deliberately absent from this whole filing.**
+  `check-passes-filed.py` / `check-commits-filed.py` join `git log` to these
+  documents by a **bare grep for the short hash** — their own headers concede
+  *"a hash cited in a [prose sentence] counts as filed"* — so writing it in
+  **this very sentence** would have marked it filed and turned both gates
+  green on a Pass with no *Shipped* entry. **Measured, not reasoned about:** a
+  draft of this entry cited it and both gates flipped from naming it to
+  `clean`. ⇒ **Naming a commit's hash is an ACT here, not a reference.**
+  Describe an unfiled commit by Pass ID and position; give the hash only in
+  the entry that files it.
+- **`crates/pdfce-cli/src/main.rs` carries +388 uncommitted lines** as of this
+  filing's close — engineer's in-flight work, untouched here.
+- **`rotate_widget` remains unbuilt.** `set_dimension_label` has left that
+  carry; **only one of the two shipped**, and the pair had been carried
+  together for a dozen filings.
+- `bash tools/run-gates.sh` has **not** been run against `c7ac578` or against
+  `Pass 175.1` — the engineer's `29 of 29` sweep predates both.
+- Backup bundle is **2 commits behind `HEAD`**
+  (`pdfce-20260830-0122-e49619f-full.bundle`, by `ls -lt` and
+  `git rev-list --count`).
+- `main` is **2 commits ahead of `origin/main`**; pushing `main` is
+  standing-authorized (decision 090) once the public-facing gate is green.
+
+**For next session:**
+1. **Three `docs/core-api/` survivors owed** (see the sweep above):
+   `03-capabilities.md:510`, `02-editing-and-saving.md:3098`, and
+   `02-editing-and-saving.md:3637` (which carries **two** stale figures).
+   Correct value **`4`**, correct location **`dimension/sidecar.rs:97`**,
+   correct ce-dimension verb count **15** — and all three should say the
+   emitted version is **content-dependent**, not a constant the writer stamps.
+2. **Consider whether `check-core-api-verbs.py` should derive `SIDECAR_VERSION`
+   and `CLIP_VERSION` the way it already derives the verb and error counts.**
+   Three wrong numbers survived inside a document the gate passes on; that is
+   the gap, and it is `R232`-shaped.
+3. **File `Pass 175.1`.**
+4. **`Acrobat_Features/measure__distance_tool.md` re-verification** — its
+   label-override claim is single-sourced at moderate confidence and its own
+   author asked for it to be checked against a live Acrobat Pro. Until then,
+   pdfce asserts nothing about whether Acrobat's custom label **tracks** the
+   geometry the way `<DIM>` does.
+5. **Notify `D:\dev\pdfceGUI`** that `set_dimension_label` / `dimension-label`
+   exist, so its `gui` box has a route to being ticked.
