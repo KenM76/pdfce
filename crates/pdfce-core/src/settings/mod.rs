@@ -362,6 +362,30 @@ pub enum CmykIntent {
     /// Its visible consequence is that solid black ink (`0 0 0 1 k`) renders
     /// `#231F20` rather than `#000000`, and mid greys come out slightly cool.
     ///
+    /// ★ **`#231F20` IS ONE OF TWO ANSWERS, ONE COUNT APART, AND BOTH ARE
+    /// CORRECT.** Measured 2026-08-29 with the ink probe (`Pass 174.0`) on one
+    /// page rendered both ways:
+    ///
+    /// ```text
+    /// 0 0 0 1 k, page composited on screen      35, 31, 31   #231F1F
+    /// 0 0 0 1 k, page composited in the buffer  35, 31, 32   #231F20
+    /// ```
+    ///
+    /// The two paths reach this same table at different precisions — one
+    /// converts an 8-bit paint colour, the other converts `f32` colorants at
+    /// the very end (`CmykBuffer::to_srgb_over_white`) — so **every**
+    /// `DeviceCMYK` colour carries a ±1 blue uncertainty that is a property of
+    /// the compositing path and not of the table. The saturated green this
+    /// project has chased all week shows exactly the same thing: `47,180,73`
+    /// on screen against `47,181,73` in ink.
+    ///
+    /// Recorded because it is the kind of one-count difference a future
+    /// session will find, read as a defect in one of the two paths, and try to
+    /// remove. It is not a defect. Every doc comment in this workspace that
+    /// states `#231F20` is quoting the colorant path and is right to — a
+    /// `grep` will find them, and a count stated here would be one more number
+    /// nothing keeps true.
+    ///
     /// # ★★ THE SECOND HALF OF THAT SENTENCE WAS A CLAIM, AND IT HAS BEEN
     /// MEASURED. It was wrong.
     ///
