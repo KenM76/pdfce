@@ -77442,3 +77442,204 @@ than an argument.
 3. **Nothing is owed from this filing.** Both owed items of the 331st are
    discharged, and the discharge is noted in that filing's own OWED section
    rather than by editing it.
+
+---
+
+## 2026-08-30 (333rd filing) — `Pass 174.8` and `174.9`: a dotted name silently DEMOTED the terminal field it nested under and the command reported success — and the fix's own account of the damage was WRONG, corrected three minutes later. This filing's sweep found FIVE MORE copies of the withdrawn claim, the first of them the string the operator actually reads. `R222` gains instance 6 and a media-enumeration extension; NO mint
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Every
+figure below was produced by a command run here, and the commands are named in
+the `Pass 174.9` *Shipped* entry in `ROADMAP.md` rather than repeated. The
+three figures worth carrying inline: `cargo test -p pdfce-core --test
+form_field_merge` **re-run here — 36 passed, 0 failed** (33 before the two
+commits ⇒ **+3 tests over 2 commits**); `git diff 3d71ad2 9d322d8 --
+docs/FEATURES.md` = **0 lines**; `git rev-list --count origin/main..main` =
+**2**. ★ **`cargo tree` was NOT re-run and is NOT claimed** — no manifest
+touched, no dependency added.
+
+**Shipped:**
+
+- **`Pass 174.8`** (`609ec6b`) — `FormAuthorError::FieldPathCrossesTerminal`,
+  raised at the single deferred authoring choke point that all three
+  `add_*_field` verbs and `paste_field` reach. Exit 9, no output file written.
+  Three tests in `crates/pdfce-core/tests/form_field_merge.rs`.
+- **`Pass 174.9`** (`9d322d8`) — the same defect **re-described from the
+  bytes**: a **demotion**, not a deletion. Refusal unchanged, tests unchanged,
+  the no-repair-verb decision re-founded on a different reason.
+
+**Where it came from, and why it was not deferred.** The `pdfceGUI` inbound
+`request_a_dotted_name_silently_swallows_an_existing_terminal_field.md`
+(2026-08-29 17:35) with a four-command reproduction — **the item the 331st
+filing recorded as unanswered and named in no pdfce document**, and item 1 of
+`NEXT_SESSION.md` §A. Acted on **inside an autonomous loop tick**, under the
+operator's standing rule *"fix bugs on discovery; never file a found bug for
+later"*, and because the defect is **silent data loss on an ADDITIVE verb** —
+nothing about *"add a field"* warns an operator that an existing field is at
+stake.
+
+**Findings + decisions:**
+
+- **★★ A hole documented at the point that hands it over is still a hole.**
+  `resolve_field_path`'s own comment has always said the caller *"will find
+  `deepest` is a terminal and can refuse or create beneath it as its own rules
+  require."* **No caller refused.** The note read as a *design* note rather
+  than as an *obligation*, and **there is no compiler diagnostic for an
+  unhonoured English sentence.** This is the finding that generalises past
+  forms.
+- **★★ The guard was half present and the missing half was the destructive
+  one.** `NameIsGroupingNode` refuses *"you asked for a terminal and the name
+  is a group"*; this is the same collision from the other side — *"you asked
+  for a child and the ancestor is a terminal"* — and where the first
+  **refuses**, the second **converted**. A pair of mirrored guards where only
+  one exists is not a partially-guarded case; it is an **unguarded** one with
+  a reassuring neighbour.
+- **★★★ The defect is a DEMOTION, not a deletion — measured, not inferred.**
+  Object 6 keeps `/V (K. Mantle)`, keeps its `/Fields` entry, keeps its
+  `/Annots` entry, and **acquires `/Kids`**, so §12.7.3.1 makes it
+  non-terminal and Table 220 leaves it no type of its own. The value survives
+  **in the bytes** and becomes **unaddressable**. *"Silent data loss"* is
+  still the right name; *"destroyed"* and *"orphaned"* are not.
+- **★★★ Why that correction is not proofreading.** The shell said
+  `orphaned_widgets_unrecoverable` is the accessor they would reach for if
+  building a repair. **On this evidence that accessor reports nothing.**
+  ⇒ **A wrong description of a defect sends the next person diagnosing it to
+  the wrong instrument, where they measure zero and conclude the defect is
+  absent.**
+- **★ The number of places a claim has been repeated is not evidence for it.**
+  The wrong description was written **three** times from **one** inference and
+  drafted a **fourth** into an outbound reply before anything checked it. One
+  `grep` of a file already on disk falsified it.
+- **An error's variant being right is not its message being right.** The
+  guard's first draft reported *"cannot create `2`"* — `remaining` carries
+  only the unmatched tail, so the message named a string the operator never
+  typed. Caught by **running the binary**, not by the tests, which matched on
+  the variant. The test now asserts on the value.
+- **The deferred choke point is worth its keep, and the asymmetry is
+  measurable:** the sibling guard is written at **5** call sites; this one is
+  written at **1**.
+- **No repair verb and no promotion verb**, at the shell's own request. A
+  promotion **renames an existing field**, and a field's name is its identity
+  to every script, calculation order, FDF import and external mapping.
+  `Pass 174.9` re-founded that refusal on the shell's own reasoning rather
+  than on *"there is nothing to put back"*, which is false.
+
+**★★★ THIS FILING'S HARD-RULE-11 SWEEP — FIVE SURVIVORS, AND THE CORRECTION
+ITSELF IS WHAT DID NOT REACH THEM**
+
+Swept per hard rule 11 clause (e) — **narrow the file set, widen the
+pattern**: a case-insensitive grep for the bare keywords `destroy` and
+`orphan` over the **four files the two commits touched**, every hit read. The
+dispatch reported the correction as landed in three places. It landed in
+**three of eight.**
+
+| # | Location | The withdrawn claim, as spelled THERE |
+|---|---|---|
+| 1 | `crates/pdfce-core/src/forms_author.rs:239-240` — the **`#[error]` template** | *"nesting under it would **destroy it**"* — and `EditError::FieldAuthoring` is `#[error(transparent)]` (`edit.rs:5102`), so this is **verbatim what the operator reads**. The correction reached the rustdoc **three lines above it** and stopped. |
+| 2 | `crates/pdfce-core/src/forms_author.rs:230` | *"Refused outright, because **there is no repair that puts the value back**"* — the reason `174.9`'s own commit message withdrew **by name**. |
+| 3 | `docs/core-api/03-capabilities.md:948-949` | *"**the value is already gone**"* — **four lines below the same bullet's own *"still carries `/V (K. Mantle)`"***. One bullet, contradicting itself, in the document `pdfceGUI` builds against. |
+| 4 | `crates/pdfce-core/tests/form_field_merge.rs:1229` | `.expect_err("nesting under a terminal **destroys it**")` |
+| 5 | `crates/pdfce-core/tests/form_field_merge.rs:1248` | *"the defect being guarded **destroyed the value**"* — the paragraph's **reasoning survives intact**; only the verb is withdrawn wording. |
+
+★ **Reported, not edited.** `crates/` is outside this role's remit (hard rule
+11) and `docs/core-api/` is the engineer's. **All five are owed** — repeated
+under *For next session* below.
+
+★ **Hits that SURVIVE AND ARE CORRECT**, recorded per clause (e) so the next
+sweep does not "fix" them: `forms_author.rs:255` (*"would destroy an identity
+they never offered up"* — that is `RenameCollision`, unrelated and accurate),
+and the whole `InsertOutcome::orphaned_widgets` /
+`orphaned_widgets_unrecoverable` family in `edit.rs` and
+`03-capabilities.md`, which describes **`insert_pages`**, a genuinely
+orphaning verb. **The word `orphan` is not the defect; the word applied to
+THIS defect is.**
+
+**Rule disposition — NO MINT, and the parent is `R222`.**
+
+The dispatch offered the `R232`/`R234` family and read it as probably no mint.
+**Agreed on the outcome, on a different warrant.**
+
+- **Not `R232`.** It binds on **figures**, and its mechanism is **drift** — a
+  copy going stale as its source moves. **These copies did not drift. They
+  were wrong at birth, all four, from one inference.**
+- **Not `R234`.** That governs negative claims about the standard.
+- **★★ The parent is `R222`** — *"when a doc-comment claim is corrected, grep
+  the FORMAT STRINGS for the same claim in the same change"* — **and its
+  remedy was never applied.** Survivor 1 *is* a format string. This project's
+  mint bar is *a parent remedy applied and insufficient*, never *a parent
+  remedy unapplied*.
+
+**Filed instead:** `R222` **instance 6**, plus an **extension of its media
+enumeration** to name `#[error("…")]` / `#[derive(Error)]` attribute templates
+and test `expect`/`expect_err` messages — neither of which is greppable by
+anyone thinking *"format string"*, and the first of which is frequently the
+**only** copy of a claim an operator ever reads. The rule is unchanged; only
+its list of places to look. **Standing rules ceiling UNCHANGED: `R234`, next
+free `R235`. Decision ceiling UNCHANGED: `104`, next free `105`.**
+
+**No `ARCHITECTURE.md` §12 entry**, and the engineer's read is endorsed: **no
+architectural decision was made.** A guard was added where the design already
+said one belonged, and a wrong sentence was corrected. Neither is a crate
+boundary, an invariant, or a library choice.
+
+**`FEATURES.md`: zero rows change — verified, not relayed.** `git diff
+3d71ad2 9d322d8 -- docs/FEATURES.md` = **0 lines**, and, because the dispatch
+correctly asked for the **prose** to be checked as well as the checkboxes, a
+keyword sweep of the file for `dotted` / `field name` / `fully-qualified` /
+`FQN` / `hierarch` / `add_text_field` returned **no hits at all**. There is no
+row that describes what dotted names do, so there was nothing to go stale. **A
+refusal is not a capability.**
+
+**Cross-project record:**
+
+- `C:\personal_rag\pdf\lesson_20260830_dotted_name_under_a_terminal_field_is_a_demotion_not_a_deletion.md`
+  — **new**. The PDF-domain half: nesting a dotted field name under an
+  existing terminal field is a **demotion**, the value survives in the bytes
+  while becoming unaddressable, and **an orphaned-widget census cannot detect
+  it**. True of any engine that authors field hierarchies, not just pdfce.
+  Subject index and master `C:\personal_rag\index.md` updated in the same
+  filing.
+- **Not** written to `D:/dev/rag/rust/`: the reusable process sentence
+  (*a claim repeated is not a claim checked*) is `R222`'s evidence, and
+  `a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`
+  already carries the method. A second file would be the fifth copy of one
+  claim, which is the failure this filing is about.
+
+**Channel — one outbound, `open/`, untracked:**
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\reply_the_dotted_name_refusal_ships_and_your_diagnosis_was_exact.md`
+(8,922 bytes, 2026-08-30 00:16 — verified on disk). Seven sections; the full
+reconstruction lives in `Pass 174.9`'s *Shipped* entry, per the rule that an
+untracked reply's durable record is the `ROADMAP.md` entry.
+
+**Still in flight:**
+
+- The **n-colorant buffer** bucket (`PCS2_020` / `PCS2_030` / `PCS2_040` /
+  `PCS2_081`), which also owns the eventual re-derivation of
+  `grey_overprint.rs`'s assertions.
+- **`CmykIntent::Calibrated`'s cool greys** — open, three independent lines
+  against the stated rationale, table deliberately unchanged (decision 064).
+- **`/OutputIntents`-aware CMYK conversion** — blocked on `iccce` shipping a
+  consumable API. No Pass ID.
+- **The ce-dimension text override (decision 097)** — still the only item on
+  `NEXT_SESSION.md` §A that Ken has personally specified, and still unstarted.
+  With §A item 1 discharged this filing, **it is now the head of that list.**
+
+**For next session:**
+
+1. **★★ FIVE SURVIVORS ARE OWED, and survivors 1 and 3 are the load-bearing
+   ones.** Survivor 1 is the operator-facing `#[error]` template; survivor 3
+   is a self-contradicting bullet in the document another project builds
+   against. The table is above and in `Pass 174.9`'s *Shipped* entry. ★ **A
+   correction is a claim** — re-run the same keyword sweep after fixing them,
+   because that is what turned these up.
+2. **`NEXT_SESSION.md` §A item 1 is struck in this filing** — the inbound is
+   answered and shipped. The engineer owns that file; the strike is recorded
+   here so the removal is not mistaken for a loss.
+3. **`main` is 2 commits ahead of `origin/main`** (`git rev-list --count
+   origin/main..main`, run here). Pushing is standing-authorized (rule 8,
+   decision 090); scrub `check-suite-name-absent.py` green first. **The two
+   filing gates were RED before this entry and should be re-run after it** —
+   turning them green is what this filing is for.
+4. **The newest backup bundle is `pdfce-20260829-2335-3d71ad2-full.bundle`**
+   (`ls -lt D:/Dev/pdfce-backups/`, run here; `git bundle verify` — *"records
+   a complete history … is okay"*). It is **3 commits behind `HEAD`**
+   (`e523395`, `609ec6b`, `9d322d8`). A fresh bundle is cheap.

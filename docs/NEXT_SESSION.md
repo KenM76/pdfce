@@ -7,11 +7,17 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-30. Ledger: **Pass ceiling 174.6**, rules **R234**, decisions
-**104**, filings **330**. ★ Do not trust that line — run
-`python tools/check-ledger-numbers.py`, which derives all four and is the only
-thing that cannot be stale. It is stated here once because a reader wants an
-order of magnitude, and it was already wrong within an hour of the first save.
+Written 2026-08-30. **For the ledger — Pass ceiling, standing-rule ceiling,
+decision ceiling, filing count — run `python tools/check-ledger-numbers.py`.**
+It derives all four and is the only thing that cannot be stale.
+
+★ **The four numbers used to be printed here, with a note saying not to trust
+them.** They were wrong within an hour of the first save, and by the 333rd
+filing they were stale on all four axes at once (`174.6` → `174.9`, `330` →
+`333`). Per `R232`(b) — *when a stale figure is found for the second time, do
+not correct it a third time; delete it* — and `R232`(c) — *an annotation
+admitting a number is stale-prone does not discharge (a) or (b)* — the numbers
+are gone and the command stands in their place. **A pointer cannot rot.**
 
 ---
 
@@ -44,13 +50,31 @@ operator** — it is a large architectural change to the compositor.
 
 ## §A — OWED. This is the pick-from list.
 
-1. **★★ THE ONE UNANSWERED INBOUND.**
-   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_a_dotted_name_silently_swallows_an_existing_terminal_field.md`
-   — from `pdfceGUI`, **2026-08-29 17:35, unanswered, and named in no pdfce
-   document until the 330th filing.** Not colour, so it was out of scope for
-   the session that found it. **Read it first**: a channel request outranks
-   anything on this list, and the last two sessions' work both came from the
-   channel rather than from here.
+1. **★★ FIVE OWED SURVIVORS OF A WITHDRAWN CLAIM, from the 333rd filing's
+   hard-rule-11 sweep.** `Pass 174.9` withdrew *"the value is destroyed and
+   the widget is orphaned"* — the defect is a **demotion**; the `/V` survives
+   in the bytes and nothing is orphaned — and corrected it in three places.
+   **Five copies survived.** In priority order:
+   - `crates/pdfce-core/src/forms_author.rs:239-240`, the **`#[error]`
+     template**: *"nesting under it would destroy it"*. `EditError::FieldAuthoring`
+     is `#[error(transparent)]` (`edit.rs:5102`), so this is **verbatim what
+     the operator reads**, and the correction reached the rustdoc **three
+     lines above it** and stopped.
+   - `docs/core-api/03-capabilities.md:948-949`: *"the value is already
+     gone"*, **four lines below the same bullet's own *"still carries
+     `/V (K. Mantle)`"***. One bullet contradicting itself, in the document
+     `pdfceGUI` builds against.
+   - `crates/pdfce-core/src/forms_author.rs:230`: *"there is no repair that
+     puts the value back"* — the reason `174.9`'s own commit message withdrew
+     by name.
+   - `crates/pdfce-core/tests/form_field_merge.rs:1229` and `:1248` — an
+     `expect_err` message and a test doc comment.
+   ★ **Re-run the sweep after fixing**: case-insensitive `destroy|orphan` over
+   the four touched files, every hit read. **Hits that survive and are
+   CORRECT** (do not "fix" them): `forms_author.rs:255` (`RenameCollision`)
+   and the whole `InsertOutcome::orphaned_widgets` family, which describes
+   `insert_pages`, a genuinely orphaning verb. Full table in the 333rd filing
+   and in `Pass 174.9`'s *Shipped* entry. **`R222` instance 6.**
 
 2. **★★ THE ce-DIMENSION TEXT OVERRIDE — decision 097, the operator's own
    ruling (2026-08-29).** Still the only item on this list Ken has personally
