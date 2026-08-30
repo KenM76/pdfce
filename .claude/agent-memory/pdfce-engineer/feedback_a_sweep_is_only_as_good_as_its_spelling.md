@@ -81,3 +81,36 @@ It was documented in every file the FIX touched and in none of the files the
 CHECKER lives in — because the sweep started from *"what did I change?"* rather
 than from *"who reads this claim?"*. **The reader who most needs a limitation
 stated is the one who never opens the file where you fixed it.**
+
+**★★ 2026-08-30, same day, the counting version: A SOURCE GREP OVER A
+DOCUMENTATION-FIRST CODEBASE COUNTS THE CODEBASE'S OWN PROSE ABOUT THE
+CONSTRUCT.**
+
+Censusing `debug_assert` invocations across `pdfce-core` + `pdfce-render`
+produced **three different published answers before the right one**: 34 (the
+librarian's), 27 (mine), and 24 (true; 12 + 12). Mine counted **grep hits**,
+three of which were **comment lines** — `edit.rs:12085`, `12092`,
+`xref_out.rs:282`, the careful reasoning about *why* that guard is a
+`debug_assert!` and not a `panic!`.
+
+⇒ **The best-written lines in the region are the ones that corrupt the
+census**, and the inflation scales with exactly the documentation discipline
+this project mandates. In a codebase where every construct is explained in
+prose beside itself, `grep -c <construct>` is systematically high and the error
+grows with quality.
+
+★ **And the noun is where it went wrong, not the command.** I published the
+exact grep I ran, which made it look auditable — the sourcing was perfect and
+the word "invocations" was false, because what I had was "hits". A sourced
+figure with the wrong noun is *more* convincing than an unsourced one.
+
+**How to apply:**
+- **Publish the DECOMPOSITION, never the total**:
+  `56 mentions = 24 invocations + 6 cfg(...) + 2 fn defs + 24 prose`. A total
+  invites re-derivation with a different pattern, which is how three answers
+  happened; a decomposition invites arithmetic, which cannot disagree with
+  itself.
+- **Filter comment lines explicitly** when counting code constructs:
+  `grep -vE "^\S+:[0-9]+:\s*//"` at minimum, and check the residue by eye.
+- Say **hits** when you counted hits. Reserve *invocations*, *call sites* and
+  *occurrences* for numbers you actually separated.
