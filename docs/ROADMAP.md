@@ -96,6 +96,275 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 185.0` (`cec4069`, 2026-08-30) — **★★★★ THE JOB IS RENAMED AND A GATE NOW FALSIFIES ITS COUNT — `Pass 185.0` IS CLOSED, 4 OF 4 CRITERIA DISCHARGED** — ★★★ **CRITERION B WAS OWED TO *THIS ROLE'S* TREE, NOT THE ENGINEER'S, AND IS DISCHARGED IN THIS FILING RATHER THAN BY THE COMMIT** — ★★ **THE ENGINEER'S TWO SABOTAGES BOTH TESTED A NAME *ALREADY* STALE; THE SABOTAGE THAT TESTS THE *TRIGGER* WAS RUN HERE AND IS THE ONE THAT DEMONSTRATES CRITERION C** — ★ **THE GATE REFUSES TO JUDGE WHETHER A NAME IS FAIR, AND THAT REFUSAL IS THE TRANSFERABLE PART** — filed 2026-08-30 (348th filing)
+
+**Sourcing (`R228`).** A shell was held and used; **no code was written in this
+filing.** Measured here: `git log` / `git rev-parse HEAD origin/main` /
+`git status --porcelain` / `git show cec4069`; `ls D:\Dev\pdfce-backups\`;
+`gh run list --json …` and `gh run view 33336540100 --json jobs`;
+`python tools/check-ci-job-names.py` and its `--self-test`;
+`bash tools/run-gates.sh` **re-run here, not relayed**;
+`python tools/check-ledger-numbers.py`; `ls tools/check-*`; an
+**independent four-way sabotage** of the new gate driven through its own
+`parse_jobs`/`findings` on copies of the live YAML; and live greps of `tools/`,
+`docs/` and `.github/`. `HEAD` = `origin/main` = `cec4069`; backup bundle
+`pdfce-20260830-1729-cec4069-full.bundle` is **current at `HEAD`** (by `ls`,
+17:29). `.tmp_bench.py` remains untracked — **sixth filing carrying it**,
+deliberate.
+
+#### ★★★★ THE CHANGE, AND THE THREE NUMBERS THAT CHANGED WITH IT
+
+| | before | after `cec4069` |
+|---|---|---|
+| CI job id | `ui-strings` | **`audits`** |
+| CI job `name:` | *"verify pdfce-gui strings live in ui_text.rs"* | **"repository audits (20 checks)"** |
+| `run:` steps in that job | 19 | **20** (the new gate is the 20th) |
+| `bash tools/run-gates.sh` | 29 commands | ★ **30 commands, incl. 2 filing gates — PASS, re-run here at `cec4069`** |
+| `ls tools/check-*` | 23 | **24** |
+
+★ **`run-gates.sh` was not edited and did not need to be.** It derives its
+command list from the workflow, so the twentieth CI step joined the local sweep
+by itself — **the property `check-ci-parity.py` exists to preserve, exercised
+without being asked.** The registration in `check-ci-parity.py`'s `LOCAL` map is
+one line (`tools/check-ci-job-names.py`).
+
+**Confirmed at the surface the audience actually reads**, which is the whole
+subject of the Pass: `gh run view 33336540100 --json jobs` on `cec4069` lists
+**`repository audits (20 checks)` — `success`**. ★★ **The run as a whole was
+still `in_progress` when this was measured** (`cargo test (windows-latest)`
+outstanding), so **no claim is made here about the run's overall colour** — the
+`audits` job's own conclusion is what was read, and it is the only job this Pass
+touched. A future filing should read the run's final colour rather than infer it
+from this row.
+
+#### ★★★★ WHAT THE GATE CHECKS — AND THE REFUSAL IS THE TRANSFERABLE PART
+
+Two rules, both decidable from the YAML alone
+(`tools/check-ci-job-names.py`, `DECLARE_THRESHOLD = 8`):
+
+1. a job running **more than 8** `run:` steps must declare a count as
+   `(N checks)`;
+2. **any declared count must equal the actual `run:` step count.**
+
+**Rule 2 is load-bearing and rule 1 alone would have been another lesson.** A
+collective name is honest on the day it is written and stays honest by doing
+nothing; **the COUNT is the part that decays**, and a stale count is a claim a
+gate can falsify.
+
+★★ **It deliberately does NOT judge whether a name fairly describes its job.**
+That is not decidable from text — a two-step job named after one step is fair
+when the second step is a detail of the first — and a gate that pretended
+otherwise would fail on honest names and get silenced (`R209`'s territory, and
+`a_warning_that_fires_when_nothing_is_wrong_gets_ignored_when_something_is.md`).
+**The general shape, which is the part that travels: where a judgement is not
+mechanisable, gate the NUMBER attached to the judgement instead.** The judgement
+stays with the author; what the gate removes is the case where **nobody made it
+at all** — which is exactly how a 1-step job reached 19 steps under its original
+name.
+
+**The threshold is a judgement and is stated as one, from a measurement.** The
+workflow's jobs run **1, 1, 2, 2, 2, 3, 3, 6 and 20** commands (re-counted here
+from `ci.yml`, not relayed). Every job at 6 or below has a name fairly covering
+all its steps — six `cargo tree` invocations under *"verify pdfce-core /
+pdfce-render have zero GUI deps"* is **one subject, not six**. The gap between 6
+and the outlier is where the misdirection bites. Raising the threshold silences
+the gate; lowering it forces collective names onto jobs that do not need them.
+
+#### ★★★ VERIFICATION — AND THE ENGINEER'S SABOTAGES AND THIS ROLE'S TEST DIFFERENT THINGS
+
+Re-run here, verbatim:
+
+```
+ci-job-names: clean — 9 job(s); every job over 8 command(s) declares a count,
+and every declared count is right.
+check-ci-job-names: self-test PASS (4 cases)
+run-gates: PASS — 30 command(s), including 2 filing gate(s).
+```
+
+The `--self-test`'s four cases were read rather than trusted: a 1-step job needs
+no declaration (**not** reported), a 19-step job with no declaration (reported),
+a **correct** declaration (not reported), a **wrong** count (reported). ★ **A
+gate whose own logic is untested can silently check nothing — the exact class
+this Pass is about — so the self-test is not ceremony here.**
+
+**Independent sabotage, run in this filing** through the module's own
+`parse_jobs`/`findings` against copies of the live YAML:
+
+| sabotage | result |
+|---|---|
+| live workflow, untouched | **0 findings** |
+| `(20 checks)` removed from the name | ★ **CAUGHT** — *"runs 20 commands and its name declares no count"* |
+| count made stale, `(20 checks)` → `(19 checks)` | ★ **CAUGHT** — *"says '(19 checks)' and runs 20"* |
+| ★★ **one `run:` step appended to the job** | ★★ **CAUGHT** — *"says '(20 checks)' and runs 21"* |
+
+★★ **The fourth row is the one that matters, and it is not in the engineer's
+set.** His two sabotages — stale count, declaration removed — both test that the
+gate catches a name **that is already stale**. The fourth tests **the event that
+makes it stale**, which is criterion C's trigger (*"whenever a step is appended
+to an existing job, re-read that job's `name:`"*). **Only that test shows the
+trigger has been mechanised**; the other two would pass on a gate that merely
+audits a static file. ⇒ **When a Pass's stated criterion is a TRIGGER, the
+verification owes a test that fires the trigger, not only one that observes its
+consequence.**
+
+#### Criteria ledger — 4 of 4 discharged
+
+| criterion | ★ status at `cec4069` |
+|---|---|
+| **A** — fix the attribution: split **or** rename | **DISCHARGED** by **option (2), rename**. The Pass entry said *"either is acceptable; leaving it is not"* |
+| **B** — if (2) is chosen, say so in the RAG file | ★★★ **DISCHARGED IN THIS FILING, NOT BY THE COMMIT** — the file is at `D:/dev/rag/rust/`, outside the repo and inside **this role's** tier-4 territory. See below |
+| **C** — the trigger, re-read a job's `name:` when a step is appended | **DISCHARGED, and MECHANISED above the threshold** — appending a step now fails the gate (measured). ★ **Below the threshold it stays a human trigger and the gate deliberately does not reach**; a 3-step job still named after step one is not caught, by design |
+| **D** — no new standing rule | **DISCHARGED — nothing minted.** `R209`'s gate-sweep discipline and the RAG file already covered the ground; what was missing was a **work item**, and the Pass was it |
+
+**★★★ Criterion B is worth naming as a class, not just ticking.** The Pass's
+acceptance criteria included an edit **the engineer could not make**, because
+the file lives in a cross-project RAG this role owns. The criterion was written
+into the Pass anyway — correctly — and it would have read as *discharged by
+association* when the Pass shipped, had this filing not gone and looked. ⇒ **A
+Pass whose criteria span two owners does not close when the code lands.** The
+RAG file now carries: the rename was chosen; the split's per-gate attribution
+was **not** taken and is **accepted, not owed**; the `gh run view --json jobs`
+descent is the documented route to the failing step; and the count-gate as a
+**third fix category the 2026-08-12 file's own list did not contain**.
+
+#### ★★★★ THE FINDING ABOVE THE PASS — A LESSON NOBODY SCHEDULED IS A LESSON THAT DOES NOT ACT
+
+The 345th filing minted `Pass 185.0` on the strength of a RAG file written
+**2026-08-12** and asserted this; `cec4069` **demonstrates** it. The file was
+correct, complete and actionable on the day it was written, and in the eighteen
+days it sat there the job grew **3 → 19** steps and misattributed red runs went
+**5 → 7**. **Writing it down a second time would have produced a third correct
+file** — and that is the trap, because *record it better* is the reflex a
+recurrence produces, and recording is the thing that already failed.
+
+⇒ ★★ **THE ACTIONABLE HALF IS A QUESTION TO ASK OF EVERY FINDING AT FILING
+TIME: "what schedules this?"** If the answer is *"a future session will read
+it"*, **that is the same answer the 2026-08-12 file had**, and it is not an
+answer. A schedule is a work item in the tracker of whoever owns the file, a
+gate that fails, or a line in a document read **unconditionally** — not a
+document read when somebody greps for it. **A RAG file is an ANSWER; it is not
+an APPOINTMENT.**
+
+★ **The tell was visible in the file the whole time**: its own trigger sentence
+was addressed to **nobody in particular**, and sixteen steps were appended
+without anyone reading it. The remedy that finally worked converted exactly that
+sentence into a condition a machine evaluates on every push.
+
+**Filed** as a dated resolution footer on the existing RAG file (hard rule 4 — a
+footer, never a second file; writing a new file about the inertness of a written
+file would refute itself), with its `index.md` line extended. **Recommended, not
+minted:** a clause on `pdfce-librarian.md` making *"what schedules this?"* a
+question every filing asks of every finding it escalates — an agent file is read
+unconditionally at every dispatch, which is precisely the property the RAG file
+lacked. **That amendment is the engineer's act, not this role's** (same
+precedent as hard rule 11's clause (e), drafted here and minted by him).
+
+#### Standing rules and decisions — BOTH DECLINED, and the declines are argued
+
+- **No standing rule.** Criterion D asked for none and none is minted. The
+  discipline already exists in `R209` and in the RAG file; **the gate is the
+  enforcement, and a rule restating what a gate enforces is a rule nobody
+  reads.**
+- **No decision record.** The two judgements in this Pass — the threshold of
+  `8`, and the refusal to check name *fairness* — are **stated in the tool's own
+  docstring**, which is where a reader who is about to change the threshold
+  already is. `ARCHITECTURE.md` §12 records decisions about **the product**;
+  routing a repo-tooling judgement there puts it where the person who needs it
+  will not be standing. Decision ceiling stays **`109`**; rule ceiling stays
+  **`R235`**.
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, file set narrowed, pattern widened (clause (e))
+
+**Three meaning changes** to sweep: the job **id** (`ui-strings` → `audits`), the
+job **name**, and two counters — `run-gates.sh` **29 → 30 commands** and
+`ls tools/check-*` **23 → 24**.
+
+**One survivor, and it is engineer-owned:**
+
+- ★★ **`docs/NEXT_SESSION.md:157`** — ``bash tools/run-gates.sh   # the full
+  sweep, 29 commands``. **This is a §D "State of the tree" instruction, i.e. a
+  CURRENT-STATE claim, not a dated measurement**, and it sits in the one block
+  of that file whose entire premise is *"run these rather than trusting the
+  sentence"*. **Reported as owed**; not edited — `NEXT_SESSION.md` is the
+  engineer's. ★ It is **not** in §A item 2, which is the part he said he would
+  refresh, so a refresh aimed only at item 2 will walk past it.
+
+**Reported by name so the next sweep does not "fix" them** — all correct as
+written:
+
+- ★ **Every `ui-strings` hit in `tools/` names the SCRIPT
+  `check-ui-strings.sh`, which is unrenamed and still the job's first step** —
+  `check-bypass-paths.sh:87,96`, `check-commits-filed.py:103,140`,
+  `check-ledger-numbers.py:21,80`, `check-string-gaps.sh:320`,
+  `check-theme-colors.sh:19`, `commits-filed-baseline.txt:8`,
+  `check-ci-job-names.py:14`. **The job was renamed; the script was not.**
+  Conflating the two is the obvious way to break this sweep next time.
+- **Every `ui-strings` hit naming the JOB is history** — `ROADMAP.md:742`,
+  `:825`, `:890`, `:1017`; `ARCHITECTURE.md:7500`, `:8377`, `:8651`, `:8738`,
+  `:8816`, `:9179`, `:9284`, and the release-verification rows around
+  `:13995`–`:16403`. **Dated measurements of a job that had that name when they
+  were taken.** Untouched, deliberately.
+- **Fifteen `29 commands` hits across `ROADMAP.md` and `SESSION_LOG.md`** are
+  likewise dated PASS records (`:276`, `:1087`, `:1502`, `:4586`, `:5962`,
+  `:7001`, `:7183`, `:7389`; `SESSION_LOG.md:76440`, `:77106`, `:80667`,
+  `:80743`, `:80945`, `:81207`). **True when written; not claims about today.**
+- `.github/workflows/ci.yml:299` names `ui-strings` inside the **rename
+  comment**, which is where it belongs.
+
+★ **Spelling note (clause (e)):** the sweep ran case-insensitively over the bare
+keywords `ui-strings` / `ui_strings`, `29 command`, `nineteen` and `23 check`
+across `tools/`, `docs/`, `.github/` and the repo root — **not** the exact
+phrase over the whole tree. The `29 commands` survivor in `NEXT_SESSION.md`
+carries a `#` comment marker and two spaces of padding; a phrase grep shaped
+like the ROADMAP's `` **PASS, 29 commands** `` would have missed it.
+
+#### `FEATURES.md` — checked, NO CHANGE, and the reason is recorded
+
+**No row changed and none should.** `FEATURES.md` names **no CI job, no gate and
+no `tools/check-*` script anywhere in the file** (grepped: zero hits for
+`check-`, `CI job`, `workflow`). This Pass changed a job label, added a repo
+gate and altered no capability in `pdfce-core`, `pdfce-cli` or `pdfceGUI` — there
+is nothing to tick, and inventing a row for repo infrastructure would violate the
+file's hard conciseness rule. **Recorded rather than left silent, because "no
+change" and "not checked" are indistinguishable in an absent note.**
+
+#### Ledger
+
+**Pass ceiling `185.0` — UNCHANGED** (the Pass shipped under the ID minted for
+it; no new ID). Next free `185.1` / new major `186.0`.
+
+> ★★★ **AND `185.1` WAS BEING SPENT WHILE THIS ENTRY WAS BEING WRITTEN.** At
+> the start of this filing `git status --porcelain` showed one untracked file
+> (`.tmp_bench.py`) and nothing else. Re-run near the end, it showed
+> **`crates/pdfce-core/src/edit.rs` and `fuzz/Cargo.toml` modified plus two new
+> untracked files** (`crates/pdfce-core/tests/form_delete_page_tree.rs`,
+> `fuzz/fuzz_targets/form_edit_sequence.rs`), carrying a new
+> `EditError::FieldObjectIsInPageTree` whose own doc comment **claims
+> `Pass 185.1` by name** — a fuzzer-found form whose `/Fields` names an object
+> that is also a `/Page`. **None of it is committed** and none of it is this
+> role's to file. ⇒ **"Next free `185.1`" is true of `cec4069` and is already
+> being spent in the working tree**; a filing that reads this ceiling minutes
+> from now should re-run the tool rather than quote the sentence. **This is hard
+> rule 10's whole point stated against a live example: the figure is filed with
+> the thing that can disagree with it.**
+>
+> ★★ **The consequence for the gate sweep, so nobody misattributes it:**
+> `bash tools/run-gates.sh` was **PASS on 30 commands** early in this filing and
+> **FAILED 1 of 30 late in it** — `check-core-api-verbs.py`, reporting
+> *"`docs\core-api\index.md:17` says `EditError` has 109 variants; it has 110"*.
+> **That failure is the engineer's uncommitted 110th variant, not this filing's
+> doc edits**, which touched no `crates/` file and no `docs/core-api/` file. It
+> discharges when he files `Pass 185.1`. ★ **The same misattribution `Pass 185.0`
+> is about, one layer up**: a red gate names a *document* count, and the cause is
+> a *code* change someone else is mid-way through. **Standing rules ceiling
+`R235`** — next free `R236`. **Decision records `109`** — next free `110`.
+**`SESSION_LOG` filings: 348 after this entry** — next free 349. The first three
+were read from `python tools/check-ledger-numbers.py` at `cec4069`, which
+reports `ledger-numbers: clean` and, **measured before this entry existed**,
+`SESSION_LOG filings : 347 -> next free is 348`. ★ **The 348 above is therefore
+this filing's own consequence, not the tool's reading** — stated apart from the
+other three so the distinction survives being quoted.
+
 ### `Pass 184.0` (criterion F, `4a25fb2`, 2026-08-30) — **★★★★ `Pass 184.0` IS NOW CLOSED — 6 OF 7 DISCHARGED, `B` STILL *WITHDRAWN* AND NOT DISCHARGED** — ★★★ **CRITERION F VERIFIED BY LIVE GREP AT ALL THREE LOCATIONS THE 346th FILING NAMED, NOT ACCEPTED FROM THE DISPATCH** — ★★ **THE `empty_line_after_doc_comments` LINT IS A *GENUINE* GUARD, NOT A THIRD LUCKY ACCIDENT — AND MEASURED HERE, IT IS SILENT ON THE VARIANT THAT ACTUALLY COSTS MONEY** — ★ **TWO SWEEPS CAME BACK CLEAN AND WERE *DISJOINT*: NEITHER KEYWORD SET CONTAINED THE OTHER'S SPELLING** — filed 2026-08-30 (347th filing)
 
 **Sourcing (`R228`).** A shell was held and used; **no code was written in this
@@ -93146,7 +93415,30 @@ in the "still open" list. Full build record: this file's own
 > (`/StructParent` / `/OBJR`) — different graph, different carrier, no
 > name-string component.
 
-### `Pass 185.0` — **THE CI JOB NAMED FOR ONE OF ITS NINETEEN STEPS: SPLIT IT, OR RENAME IT TO WHAT IT HAS BECOME** — ★★★ **THIS WAS DIAGNOSED, FILED AND REMEDIED IN THE RAG ON 2026-08-12 AND THE REMEDY WAS NEVER EXECUTED; THE JOB HAS SINCE GROWN FROM 3 STEPS TO 19** — ★★ **SEVEN OBSERVED RED RUNS HAVE NOW BEEN MISATTRIBUTED IN PUBLIC, AND THE MISATTRIBUTION IMPUGNS `run-gates.sh`** — filed 2026-08-30 (345th filing), **NOT STARTED**
+> ★★★★ **`Pass 185.0` SHIPPED AND HAS LEFT THIS SECTION — `cec4069`,
+> 2026-08-30 (348th filing). IT IS CLOSED AT 4 OF 4 CRITERIA DISCHARGED.**
+> The entry below is kept **struck** rather than deleted, because it is the
+> record of what was owed, of the eighteen-day-old RAG file that owed it, and of
+> the ID decision. **Its full Shipped entry, criteria ledger, sabotage table and
+> the finding above the Pass are at the top of *Shipped*.**
+>
+> **What shipped:** the job `ui-strings` / *"verify pdfce-gui strings live in
+> ui_text.rs"* is now `audits` / **"repository audits (20 checks)"**, and
+> `tools/check-ci-job-names.py` keeps the count honest — a job over 8 `run:`
+> steps must declare `(N checks)`, and a declared count must be right.
+> **Option (2), rename**, was taken; the split's per-gate attribution was **not**
+> taken and is **accepted, not owed** — recorded in the RAG file so the next
+> reader does not re-file it.
+>
+> ★★ **Criterion B was owed to the LIBRARIAN'S tree, not the engineer's**
+> (`D:/dev/rag/rust/`, outside the repo), and is discharged **in the 348th
+> filing rather than by the commit.** A Pass whose criteria span two owners does
+> not close when the code lands.
+>
+> ★ **Still owed and un-minted, unchanged by this:** the `Pass 38.5` **C9** debt
+> (`/StructParent` / `/OBJR`), and `Pass 184.0` **criterion E**.
+
+### ~~`Pass 185.0`~~ — **THE CI JOB NAMED FOR ONE OF ITS NINETEEN STEPS: SPLIT IT, OR RENAME IT TO WHAT IT HAS BECOME** — ★★★ **THIS WAS DIAGNOSED, FILED AND REMEDIED IN THE RAG ON 2026-08-12 AND THE REMEDY WAS NEVER EXECUTED; THE JOB HAS SINCE GROWN FROM 3 STEPS TO 19** — ★★ **SEVEN OBSERVED RED RUNS HAVE NOW BEEN MISATTRIBUTED IN PUBLIC, AND THE MISATTRIBUTION IMPUGNS `run-gates.sh`** — filed 2026-08-30 (345th filing), ~~**NOT STARTED**~~ ★ **SHIPPED `cec4069`, 2026-08-30 — SEE *Shipped***
 
 **★ ID assignment.** `CLAUDE.md` rule 5 makes the ID the engineer's act; this
 filing's dispatch **explicitly delegated the judgement** (*"Your call whether
@@ -93197,6 +93489,15 @@ merely fail to help; it argues against a correct local result.
 
 #### Acceptance criteria
 
+> ★★★ **ALL FOUR DISCHARGED, 2026-08-30 (348th filing).** `A` by **option (2),
+> rename** — the alternative (1) split was not taken and its per-gate
+> attribution is **accepted, not owed**. `B` **in that filing, not by the
+> commit**, because the RAG file is this role's to write. `C` **mechanised
+> above the threshold** — appending a step to the job now fails
+> `tools/check-ci-job-names.py`, measured; below the threshold it stays a human
+> trigger by design. `D` honoured — **no standing rule minted.** Ledger and
+> evidence at the top of *Shipped*.
+
 - **A — Fix the attribution.** Either **(1) split** the unrelated gates into
   separate jobs — correct attribution in the one place everyone looks, at the
   cost of a checkout + toolchain install per job — or **(2) rename** the job to
@@ -93219,6 +93520,13 @@ merely fail to help; it argues against a correct local result.
 the misdirection was measured and filed, not fixed. **The RAG file received a
 dated recurrence footer** (hard rule 4: a dated footer on the existing lesson,
 never a second file).
+
+> ★ **Both halves closed since.** `.github/workflows/ci.yml` was edited by the
+> **engineer** at `cec4069`, as it had to be; the RAG file received a **second**
+> dated footer — a *resolution* footer — in the 348th filing, recording that
+> option (2) was chosen and that the count-gate is a **third fix category the
+> 2026-08-12 list did not contain**. Still one file, still footers: writing a new
+> RAG file about the inertness of a written RAG file would refute itself.
 
 ### `Pass 179.0` — **BOLD BECOMES AUTOMATIC: A FALLBACK LADDER THAT BINDS A REAL FACE WHEN ONE EXISTS AND SYNTHESISES WHEN ONE DOES NOT, WITH NO OPERATOR INTERVENTION** — ★★★ **OPERATOR RULING, 2026-08-30; DECISION `106`. REVERSES THREE CLAUSES OF pdfce's OWN DOCUMENTED POSTURE AND AMENDS `R90`** — filed 2026-08-30 (340th filing), **NOT STARTED**
 
