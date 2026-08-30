@@ -27455,3 +27455,106 @@ free 072.**
   is one instance here plus decision 098's prior defect and is recorded as a
   decision rather than elevated, per the 2026-08-05 ruling against elevating on
   occurrence count.
+
+- **2026-08-29 — decision `104`: `OverprintZeroTintScope::GreyAsKOnly` IS
+  RETAINED AS THE DEFAULT, AND IS RECLASSIFIED FROM "one of two defensible
+  readings" TO "A KNOWING DIVERGENCE FROM ISO 32000-1". The behaviour does not
+  move; what pdfce OWES the operator does.** (`Pass 174.5`, `c751606`, filed in
+  the 330th filing.)
+
+  **Why this is a decision at all, since nothing was implemented.** A decision
+  *was* made, and a different one was available: having established that
+  ISO 32000-1 answers the question against pdfce's default, the conforming move
+  is to flip the default to `DeviceCmykOnly`. **That was considered and
+  declined.** `overprint_zero_tint_scope` is a **print** axis, scored against
+  press behaviour and against a print-conformance corpus whose own reference
+  renders are Acrobat's; a default that is conformant on paper and wrong on
+  press is the wrong default for the instrument this setting is authored for.
+  ⇒ **The default stays. The description changes.** Recorded so a future
+  session that re-derives the three grounds does not read them as a mandate to
+  flip a shipped default, which is the single most likely misreading of
+  `Pass 174.5`.
+
+  **What was found** (audited by `pdfce-spec-librarian`, spec register
+  **`OP-A5`**; the engineer re-verified grounds 1 and 2 against the corpus
+  before the doc was rewritten). The type's own doc comment had claimed *"a
+  genuine spec ambiguity"* and *"there is no sentence resolving it either way"*.
+  **Three provisions of ISO 32000-1 resolve it:**
+
+  1. **§8.6.7's very next sentence** — *"shall not apply … to any colours that
+     are the result of a computation, such as those in a shading pattern **or
+     conversions from some other colour space**"*. A `DeviceGray` →
+     `DeviceCMYK` map is exactly that, and **§10.3.3 specifies the arithmetic
+     as a `shall`**.
+  2. **Tables 148/149 row 2** — *"Any process colour space (including other
+     cases of `DeviceCMYK`)"* × process colorant × `OP true, OPM 1` = **"Paint
+     source"**, identical to the `OPM 0` column. **The standard did not omit
+     non-`DeviceCMYK` process spaces; it tabulated them.**
+  3. §8.6.7's escape hatch pointing at §8.6.5.7, *"Implicit Conversion of
+     **CIE-Based** Colour Spaces"* — CIE-based and nothing else. **This third
+     ground is the only one the previous wording had**, and alone it does read
+     like a silence, which is how the mistake was made.
+
+  **★★ THE EDITION GATE — the fact this decision exists to keep findable.**
+
+  | edition | grounds surviving | honest classification |
+  |---|---|---|
+  | **ISO 32000-1 (PDF 1.7)** | **3 of 3** | **divergence** — the standard answers, and pdfce does otherwise |
+  | **ISO 32000-2 (PDF 2.0)** | **1 of 3** — 2.0 replaces the computed-colour sentence with a bare *"images or shadings"* and **drops the opaque-model table entirely** (`"Overprinting behaviour in the opaque imaging model"`: **1 hit in 1.7, 0 hits in 2.0**) | much closer to a genuine **silence** |
+
+  ⇒ **An engine targeting both editions has two different correct answers here
+  and must say which it implements.** `render-page --overprint-zero-tint-scope
+  device_cmyk_only` is the escape: it gets ISO 32000-1 to the letter. The
+  general form — *before recording a spec question as open, ask which edition
+  it is open in* — is `R234` clause (c).
+
+  **★★★ WHAT ACTUALLY CHANGED, and it is a rule-4 obligation, not a wording
+  preference.** *"The standard is ambiguous"* and *"the standard says X and we
+  do Y"* are different claims. An **ambiguity** owes a setting and a default
+  (`R169`/`R206`, already discharged by `Pass 143.0`). A **divergence** owes
+  the setting **and a disclosure** — rule 4 forbids silence about anything
+  pdfce decided that the operator did not. ⇒ **Naming a divergence an ambiguity
+  quietly discharges a rule-4 obligation by misnaming it**, and no gate can
+  catch that, because such a gate would have to know which of the two the
+  standard is — the very question the misnaming got wrong. The standing-rule
+  half is **`R234`**, minted from this in the same filing.
+
+  **A TEST-DESIGN CONSEQUENCE that had already cost a measurement**
+  (spec register **`OP-N3`**). Tables 148/149 put *"any process colour space"*
+  × **spot** colorant × `OP true` at `c_b` — *do not paint* — in **both**
+  overprint-mode columns. So a grey fill over a **spot** backdrop preserves that
+  backdrop under **all three** settings and under **either** reading. `Pass
+  174.2` ran exactly that ablation on `PCS2_030`, obtained bit-identical ink,
+  and reported it as evidence the setting was not the cause: **the conclusion
+  was right and the inference was weaker than stated — the result was forced by
+  the table** and would have been identical on a correct implementation and on
+  a broken one. **The discriminating case is grey over PROCESS components.**
+  That entry carries a dated amendment; the attribution stands, resting on the
+  file's own colour spaces rather than on the ablation.
+
+  **And one consequence for pdfce's own settings documentation.** The
+  *"what the difference looks like on paper"* example described a difference
+  between two of pdfce's settings as though the standard licensed it. **It does
+  not** — a conforming engine preserves that spot backdrop either way. pdfce's
+  settings differ there **only because pdfce flattens a spot into C, M and Y**,
+  so no spot colorant survives for that table row to protect. **Real
+  difference, pdfce's own representation as its cause, and it will change when
+  the n-colorant buffer lands.**
+
+  **Body-section counterpart: none required.** No crate boundary is redrawn, no
+  invariant defined, no public API changed — `OverprintZeroTintScope`'s three
+  variants and its default are byte-for-byte what `Pass 143.0` shipped. The
+  living account is the type's own doc comment
+  (`crates/pdfce-core/src/settings/mod.rs`), `docs/FEATURES.md`'s
+  `overprint_zero_tint_scope` row (corrected in the same filing), and the spec
+  register's §5.19.
+
+  **GUI-core separation:** unaffected and **not re-verified** — no crate
+  manifest was touched and no dependency added, so `cargo tree` was neither run
+  nor claimed.
+
+  **Decision ceiling moves 103 → 104; next free 105.** **`R234` minted from
+  this decision** — the substantive half (retain the default, knowing what it
+  diverges from) is recorded here; the procedural half (how a claim about a
+  standard's silence is sourced, and what a divergence owes that an ambiguity
+  does not) is the rule.

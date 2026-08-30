@@ -96,6 +96,178 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 174.5` (`c751606`, 2026-08-29) — TWO DOC CLAIMS AUDITED AND FOUND WRONG: a worked example that shipped the PRE-FIX value, and an "ambiguity" that is a DIVERGENCE. Both found by OTHER AGENTS auditing this session's own output, neither by any of the 29 gates — filed 2026-08-29 (330th filing)
+
+**Sourcing — `R228` invoked; this filing had a shell and used it.** Checked
+here, on disk, not relayed: `git log --oneline -8` (`c751606` → `d4d874d` →
+`12cd53e`, in that order above `ecc24ac`); `git status --short` (**empty**);
+`git remote -v` (**`github.com/KenM76/pdfce.git`** — a push publishes);
+`git rev-list --count origin/main..main` = **8**; `git show --stat c751606` =
+**5 files, +131 / −33**; **the commit message read in full**; **all four
+diff hunks read as diffs**, so the withdrawn wording is on this record;
+`python tools/check-commits-filed.py` **red on exactly this commit** before
+this filing; `wc -l docs/core-api/03-capabilities.md` = **2,646**, matching
+what the commit wrote into `docs/core-api/index.md` (2,633 → 2,646, a **+13**
+that equals the block added); `ls -lt` on **both** channel folders;
+`grep -rn "OP-A5\|OP-N3" D:/Dev/Rag-Specialized/PDF_Spec/` (**both register
+entries exist**, §5.19 and the `spot_colour_overprint` reference file — so the
+spec-corpus half of this Pass is verifiable independently of the commit that
+cites it). **Relayed, not re-run:** `bash tools/run-gates.sh` (**PASS — 29
+commands, incl. 2 filing gates**, with the two standing skips: `cargo about`,
+and `--all-features` replaced by plain `cargo test --workspace`, so this is a
+**default-features** green, run on the tree at `c751606` **before**
+`d4d874d`/`12cd53e` existed), `cargo fmt --all --check`, `cargo clippy
+--workspace --all-targets -- -D warnings`, `check-clap-help.py` (**118
+subcommands**), `check-core-api-verbs.py`. ★ **`cargo tree` was NOT re-run and
+is NOT claimed** — no crate manifest was touched, no dependency added; the
+GUI-core separation invariant is **unchallenged this session**, which is a
+different statement from **verified this session**.
+
+**No behaviour change. 5 files, +131 / −33**, four of them doc-comment or
+prose. The value is entirely in what the corrections *say about how the
+defects got in*.
+
+---
+
+**★★★ THE HEADLINE IS THE PROVENANCE, NOT THE SIZE.** Both defects were found
+by **other agents auditing this session's own output** — defect A by this role
+in the 329th filing's own report, defect B by `pdfce-spec-librarian` auditing
+the dispatch it had just been handed. **Neither was found by any of the 29
+gates**, and **both lived in documents another project builds against.** A
+session that audits only its code has audited the half a gate already covers.
+
+---
+
+#### DEFECT A — a worked example shipped the PRE-FIX value
+
+`--probe-ink`'s worked example, in the CLI's own `--help`
+(`crates/pdfce-cli/src/main.rs:9710`) **and** in
+`docs/core-api/03-capabilities.md` §7.3b, read:
+
+```text
+ink-probe: … source=cmyk-buffer c=0.750 m=0.000 y=1.000 k=0.000 … srgb=24,140,108
+ink-probe: … source=screen-srgb  c=-     m=-     y=-     k=-     … srgb=47,180,73
+```
+
+**`24,140,108` is the pre-`Pass 165.0` defect value** — the render produced
+when `authored_tints` returned `None` for `ICCBased /N 4` over `DeviceCMYK`,
+yellow `1.0` arrived as `0.59` and a black of `0.29` was invented from nothing.
+⇒ **The example restated, in shipped operator-facing documentation, exactly the
+*"the fallback beats the buffer"* premise that `Pass 174.0` had just measured
+away** — while `crates/pdfce-cli/tests/render_page.rs` asserted `47,181,73` for
+the same operand, twenty files over.
+
+★ **A worked example is a CLAIM. A stale one is a wrong claim that reads as an
+illustration**, which is why three readings of that block walked past it: an
+example invites *following*, not *checking*.
+
+Corrected to the measured pair — and the pair is now **useful** rather than
+merely right:
+
+| the same page, the same operand `0.75 0 1 0` | sRGB |
+|---|---|
+| `source=cmyk-buffer` (composited in ink) | **`47,181,73`** |
+| `source=screen-srgb` (composited on screen) | **`47,180,73`** |
+
+**That one count of blue IS `Pass 174.4`'s ±1**, so the example now teaches the
+path uncertainty instead of teaching a defect. Both sites keep the prior
+wording struck rather than silently replaced.
+
+#### DEFECT B — `OverprintZeroTintScope` is a DIVERGENCE under ISO 32000-1, not an ambiguity, and the type's own first line said otherwise
+
+`crates/pdfce-core/src/settings/mod.rs` said *"a genuine spec ambiguity"* and,
+in terms, *"there is no sentence resolving it either way"*. **Audited by
+`pdfce-spec-librarian` against the spec corpus: three sentences resolve it**
+(register `OP-A5`, `iso32000__s__8.6.7.md` § UPDATE 2026-08-29):
+
+| # | ground | what it says |
+|---|---|---|
+| 1 | **§8.6.7's very next sentence** | *"shall not apply … to any colours that are the result of a computation, such as those in a shading pattern **or conversions from some other colour space**"* — a `DeviceGray`→`DeviceCMYK` map is exactly that, and **§10.3.3 specifies the arithmetic as a `shall`** |
+| 2 | **Tables 148/149 row 2** | *"any process colour space (including other cases of `DeviceCMYK`)"* × process colorant × `OP true, OPM 1` = **"Paint source"**, *identical to the `OPM 0` column*. **The standard did not omit non-`DeviceCMYK` process spaces; it TABULATED them** |
+| 3 | §8.6.7's escape hatch → §8.6.5.7, **CIE-based only** | ★ **the only ground the previous wording had — and alone it does read like a silence, which is how the mistake was made** |
+
+**★★ ISO 32000-2 DELETES TWO OF THE THREE**, so the question is
+**EDITION-GATED**: 2.0 replaces the computed-colour sentence with a bare
+*"images or shadings"* and drops the opaque-model table entirely (**1 hit in
+1.7, 0 in 2.0**). Under 2.0 this is much closer to a real silence; under 1.7 it
+is not. ★ **The engineer verified grounds 1 and 2 against the spec corpus
+directly before rewriting the doc rather than taking the audit on trust** — a
+subagent's finding is evidence, not a verdict, and this is `R220`(e) applied in
+the direction that is easy to skip.
+
+**★★★ THE DEFAULT DOES NOT MOVE**, and that is deliberate: matching Acrobat is
+still right for a print axis scored against press behaviour. What changes is
+that it is now **described as the divergence it is** — and that is a
+correctness change, not a wording one:
+
+> **"the standard is ambiguous" and "the standard says X and we do Y" are
+> different claims, and ONLY THE SECOND OWES THE OPERATOR A RULE-4
+> DISCLOSURE.** Calling it an ambiguity was quietly discharging that obligation
+> by misnaming it.
+
+#### DEFECT B's COROLLARY — and it amends `Pass 174.2`'s entry, three entries below this one
+
+Tables 148/149 also put *"any process colour space"* × **spot** colorant ×
+`OP true` at `c_b` — *do not paint* — in **BOTH** overprint-mode columns
+(register `OP-N3`). ⇒ **A grey fill over a SPOT backdrop preserves that
+backdrop under all three `overprint_zero_tint_scope` values and under either
+reading.** `Pass 174.2` ran exactly that ablation on `PCS2_030`. See that
+entry's own **2026-08-29 amendment**, filed in this same filing; the one-line
+form is:
+
+> **A measurement whose outcome is entailed by the spec is not a measurement of
+> the implementation.**
+
+**The attribution stands** — it rests on the file's own colour spaces (a
+`/DeviceN [/Black /<spot>]` over `/DeviceCMYK` backdrop flattened into C/M/Y),
+not on the ablation. **The discriminating case is grey over PROCESS
+components**, and `PCS2_030`'s failing cells are not it.
+
+#### One more correction in the same commit — a difference the standard does NOT license
+
+The settings docs' *"what the difference looks like on paper"* example
+described a difference between **two of pdfce's own settings** as though the
+standard licensed it. **It does not.** A *conforming* engine preserves that
+spot backdrop either way (that is `OP-N3` again). pdfce's settings differ there
+**only because pdfce FLATTENS a spot into C, M and Y**, so there is no spot
+colorant for the table row to protect and the paint meets the process-colorant
+row instead. ⇒ **Real difference, pdfce's own representation as its cause, and
+it will change when the n-colorant buffer lands.**
+
+#### ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string. SIX SURVIVORS, and one of them is in a document THIS ROLE OWNS
+
+`Pass 174.5` retired the *"genuine spec ambiguity"* characterisation in **two**
+places. Grepping for the **claim** — *"§8.6.7 ambiguity"*, *"both defensible
+readings"*, *"no sentence resolving it"* — rather than for the wording the
+commit used, finds **six more**:
+
+| # | site | what it still says | owner |
+|---|---|---|---|
+| 1 | ★★★ `crates/pdfce-core/src/settings/mod.rs:1479` | *"See [`OverprintZeroTintScope`] — the §8.6.7 ambiguity."* — **in the very file this Pass corrected, 960 lines below the corrected block** | engineer |
+| 2 | `crates/pdfce-render/src/overprint.rs:642` | `// ★ Pass 143.0 — the §8.6.7 ambiguity, resolved by SETTING.` | engineer |
+| 3 | `crates/pdfce-render/src/font/mod.rs:617` | *"the §8.6.7 ambiguity (`Pass 143.0`) … whose docs carry the clause citations, **both defensible readings**, and the measurement behind the default"* | engineer |
+| 4 | `crates/pdfce-render/tests/grey_overprint.rs:1` | module title: *"A `DeviceGray` fill overprinting a spot backdrop — **the §8.6.7 ambiguity**"* | engineer |
+| 5 | `docs/suite-patch-reference.md:244` | **`Pass 174.5` EDITED THIS VERY LINE and left `"The Pass 143.0 ambiguity is not the cause"` in the bolded lead** — the correction landed in the paragraph below the claim it corrects | engineer |
+| 6 | ★ `docs/FEATURES.md:268` | *"**A genuine spec ambiguity**: §8.6.7's one escape hatch points at §8.6.5.7 … so **both readings are defensible**"* — the withdrawn sentence, near-verbatim | ★ **this role — FIXED IN THIS FILING** |
+
+**★ Survivor 5 is the sharpest of the six and survivor 1 is a close second**,
+for the same reason: *the correction and the survivor were in the same file, in
+one case eight lines apart.* A sweep that starts from the diff sees what
+changed; only a sweep that starts from the **claim** sees what did not.
+
+★★ **AND THIS IS WHY THE DISPATCH'S `FEATURES.md` LINE WAS WRONG.** The
+dispatch said *"`FEATURES.md`: **zero rows change**. Say so explicitly."* **Zero
+CHECKBOXES change — that part is right.** One row's **prose** carried the
+withdrawn claim and has been corrected here. Reported rather than quietly
+done, because a dispatch is a snapshot and this is exactly the class hard rule
+11 exists to catch.
+
+**`FEATURES.md`: ZERO checkbox changes; ONE row's prose corrected** (the
+`overprint_zero_tint_scope` row) — *"a genuine spec ambiguity … both readings
+are defensible"* → the divergence, with the edition gate named and the prior
+wording struck. **No capability moved**, which is the claim the dispatch was
+making and which stands.
+
 ### `Pass 174.4` (`ecc24ac`, 2026-08-29) — `#231F20` is ONE OF TWO CORRECT ANSWERS, one count apart, and a note telling another project they were wrong was written and WITHDRAWN before sending — filed 2026-08-29 (329th filing)
 
 **Sourcing.** As `Pass 174.2` below. This Pass **landed mid-filing**, after the
@@ -277,15 +449,56 @@ earlier:
 | `(28, 135)` | `0 0 0 0.500` | `0.443 0 0.885 0.500` |
 | `(434, 136)` | `0.500 0 1.000 0.500` | `0.029 0 0.059 0.500` |
 
-**1. The `Pass 143.0` §8.6.7 grey ambiguity is REFUTED AS THE CAUSE, BY
-ABLATION.** All three `overprint_zero_tint_scope` values — `device_cmyk_only`,
-`grey_as_k_only`, `all_process_spaces` — return **bit-identical ink** at the
-failing pixel. ★ **The ablation is LIVE, not inert**, and that is the half that
-makes it evidence: the same three settings move the page's total
-effective-overprint count **24 / 29 / 29**. A knob that moves a page-level
-counter and does not move the pixel under test has been *exercised* and found
-irrelevant, which is a different and much stronger result than a knob that
-turned out to be disconnected.
+**1. ~~The `Pass 143.0` §8.6.7 grey ambiguity is REFUTED AS THE CAUSE, BY
+ABLATION.~~** — **AMENDED 2026-08-29 (330th filing), see the box below; the
+CONCLUSION stands and the WORD "ablation" is withdrawn.** All three
+`overprint_zero_tint_scope` values — `device_cmyk_only`, `grey_as_k_only`,
+`all_process_spaces` — return **bit-identical ink** at the failing pixel.
+~~★ **The ablation is LIVE, not inert**, and that is the half that makes it
+evidence: the same three settings move the page's total effective-overprint
+count **24 / 29 / 29**. A knob that moves a page-level counter and does not
+move the pixel under test has been *exercised* and found irrelevant, which is a
+different and much stronger result than a knob that turned out to be
+disconnected.~~ (The **24 / 29 / 29** measurement is correct and is retained;
+what is withdrawn is the inference drawn from it.)
+
+> **★★★ AMENDMENT — 2026-08-29 (330th filing), from `Pass 174.5` (`c751606`).
+> THE RESULT WAS FORCED BY THE SPEC, SO IT WAS NEVER A MEASUREMENT OF PDFCE.**
+>
+> Audited by `pdfce-spec-librarian` the same day (register **`OP-N3`**):
+> **Tables 148/149 put *"any process colour space"* × SPOT colorant ×
+> `OP true` at `c_b` — *do not paint* — in BOTH the `OPM 0` and the `OPM 1`
+> column.** ⇒ On a **spot** backdrop, all three settings agree **by
+> construction**, under either reading of `OP-A5`.
+>
+> `PCS2_030`'s failing traps sit on exactly that geometry. So the
+> bit-identical ink above **would have come out identical on a correct
+> implementation and on a broken one**, and the paragraph's own escalation —
+> *"a different and much stronger result"* — is the half that is wrong. **It
+> was the weakest kind of result: one the spec entails.**
+>
+> ★ **THE CONCLUSION IS UNCHANGED AND THE ATTRIBUTION STANDS.** §3 of that
+> same entry — the absent per-spot-colorant plane — is derived from **the
+> file's own colour spaces** (`/DeviceN [/Black /<spot>]` over `/DeviceCMYK`,
+> flattened into the measured `0.443 0 0.885`), **not from the ablation**.
+> Nothing downstream of this entry moves. What moves is the *status* of one
+> line of evidence, from *proof* to *consistency check*.
+>
+> **The discriminating case is grey over PROCESS components**, and it is
+> recorded as `OP-N3` in the spec register so nobody re-runs this one.
+> `docs/suite-patch-reference.md` §3 carries the same correction against the
+> same table.
+>
+> **★★ The sentence worth carrying forward, and it generalises past overprint:**
+>
+> > **A measurement whose outcome is ENTAILED BY THE SPEC is not a measurement
+> > of the implementation.**
+>
+> Sibling of `R225` (*a sabotage is only as discriminating as its fixture*) and
+> of `R233` (*an aggregate is only as discriminating as the fraction of its
+> population on which right and wrong disagree*) — the same defect at a third
+> site: **the ablation arm**. Recorded here rather than minted as a fourth
+> rule; see this filing's standing-rule disposition.
 
 **2. THE GREY-STROKE LEAD IS REFUTED TOO, and is recorded as a near miss
 rather than quietly dropped.** `.5 G` does occur — under a **different**
@@ -87356,6 +87569,99 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### ★★★★ TWO CHANNEL ITEMS ARE OWED AND NAMED IN NO PDFCE DOCUMENT — a `pdfceGUI` REQUEST unanswered since 17:35, and an `iccce` REPLY that arrived AFTER the dispatch was written and strengthens a pdfce open item. **NO PASS ID CLAIMED** — opened 2026-08-29 (330th filing)
+
+**★ NO ID IS MINTED HERE, DELIBERATELY.** Assigning a Pass ID is the
+engineer's act (`CLAUDE.md` rule 5). This box exists so neither item can be
+lost between filings, **not** to scope either.
+
+**Provenance.** `ls -lt` on both channel folders, **run by this role at filing
+time**, not relayed.
+
+---
+
+#### ITEM 1 — `pdfceGUI` inbound, UNANSWERED, and out of scope for the session that found it
+
+| | |
+|---|---|
+| file | `D:/Dev/FeatureRequests/pdfce_FeatureRequests/open/request_a_dotted_name_silently_swallows_an_existing_terminal_field.md` |
+| from | `pdfceGUI` |
+| dated | **2026-08-29 17:35** |
+| status | ★ **UNANSWERED.** The newest outbound in that folder is `note_cut_copy_paste_now_covers_almost_everything_and_six_things_were_broken.md` at **17:53** — *18 minutes later, and it does not answer this* |
+| named in | ★ **no pdfce document, until this box** |
+
+**Why it sat.** The session that followed it was a **colour** session
+(`Pass 174.0`–`174.5`); this is a **forms/field-naming** report. It was not
+declined and it was not deferred on merit — **it was never parsed**, because
+nothing in the colour work would ever have surfaced it. ⇒ Recorded as **owed**
+so the next session finds it, per the operator's standing ruling that inbound
+requests are checked **before** continuing other work.
+
+**★ Not scoped here on purpose.** The title asserts a mechanism —
+*"a dotted name silently swallows an existing terminal field"* — and `R220`(e)
+says a requester's mechanism is a hypothesis arriving in the same paragraph as
+a real observation. This role has **read the folder listing, not the file's
+body**, and states that rather than relaying a summary that would then read as
+pdfce's own claim about its own crate. (That is the 306th filing's exact
+failure mode, recorded three boxes below.)
+
+★ **Adjacent prior art the scoping session should read first**, because the
+field-naming surface has been here before:
+`C:/personal_rag/pdf/lesson_20260810_field_t_may_contain_a_period_so_fqn_is_not_safely_splittable.md`
+and `.../lesson_20260807_fqn_derived_by_descent_makes_a_subtree_rename_one_object_write.md`.
+
+---
+
+#### ITEM 2 — `iccce` answered the 49-operand list within 15 minutes, and it STRENGTHENS a pdfce open item rather than opening a new one
+
+| | |
+|---|---|
+| file | `D:/Dev/FeatureRequests/iccce_FeatureRequests/open/reply_the_49_rows_and_the_black_end_is_where_i_am_weaker.md` |
+| from | `iccce` |
+| dated | **2026-08-29 21:44** — ★ **after the dispatch for this filing was written; it names only the outbound** |
+| status | *"Nothing owed back."* Recorded as a **finding**, not as work |
+
+**pdfce sent** `note_the_operand_list_you_asked_for_49_tuples_covering_95_percent.md`
+at **21:29**; the answer came at **21:44**. Their destination, named as asked:
+the patch's own `/DestOutputProfile` (*ISO Coated v2 300% (ECI)*, a v2.4.0
+`prtr` CMYK/Lab) → **OS-shipped** `sRGB Color Space Profile.icm`,
+media-relative, **BPC refused by name**. Corroborated by lcms2 2.19.1 to a
+**max divergence of 0.2154 counts across all 49 rows**.
+
+**The spread, both denominators, per hard rule 10(a):** **9 of 49** agree
+within 5 counts on every channel; **median worst-channel difference 11
+counts**; **maximum 34** (row 38, `0.10 1.00 1.00 1.00`); **5 of 49** differ by
+≥ 20 on some channel.
+
+**★★ THE TWO REGIONS DISAGREE IN OPPOSITE DIRECTIONS, and that is the finding.**
+
+| region | who is closer to the reference capture | why |
+|---|---|---|
+| **the black end** (rows 38, 8, 23, 1 — the four darkest) | ★ **pdfce**, on every one | `iccce` is **lighter** everywhere here; on `0 0 0 1 k` pdfce reads `35,31,31`/`35,31,32` against their `43,43,42`. **Their own explanation: BPC, refused by name on this profile.** *"Refusing and being wrong look identical in a table"* |
+| **the achromatic axis** (rows 3, 36, 30, 18) | ★★★ **`iccce`** | they return **neutral** greys; pdfce's are **consistently cool** — blue above red on every row by 2–5 counts. On `0 0 0 0.5 k`: pdfce `147,148,152`, `iccce` `158,159,159`, reference capture `156,156,156` |
+
+⇒ **`CmykIntent::Calibrated`'s doc comment justifies its cool greys as *"what
+Acrobat shows, which is the point"* — and on the achromatic axis the profile
+disagrees with that rationale.** That is now **three independent lines** on the
+grey axis: the reference's exact neutrality on the four-grey patch, pdfce's own
+flagged row, and the profile's answer computed by a third engine. ★ **An
+existing open item strengthened, not a new one created**, and it is the
+follow-on `Pass 174.1` left standing.
+
+**★★★ WHAT THIS IS NOT, and BOTH projects say so independently.** `iccce`
+holds their column is **not a fitting target** and adds the sign-flipped form
+of their own rule — *"you should not hand-tune toward these 49 numbers any more
+than I should tune toward the Acrobat capture"* — which is **decision 064's
+forbidden move**. **Keep it as a regression datum**: *what a real transform
+through a real declared output condition returns*.
+
+★ **And they name a limit on the whole exercise that pdfce's own record should
+carry:** *"where a document declares an output intent, you should not be
+consulting a table at all"* — pdfce's table exists for documents that declare
+**no** output intent, where *"there is no colorimetrically right answer at
+all"*. The 49 rows are a plausible stand-in for that case and **nothing
+stronger**.
+
 ### ~~★★★★★ THE 08:31 INBOUND — A `pdfceGUI` REQUEST ARRIVED BETWEEN THE 305th FILING'S CHANNEL CHECK AND `Pass 143.0`'s COMMIT. **UNPARSED · NO PASS ID CLAIMED** — and it is `R219`'s shape again: `format_text` was made addressable by PIN ALONE and its sibling `edit_text` was not~~ — **DISCHARGED 2026-08-28 (307th filing): SCOPED AND SHIPPED AS `Pass 152.0` (`06e4c27`), THREE HOURS AFTER THIS BOX WAS OPENED — AND THE BOX'S OWN PREMISE WAS FALSE** — opened 2026-08-28 (306th filing)
 
 > **★★★★★ DISCHARGE BANNER — READ BEFORE ACTING ON ANYTHING BELOW, BECAUSE
@@ -121281,7 +121587,31 @@ same cause (hashes exist only at commit time), two different failure modes.
   option `R212` did not name, and it is the cheap one: **where a derivation
   command exists, the copy has no reason to exist at all.**
 
-  **What the rule obliges, in three lines.**
+  - **★★★ Instance 3 (330th filing, `Pass 174.5` / `c751606`) — A WORKED
+    EXAMPLE, WHERE THIS RULE'S PRESCRIBED REMEDY IS UNAVAILABLE. Clause (d)
+    below is added from it.** `--probe-ink`'s example — in the CLI's shipped
+    `--help` **and** in `docs/core-api/03-capabilities.md` §7.3b, a document
+    another project builds against — printed
+    `source=cmyk-buffer … srgb=24,140,108`. **That is the pre-`Pass 165.0`
+    DEFECT value**, so the example restated the very premise `Pass 174.0` had
+    measured away, **while `crates/pdfce-cli/tests/render_page.rs` asserted
+    `47,181,73` for the same operand.** ★ **The correct value was already
+    written down, in a gated file, twenty files away** — this is `R212`'s
+    two-copies mechanism with the *enforced* copy being a **test assertion**
+    rather than a document.
+
+  **★★ WHY INSTANCE 3 DID NOT MINT A NEW RULE, argued rather than assumed**,
+  because it is the obvious candidate. It is `R232`'s mechanism exactly — a
+  figure copied into a document nothing gates — and it fails **only** on the
+  remedy: clause (a) says *write the command instead of the number*, and **a
+  worked example cannot be replaced by a command without ceasing to be an
+  example.** That is a gap in the remedy, not a new mechanism, and this
+  project's bar for a mint is a **parent remedy applied and insufficient**, not
+  a **parent remedy inapplicable**. ⇒ **Sharpen the rule, do not move the
+  ceiling.** (Contrast `R234`, minted in the same filing on the opposite
+  finding: there the mechanism itself is new.)
+
+  **What the rule obliges, in four lines.**
   (a) **Before writing a figure into a non-gated document, ask whether a
   command or a gated file derives it.** If one does, write **the command**
   — `python tools/check-core-api-verbs.py` — and not the number.
@@ -121294,6 +121624,22 @@ same cause (hashes exist only at commit time), two different failure modes.
   `docs/ROADMAP.md` *"How a figure is filed"* precedent, and hard rule 10's
   ablation-row instance, where the correct reading was printed **above** the
   incorrect one for four filings.
+  (d) **★ ADDED 2026-08-29 (330th filing), from instance 3 — WHERE THE FIGURE
+  IS A WORKED EXAMPLE AND (a) IS THEREFORE UNAVAILABLE, TAKE THE VALUE FROM A
+  PLACE THAT IS CHECKED, AND SAY WHICH.** An example must carry a concrete
+  value — deleting it destroys the example — so the third option is to make the
+  copy's **source** a checked one: **paste it out of a test assertion, or out
+  of a live re-run performed at write time**, and name that source beside it.
+  **Where a test already asserts the same operand, the example and the
+  assertion must be THE SAME NUMBER**, and a mismatch between them is a defect
+  in whichever is not the measurement. ★ **The failure mode this closes is
+  specific to examples and is why three readings walked past it: an example
+  invites FOLLOWING, not CHECKING.** A figure in prose reads as a claim; the
+  identical figure in a fenced block reads as output, and output is not
+  something a reader audits.
+  **★ No gate is prescribed for (d) either**, on `R232`'s own stated ground —
+  a checker would have to know which fenced-block figures are copies of which
+  assertions, which is not enumerable in advance.
 
   **★ A PROPOSITION THIS RULE DELIBERATELY DOES NOT MAKE: no gate is
   prescribed.** A checker would have to know which prose figures are copies
@@ -121456,6 +121802,149 @@ same cause (hashes exist only at commit time), two different failure modes.
   choice.
 
   **Standing rules ceiling `R232` → `R233`; next free `R234`.**
+
+  ★ **AMENDED 2026-08-29 (330th filing).** `R233`'s own instance 2 is the
+  *aggregate* arm of a defect that has now appeared at a third site — the
+  **ablation** arm — in `Pass 174.2`'s amendment above. **Not folded in here**:
+  that instance is recorded against the entry it corrects, and the general form
+  it shares with `R225` and `R233` is stated there. Three siblings, one cause:
+  **a fixture, an aggregate and an ablation are each only as discriminating as
+  the fraction of cases on which a right and a wrong implementation disagree.**
+
+- **R234 — "THE STANDARD IS SILENT / AMBIGUOUS / DOES NOT SAY" IS A NEGATIVE
+  CLAIM ABOUT A CORPUS, AND A NEGATIVE CLAIM CAN ONLY BE MADE BY SEARCHING THE
+  CORPUS. IT IS THE ONE KIND OF SPEC CLAIM THAT CANNOT BE MADE FROM THE CLAUSE
+  YOU HAPPEN TO BE READING. AND WHEN THE SEARCH IS DONE AND THE STANDARD DOES
+  ANSWER, THE THING BEING SHIPPED IS A **DIVERGENCE** — WHICH OWES THE OPERATOR
+  A DISCLOSURE THAT AN AMBIGUITY DOES NOT.** Minted 2026-08-29 (330th filing),
+  librarian-minted at the engineer's explicit invitation, from `Pass 174.5`
+  (`c751606`).
+
+  **The instances, and the second one is the warrant.**
+
+  - **Instance 1 (2026-08-11, recorded in `CLAUDE.md`'s XFA open item).** That
+    item carried *"what is still genuinely unverified: Acrobat's exact
+    version-level deprecation date (only third-party approximate timing found,
+    **no Adobe-primary source**)"*. **The spec corpus already recorded XFA as
+    deprecated in ISO 32000-2 itself**, `NeedsRendering` included, and said so
+    explicitly. ★ **Nothing was wrong and nothing contradicted anything — the
+    answer was sourced in one document while another still asked the
+    question.** The lesson written at the time: *"Grep the corpus before
+    recording something as unverified."*
+  - **★★★ Instance 2 (2026-08-29, `Pass 174.5`), and it is the SAME SENTENCE
+    SHAPE eighteen days later.** `crates/pdfce-core/src/settings/mod.rs`
+    described `OverprintZeroTintScope` as *"a genuine spec ambiguity"* and, in
+    terms, *"**there is no sentence resolving it either way**"*. Audited by
+    `pdfce-spec-librarian` against the corpus: **three provisions resolve it**
+    — §8.6.7's very next sentence (*"conversions from some other colour
+    space"*), Tables 148/149 row 2 (*"any process colour space"* tabulated
+    explicitly, `OPM 1` = `OPM 0` = "Paint source"), and the §8.6.5.7 escape
+    hatch. **Only the third was in the doc**, and alone it does read like a
+    silence.
+
+  **★★ WHY THIS IS A MINT AND NOT AN INSTANCE OF PROJECT RULE 1 (spec-fidelity
+  discipline), which is what a future session will reach for.** Rule 1 is the
+  parent and its remedy — *"check `D:\Dev\Rag-Specialized\PDF_Spec\` first;
+  dispatch `pdfce-spec-librarian` if the RAG doesn't cover the question"* — is
+  the right remedy. **It was not applied, and the reason it was not applied is
+  the finding:**
+
+      Rule 1 obliges a check before IMPLEMENTING spec-governed behaviour. It
+      is not read as obliging a check before WRITING THAT THE SPEC IS SILENT,
+      because a negative claim does not FEEL like a spec claim — it feels like
+      the ABSENCE of one.
+
+  A positive claim (*"§8.6.7 says X"*) announces its own sourcing obligation;
+  a negative claim (*"§8.6.7 says nothing"*) reads as a report on having looked
+  and found nothing, **which is indistinguishable in prose from not having
+  looked.** ⇒ Same shape as `R232`'s warrant against `R212`(b) and `R233`'s
+  against hard rule 10(a): **the parent's remedy is correct and does not reach
+  the case**, which is this project's stated bar for a sharpening mint rather
+  than an occurrence count (the 2026-08-05 ruling forbids elevating per
+  occurrence, and this is not that).
+
+  **★★★ AND THE SECOND HALF IS A CORRECTNESS CLAUSE, NOT A WORDING ONE — this
+  is the part that must not be traded away as pedantry.** *"The standard is
+  ambiguous"* and *"the standard says X and we do Y"* are **different claims
+  with different obligations**:
+
+  | characterisation | what pdfce owes | why |
+  |---|---|---|
+  | **ambiguity** | a setting, per `R169`/`R206`, and a default | nobody is diverging from anything; two readings are both conforming |
+  | ★ **divergence** | **the setting AND a rule-4 disclosure** | pdfce is knowingly not doing what the standard says, and rule 4 forbids silence about anything pdfce decided that the operator did not |
+
+  ⇒ **Calling a divergence an ambiguity QUIETLY DISCHARGES a rule-4 obligation
+  by misnaming it.** No gate can catch that, because the gate would have to
+  know which of the two the standard actually is — the very question the
+  misnaming got wrong.
+
+  **★★ THE EDITION GATE, recorded here because §12 is the wrong shape for it
+  and because it is the fact most likely to be needed and hardest to find.**
+  For `OP-A5` specifically:
+
+  | edition | grounds surviving | so the honest word is |
+  |---|---|---|
+  | **ISO 32000-1 (PDF 1.7)** | **all three** | ★ **divergence** |
+  | **ISO 32000-2 (PDF 2.0)** | **one** — 2.0 replaces the computed-colour sentence with a bare *"images or shadings"* and **drops the opaque-model table entirely** (`"Overprinting behaviour in the opaque imaging model"`: **1 hit in 1.7, 0 in 2.0**) | much closer to a genuine **silence** |
+
+  ⇒ **An engine that targets both editions has TWO DIFFERENT CORRECT ANSWERS
+  here and must say which it implements.** Generalised: **before recording a
+  spec question as open, ask WHICH EDITION it is open in** — a provision
+  deleted between editions turns a divergence into an ambiguity without anyone
+  changing a line of code.
+
+  **What the rule obliges, in four lines.**
+  (a) **Before writing that a standard is silent, ambiguous, unresolved or
+  unverified, SEARCH the corpus for the answer** — `D:\Dev\Rag-Specialized\PDF_Spec\`
+  first, then dispatch `pdfce-spec-librarian`. A negative claim about a corpus
+  is a claim about a **search**, and it is only as good as the search.
+  (b) **Search the NEIGHBOURING TEXT and the TABLES, not only the clause.**
+  All three of instance 2's grounds were outside the sentence being quoted:
+  one was **the next sentence**, one was **a table two clauses away**, one was
+  the clause's own cross-reference. **A table is the easiest place for an
+  answer to hide**, because a reader looking for a *sentence* does not see a
+  row.
+  (c) **Name the EDITION.** Record which edition the question is open in;
+  where the editions differ, say so and say which one the shipped behaviour is
+  written against.
+  (d) **When the search answers, RE-CLASSIFY and pay what the new class owes.**
+  An ambiguity that turns out to be a divergence acquires a rule-4 disclosure
+  obligation it did not have. Keep the prior characterisation **visible and
+  struck**, per house style, so the next reader can see the reclassification
+  rather than only its result.
+
+  **★ Scope, so it is not over-read.** This binds on **claims about what a
+  standard does or does not say** — doc comments, `--help` text, decision
+  records, RAG prose, roadmap entries, dispatches. It does **not** oblige
+  exhaustive proof of a negative before every sentence: clause (a) is
+  satisfied by a **recorded search** (the register entry, the grep, the
+  librarian dispatch), not by certainty. And it does **not** bind on empirical
+  negatives — *"no file in the corpus does X"* is a measurement, governed by
+  `R233` and hard rule 10 instead.
+
+  **★★ The corpus half is already discharged and is verifiable independently
+  of the commit that cites it**: `pdfce-spec-librarian` registered **`OP-A5`**
+  (the three grounds and the edition gate) and **`OP-N3`** (why a grey-over-spot
+  fixture cannot discriminate) in
+  `D:/Dev/Rag-Specialized/PDF_Spec/iso32000/iso32000__ref__ambiguity_settings_register.md`
+  §5.19 and `iso32000__ref__spot_colour_overprint.md`, plus
+  `iso32000__s__8.6.7.md` § UPDATE 2026-08-29. **Checked by grep at filing
+  time**, not relayed. That corpus is **not this role's to write** (hard rule
+  6); what is filed here is the project-side obligation the finding creates.
+
+  **The domain half is filed cross-project** to `C:\personal_rag\pdf\` — the
+  2026-08-28 `OPM 1` lesson gets a dated amendment carrying the edition gate
+  (its own *"the standard's silence … is the ambiguity"* line being instance 2
+  in a third place), and the non-discriminating-fixture shape gets its own
+  lesson. The **project-specific** half stays here: the reclassification, the
+  disclosure obligation, and the six survivors reported in `Pass 174.5`'s
+  entry.
+
+  **`ARCHITECTURE.md` body-section counterpart: decision `104`**, which records
+  the substantive half — the default is **retained** as a knowing divergence —
+  as opposed to this rule, which governs how such a thing is described.
+
+  **Standing rules ceiling `R233` → `R234`; next free `R235`.**
 
 ## Update protocol
 
