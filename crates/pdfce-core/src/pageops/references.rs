@@ -322,6 +322,14 @@ fn flatten_name_tree<G: ObjectGraph + ?Sized>(
 /// say "300", not list them. The list is what a future "repair / remove /
 /// ignore" review flow would need, and it can be added when that flow
 /// exists rather than being carried unused now.
+///
+/// # ★★ It does not cover field-name targets, and `is_empty()` will not say so
+///
+/// `/ResetForm`, `/SubmitForm` and `/Hide` name their targets by
+/// fully-qualified **name string**. A name is not a reference, so removing
+/// the field it names breaks the button while leaving this whole report at
+/// zero. See [`census_dangling`]'s own note; the companion numbers live on
+/// `EditSession::delete_field` and `EditSession::rename_field`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DanglingReport {
@@ -390,6 +398,27 @@ impl DanglingReport {
 /// `surviving` is needed as well as `removed` because link annotations
 /// are only interesting when they *stay* — see
 /// [`DanglingReport::links`].
+///
+/// # ★★ WHAT THIS CENSUS CANNOT SEE, and the reader who most needs to know
+///
+/// **A field-name STRING is not a reference, so nothing here counts one.**
+/// `/ResetForm` and `/SubmitForm` name their targets in `/Fields`, and
+/// `/Hide` names its in `/T`, as fully-qualified **name strings** — which is
+/// pdfce's own deliberate choice on the authoring side, because a name
+/// survives a field being renumbered or copied between documents where an
+/// indirect reference does not.
+///
+/// Deleting the field those names point at leaves **no dangling object
+/// reference**, so every count below stays `0` and
+/// [`DanglingReport::is_empty`] returns `true` on a document whose buttons
+/// just stopped working. That is not a bug in this function; it is the
+/// boundary of the question it asks, which is about the object graph.
+///
+/// The other half is answered by `EditSession::delete_field`'s
+/// `action_targets_orphaned` and `EditSession::rename_field`'s
+/// `action_targets_retargeted` (`Pass 184.0`), which sweep objects rather
+/// than references. **A caller reporting document health needs both**;
+/// neither subsumes the other.
 ///
 /// # Errors
 ///

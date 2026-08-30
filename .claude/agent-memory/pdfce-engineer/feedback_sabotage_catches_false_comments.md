@@ -70,3 +70,37 @@ oversight.
 
 Related: [[feedback_a_claim_about_callers_is_a_measurement]],
 [[feedback_gates_i_owe_myself]].
+
+**★★ WIDENED 2026-08-30 — a survivor has THREE possible causes, and only one
+of them is about the test.** `Pass 184.0` ran four sabotages; two survived, for
+two *different* reasons, neither of which was the one above:
+
+1. **A VACUOUS ASSERTION — the test could not see the change.** The test
+   asserted `saved(&s).contains("(Name)")`, and `saved()` returns **the base
+   bytes plus the appended update**, so the base revision's own `/T (Name)`
+   satisfied it no matter what the code did. Re-asserted on the specific
+   structure (`/Fields [(Name)]`) and the sabotage was caught.
+   ★ **The same trap had fired in the same file twenty minutes earlier** — an
+   assertion that a script was *"not in the update"* when the script is
+   necessarily in the *base*. Both times I read a whole-file string as an
+   update-only one.
+2. **A GUARANTEE ENFORCED SOMEWHERE ELSE.** I sabotaged `delete_field` to ask
+   the sweep to *repair*, and nothing happened — because the call site
+   **discards the sweep's writes with `_`**. No argument passed to the function
+   can defeat that; the guarantee is structural. The mutation had to remove the
+   discard *as well* before it meant anything. **A survivor here is good news
+   about the design**, not bad news about the test.
+3. **A SEMANTICALLY NULL MUTATION.** Adding `/JavaScript → /JS` to a
+   target-key table changed nothing, because the script's text matches no field
+   name. Only *that plus* greedy substring matching is the plausible shape of
+   the mistake. A one-line sabotage cannot always express a two-line error.
+
+**How to apply:** when a sabotage survives, ask in this order —
+**(a) could the assertion see it?** (check what the helper actually returns);
+**(b) is the property enforced elsewhere?** (then widen the sabotage until it
+would really break);
+**(c) is the mutation a no-op?** (then it is the wrong mutation);
+and only then (d) is the test weak or the claim false.
+
+Skipping (a) makes a weak test look strong. Skipping (b) makes a good design
+look untested and invites a test written to defend it.

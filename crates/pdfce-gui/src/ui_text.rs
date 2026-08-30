@@ -9301,7 +9301,7 @@ pub fn form_field_renamed(from_fqn: &str, to_fqn: &str) -> String {
 /// [`form_field_renamed`] records.
 pub fn form_field_renamed_with_descendants(from_fqn: &str, to_fqn: &str, count: usize) -> String {
     format!(
-        "Renamed \u{201c}{from_fqn}\u{201d} to \u{201c}{to_fqn}\u{201d}. {count} field(s) beneath it now have different names as a result — nothing else was written, but any external form data (FDF), JavaScript or submit mapping that named them no longer matches."
+        "Renamed \u{201c}{from_fqn}\u{201d} to \u{201c}{to_fqn}\u{201d}. {count} field(s) beneath it now have different names as a result. Buttons in this document that acted on them were repointed; any external form data (FDF) or JavaScript that named them no longer matches."
     )
 }
 

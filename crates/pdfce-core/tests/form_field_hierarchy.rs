@@ -585,7 +585,8 @@ fn flatten_clears_the_fields_array_in_the_saved_bytes() {
 ///
 /// The count is the disclosure. `Personal.Address` → `Personal.Location`
 /// renames two fields the operator did not name, and an operator not told so
-/// has silently broken every FDF and submit mapping that referenced them.
+/// has silently broken every FDF that referenced them. (Button actions
+/// naming them are repaired since `Pass 184.0`; an FDF is not.)
 #[test]
 fn renaming_a_grouping_node_renames_its_whole_subtree() {
     let mut s = session("nested-form.pdf");

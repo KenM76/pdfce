@@ -878,8 +878,11 @@ strips it). `formcsv.rs:30-38` names the hazard, including
     as a bug later."*
 17. `FieldRename::descendants_renamed` (`edit.rs:6786-6791`) — descendants'
     FQNs changed **without any of their own objects being written**, so every
-    JavaScript reference and submit mapping naming them now points at nothing
-    (`edit.rs:6774-6777`).
+    FDF and JavaScript reference naming them now points at nothing
+    (`edit.rs:6774-6777`). ⚠️ **Not "submit mapping" any more**: since
+    `Pass 184.0` a rename REPAIRS the button actions naming the field, and
+    reports how many in `FieldRename::action_targets_retargeted`. A deletion
+    does not repair, and reports `action_targets_orphaned` instead.
 18. `FieldDeletion::selection_cleared` (`edit.rs:6058-6064`) — *"silently
     leaving the dangling `/V` would be sneaky; silently clearing it would also
     be."*

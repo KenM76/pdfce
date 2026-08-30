@@ -3731,8 +3731,13 @@ readers will never display.
 
 `edit.rs:6785`, `edit.rs:8865-8868`: only one dictionary is written; every
 descendant's FQN re-derives. *"an operator not told so has silently broken every
-FDF, JavaScript reference and submit mapping that named them (rule 4)."* A tree
-view refreshing only the renamed row shows stale FQNs. Related:
+FDF and JavaScript reference that named them (rule 4)."* A tree
+view refreshing only the renamed row shows stale FQNs.
+⚠️ **This quotation used to end "and submit mapping", and that third of it
+stopped being true on 2026-08-30**: `Pass 184.0` made a rename **repair** the
+button actions naming the field, reported as
+`FieldRename::action_targets_retargeted`. An FDF and a JavaScript still break,
+and still silently. Related:
 `new_partial` is **one path segment**; feeding a displayed FQN back yields
 `Personal.Address.Personal.Address.Zip`, and a period is refused outright.
 

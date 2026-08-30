@@ -14,46 +14,29 @@ thing that cannot be stale.
 
 ---
 
-## §0 ★★ ONE THING IS OWED, AND IT IS A REFACTOR, NOT A CORRECTION
+## §0 NOTHING IS OWED. The button-action arc is closed.
 
-**`Pass 184.0` is PARTIALLY DELIVERED.** Criterion A shipped (`92b9f99`); the
-rest did not, and the rest is the substance.
+`Pass 182.0` → `183.0` → `183.1` → `184.0` ran end to end today, and the last
+of them repaired a defect the first three created. Concretely, a push button
+can now be given a **reset**, a **submit**, an in-document **jump**, one of the
+four **named navigations**, a **URI**, or a **show/hide** — and renaming a
+field repoints every button that named it while deleting one reports what it
+orphaned.
 
-| criterion | state |
-|---|---|
-| **A — a categorical disclosure on rename** | **SHIPPED.** `FieldRename::actions_not_retargeted`, an upper bound, labelled categorical in three places. |
-| **B — generalise the action-carrier walk to a visitor** | **OWED.** |
-| **C — `rename_field` REPAIRS the name strings and reports the real count** | **OWED**, needs B. |
-| **D — `delete_field` DISCLOSES without repairing** | **OWED**, needs B. Discharges the `Pass 38.5` **C8** debt. |
+**Two things that arc left standing, deliberately, and neither is a gap:**
 
-**The defect, stated once so it does not have to be re-derived.** Passes
-182.0/183.0/183.1 write `/ResetForm` and `/SubmitForm` targets in `/Fields`,
-and `/Hide` targets in `/T`, as **fully-qualified name strings** — deliberately,
-because a name survives a field being renumbered or copied between documents
-where an indirect reference does not. **A rename is the one operation that
-breaks that choice**, and pdfce repairs nothing. A button reading "Reset"
-quietly stops resetting the field it was drawn for.
+- **A toggling show/hide button is OUT OF SCOPE, not unbuilt.** Table 210
+  assigns (`/H` is a value, not a verb) and the standard owns a toggle
+  elsewhere (`/SetOCGState`'s `/State`) and did not use it here. A real toggle
+  needs ECMAScript.
+- **Four of the eight script-free, reach-nothing action types are unauthored**
+  — `SetOCGState`, `Trans`, `GoTo3DView`, `GoToDp`. Each is **sized** in
+  `ButtonAction`'s own doc block. None has been asked for.
 
-★ **And `census_dangling` is STRUCTURALLY blind to it.** A name string leaves
-**no dangling object reference**, so the graph census that `Pass 183.0`
-correctly widened from links to every annotation subtype cannot see this at
-all. Two different invisibilities in one feature; that Pass fixed the one a
-graph walk can see. `personal_rag/pdf` carries the lesson.
-
-**Why B is a refactor and not a line.** Finding the affected buttons means
-walking **all seventeen action carrier sites with `/Next` chains** — the walk
-`forms::scan_javascript` owns, which threads `&mut FormJavaScript` throughout.
-Generalising it to a visitor is a real change to the crate's most
-defect-prone function (`Pass 133.0`'s history is attached to it), and writing
-a **second, narrower walker** instead is the exact defect class this project
-keeps recording. Keep `scan_javascript`'s behaviour byte-identical and
-sabotage-check that it is.
-
-**Why repair is defensible on rename and nowhere else:** pdfce knows both the
-old and the new name exactly, so rewriting the string is not a guess. A
-*deleted* target has no answer to "what did the author mean", which is why D
-discloses and does not repair — and why C9 (`/StructParent` / `/OBJR`) is
-scoped out: different graph, different carrier, no name-string component.
+**And one that is:** `/AP` `/D` (the pressed appearance) and `/MK` icon/label
+layout, the remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
+neighbourhood), not a continuation of the action work — a session scoping it as
+"the rest of the button actions" would scope the wrong thing.
 
 ---
 
@@ -64,41 +47,42 @@ scoped out: different graph, different carrier, no name-string component.
    - `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
    - `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`
 
-   Two inbound requests were **answered by shipped work** today and are still
-   sitting in `open/`: the push-button one and the double-decomposition one.
-   One outbound reply was left, with an addendum — it tells `pdfceGUI` that
-   the submit they asked us to **refuse** shipped anyway on an operator
-   override, and names the two Table 210 traps a UI will hit. Nothing is owed
-   back.
+   Two inbound requests were **answered by shipped work** today and still sit
+   in `open/`. One outbound reply is there with **two addenda** — it tells
+   `pdfceGUI` that the submit they asked us to *refuse* shipped on an operator
+   override, names the two Table 210 traps a UI will hit, and warns that
+   `rename_field`/`delete_field` **changed behaviour** on verbs they already
+   call. Nothing is owed back.
 
-2. **`Pass 184.0` B/C/D** — §0. The largest owed item and the only one with a
-   named defect behind it.
+2. **`Pass 185.0` — a CI job named after one of its steps.** The job "verify
+   pdfce-gui strings live in ui_text.rs" also runs the filing gates, so a
+   filing failure reports as a red job named after a string check that is
+   perfectly clean. It cost a diagnostic cycle today.
+   ★ **The finding was already filed on 2026-08-12** and has been correct,
+   complete and actionable ever since — and **inert, because nothing was ever
+   scheduled against it.** That job has gone from 3 steps to 19; misattributed
+   red runs are up from 5 to 7. Small, mechanical, and it stops a recurring
+   waste of exactly the kind that reads as a real failure.
 
-3. **`Pass 142.0`** — a font face outside the standard 14. Still the largest
-   remaining *named* feature, still **de-prioritised by the consuming
-   project's own use report**, not by us: *"Synthetic is enough. Drop `142.0`
-   down the queue."* Not closed, not declined.
-   ★ `bind_font_resource` (`text_edit/addtext.rs`) is the single implementation
-   of "add a `/Font` entry"; `142.0` extends it and does not write a second
-   one. And there are **THREE save paths** — `EditSession::format_text`, its
-   form twin, and the one-shot `text_edit::set_format`, **which is the one the
-   CLI uses**. `Pass 162.0` wired two, every unit test passed, and the binary
-   printed a disclosure about a resource it had not written.
+3. **`Pass 142.0`** — a font face outside the standard 14. The largest
+   remaining *named* feature, **de-prioritised by the consuming project's own
+   use report**, not by us: *"Synthetic is enough. Drop `142.0` down the
+   queue."* Not closed, not declined.
+   ★ `bind_font_resource` (`text_edit/addtext.rs`) is the single
+   implementation of "add a `/Font` entry"; `142.0` extends it and does not
+   write a second one. And there are **THREE save paths** —
+   `EditSession::format_text`, its form twin, and the one-shot
+   `text_edit::set_format`, **which is the one the CLI uses**. `Pass 162.0`
+   wired two, every unit test passed, and the binary printed a disclosure
+   about a resource it had not written.
 
-4. **A CI job named for one of its steps.** The job **"verify pdfce-gui
-   strings live in ui_text.rs"** also runs `check-commits-filed.py`, so when
-   the filing gate fails, CI reports a red job named after a string check that
-   is perfectly clean. It cost a diagnostic cycle today and it impugns the
-   local gate runner, which is the expensive part. `.github/workflows/` was
-   not touched; raised with the librarian.
-
-5. **The n-channel (per-spot-colorant) buffer** — the only path to the print
+4. **The n-channel (per-spot-colorant) buffer** — the only path to the print
    suite's remaining overprint/spot FAILs. **Operator's call; do not scope it
    without him.**
 
-6. **`CmykIntent::Calibrated`'s cool greys** — three independent lines of
-   evidence now, and **still not ours to fix** (decision 064 puts the
-   conversion in `iccce`'s domain; the operator ruled the default 2026-08-28).
+5. **`CmykIntent::Calibrated`'s cool greys** — three independent lines of
+   evidence, and **still not ours to fix** (decision 064 puts the conversion in
+   `iccce`'s domain; the operator ruled the default 2026-08-28).
    ★ **The black end of that same table is a FALSE-DEFECT TRAP** — pdfce is the
    *closer* answer there and `iccce` said so unprompted. Read
    `settings/mod.rs`'s doc comment before touching anything CMYK.
@@ -107,60 +91,60 @@ scoped out: different graph, different carrier, no name-string component.
 
 ## §B — What is deliberately NOT being worked, and why
 
-- **A toggling show/hide button.** Not unbuilt — **out of scope**. Table 210
-  works *"by setting or clearing"* with `/H` as a value, and the standard owns
-  a toggle (`/SetOCGState`'s `/State`) and did not use it here, so a genuine
-  toggle requires ECMAScript.
-- **Four of the eight script-free, reach-nothing action types** —
-  `SetOCGState`, `Trans`, `GoTo3DView`, `GoToDp`. Each is **sized** in
-  `ButtonAction`'s doc block; none has been asked for.
-- **`/AP` `/D` (the pressed appearance) and `/MK` icon/label layout** — the
-  remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
-  neighbourhood), not a continuation of the action work; a session scoping it
-  as "the rest of the button actions" would scope the wrong thing.
+- **`census_dangling` will never see a field-name target.** That is a boundary,
+  not a bug: a name is not a reference, and the census answers a question about
+  the object graph. The companion numbers live on `delete_field` and
+  `rename_field`. Both halves are now documented at both ends — do not
+  "fix" the census by teaching it names; it would then need the object sweep,
+  and that already exists.
+- **C9 — `/StructParent` / `/OBJR` orphaned by an annotation delete.** Owed
+  since `Pass 38.5` and scoped out again: different graph, different carrier,
+  no name-string component, so it shares none of the sweep's machinery.
 - **ce-dimension tolerance, the ISO 286 fit classes** — needs a sourced
   class/table lookup this project does not have.
 
 ---
 
-## §C — ★★ READ BEFORE WRITING CODE. Traps this session walked into.
+## §C — ★★ READ BEFORE WRITING CODE. Five traps from this session.
 
 1. **★★★ A CORRECTION THAT REACHES THE STRUCTURE AND STOPS SHORT OF THE
-   PROSE.** Twice today, hours apart, both found by the librarian and neither
-   by a gate:
-   - the plan doc got a "PHASE 1 IS SHIPPED" banner at its head while §0's
-     opening sentence still said pdfce authors no action;
-   - `docs/core-api` got a six-row table and an updated heading with
-     *"Five variants:"* left **on the line between them**.
-
-   **Attention follows structure.** After amending a document, grep it for the
-   claim you just falsified — not for the section you just edited.
+   PROSE.** Four instances today, every one found by a reader rather than a
+   gate: a plan doc's banner updated while its opening sentence still said the
+   opposite; *"Five variants:"* left on the line between an updated heading and
+   a six-row table; a rename disclosure saying it broke *"submit mappings"*
+   hours after it started repairing them; and the census's own blindness
+   documented in every file the fix touched and **in none of the files the
+   checker lives in**.
+   ⇒ **After amending a document, grep for the CLAIM you just falsified, not
+   for the section you just edited.** And when a sweep comes back clean, ask
+   what its keyword set could not have matched — two of today's sweeps were
+   disjoint and each would have missed the other's survivors.
 
 2. **A plan's enumerated list is a snapshot; the operator's sentence is the
-   ruling.** `Pass 183.0` shipped from a four-day-old plan's Phase-1 bullet
-   list and omitted `/Hide`, which his actual words plainly covered. Cost a
-   whole second Pass. Where the standard defines a **closed set**, enumerate
-   it and say which members are in and out — that is what surfaces the
-   omission *before* shipping.
+   ruling.** `Pass 183.0` shipped from a four-day-old plan's bullet list and
+   omitted `/Hide`, which his words plainly covered. Cost a whole second Pass.
 
-3. **`pathlib.Path.write_text()` rewrites the whole file to CRLF on Windows.**
-   Default `newline=None` translates every newline to `os.linesep`. A
-   sabotage-and-restore script flipped all 40,699 lines of `edit.rs`, and its
-   own identity assertion **passed**, because `read_text` compares after
-   translation. Always pass `newline` explicitly, and check the byte count of
-   CRLFs before committing.
+3. **★ The difficulty of the obvious implementation is not the difficulty of
+   the problem.** I wrote this file's own previous §0 saying `Pass 184.0`
+   needed a visitor refactor of `scan_javascript` — the crate's most
+   defect-prone function. It did not. The two walks answer different questions,
+   and an **object sweep** is a strict superset of the carrier walk. The
+   refactor was correctly assessed as risky and was never the work.
 
-4. **A sabotage LOOP leaves the previous case applied when a later anchor
-   fails.** The restore was after the loop; an assertion on case 3 raised, and
-   case 2's sabotage sat on disk with the tests still passing for everything
-   else. **Restore in a `finally`, and validate every anchor before touching
-   the file.**
+4. **A surviving sabotage has three causes and only one is a weak test:** an
+   assertion that cannot see the change (`saved()` returns the base bytes
+   **plus** the update — this fired twice in one file), a guarantee enforced
+   elsewhere (the call site discards the writes, so no argument can defeat it),
+   and a mutation that is semantically a no-op. Ask in that order.
 
-5. **Three counts of the same enum are three different facts.** `ButtonAction`
-   has **six** variants; pdfce authors **four** of the **eight** script-free,
-   reach-nothing action types the standard defines. A sweep that "reconciles"
-   those numbers breaks two correct sentences. They are filed side by side in
-   the Pass entry and in decision 107 for exactly that reason.
+5. **Patch-script hazards, both of which destroy work silently.**
+   `pathlib.write_text()` rewrites a whole file to CRLF unless you pass
+   `newline`; and a sabotage loop that asserts on a *later* case leaves an
+   *earlier* case's sabotage on disk if the restore is after the loop rather
+   than in a `finally`. Validate every anchor before touching the file.
+   ★ And a new string-gap mechanism: a Rust line continuation can survive
+   transit and be **flattened by `cargo fmt`**, which rejoins the literal and
+   leaves the eaten indentation as a run of spaces.
 
 ---
 
@@ -180,12 +164,16 @@ gh run list --limit 3                     # CI's colour, from GitHub
   cutting a tag or release is **not**, and neither is a force push or a
   non-`main` branch. Scrub `check-suite-name-absent.py` green **before**
   pushing regardless — the repository is public, so a push publishes.
-- **★ "Always push" and `R217` (hold the push until the filing commits) pull
-  against each other, and it is not theoretical.** Three code commits went out
-  ahead of their filings today and **CI was red on each until the filing
-  landed** — a known, expected, self-healing red. Raised with the librarian;
-  read `ROADMAP.md` for whatever it decided before repeating the pattern.
-- **Read CI's colour from GitHub**, not from a sentence in a document — and
-  see §A item 4 before trusting a failing job's *name*.
+- **★ `R217` does NOT constrain pushing, and I claimed it did.** I asserted
+  that three commits went out ahead of their filings and turned CI red each
+  time; the librarian measured GitHub and **one of the three was green** —
+  pushed alone, as the tip, before its filing existed, which is exactly the act
+  I called forbidden. `R217` constrains what may land **on top of** an unfiled
+  commit. Read its third amendment note before repeating my mistake.
+- **Read CI's colour from GitHub**, not from a sentence in a document, and see
+  §A item 2 before trusting a failing job's *name*.
 - The backup bundle drifts about one commit per Pass. A fresh one is cheap:
   `git bundle create <path> --all`.
+- `.tmp_bench.py` has been untracked for four filings. It is deliberately not
+  committed — the repository is public — so **stage by path, never `git add
+  -A`**.

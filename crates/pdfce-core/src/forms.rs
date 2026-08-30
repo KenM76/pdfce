@@ -1026,7 +1026,7 @@ impl AcroForm {
     ///
     /// That is the right number for what the count is FOR. The disclosure it
     /// feeds is about breakage outside the document — FDF entries, JavaScript
-    /// references, submit mappings — and every one of those names a terminal
+    /// references — and every one of those names a terminal
     /// field. An intermediate node's name changing breaks nothing on its own;
     /// it breaks things by changing the terminals beneath it, which are
     /// already counted.

@@ -3935,8 +3935,9 @@ enum Command {
     /// down, so renaming `Address` re-derives `Address.City` as
     /// `Location.City` — without writing to `City` at all. The output line
     /// reports `descendants_renamed` for exactly this reason: a one-field
-    /// request can rename six, and every FDF, JavaScript reference and
-    /// submit mapping that named them stops matching.
+    /// request can rename six. Button actions naming any of them are
+    /// REPAIRED and counted (`action_targets_retargeted`); an FDF or a
+    /// JavaScript naming them is not, and stops matching.
     ///
     /// A rename onto a name something else already holds is REFUSED, not
     /// merged — unlike `add-*`, which merges a same-type name because the
@@ -25911,7 +25912,7 @@ fn cmd_rename_field(
     // machine-readable count is on the result line below.
     if rename.descendants_renamed > 0 {
         eprintln!(
-            "pdfce-cli: field {name:?}: {} field(s) beneath it now have different fully-qualified names, because §12.7.3.2 builds those names from this one — no object of theirs was written, but anything naming them (FDF, JavaScript, submit mappings) no longer matches",
+            "pdfce-cli: field {name:?}: {} field(s) beneath it now have different fully-qualified names, because §12.7.3.2 builds those names from this one — no object of theirs was written. Button actions naming them ARE repaired -- see the line below -- but an FDF or a JavaScript naming them is not, and no longer matches",
             rename.descendants_renamed
         );
     }

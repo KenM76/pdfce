@@ -138,7 +138,7 @@ builds `--no-default-features`, so both configurations compile.
 | Refine layer visibility for on-screen view only | `annot::apply_view_usage(&graph, …)` — `annot.rs:1268` **(never on a print path — T-12.8)** | §12.3 |
 | List annotations on a page with their rects | `annot::page_annotations(&graph, page.id)` — `annot.rs:531` | §12.4 |
 | Make hyperlinks clickable | **No direct API** — `Annotation` models no `/Dest`/`/A`. Read the raw dict, then `pageops::references::DestinationResolver::resolve_target` — `pageops/references.rs:187` | §12.4 |
-| Report dangling cross-references (document health) | `pageops::references::census_dangling` — `pageops/references.rs:336` | §12.4 |
+| Report dangling cross-references (document health) | `pageops::references::census_dangling` — `pageops/references.rs:336` ⚠️ **Counts REFERENCES only.** `/ResetForm`, `/SubmitForm` and `/Hide` name their targets by fully-qualified **name string**, and a name is not a reference — so deleting such a field leaves this report at zero while the buttons stop working. `is_empty() == true` is therefore **not** a clean bill of health on its own; pair it with `delete_field`'s `action_targets_orphaned` and `rename_field`'s `action_targets_retargeted` (`Pass 184.0`). | §12.4 |
 | Census digital signatures and their byte coverage | `signature::census(&graph)` — `signature.rs:370`; `signature::byte_range_coverage` — `signature.rs:900` | §12.5 |
 | Read `/Info` title / author / subject / keywords | `EditSession::info_text(InfoField)` — `edit.rs:3807` **(needs a session; only those 4 fields)** | §12.6 |
 | Read `/Producer`, `/CreationDate`, XMP, or page labels | **No public reader** — read the raw `/Info` dict via `ObjectGraph` | §12.6 |

@@ -15416,11 +15416,16 @@ pub struct WidgetEditOutcome {
 ///
 /// That is exactly the shape rule 4 exists for. An operator who renames
 /// `Address` and is not told that `Address.City` is now `Location.City` has
-/// had six fields renamed by a one-field request, and every FDF, every
-/// JavaScript reference and every submit mapping that named them is now
-/// pointing at nothing. [`descendants_renamed`](Self::descendants_renamed)
-/// is that disclosure, and it is why the count is returned rather than
-/// discarded.
+/// had six fields renamed by a one-field request.
+/// [`descendants_renamed`](Self::descendants_renamed) is that disclosure, and
+/// it is why the count is returned rather than discarded.
+///
+/// **What that breaks, narrowed 2026-08-30.** This paragraph used to end
+/// *"every FDF, every JavaScript reference and every submit mapping that
+/// named them is now pointing at nothing"*, and the last third stopped being
+/// true when `Pass 184.0` taught a rename to repair its own button actions —
+/// see [`Self::action_targets_retargeted`]. An **FDF** and a **JavaScript**
+/// still break, and still silently.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct FieldRename {
@@ -18494,8 +18499,10 @@ impl EditSession {
     ///
     /// This is why [`FieldRename::descendants_renamed`] is returned rather
     /// than discarded: a one-field request can rename six fields, and an
-    /// operator not told so has silently broken every FDF, JavaScript
-    /// reference and submit mapping that named them (rule 4).
+    /// operator not told so has silently broken every FDF and JavaScript
+    /// reference that named them (rule 4). **Button actions naming them are
+    /// repaired here** — [`FieldRename::action_targets_retargeted`] — which
+    /// is why this sentence no longer says "submit mapping".
     ///
     /// `new_partial` is a **partial** name, not an FQN — the one path segment
     /// this node contributes. Renaming `Address.City` to `Town` yields
