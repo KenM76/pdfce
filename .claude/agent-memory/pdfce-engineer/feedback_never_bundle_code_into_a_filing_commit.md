@@ -98,3 +98,33 @@ The tip commit is exempt (`commits-filed` defers it: *"a commit cannot cite
 its own hash"*), so pushing a **single** code commit and filing it next
 session is fine. It is the **second** unfiled code commit that turns the
 run red.
+
+**★★ 2026-08-30 — THE ADJACENT RULE, AND I BROKE IT HOURS AFTER WRITING IT
+DOWN.** This file is about not putting code *into* a filing commit. `R217` is
+about the other side: **do not land a code commit ON TOP OF an unfiled one.**
+
+What happened: `Pass 185.1` was pushed and dispatched for filing. While the
+librarian worked, I fixed the follow-up defect, committed it as `Pass 185.2`
+and pushed — so `185.1` stopped being the tip, lost its deferral, and
+`check-commits-filed` went red naming it. CI followed.
+
+Three things worth keeping:
+
+- **I had written the correct rule into `NEXT_SESSION.md` §D that same
+  afternoon**, including the sentence *"`R217` constrains what may land on top
+  of an unfiled commit"*. Knowing it, and having just corrected a wrong version
+  of it, did not stop me. The failure was **momentum**, not ignorance: the fix
+  was ready, the gates were green *at that moment*, and the gate only turns red
+  at the NEXT commit.
+- **`run-gates.sh` was PASS immediately before the commit and the commit itself
+  is what made it fail.** So a green sweep is not evidence you may commit — it
+  certifies the tree, not the act. That is this file's own thesis pointed one
+  step forward in time.
+- **The cost is small and self-healing** (the next filing clears it), which is
+  precisely why it keeps happening. It is a rule with no teeth at the moment
+  you break it.
+
+**How to apply:** after pushing a Pass and dispatching its filing, **the next
+code commit waits for the filing commit to land.** If the fix cannot wait,
+commit it and dispatch BOTH in one filing — the wrong move is to push the
+second one and hope the first is still deferred.

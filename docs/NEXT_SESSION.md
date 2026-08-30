@@ -14,7 +14,7 @@ thing that cannot be stale.
 
 ---
 
-## §0 ONE THING IS IN FLIGHT: `Pass 185.1`. The button-action arc is closed.
+## §0 ONE THING IS OWED: the third fuzz finding. The button-action arc is closed.
 
 `Pass 182.0` → `183.0` → `183.1` → `184.0` ran end to end today, and the last
 of them repaired a defect the first three created. Concretely, a push button
@@ -38,9 +38,15 @@ layout, the remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
 neighbourhood), not a continuation of the action work — a session scoping it as
 "the rest of the button actions" would scope the wrong thing.
 
-**★ `Pass 185.1` is IN FLIGHT and may be uncommitted when you read this.** Run
-`git status` first. It is the form-edit fuzz target plus the page-tree guard it
-found — see §A item 2 — and it carries **one unresolved item**, §C item 6.
+**★ THE OWED ITEM: finding #3 from the form-edit fuzz target**, a
+`debug_assert_eq!` in `delete_field_group` where the emptied-node cascade and
+its prediction disagree. **Sized honestly: it is `debug_assert`, so in release
+it is a wrong `nodes_removed` in a disclosure, not corruption** — materially
+less severe than the two page-tree defects already fixed. §C item 5 has the
+location, the replay seed, the harness traps and a stated guess to start from.
+
+`Pass 185.1` (the target + the first guard) and `Pass 185.2` (the catalog,
+which the first guard did not cover) are both shipped and pushed.
 
 ---
 
@@ -68,15 +74,15 @@ found — see §A item 2 — and it carries **one unresolved item**, §C item 6.
    removed the page, and the only thing that complained was a
    `#[cfg(debug_assertions)]` postcondition that is **compiled out of the
    build operators run**.
-   ★ Guarded on all three deletion routes and reproduced in a hand-built
-   fixture (`crates/pdfce-core/tests/form_delete_page_tree.rs`). **A second,
-   different page-tree crash was seen once and has not been reproduced** —
-   see §C item 6 before assuming the class is closed.
+   ★ Guarded on all three deletion routes, each on its own removal set, and
+   reproduced in hand-built fixtures
+   (`crates/pdfce-core/tests/form_delete_page_tree.rs`).
 
-   ★★ **`Pass 185.0` shipped this morning and this target is the reason to
-   care about it**: the fuzz gate is the one this role skips, twice recorded
-   and twice recurred, and the first target written after saying so found a
-   real defect in an existing verb within two minutes.
+   ★★ **It has now found THREE things, two fixed and one open** — see §C item
+   5 for the table, the replay seed and the harness traps. The fuzz gate is
+   the one this role skips, twice recorded and twice recurred, and the first
+   target written after saying so out loud found a months-old defect in
+   fifteen minutes and two more behind it.
 
 3. **`Pass 142.0`** — a font face outside the standard 14. The largest
    remaining *named* feature, **de-prioritised by the consuming project's own
@@ -151,22 +157,45 @@ found — see §A item 2 — and it carries **one unresolved item**, §C item 6.
    elsewhere (the call site discards the writes, so no argument can defeat it),
    and a mutation that is semantically a no-op. Ask in that order.
 
-5. **★★ A SECOND PAGE-TREE CRASH, SEEN ONCE, NOT REPRODUCED — do not assume
-   `Pass 185.1` closed the class.** After the three deletion routes were
-   guarded, `cargo +nightly fuzz run form_edit_sequence` hit the same
-   `debug_assert_page_tree_still_walks` postcondition again, at a different
-   line, and I could not get it back: two subsequent runs (50k and 90k
-   iterations) were clean, and **libFuzzer wrote no artifact**, because Rust's
-   abort on Windows exits `0xc0000409` before its crash handler saves one.
+5. **★★ THE FUZZ TARGET HAS FOUND THREE THINGS AND ONE IS STILL OPEN.**
+   `fuzz/fuzz_targets/form_edit_sequence.rs`, in its first afternoon:
 
-   Two things to carry:
-   - **Run it with `-seed=N` fixed** so a crash is replayable, and consider
-     making the target print the input itself on panic — the harness cannot be
-     relied on to.
-   - **The absence of a reproduction is not evidence of a fix.** The first
-     crash was reproduced deterministically in a hand-built fixture *before*
-     being fixed; this one was not, so it is open. The ASan DLL path and the
-     invocation are in `.claude/agent-memory/pdfce-engineer/reference_fuzz_asan_dll.md`.
+   | # | verb | what | state |
+   |---|---|---|---|
+   | 1 | `delete_field` | a field that is also a **page** → no page tree | **FIXED**, `Pass 185.1` |
+   | 2 | `delete_field` | a field that is the **catalog** → `NoPageTreeRoot` | **FIXED**, `Pass 185.2` |
+   | 3 | `delete_field_group` | `debug_assert_eq!` at `edit.rs:17486` — the emptied-node **cascade and prediction disagree** | **OPEN** |
+
+   ★ **#2 is the one to learn from**: #1's fix was built from "the page tree",
+   and the catalog — the object that *points at* the tree — is not in it. The
+   error said `NoPageTreeRoot`, not `NoPages`, from the very first crash.
+
+   **On #3, what is known and what is a guess.** Known: it is
+   `delete_field_group`, it is the assertion that `remove_fields_from_form`'s
+   `emptied` fixed point agrees with `group_deletion_preflight`'s tree walk,
+   and it is **`debug_assert_eq!` — so in release it is a WRONG
+   `nodes_removed` in a disclosure, not corruption.** Materially less severe
+   than #1 and #2 and it should be sized accordingly.
+   Guess, not measured: the preview filters `form.groups` by
+   `fully_qualified_name != fqn` and then appends `fqn`, so **two grouping
+   nodes sharing one FQN** — trivial on a malformed file, and `""` for any
+   `/T`-less node, which is exactly what the fuzzer reaches — would make the
+   two derivations count differently. Start there, but measure it.
+
+   **How to run it, because the harness fights you:**
+   - `-seed=1` makes a crash **replayable**; without it the same defect
+     appears and vanishes across runs.
+   - **libFuzzer writes NO artifact here.** Rust's abort on Windows exits
+     `0xc0000409` before its crash handler saves one, so there is nothing to
+     reduce — consider making the target print its own input on panic.
+   - **Grep for the panic HEAD, never `tail` the output.** A `tail -40` keeps
+     only libFuzzer's internal frames and drops both the message and the verb.
+   - ASan DLL path and invocation:
+     `.claude/agent-memory/pdfce-engineer/reference_fuzz_asan_dll.md`.
+
+   ⇒ **The absence of a reproduction is not evidence of a fix.** #2 was filed
+   as "seen once, maybe a different class" and turned out to be the same crash
+   walking through an incomplete guard.
 
 6. **Patch-script hazards, both of which destroy work silently.**
    `pathlib.write_text()` rewrites a whole file to CRLF unless you pass
