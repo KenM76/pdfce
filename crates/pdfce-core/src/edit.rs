@@ -8051,7 +8051,7 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(TeError::Encrypted);
         }
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let page = pages
             .get(req.page_index)
             .ok_or(TeError::PageIndex(req.page_index))?
@@ -8067,9 +8067,7 @@ impl EditSession {
         {
             match page.contents.first().copied() {
                 Some(content_id) => {
-                    let stream = self
-                        .current_page_content(content_id, &page)
-                        .map_err(TeError::Content)?;
+                    let stream = self.current_page_content(&page).map_err(TeError::Content)?;
                     match plan_edit(&self.base, &page, &stream, req, opts) {
                         Ok(plan) => {
                             let command = self.text_edit_command(
@@ -8333,7 +8331,7 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(FmtError::Encrypted);
         }
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let page = pages
             .get(req.page_index)
             .ok_or(FmtError::PageIndex(req.page_index))?
@@ -8351,7 +8349,7 @@ impl EditSession {
             match page.contents.first().copied() {
                 Some(content_id) => {
                     let stream = self
-                        .current_page_content(content_id, &page)
+                        .current_page_content(&page)
                         .map_err(FmtError::Content)?;
                     match plan_format(&self.base, &page, &stream, req, opts) {
                         Ok(plan) => {
@@ -8591,17 +8589,21 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(FmtError::Encrypted);
         }
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let page = pages
             .get(page_index)
             .ok_or(FmtError::PageIndex(page_index))?;
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or_else(|| FmtError::Unsupported("the page has no /Contents to edit".to_owned()))?;
-        let stream = self
-            .current_page_content(content_id, page)
-            .map_err(FmtError::Content)?;
+        // The refusal is kept; the id is not needed. `current_page_content`
+        // reads the WHOLE `/Contents` list through the session view since
+        // `Pass 186.0`, so nothing downstream addresses the first stream by
+        // itself -- but "this page has nothing to edit" is still the honest
+        // operator-facing answer and it must not be lost with the binding.
+        if page.contents.is_empty() {
+            return Err(FmtError::Unsupported(
+                "the page has no /Contents to edit".to_owned(),
+            ));
+        }
+        let stream = self.current_page_content(page).map_err(FmtError::Content)?;
         preview_style_resolution(&self.base, page, &stream, find, pinned_span, want)
     }
 
@@ -8661,17 +8663,21 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(FmtError::Encrypted);
         }
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let page = pages
             .get(page_index)
             .ok_or(FmtError::PageIndex(page_index))?;
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or_else(|| FmtError::Unsupported("the page has no /Contents to edit".to_owned()))?;
-        let stream = self
-            .current_page_content(content_id, page)
-            .map_err(FmtError::Content)?;
+        // The refusal is kept; the id is not needed. `current_page_content`
+        // reads the WHOLE `/Contents` list through the session view since
+        // `Pass 186.0`, so nothing downstream addresses the first stream by
+        // itself -- but "this page has nothing to edit" is still the honest
+        // operator-facing answer and it must not be lost with the binding.
+        if page.contents.is_empty() {
+            return Err(FmtError::Unsupported(
+                "the page has no /Contents to edit".to_owned(),
+            ));
+        }
+        let stream = self.current_page_content(page).map_err(FmtError::Content)?;
         preview_font_resources(&self.base, page, &stream, find, pinned_span)
     }
 
@@ -8715,12 +8721,43 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(RErr::Encrypted);
         }
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let page = pages.get(page_index).ok_or(RErr::PageIndex(page_index))?;
         let content_id = *page
             .contents
             .first()
             .ok_or_else(|| RErr::Unsupported("the page has no /Contents to reflow".to_owned()))?;
+
+        // ★★ Reflow's PLANNER IS BASE-INDEXED, and `Pass 186.0` made that a
+        // hazard it did not used to be. `plan_reflow_from_doc` takes
+        // `(&self.base, page_index)` and re-derives the page itself; every
+        // other read in this method now resolves `page_index` against the
+        // OVERLAY. Those two agree only while the session has not added,
+        // removed or reordered a page.
+        //
+        // If they disagree, the failure is silent and destructive in the worst
+        // available way: the plan describes base page N while `content_id`
+        // names overlay page N's content stream, so the reflowed bytes of one
+        // sheet are staged into a DIFFERENT sheet's content object. Before
+        // this Pass both halves read the base, so they were consistent with
+        // each other and merely addressed a sheet the operator was not
+        // looking at.
+        //
+        // Refused by name rather than by teaching the planner the overlay:
+        // that is a real feature (`plan_reflow_from_doc` needs extraction
+        // provenance the staging buffer does not carry -- the same reason the
+        // already-edited refusal below exists) and it is not this Pass.
+        let base_page_id = page_tree::pages(&self.base)
+            .ok()
+            .and_then(|p| p.get(page_index).map(|p| p.id));
+        if base_page_id != Some(page.id) {
+            return Err(RErr::Unsupported(
+                "the document's page set was changed this session (a page was added, removed or \
+                 reordered); reflow is planned against the base document's pages, so save and \
+                 reopen before reflowing"
+                    .to_owned(),
+            ));
+        }
 
         // Reflow is planned from base content; refuse if this content object
         // was already rewritten this session (see the method docs).
@@ -11192,19 +11229,30 @@ impl EditSession {
                 count,
             })?
             .clone();
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or(EditError::VectorEditNoContents { page_index })?;
+        // The refusal is kept; the id is not needed. `current_page_content`
+        // reads the WHOLE `/Contents` list through the session view since
+        // `Pass 186.0`, so nothing downstream addresses the first stream by
+        // itself -- but "this page has nothing to edit" is still the honest
+        // operator-facing answer and it must not be lost with the binding.
+        if page.contents.is_empty() {
+            return Err(EditError::VectorEditNoContents { page_index });
+        }
         let stream = self
-            .current_page_content(content_id, &page)
+            .current_page_content(&page)
             .map_err(EditError::VectorEditContent)?;
-        let base_view = self.base.view();
+        // SESSION view, not the base's: an `/XObject` or `/Font` added this
+        // session (`add_image`, `add_text`) is named by the overlay page's
+        // `/Resources` but exists only in the staging overlay. A base-only
+        // resolver declines to classify its `Do`, and an unclassifiable `Do`
+        // emits NO object -- so the content would remain visible on the canvas
+        // and vanish from selection and snapping. `DocumentXObjects`' own doc
+        // comment states that hazard; this is the line that avoids it.
+        let view = self.view();
         let resolver = crate::vector::DocumentXObjects {
-            view: &base_view,
+            view: &view,
             resources: &page.resources,
         };
-        let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+        let fonts = crate::vector::DocumentFonts::new(&view, &page.resources);
         let model = crate::vector::decompose_with_fonts(
             &stream,
             crate::vector::Matrix::IDENTITY,
@@ -11499,25 +11547,36 @@ impl EditSession {
             return Err(EditError::DocumentEncrypted);
         }
         self.check_certification()?;
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let count = pages.len();
         let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
             index: page_index,
             count,
         })?;
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or(EditError::VectorEditNoContents { page_index })?;
+        // The refusal is kept; the id is not needed. `current_page_content`
+        // reads the WHOLE `/Contents` list through the session view since
+        // `Pass 186.0`, so nothing downstream addresses the first stream by
+        // itself -- but "this page has nothing to edit" is still the honest
+        // operator-facing answer and it must not be lost with the binding.
+        if page.contents.is_empty() {
+            return Err(EditError::VectorEditNoContents { page_index });
+        }
         let stream = self
-            .current_page_content(content_id, page)
+            .current_page_content(page)
             .map_err(EditError::VectorEditContent)?;
-        let base_view = self.base.view();
+        // SESSION view, not the base's: an `/XObject` or `/Font` added this
+        // session (`add_image`, `add_text`) is named by the overlay page's
+        // `/Resources` but exists only in the staging overlay. A base-only
+        // resolver declines to classify its `Do`, and an unclassifiable `Do`
+        // emits NO object -- so the content would remain visible on the canvas
+        // and vanish from selection and snapping. `DocumentXObjects`' own doc
+        // comment states that hazard; this is the line that avoids it.
+        let view = self.view();
         let resolver = crate::vector::DocumentXObjects {
-            view: &base_view,
+            view: &view,
             resources: &page.resources,
         };
-        let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+        let fonts = crate::vector::DocumentFonts::new(&view, &page.resources);
         let model = crate::vector::decompose_with_fonts(
             &stream,
             crate::vector::Matrix::IDENTITY,
@@ -11584,17 +11643,107 @@ impl EditSession {
         &mut self,
         page_index: usize,
     ) -> Result<std::sync::Arc<crate::vector::PageObjects>, EditError> {
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let count = pages.len();
         let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
             index: page_index,
             count,
         })?;
-        let content_id = *page
-            .contents
-            .first()
-            .ok_or(EditError::VectorEditNoContents { page_index })?;
-        Ok(self.page_content_and_objects(content_id, page)?.1)
+        // The refusal is kept; the id is not needed. `current_page_content`
+        // reads the WHOLE `/Contents` list through the session view since
+        // `Pass 186.0`, so nothing downstream addresses the first stream by
+        // itself -- but "this page has nothing to edit" is still the honest
+        // operator-facing answer and it must not be lost with the binding.
+        if page.contents.is_empty() {
+            return Err(EditError::VectorEditNoContents { page_index });
+        }
+        Ok(self.page_content_and_objects(page)?.1)
+    }
+
+    /// The dependency set a page's decomposition is a function of, built
+    /// from the SESSION's view of the page (`Pass 186.0`).
+    ///
+    /// `page` must come from [`Self::pages`]; passing a base-derived page
+    /// would key the cache to the file on disk, which is the exact defect
+    /// this replaced.
+    fn page_model_key(&self, page: &Page) -> PageModelKey {
+        PageModelKey {
+            page_id: page.id,
+            contents: page
+                .contents
+                .iter()
+                .map(|id| {
+                    let span = match self.state.get(id) {
+                        Some(Object::Stream(st)) => Some(st.data_span),
+                        _ => None,
+                    };
+                    (*id, span)
+                })
+                .collect(),
+            resources: page.resources.clone(),
+        }
+    }
+
+    /// **A cheap number that changes whenever a page's drawable content
+    /// changes**, so a front end can tell that its own decomposition has gone
+    /// stale without paying for a second one (`Pass 186.0`).
+    ///
+    /// # Why this exists
+    ///
+    /// `pdfceGUI` asked for it by name, and the reason is a real class of
+    /// defect rather than an optimisation. A shell maintains its own object
+    /// model of the page — it must, because that is what the operator clicks
+    /// on — and every geometry verb here is addressed by an **index into a
+    /// decomposition**. If the two models disagree by one object, a drag
+    /// lands on the wrong object and returns `Ok`. Nothing in either process
+    /// can notice: the index is in range on both sides.
+    ///
+    /// So the shell needs a continuous, cheap agreement check. Comparing
+    /// object *counts* means decomposing twice; comparing this number means
+    /// comparing two `u64`s. Its own words: *"our funnel already bumps an
+    /// edit epoch on every successful edit, and a per-page generation from
+    /// your side is what would let us assert agreement continuously rather
+    /// than in a test."*
+    ///
+    /// # What it is, exactly
+    ///
+    /// A 64-bit FNV-1a hash of the same [`PageModelKey`] the internal
+    /// decomposition cache is keyed on — the page's identity, every
+    /// `/Contents` entry with its staged span, and the page's effective
+    /// `/Resources`. Equal inputs give equal outputs by construction, because
+    /// it is literally the cache key.
+    ///
+    /// # ★ What it does NOT promise, and this matters to a caller
+    ///
+    /// - **It is not a content digest.** Two *different* pages can collide,
+    ///   as any 64-bit hash can. It answers "has this page's model changed
+    ///   since I last looked", not "are these two pages the same".
+    /// - **It is not stable across sessions or across saves.** A staged span
+    ///   is an offset into this session's staging buffer. Reopen the document
+    ///   and the same visual page yields a different number. Compare it only
+    ///   against a value from the same [`EditSession`].
+    /// - **It changes on edits that do not change the picture.** Re-staging
+    ///   byte-identical content moves the span. False "changed" is the safe
+    ///   direction: it costs a redundant re-decomposition, where a false
+    ///   "unchanged" costs an edit to the wrong object.
+    /// - **It says nothing about annotations.** Those are addressed by
+    ///   [`ObjId`] and never by index, so they cannot skew this way
+    ///   (`request_edit_verbs_read_the_base_not_the_overlay` §7 verified the
+    ///   whole group).
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::PageOutOfRange`] for a page index outside the document
+    /// **as this session has it** — which, since `Pass 186.0`, is the same
+    /// page set every editing verb resolves against.
+    pub fn page_content_generation(&self, page_index: usize) -> Result<u64, EditError> {
+        let pages = self.pages()?;
+        let count = pages.len();
+        let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
+            index: page_index,
+            count,
+        })?;
+        Ok(self.page_model_key(page).fingerprint())
     }
 
     /// The cache lookup shared by [`Self::page_objects`] and the editing
@@ -11609,7 +11758,6 @@ impl EditSession {
     /// expensive half and both callers need it.
     fn page_content_and_objects(
         &mut self,
-        content_id: ObjId,
         page: &Page,
     ) -> Result<
         (
@@ -11618,14 +11766,10 @@ impl EditSession {
         ),
         EditError,
     > {
-        // The key, computed WITHOUT decoding anything — see the field's docs.
-        let span = match self.state.get(&content_id) {
-            Some(Object::Stream(st)) => Some(st.data_span),
-            _ => None,
-        };
+        // The key, computed WITHOUT decoding anything — see `PageModelKey`.
+        let key = self.page_model_key(page);
         if let Some(c) = &self.page_objects_cache
-            && c.content_id == content_id
-            && c.span == span
+            && c.key == key
         {
             return Ok((
                 std::sync::Arc::clone(&c.stream),
@@ -11634,20 +11778,27 @@ impl EditSession {
         }
 
         let stream = std::sync::Arc::new(
-            self.current_page_content(content_id, page)
+            self.current_page_content(page)
                 .map_err(EditError::VectorEditContent)?,
         );
-        // Same resolvers the verbs have always used, and for the same stated
-        // reason: page `/Resources` are not rewritten by content surgery, so
-        // base and session agree on them and the base view is the one
-        // guaranteed borrowable here.
+        // SESSION view, and the borrow is scoped to this block so the cache
+        // write below can take `&mut self`.
+        //
+        // This used to read the BASE view, on the reasoning that "page
+        // `/Resources` are not rewritten by content surgery, so base and
+        // session agree on them". Content surgery does not rewrite them --
+        // but `add_image` and `add_text` do, and the object they name lives
+        // only in the overlay. A base resolver cannot classify the resulting
+        // `Do`, and `vector/decompose.rs` emits no object for a `Do` it
+        // cannot classify: the image stays on the canvas and disappears from
+        // the model. `Pass 186.0`.
         let objects = {
-            let base_view = self.base.view();
+            let view = self.view();
             let resolver = crate::vector::DocumentXObjects {
-                view: &base_view,
+                view: &view,
                 resources: &page.resources,
             };
-            let fonts = crate::vector::DocumentFonts::new(&base_view, &page.resources);
+            let fonts = crate::vector::DocumentFonts::new(&view, &page.resources);
             std::sync::Arc::new(crate::vector::decompose_with_fonts(
                 &stream,
                 crate::vector::Matrix::IDENTITY,
@@ -11656,8 +11807,7 @@ impl EditSession {
             ))
         };
         self.page_objects_cache = Some(PageObjectsCache {
-            content_id,
-            span,
+            key,
             stream: std::sync::Arc::clone(&stream),
             objects: std::sync::Arc::clone(&objects),
         });
@@ -11682,7 +11832,7 @@ impl EditSession {
         // rewrite a certified page unguarded.
         self.check_certification()?;
 
-        let pages = page_tree::pages(&self.base)?;
+        let pages = self.pages()?;
         let count = pages.len();
         let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
             index: page_index,
@@ -11728,7 +11878,7 @@ impl EditSession {
             // reading it would not have: a cache HIT still cost 292 ms of the
             // 405, because the flate decode is the larger half. Caching the
             // model without the stream caches the cheaper part.
-            let (stream, model) = self.page_content_and_objects(content_id, page)?;
+            let (stream, model) = self.page_content_and_objects(page)?;
             plan(&stream, &model)?
         };
 
@@ -11740,44 +11890,48 @@ impl EditSession {
         Ok(new_content)
     }
 
-    /// The page's CURRENT decoded content, tokenized: the session's own
-    /// edited raw stream (read back from the staging buffer) when a prior
-    /// text/format edit already rewrote `content_id` this session, else the
-    /// base document's decoded page content.
+    /// The page's CURRENT decoded content, tokenized — **read through the
+    /// session view**, so it is the page as this session has it, not as the
+    /// file on disk has it.
     ///
     /// This is what makes sequential edits ACCUMULATE (Pass 14.3 §0.2 /
-    /// UI spec §2.1's post-edit rebuild): a second edit must compose on top
-    /// of the first, not re-splice the base. A page's first `/Contents`
-    /// object is touched in `state` ONLY by [`Self::edit_text`] /
-    /// [`Self::format_text`] (no other `EditSession` operation rewrites a page
-    /// content stream), so `state.contains_key(content_id)` reliably means "a
-    /// prior text edit this session," and its overlay value is the raw
-    /// (unfiltered) stream those methods staged — read directly, no decode.
+    /// UI spec §2.1's post-edit rebuild): a second edit composes on top of
+    /// the first rather than re-splicing the base.
+    ///
+    /// # ★ Why this is one branch and not two (`Pass 186.0`)
+    ///
+    /// It used to be two. A content object already rewritten this session was
+    /// read **directly** out of the staging buffer, and every other page fell
+    /// through to `ContentStream::from_page(&self.base.view(), page)` — a BASE
+    /// read, justified on the ground that "base and session agree by
+    /// definition" when the session has not touched the content object.
+    ///
+    /// That premise was false, and `pdfceGUI` measured it: a session can add a
+    /// **whole new content stream** to a page without touching the existing
+    /// one. [`Self::add_image`], `paste_objects`, `flatten_fields` and
+    /// `add_text` all append through `append_content_stream`, which writes a
+    /// NEW object and patches the page's `/Contents` array. Neither branch
+    /// could see it — the base branch because the appended stream is not in
+    /// the base, the staged branch because it returned the first stream only.
+    /// The operator's report was the plain consequence: *"When I add a new
+    /// image to a pdf I can't edit it unless I save the document first."*
+    ///
+    /// [`ContentStream::from_page`] over [`Self::view`] answers both cases
+    /// with one path, because the session view resolves each `/Contents`
+    /// entry from the overlay and slices its bytes out of the split
+    /// base+staging source. The old "double-handling" worry does not apply: a
+    /// staged content stream is written by `make_raw_stream` with **`/Length`
+    /// and nothing else**, so `decode_stream` runs an empty filter chain over
+    /// it and hands the raw bytes straight back.
+    ///
+    /// `page` must be an **overlay-derived** page (see [`Self::pages`]) or the
+    /// `/Contents` list will be the base's and the appended stream is lost
+    /// again. Every caller reads it from `self.pages()?` for that reason.
     fn current_page_content(
         &self,
-        content_id: ObjId,
         page: &Page,
     ) -> Result<crate::content::ContentStream, crate::content::ContentError> {
-        use crate::content::{ContentError, ContentStream};
-        if let Some(Object::Stream(s)) = self.state.get(&content_id) {
-            // A prior edit rewrote this content object into a raw stream whose
-            // data lives in the staging buffer; walk THAT.
-            let span = s.data_span;
-            let src = self.authored_source();
-            let raw = span
-                .slice(src.as_ref())
-                .ok_or(ContentError::NotAStream)?
-                .to_vec();
-            return ContentStream::parse(raw);
-        }
-        // BASE READ, deliberately (decision 018 caller audit). The session
-        // case is the branch above, which reads the RAW staged stream
-        // directly — a staged content stream is stored unfiltered, so
-        // routing it through `from_page` (which runs `decode_stream`) would
-        // double-handle it. This branch is only reached when the session has
-        // NOT rewritten this content object, where base and session agree by
-        // definition.
-        ContentStream::from_page(&self.base.view(), page)
+        crate::content::ContentStream::from_page(&self.view(), page)
     }
 
     /// Build the one [`Command`] that replaces `content_id` with the freshly
@@ -13032,16 +13186,113 @@ pub struct AnnotationRotate {
 /// a span rather than a digest of the content.
 #[derive(Debug)]
 struct PageObjectsCache {
-    /// The content object this was built from.
-    content_id: ObjId,
-    /// The staged span holding its bytes, or `None` when the content is the
-    /// base document's and therefore immutable.
-    span: Option<crate::span::ByteSpan>,
+    /// Everything the decomposition depends on, so a stale hit is not
+    /// representable. See [`PageModelKey`].
+    key: PageModelKey,
     /// The decoded content — the expensive half, cached so a hit does not
     /// repeat the flate decode.
     stream: std::sync::Arc<crate::content::ContentStream>,
     /// The decomposition of that content.
     objects: std::sync::Arc<crate::vector::PageObjects>,
+}
+
+/// **What a page's decomposition is a function of**, captured cheaply enough
+/// to compare on every call (`Pass 186.0`).
+///
+/// # Why this is not just the first content stream's staged span
+///
+/// It was, and that was wrong in a way nothing reported. The old key was
+/// `(content_id, staged span of content_id)`, on the reasoning that the only
+/// thing that could change a page's model was a rewrite of its content
+/// object. [`EditSession::add_image`] disproves it: it appends a **new**
+/// content stream and adds an `/XObject` resource, touching neither
+/// `content_id` nor its span. The memo therefore served the pre-insert model
+/// back to every caller — including the editing verbs, which address objects
+/// by INDEX into that model. A stale index is not a stale answer; it is an
+/// edit applied to the wrong object.
+///
+/// So the key is the whole dependency set:
+///
+/// - **`page_id`** — two pages can share a first content object (a template
+///   page invoked twice), and their `/Resources` need not agree.
+/// - **`contents`** — every `/Contents` entry with its staged span, in
+///   order. Catches a rewrite, an append, a removal and a reorder. `None` is
+///   "this object is the base document's", which is immutable by definition.
+/// - **`resources`** — the page's effective `/Resources`, because that is
+///   what resolves an `XObject`'s `Do` and a font's `Tf`. Adding an
+///   `/XObject` entry changes the model without changing a single byte of
+///   content.
+///
+/// # Cost
+///
+/// One `Dict` clone and a short `Vec` per cache fill, and an `==` per lookup.
+/// The thing being avoided is a flate decode plus a full decomposition —
+/// measured at 292 ms and 482 ms respectively on a 130k-object CAD drawing
+/// — so the comparison is three orders of magnitude cheaper than the miss it
+/// prevents. A page's `/Resources` is a handful of name→reference entries
+/// even on that drawing; the 130k objects live in the content stream, which
+/// this never touches.
+#[derive(Debug, Clone, PartialEq)]
+struct PageModelKey {
+    /// The page object itself.
+    page_id: ObjId,
+    /// Each `/Contents` entry and its staged span (`None` = base, immutable).
+    contents: Vec<(ObjId, Option<crate::span::ByteSpan>)>,
+    /// The page's effective `/Resources` as this session has them.
+    resources: Dict,
+}
+
+impl PageModelKey {
+    /// A 64-bit FNV-1a digest of this key, for
+    /// [`EditSession::page_content_generation`].
+    ///
+    /// # Why it hashes the `Debug` rendering rather than walking the fields
+    ///
+    /// The property that has to hold is **`a == b` implies
+    /// `a.fingerprint() == b.fingerprint()`**, and the cheapest way to
+    /// guarantee it is to derive both from the same structural description.
+    /// `PartialEq` here is `derive`d, and [`Dict`] is a `Vec`-backed,
+    /// order-preserving type whose `PartialEq` is therefore order-sensitive
+    /// in exactly the way its `Debug` is — so the two agree by construction.
+    /// A hand-written field walk would be a *second* definition of equality,
+    /// and the failure mode of the two drifting is a fingerprint that says
+    /// "unchanged" about a page that changed, which is the one answer this
+    /// must never give.
+    ///
+    /// It allocates nothing: [`FnvWriter`] implements [`std::fmt::Write`], so
+    /// the formatter's output is consumed byte by byte and never assembled
+    /// into a `String`.
+    ///
+    /// FNV-1a rather than `DefaultHasher` because `DefaultHasher`'s output is
+    /// explicitly not guaranteed stable across Rust releases, and a shell
+    /// comparing this number across a rebuild deserves better than a silent
+    /// change of meaning. It is **not** a cryptographic digest and is not
+    /// used as one.
+    fn fingerprint(&self) -> u64 {
+        use std::fmt::Write as _;
+        let mut w = FnvWriter(0xcbf2_9ce4_8422_2325);
+        // Infallible: `FnvWriter::write_str` never returns `Err`.
+        let _ = write!(w, "{self:?}");
+        w.0
+    }
+}
+
+/// A [`std::fmt::Write`] sink that folds every byte into an FNV-1a hash.
+///
+/// Exists so [`PageModelKey::fingerprint`] can digest a `Debug` rendering
+/// without materialising it — a page's `/Resources` on a large drawing is a
+/// few kilobytes of text that would otherwise be allocated and thrown away on
+/// every call, and a front end may call it once per frame.
+struct FnvWriter(u64);
+
+impl std::fmt::Write for FnvWriter {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        for b in s.as_bytes() {
+            self.0 ^= u64::from(*b);
+            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        Ok(())
+    }
 }
 
 /// Which fields a [`ButtonAction::ResetForm`] touches

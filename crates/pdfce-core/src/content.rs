@@ -262,7 +262,18 @@ impl ContentStream {
                 .slice(stream.data_span)
                 .ok_or(ContentError::NotAStream)?;
             let decoded = filters::decode_stream(&stream.dict, raw)?;
-            if i > 0 {
+            // A separator only where there is something to separate. An
+            // EMPTY payload is routine here: `EditSession::text_edit_command`
+            // folds a multi-stream page into its first object and empties the
+            // rest IN PLACE (object identity is preserved for minimal-diff
+            // reasons), so a page edited this session concatenates as
+            // "content" + "" + "" ... An unconditional separator would append
+            // one whitespace byte per emptied stream on EVERY re-read, and a
+            // session re-reads its own content on every subsequent edit -- the
+            // staging buffer would grow by a byte per extra stream per edit,
+            // forever. Skipping it also makes a re-read of an already-folded
+            // page byte-identical to what was staged.
+            if i > 0 && !decoded.is_empty() {
                 buf.push(b'\n');
             }
             buf.extend_from_slice(&decoded);

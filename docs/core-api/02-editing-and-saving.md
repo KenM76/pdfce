@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 177 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 178 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 177 public `EditSession` methods
+## 1. Verb index — all 178 public `EditSession` methods
 
-**Count: 177.** Established by brace-matched extraction of the four
+**Count: 178.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -2264,6 +2264,111 @@ it holds is the model the caller already has.
 **2. `&mut self` is deliberate.** An interior-mutability cache reachable
 through `&self` would make `EditSession` no longer `Sync`.
 
+### ★★★ A page index means the page as THIS SESSION has it — `Pass 186.0`
+
+**Read this before computing a page index for any verb.** It changed on
+2026-08-31 and it changed a rule a shell may have been relying on without
+knowing it existed.
+
+**What it is now, and it is the only rule:** every `EditSession` method that
+takes a `page_index` resolves it against `EditSession::pages()` — the page
+tree **as this session has edited it**. If your shell shows the operator three
+pages, index 2 is the third of those three, on both sides of the boundary.
+There is no second answer.
+
+**What it was until that date, and why it did not look like a defect.**
+`EditSession` had two page-tree readers. The authoring verbs used the
+overlay-aware one; the eight content-editing entry points — `edit_text`,
+`format_text`, `preview_style_resolution`, `preview_font_resources`,
+`reflow_block`, `page_objects`, and the shared bodies behind `move_objects` /
+`transform_objects` / `delete_objects` / `move_subpath` / `move_node` /
+`move_nodes` / `move_handle` / `paste_objects` — read the **base document**,
+meaning the file as it was on disk. On a session that had not been
+structurally edited the two agree exactly, which is why every test in this
+repo passed under both.
+
+**Two consequences, and the second is the dangerous one.**
+
+1. **Content added this session was not editable.** `add_image`,
+   `paste_objects`, `flatten_fields` and `add_text` all append a **new**
+   content stream and (for the first and last) a **new** resource, none of
+   which exist in the base. The base-derived page's `/Contents` did not name
+   the new stream and a base-only resolver could not classify the resulting
+   `Do` — and `vector/decompose.rs` emits **no object** for a `Do` it cannot
+   classify. So the object was visible on the canvas and absent from the
+   model: your decomposition had N+1 objects, `page_objects` had N, and
+   dragging the new one answered `ObjectOutOfRange`. Reported by the operator
+   as *"When I add a new image to a pdf I can't edit it unless I save the
+   document first."*
+
+2. **★ After any structural page edit the verbs addressed a different
+   sheet, and returned `Ok`.** `delete_pages`, `insert_pages`,
+   `reorder_pages` and the merge verbs commit into the overlay, so the base
+   still held the original page order and count. Delete page one, and what
+   your shell calls index 0 was planned and committed against the sheet that
+   used to be index 0 — a different sheet — with no refusal and no disclosure.
+   `delete_objects` there destroys real content. This is driven end to end in
+   `crates/pdfce-core/tests/session_overlay_skew.rs`:
+   `page_objects(3)` on a three-page document used to return the text of page
+   four.
+
+**One verb is deliberately narrower than the rest.** `reflow_block`'s planner
+(`plan_reflow_from_doc`) re-derives the page from the base document by index —
+it needs extraction provenance the staging buffer does not carry, which is the
+same reason it already refuses a page whose content was rewritten this
+session. It therefore now **refuses by name** once the page set has changed:
+*"the document's page set was changed this session (a page was added, removed
+or reordered); reflow is planned against the base document's pages, so save
+and reopen before reflowing."* That is a named refusal, never a silent
+mis-splice.
+
+**What was never affected**, so you do not need to re-verify it: annotations
+are addressed by `ObjId` and read through the overlay-aware `value()` /
+`locate_annotation()` / `graph()`. Markup, pasted markup, text markup,
+FreeText, ce dimensions, form-field authoring, pasted fields, adopted
+widgets, redaction marks, file attachments and bookmarks were all editable
+the instant they were authored, and still are.
+
+**One residual, named so it is not rediscovered as a new bug.** `edit_text`,
+`format_text` and the two `preview_*` verbs pass `&self.base` to the text
+planner as the object resolver, so a `/Font` resource **created this session**
+(by `add_text`, or by `format_text`'s own `created_font` path) is named by the
+overlay page's `/Resources` and cannot be resolved through it. The failure is
+a clean refusal, not a wrong edit, and it is the same outcome as before this
+Pass — the resource used to be invisible, and is now unresolvable. Fixing it
+means threading a view through `text_edit`'s ~40 `doc: &Document` signatures,
+which is its own Pass.
+
+### ⚡ `page_content_generation` — the agreement check, and what it does NOT promise
+
+Your shell keeps its own object model of the page; it must, because that is
+what the operator clicks. Every geometry verb here is addressed by an **index
+into a decomposition**. If the two models differ by one object, a drag lands
+on the wrong object and returns `Ok` — the index is in range on both sides and
+neither process can notice.
+
+`page_content_generation(page_index) -> u64` is the cheap continuous check.
+Comparing object *counts* means decomposing twice; comparing this means
+comparing two integers. Bump your own edit epoch, re-read this, assert they
+moved together.
+
+Three things it is **not**, each of which will bite a caller who assumes
+otherwise:
+
+- **Not a content digest.** Two different pages can collide, as any 64-bit
+  hash can. It answers *"has this page's model changed since I last looked"*,
+  not *"are these two pages the same"*.
+- **Not stable across sessions or across a save.** A staged span is an offset
+  into this session's staging buffer. Reopen the document and the same visual
+  page yields a different number. Only ever compare values from one
+  `EditSession`.
+- **Not minimal.** Re-staging byte-identical content moves the number. False
+  *changed* is the safe direction — it costs a redundant re-decomposition,
+  where a false *unchanged* costs an edit to the wrong object.
+
+It says nothing about annotations, which are addressed by `ObjId` and cannot
+skew this way.
+
 ### ⚡⚡ `EditSession` is `Send` AND `Sync` — the 500 ms can leave the UI thread
 
 This is not a change; it has always been true and is stated here because a
@@ -2305,6 +2410,7 @@ constructed, then committed, under one `&mut`.
 | Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** ⚠️ **Refuses an unknown `group` since `Pass 178.2`** — it used to return `Ok` and change nothing. |
 | Toggle a group's layer | `toggle_dimension_layer(&mut self, group, visible) -> Result<bool, EditError>` | 15600 | Resulting visibility. The default group is un-hideable. |
 | **The page's vector objects, memoised** | `page_objects(&mut self, page_index) -> Result<Arc<PageObjects>, EditError>` | 11400 | ⚡ **Use this instead of `vector::decompose_page`** (`Pass 181.0`). The editing verbs share the same cache, so a shell that decomposes to get object indices does not pay for the identical parse again inside `move_objects` — measured **385 ms → 0 ms** on a 130k-object CAD page. `&mut self` because populating a cache is a mutation; see below. |
+| **Has this page's model changed?** | `page_content_generation(&self, page_index) -> Result<u64, EditError>` | 11700 | ⚡ A cheap `u64` that moves whenever the page's drawable content does — the FNV-1a digest of the same key `page_objects` memoises on (page id + every `/Contents` entry with its staged span + the effective `/Resources`). Compare two of these instead of decomposing twice. **Session-local and not a content digest** — see the box below. `Pass 186.0`. |
 | Hit-test ce dimensions on a page | `dimension_rects(&self, page_index) -> Vec<(DimensionId, [f64;4])>` | 15645 | `[llx, lly, urx, ury]` page space. |
 | List groups present on a page | `dimension_groups_on_page(&self, page_index) -> Vec<GroupId>` | 15725 | Model order. |
 | **Drag** a ce dimension | `place_dimension(&mut self, dimension, offset: f64, text_along: f64) -> Result<(), EditError>` | 15804 | ✅ **This, not `move_dimension`, is what dragging does.** Value-preserving by construction. |
