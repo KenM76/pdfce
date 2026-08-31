@@ -7,94 +7,108 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
-Written 2026-08-30, end of the button-actions session. **For the ledger — Pass
-ceiling, standing-rule ceiling, decision ceiling, filing count — run
+Written 2026-08-31, end of the session-model / widget-appearance / form-geometry
+session (`Pass 186.0` → `187.0` → `188.0`). **For the ledger — Pass ceiling,
+standing-rule ceiling, decision ceiling, filing count — run
 `python tools/check-ledger-numbers.py`.** It derives all four and is the only
 thing that cannot be stale.
 
 ---
 
-## §0 ONE THING IS OWED: the third fuzz finding. The button-action arc is closed.
+## §0 FOUR THINGS ARE OWED, AND THE FIRST IS UNCHANGED FROM THE LAST HANDOFF
 
-`Pass 182.0` → `183.0` → `183.1` → `184.0` ran end to end today, and the last
-of them repaired a defect the first three created. Concretely, a push button
-can now be given a **reset**, a **submit**, an in-document **jump**, one of the
-four **named navigations**, a **URI**, or a **show/hide** — and renaming a
-field repoints every button that named it while deleting one reports what it
-orphaned.
+Today's arc answered three inbound `pdfceGUI` requests end to end. A shell can
+now edit an image it added a moment ago without saving first, resize a check box
+and have it **redrawn** rather than magnified, and drag a node that lives inside
+a form XObject. Three replies are out; **nothing is owed back on any of them.**
 
-**Two things that arc left standing, deliberately, and neither is a gap:**
+None of that touched the items below.
 
-- **A toggling show/hide button is OUT OF SCOPE, not unbuilt.** Table 210
-  assigns (`/H` is a value, not a verb) and the standard owns a toggle
-  elsewhere (`/SetOCGState`'s `/State`) and did not use it here. A real toggle
-  needs ECMAScript.
-- **Four of the eight script-free, reach-nothing action types are unauthored**
-  — `SetOCGState`, `Trans`, `GoTo3DView`, `GoToDp`. Each is **sized** in
-  `ButtonAction`'s own doc block. None has been asked for.
+### ★ OWED ITEM 1 — fuzz finding #3, **still open, untouched, carried forward with its detail intact**
 
-**And one that is:** `/AP` `/D` (the pressed appearance) and `/MK` icon/label
-layout, the remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
-neighbourhood), not a continuation of the action work — a session scoping it as
-"the rest of the button actions" would scope the wrong thing.
+A `debug_assert_eq!` in **`delete_field_group`** at **`edit.rs:17486`**, where
+the emptied-node **cascade** and its **prediction** disagree — specifically,
+`remove_fields_from_form`'s `emptied` fixed point against
+`group_deletion_preflight`'s tree walk. **Two independent derivations of one
+quantity.**
 
-**★ THE OWED ITEM: finding #3 from the form-edit fuzz target**, a
-`debug_assert_eq!` in `delete_field_group` where the emptied-node cascade and
-its prediction disagree. **Sized honestly: it is `debug_assert`, so in release
-it is a wrong `nodes_removed` in a disclosure, not corruption** — materially
-less severe than the two page-tree defects already fixed. §C item 5 has the
-location, the replay seed, the harness traps and a stated guess to start from.
+**Sized honestly, and the sizing is part of the item.** It is a
+`debug_assert_eq!`, so **in the build operators run it is a wrong
+`nodes_removed` in a disclosure — not corruption.** Materially less severe than
+the two page-tree destructions fixed in `Pass 185.1`/`185.2`, which it was found
+beside. Do not spend a day at the wrong priority.
 
-`Pass 185.1` (the target + the first guard) and `Pass 185.2` (the catalog,
-which the first guard did not cover) are both shipped and pushed.
+**Known:** the verb, the assertion, the location.
+**Guess, labelled as one — start here but measure it:** the preview filters
+`form.groups` by `fully_qualified_name != fqn` and then appends `fqn`, so **two
+grouping nodes sharing one FQN** — trivially the empty name for a `/T`-less
+node, which is exactly what a fuzzer reaches — would make the two derivations
+count differently.
 
-**★★ AND `R236` ARRIVED WITH THIS PASS, SO ITS DENOMINATOR IS MEASURED HERE
-RATHER THAN LEFT AS "SEVERAL".** The rule: *a `debug_assert` postcondition over
-state derived from untrusted input is a tripwire for a fuzzer, not a guard for
-an operator*, so it owes a `cargo-fuzz` target over the verbs it guards or a
-written exemption at the site.
+**How to run it, because the harness fights you:**
+- **`-seed=1` makes a crash replayable.** Without it the same defect appears and
+  vanishes across runs.
+- **libFuzzer writes NO artifact here.** Rust's abort on Windows exits
+  `0xc0000409` before the crash handler saves one, so there is nothing to
+  reduce — consider making the target print its own input on panic.
+- **Grep for the panic HEAD; never `tail` the output.** A `tail -40` keeps only
+  libFuzzer's internal frames and drops both the message and the verb.
+- ASan DLL path and invocation:
+  `.claude/agent-memory/pdfce-engineer/reference_fuzz_asan_dll.md`.
 
-The filing's ledger counted **named helpers** (2 of 2). The unit was then
-widened to include bare inline assertions — finding #3 is one — and **the wider
-denominator was never taken**.
+⇒ **The absence of a reproduction is not evidence of a fix.**
 
-**It is 24** — 12 in `pdfce-core`, 12 in `pdfce-render` — and getting there
-took three wrong answers, which is worth more than the number:
+### OWED ITEM 2 — `R236`'s one named uncovered site
 
-| published | actual | why |
+**Annotation DELETION has no fuzz target.** `edit.rs:21669` carries the
+postcondition *"the target was located on some page, so at least that page must
+be patched"*; `annot_walk` **reads** and `annot_author` **writes**, and neither
+deletes. **This is the concrete work `R236` creates**, and this session did not
+do it.
+
+The rule's full site table and its measured denominator (**24 invocations** — 12
+in `pdfce-core`, 12 in `pdfce-render`, decomposed as `grep -c debug_assert` = 56
+mentions = 24 invocations + 6 `cfg(debug_assertions)` + 2 `fn` definitions + 24
+lines of prose) live in **`R236`'s own text** in `ROADMAP.md`'s *Standing
+rules* — deliberately, because the census's first home was a file that gets
+overwritten. This one.
+
+### OWED ITEM 3 — the ten `cmyk_buffer` `debug_assert`s are **unaudited**
+
+Render side. `mesh_shading` covers the `mesh.rs` pair; **the `cmyk_buffer.rs`
+ten have never been classified** as *covered* / *open* / *exempt*. Second thing
+to look at after item 2.
+
+### OWED ITEM 4 — three stale claims in `docs/core-api/01-reading-and-model.md` (yours to fix)
+
+Found by the 351st filing's hard-rule-11 sweep. **`02-editing-and-saving.md` was
+swept thoroughly and is current; the correction stopped at that file's
+boundary.** `01-reading-and-model.md` is the document a shell reads **first**:
+
+| line | claim | state |
 |---|---|---|
-| 34 (349th filing) | — | never right at any commit |
-| 27 (`7ac98da`, mine) | — | counted grep **hits**, three of which are **comment lines** |
-| **24** | ✓ | independently derived twice, agreeing |
+| `:1691` | *"A form leaf is reported as `leaf=N containment=… paint_order=… editable=false`"* | **FALSE** — `editable=` is real since `188.0` |
+| `:1706` | field table row: `is_editable()` \| **always `false`** today | **FALSE** — it answers about the object (`true` for a path) |
+| `~:1719` | *"For **selection**, use the deep test. For **editing**, use `hit_test_point` and you get back something you can actually edit."* | **MISLEADING** — a leaf is editable now; the sentence's real subject is that a leaf index must never be handed to an `objects`-indexed verb. Say that instead. |
 
-★★ **A source grep over a documentation-first codebase counts the codebase's
-own prose about the construct.** The three lines that inflated my count are
-`edit.rs:12085`, `12092` and `xref_out.rs:282` — the careful reasoning about
-*why* the guard is a `debug_assert!` and not a `panic!`. **The best-written
-lines in the region are the ones that corrupted the census.**
+★ **Two nearby hits are SURVIVING-AND-CORRECT — do not "fix" them:** `:1667`
+(*"Nothing here is gated on `FormLeaf::is_editable()`, and that is correct"* — a
+ce dimension against a form-interior line is a new **page** annotation, so the
+reasoning is independent of editability) and `:1726` (the vocabulary note
+pairing `stream()`/`is_editable()` with `text_extract`'s — **more** correct
+after `188.0`). Likewise `02-editing-and-saving.md:2455` (*"the same model
+`vector::decompose_page` returns"*) — that was the false claim `188.0` **fixed**;
+it is true now.
 
-And the shape is `7ac98da`'s own headline turned back on it: *sourcing a figure
-makes it auditable, not durable* — that commit named its exact command and
-still published the wrong **noun** (hits, not invocations).
+### ★ WHAT THIS SESSION ADDED, so the arithmetic is legible
 
-⇒ **Publish the decomposition, not the total**, so a reader checks by addition:
-`grep -c debug_assert` = 56 mentions = **24 invocations** + 6
-`cfg(debug_assertions)` + 2 `fn` definitions + 24 lines of prose about them.
-
-The sites this rule actually reaches:
-
-| site | verdict |
-|---|---|
-| `edit.rs:12095` page-tree postcondition | **covered** — `form_edit_sequence`, `pageops_sequence` |
-| `edit.rs:17486` group cascade vs prediction | **open finding #3** — the target reaches it |
-| **`edit.rs:21669`** *"the target was located on some page, so at least that page must be patched"* | ★ **UNCOVERED. No fuzz target drives annotation DELETION** — `annot_walk` reads, `annot_author` writes. This is the concrete work `R236` creates. |
-| `ccitt.rs:236`, `lexer.rs:400`, `parser.rs:699` | covered by `image_codec_ccitt` / `parse_object` / `load_document` |
-| `cmyk_buffer.rs` ×10, `mesh.rs` ×2 | render side; `mesh_shading` covers the mesh pair — **the cmyk_buffer ten are unaudited and are the second thing to look at** |
-| `text_edit/edit.rs:2998`, `addtext.rs:682`, `xref_out.rs:292`, `writer/content.rs` | **exempt**: caller-convention or pdfce-constructed state, not untrusted-derived — the same reasoning `writer/content.rs:649` already wrote for itself |
-
-⇒ **One named uncovered site, one unaudited group of ten.** That is a finite
-work item rather than a rule with an open-ended obligation, which is the shape
-it needs to survive contact with a busy session.
+**One** new fuzz target — `fuzz/fuzz_targets/form_geometry_sequence.rs`,
+**301,952 executions in 421 s = 717 exec/s, 0 crashes, 0 artifacts** — covering
+`Pass 188.0`'s six new verbs at the moment they shipped. **It closes neither
+owed item above.** The existing `vector_edit` target could not have covered them:
+it drives the **planners** over one already-parsed content stream and cannot
+reach leaf resolution, the containment walk, re-decomposition from a placement,
+the selection guard or the reach count.
 
 ---
 
@@ -105,154 +119,178 @@ it needs to survive contact with a busy session.
    - `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
    - `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`
 
-   Two inbound requests were **answered by shipped work** today and still sit
-   in `open/`. One outbound reply is there with **two addenda** — it tells
-   `pdfceGUI` that the submit they asked us to *refuse* shipped on an operator
-   override, names the two Table 210 traps a UI will hit, and warns that
-   `rename_field`/`delete_field` **changed behaviour** on verbs they already
-   call. Nothing is owed back.
+   **Three inbound requests were answered by shipped work today and still sit in
+   `open/`** (`request_edit_verbs_read_the_base_not_the_overlay`,
+   `request_resizing_a_check_box_stretches_its_appearance`,
+   `request_editing_through_recursion_into_a_form_xobject`), with **three
+   outbound replies beside them**. **Nothing is owed back.**
 
-2. **`Pass 185.1` — the form-edit fuzz target and what it found in two
-   minutes.** `fuzz/fuzz_targets/form_edit_sequence.rs` drives
-   `set_button_action`, `rename_field`, `delete_field` and
-   `delete_field_group` over mutated documents, and immediately hit a
-   **release-silent page-tree corruption**: an `/AcroForm` whose `/Fields`
-   names an object that is also a `/Page`. `parse_acroform` models it as a
-   field (correctly — the form dictionary says it is one), the deletion
-   removed the page, and the only thing that complained was a
-   `#[cfg(debug_assertions)]` postcondition that is **compiled out of the
-   build operators run**.
-   ★ Guarded on all three deletion routes, each on its own removal set, and
-   reproduced in hand-built fixtures
-   (`crates/pdfce-core/tests/form_delete_page_tree.rs`).
+2. **The four owed items in §0.** Items 1–3 are fuzz work: item 1 is a bounded
+   chase with a stated starting guess, item 2 is a new target over a verb family
+   that already exists, item 3 is a classification pass rather than code. **Item
+   4 is three sentences in a doc** and is fifteen minutes.
 
-   ★★ **It has now found THREE things, two fixed and one open** — see §C item
-   5 for the table, the replay seed and the harness traps. The fuzz gate is
-   the one this role skips, twice recorded and twice recurred, and the first
-   target written after saying so out loud found a months-old defect in
-   fifteen minutes and two more behind it.
+3. **`Pass 142.0`** — a font face outside the standard 14. The largest remaining
+   *named* feature, **de-prioritised by the consuming project's own use report**,
+   not by us: *"Synthetic is enough. Drop `142.0` down the queue."* Not closed,
+   not declined.
+   ★ `bind_font_resource` (`text_edit/addtext.rs`) is the single implementation
+   of "add a `/Font` entry"; `142.0` extends it and does not write a second one.
+   And there are **THREE save paths** — `EditSession::format_text`, its form
+   twin, and the one-shot `text_edit::set_format`, **which is the one the CLI
+   uses**. `Pass 162.0` wired two, every unit test passed, and the binary printed
+   a disclosure about a resource it had not written.
 
-3. **`Pass 142.0`** — a font face outside the standard 14. The largest
-   remaining *named* feature, **de-prioritised by the consuming project's own
-   use report**, not by us: *"Synthetic is enough. Drop `142.0` down the
-   queue."* Not closed, not declined.
-   ★ `bind_font_resource` (`text_edit/addtext.rs`) is the single
-   implementation of "add a `/Font` entry"; `142.0` extends it and does not
-   write a second one. And there are **THREE save paths** —
-   `EditSession::format_text`, its form twin, and the one-shot
-   `text_edit::set_format`, **which is the one the CLI uses**. `Pass 162.0`
-   wired two, every unit test passed, and the binary printed a disclosure
-   about a resource it had not written.
+4. **The `text_edit` resolver residual** (`ROADMAP.md` *Backlog*, filed today).
+   `edit_text`, `format_text` and the two `preview_*` verbs still pass
+   `&self.base` to the text planner **as the object resolver**, so a `/Font`
+   created this session cannot be resolved through it. **The outcome is a clean
+   refusal, not a wrong edit, and it is unchanged from before `Pass 186.0`.**
+   ★ **Re-size it before scheduling it.** The obvious shape is threading a view
+   through `text_edit`'s ~40 `doc: &Document` signatures — wide, mechanical, in
+   the crate's most defect-prone module — and §C item 2 below is exactly the
+   warning that the obvious implementation's difficulty is not the problem's.
 
-4. **The n-channel (per-spot-colorant) buffer** — the only path to the print
+5. **`/AP` `/D` (the pressed appearance) and `/MK` icon/label layout**, the
+   remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
+   neighbourhood), not a continuation of the button-action work — a session
+   scoping it as "the rest of the button actions" would scope the wrong thing.
+
+6. **The n-channel (per-spot-colorant) buffer** — the only path to the print
    suite's remaining overprint/spot FAILs. **Operator's call; do not scope it
    without him.**
 
-5. **`CmykIntent::Calibrated`'s cool greys** — three independent lines of
-   evidence, and **still not ours to fix** (decision 064 puts the conversion in
+7. **`CmykIntent::Calibrated`'s cool greys** — three independent lines of
+   evidence, and **still not ours to fix** (decision `064` puts the conversion in
    `iccce`'s domain; the operator ruled the default 2026-08-28).
    ★ **The black end of that same table is a FALSE-DEFECT TRAP** — pdfce is the
-   *closer* answer there and `iccce` said so unprompted. Read
-   `settings/mod.rs`'s doc comment before touching anything CMYK.
+   *closer* answer there and `iccce` said so unprompted. Read `settings/mod.rs`'s
+   doc comment before touching anything CMYK.
 
 ---
 
 ## §B — What is deliberately NOT being worked, and why
 
+- **`/BS` `/W` does not change a check box's or radio button's drawn border.**
+  pdfce authors it at a fixed **1.0**. That is **the artwork's existing
+  contract**, not an oversight: honouring `/BS` `/W` would alter how **every
+  pdfce-authored check box already in the wild** renders on its next
+  regeneration. `ROADMAP.md` *Backlog*; **a decision to take with the operator,
+  not under a bug report.**
+- **Rounded corners on widget artwork are ANSWERED, not owed.** `pdfceGUI`
+  checked and there is nothing to scale. A genuine toggle needs a
+  **rounded-rectangle primitive** first, scoped with the operator.
+- **Teaching `reflow_block`'s planner the overlay.** It is base-indexed because
+  it needs extraction provenance the staging buffer does not carry — the same
+  reason its pre-existing already-edited refusal exists. It now **refuses by
+  name** when the page set changed this session (decision `111`'s one named
+  exception). Converting it is a **real feature**, not a cleanup.
 - **`census_dangling` will never see a field-name target.** That is a boundary,
-  not a bug: a name is not a reference, and the census answers a question about
-  the object graph. The companion numbers live on `delete_field` and
-  `rename_field`. Both halves are now documented at both ends — do not
-  "fix" the census by teaching it names; it would then need the object sweep,
-  and that already exists.
-- **C9 — `/StructParent` / `/OBJR` orphaned by an annotation delete.** Owed
-  since `Pass 38.5` and scoped out again: different graph, different carrier,
-  no name-string component, so it shares none of the sweep's machinery.
+  not a bug: a name is not a reference. Do not "fix" the census by teaching it
+  names.
+- **C9 — `/StructParent` / `/OBJR` orphaned by an annotation delete.** Owed since
+  `Pass 38.5` and scoped out again: different graph, different carrier, no
+  name-string component.
 - **ce-dimension tolerance, the ISO 286 fit classes** — needs a sourced
   class/table lookup this project does not have.
 
 ---
 
-## §C — ★★ READ BEFORE WRITING CODE. Six items from this session.
+## §C — ★★ READ BEFORE WRITING CODE. Seven items from this session.
 
-1. **★★★ A CORRECTION THAT REACHES THE STRUCTURE AND STOPS SHORT OF THE
-   PROSE.** Four instances today, every one found by a reader rather than a
-   gate: a plan doc's banner updated while its opening sentence still said the
-   opposite; *"Five variants:"* left on the line between an updated heading and
-   a six-row table; a rename disclosure saying it broke *"submit mappings"*
-   hours after it started repairing them; and the census's own blindness
-   documented in every file the fix touched and **in none of the files the
-   checker lives in**.
-   ⇒ **After amending a document, grep for the CLAIM you just falsified, not
-   for the section you just edited.** And when a sweep comes back clean, ask
-   what its keyword set could not have matched — two of today's sweeps were
-   disjoint and each would have missed the other's survivors.
+1. **★★★★ A GREEN SUITE CAN BE *VACUOUS* RATHER THAN WEAK, AND RUNNING IT HARDER
+   WILL NEVER SAY SO.** All **4,861** tests were green **before and after**
+   `Pass 186.0`'s fix for a verb that addressed the wrong sheet. Every test that
+   exercised a content-editing verb did so on a session whose page set had not
+   been structurally edited and whose content had not been appended this session
+   — and **on such a session base and overlay agree by construction.**
+   ⇒ **Before trusting a suite to protect a property, ask what STATE the
+   property needs in order to exist.** This one needs **two verbs in one
+   session**; a per-verb suite tests verbs, and a property that lives *between*
+   verbs has no home in it. `crates/pdfce-core/tests/session_overlay_skew.rs` is
+   the only place in the crate with that shape — do not delete it in a tidy-up.
 
-2. **A plan's enumerated list is a snapshot; the operator's sentence is the
-   ruling.** `Pass 183.0` shipped from a four-day-old plan's bullet list and
-   omitted `/Hide`, which his words plainly covered. Cost a whole second Pass.
+2. **★★★ ASSERT ON THE BYTES, NOT ON THE OUTCOME. A VERB'S OUTCOME STRUCT IS A
+   READER THE VERB WRITES ITSELF.** `Pass 187.0`'s worst route left `/Rect` at
+   140×22, rebuilt the artwork at 380×100, and returned `resized: true` with a
+   `rect_after` naming a box **never written**. Every assertion anyone had
+   written was on the outcome. **On three of that Pass's four routes the outcome
+   was correct and the bytes were not.** `R159`'s mechanism, with the return
+   value playing the lenient parser.
 
-3. **★ The difficulty of the obvious implementation is not the difficulty of
-   the problem.** I wrote this file's own previous §0 saying `Pass 184.0`
-   needed a visitor refactor of `scan_javascript` — the crate's most
-   defect-prone function. It did not. The two walks answer different questions,
-   and an **object sweep** is a strict superset of the carrier walk. The
-   refactor was correctly assessed as risky and was never the work.
+3. **★★★ A MEMO'S KEY MUST BE THE WHOLE DEPENDENCY SET — AND WHERE THE INPUTS
+   CANNOT NAME A DEPENDENCY, TAKE THE KEY FROM THE WALK'S *OUTPUT*.** Minted
+   today as **`R237`** at `n = 2`, both in `PageModelKey`: it could not see an
+   appended content stream or a changed `/Resources` (`186.0`), and could not see
+   a form-stream rewrite (`188.0`). **Both times every verb returned `Ok` while
+   the model was stale — and a stale index is not a stale answer, it is an edit
+   applied to the wrong object.** *Which* forms a page paints cannot be computed
+   before the walk that finds them, so the key comes from `containment`, the
+   walk's own output. **Sabotage the KEY, not the value**, and note it reddens
+   nothing until a two-verbs-in-one-session test exists.
 
-4. **A surviving sabotage has three causes and only one is a weak test:** an
-   assertion that cannot see the change (`saved()` returns the base bytes
-   **plus** the update — this fired twice in one file), a guarantee enforced
-   elsewhere (the call site discards the writes, so no argument can defeat it),
-   and a mutation that is semantically a no-op. Ask in that order.
+4. **★★ A CONSISTENCY FIX CAN PRODUCE A WORSE INCONSISTENCY THAN THE ONE IT
+   REMOVES.** Swapping `reflow_block`'s surrounding reads to the overlay without
+   a guard would have spliced one sheet's reflowed bytes into a **different**
+   sheet's content object. **Two wrong readings that agree with each other are
+   survivable; one right and one wrong is not.** Where a component cannot be
+   converted in the same change, **make it refuse** — do not leave its old
+   reading beside the new one.
 
-5. **★★ THE FUZZ TARGET HAS FOUND THREE THINGS AND ONE IS STILL OPEN.**
-   `fuzz/fuzz_targets/form_edit_sequence.rs`, in its first afternoon:
+5. **★★ A FIXTURE SET CAN BE COMPLETE IN COVERAGE AND DEGENERATE IN
+   DISCRIMINATION.** All **seven** pre-existing form fixtures placed their form
+   with a **pure translation** — the one transform under which a wrong
+   page-space → form-space conversion still looks plausible (a 10 pt drag moves
+   10 pt either way, just from the wrong origin).
+   `fixtures/synthetic/forms-xobject/scaled-form-placement.pdf` places its form
+   at `2 0 0 2 40 30 cm`, so the answers differ **in magnitude**.
+   ⇒ **Ask what property all your fixtures share that nobody listed as a
+   property.** Related: **a bounding box is a lossy instrument for a node move** —
+   dragging a rectangle corner *inward* does not change the box, because the two
+   adjacent corners still hold the extremes.
 
-   | # | verb | what | state |
-   |---|---|---|---|
-   | 1 | `delete_field` | a field that is also a **page** → no page tree | **FIXED**, `Pass 185.1` |
-   | 2 | `delete_field` | a field that is the **catalog** → `NoPageTreeRoot` | **FIXED**, `Pass 185.2` |
-   | 3 | `delete_field_group` | `debug_assert_eq!` at `edit.rs:17486` — the emptied-node **cascade and prediction disagree** | **OPEN** |
+6. **★★ A GUARD KEYED ON THE SHARED THING IS NOT A GUARD ON THE THING THAT MUST
+   BE UNIQUE.** `FormLeafSelectionSpansForms` requires a multi-leaf selection to
+   sit in **one invocation**, not merely one **form**: two invocations produce
+   leaves naming the same form with different placements whose
+   `form_object_index` values **collide**. Accepting such a selection moves one
+   object twice through two different matrices — silently wrong, not refused.
 
-   ★ **#2 is the one to learn from**: #1's fix was built from "the page tree",
-   and the catalog — the object that *points at* the tree — is not in it. The
-   error said `NoPageTreeRoot`, not `NoPages`, from the very first crash.
+7. **★★★ THE BASH TOOL ON THIS MACHINE STRIPS BACKSLASHES FROM QUOTED
+   HEREDOCS.** Rust string-literal line continuations (a trailing backslash) and
+   Python escape sequences are **eaten** when source is written that way. **It
+   happened four times this session, one debugging cycle each.**
+   `tools/check-string-gaps.sh` caught the one that reached a committed file — a
+   refusal message that would otherwise have shipped with a ten-space hole in
+   it. ⇒ **Author any such content with the Write/Edit tools, never a heredoc.**
+   ★ Compounding hazard: a surviving line continuation can then be **flattened
+   by `cargo fmt`**, which rejoins the literal and leaves the eaten indentation
+   as a run of spaces — the corruption survives *and* is normalised into
+   something that looks intentional. Written up in `D:/dev/rag/rust/`.
 
-   **On #3, what is known and what is a guess.** Known: it is
-   `delete_field_group`, it is the assertion that `remove_fields_from_form`'s
-   `emptied` fixed point agrees with `group_deletion_preflight`'s tree walk,
-   and it is **`debug_assert_eq!` — so in release it is a WRONG
-   `nodes_removed` in a disclosure, not corruption.** Materially less severe
-   than #1 and #2 and it should be sized accordingly.
-   Guess, not measured: the preview filters `form.groups` by
-   `fully_qualified_name != fqn` and then appends `fqn`, so **two grouping
-   nodes sharing one FQN** — trivial on a malformed file, and `""` for any
-   `/T`-less node, which is exactly what the fuzzer reaches — would make the
-   two derivations count differently. Start there, but measure it.
-
-   **How to run it, because the harness fights you:**
-   - `-seed=1` makes a crash **replayable**; without it the same defect
-     appears and vanishes across runs.
-   - **libFuzzer writes NO artifact here.** Rust's abort on Windows exits
-     `0xc0000409` before its crash handler saves one, so there is nothing to
-     reduce — consider making the target print its own input on panic.
-   - **Grep for the panic HEAD, never `tail` the output.** A `tail -40` keeps
-     only libFuzzer's internal frames and drops both the message and the verb.
-   - ASan DLL path and invocation:
-     `.claude/agent-memory/pdfce-engineer/reference_fuzz_asan_dll.md`.
-
-   ⇒ **The absence of a reproduction is not evidence of a fix.** #2 was filed
-   as "seen once, maybe a different class" and turned out to be the same crash
-   walking through an incomplete guard.
-
-6. **Patch-script hazards, both of which destroy work silently.**
+8. **Patch-script hazards, both of which destroy work silently.**
    `pathlib.write_text()` rewrites a whole file to CRLF unless you pass
    `newline`; and a sabotage loop that asserts on a *later* case leaves an
-   *earlier* case's sabotage on disk if the restore is after the loop rather
-   than in a `finally`. Validate every anchor before touching the file.
-   ★ And a new string-gap mechanism: a Rust line continuation can survive
-   transit and be **flattened by `cargo fmt`**, which rejoins the literal and
-   leaves the eaten indentation as a run of spaces.
+   *earlier* case's sabotage on disk if the restore is after the loop rather than
+   in a `finally`. Validate every anchor before touching the file.
+
+9. **A surviving sabotage has three causes and only one is a weak test:** an
+   assertion that cannot see the change, a guarantee enforced elsewhere, and a
+   mutation that is semantically a no-op. Ask in that order. **It paid out today
+   on its first use** — two `Pass 186.0` tests survived the first sabotage; one
+   was **vacuous** (a baseline taken *after* the change it was measuring) and one
+   **passed for the wrong reason** (a failure from an unrelated resolution error
+   that looked like the right answer). Both were **strengthened, not kept.**
+
+10. **★ After amending a document, grep for the CLAIM you just falsified, not
+    for the section you just edited.** `Pass 188.0` did this correctly on its own
+    side: `FormLeaf::is_editable()` changing from a hard `false` falsified a
+    property table, a load-bearing-properties paragraph, a test's own name and
+    doc block, `linepick.rs`'s note **and** a hard-coded `editable=false` in
+    shipped CLI output — all five corrected in the same commit.
+    ⇒ **A placeholder that documents its own provisionality is still a false
+    claim once it is wrong**, and the doc comment saying so does not reach the
+    operator.
 
 ---
 
@@ -269,20 +307,30 @@ ls -lt D:/Dev/pdfce-backups/              # newest bundle
 gh run list --limit 3                     # CI's colour, from GitHub
 ```
 
-- **Pushing is standing-authorized** (rule 8, decision 090 — *"always push"*);
-  cutting a tag or release is **not**, and neither is a force push or a
-  non-`main` branch. Scrub `check-suite-name-absent.py` green **before**
-  pushing regardless — the repository is public, so a push publishes.
-- **★ `R217` does NOT constrain pushing, and I claimed it did.** I asserted
-  that three commits went out ahead of their filings and turned CI red each
-  time; the librarian measured GitHub and **one of the three was green** —
-  pushed alone, as the tip, before its filing existed, which is exactly the act
-  I called forbidden. `R217` constrains what may land **on top of** an unfiled
-  commit. Read its third amendment note before repeating my mistake.
-- **Read CI's colour from GitHub**, not from a sentence in a document, and see
-  §A item 2 before trusting a failing job's *name*.
-- The backup bundle drifts about one commit per Pass. A fresh one is cheap:
-  `git bundle create <path> --all`.
-- `.tmp_bench.py` has been untracked for seven filings. It is deliberately not
-  committed — the repository is public — so **stage by path, never `git add
-  -A`**.
+- **FOUR COMMITS ARE UNPUSHED** as of this handoff — the three Passes (`186.0`
+  `7c2ee96`, `187.0` `52beaf6`, `188.0` `a8586cc`) plus an agent-memory chore
+  (`d7c4675`). `HEAD` = `d7c4675`, `origin/main` = `1e63186`. The filing commit
+  that accompanies this file makes **five**. **Pushing is standing-authorized**
+  (rule 8, decision `090` — *"always push"*); cutting a tag or release is
+  **not**, and neither is a force push or a non-`main` branch. Scrub
+  `check-suite-name-absent.py` green **before** pushing regardless — the
+  repository is public, so a push publishes. (It was run during the 351st
+  filing and was clean; re-run it, do not carry that sentence.)
+- **The backup bundle is 4 commits stale** — newest is
+  `pdfce-20260830-2005-1e63186-full.bundle`, which is `origin/main`, not
+  `HEAD`. A fresh one is cheap: `git bundle create <path> --all`.
+- **★ `R217` does NOT constrain pushing.** It constrains what may land **on top
+  of** an unfiled commit. Read its third amendment note before assuming
+  otherwise.
+- **Read CI's colour from GitHub**, not from a sentence in a document.
+- **The working tree is clean of untracked files** as of this handoff. Two that
+  earlier handoffs named — `.tmp_bench.py` (untracked for seven filings) and
+  `.g3.log` (present at the start of the 351st filing) — are **no longer on
+  disk**; neither was committed and neither is ignored by any rule. **The
+  instruction they motivated stands unchanged: the repository is public, so
+  stage by path, never `git add -A`.**
+- ★ **The tree moved mid-filing twice this week.** `d7c4675` landed while the
+  351st filing was being written, as `c17f1b5` and `8d8dbb5` did during the
+  349th. **Re-measure git state before the commit, not only at the start** — a
+  `git status` taken at the start of a filing is a measurement with a shelf
+  life.

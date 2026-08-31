@@ -7425,6 +7425,71 @@ the code stay reconcilable.)*
   `cut_field`, `cut_pages`, `cut_outline_item`, `cut_attachment`,
   `paste_outline_item`.
 
+### 11.7 Implementation record — ONE page-tree reader: the overlay (Pass 186.0, 2026-08-31; decision 111)
+
+*(§11.5 records the overlay design as built; §11.6 the one mechanism the undo
+stack has grown since. This records the correction of a **split** in how that
+overlay was read — the design in §11.5 was right and eight call sites did not
+follow it.)*
+
+**The state this section replaces.** `EditSession` carried **two** page-tree
+readers. The **authoring** verbs used the overlay-aware
+`EditSession::pages()`. **Eight content-editing entry points** used
+`page_tree::pages(&self.base)` — the document **as it was on disk**. Both were
+individually defensible; together they meant a shell's page index and the
+engine's page index could name **different sheets**, with no refusal and no
+disclosure.
+
+**The rule now (decision 111).** **Every operator-facing verb resolves a page
+index through `EditSession::pages()` — the overlay.** A front end computes an
+index against **what the operator is looking at**, which is the overlay by
+definition; a verb resolving that index against the base is **addressing a
+different sheet**.
+
+**Two consequences that follow directly, and are the reason this is a §11
+concern rather than a bug fix:**
+
+- **Content appended this session is part of the page.** `add_image`,
+  `add_text`, `paste_objects` and `flatten_fields` append a new content stream
+  (and often a new resource) into the staging overlay. A base-derived page's
+  `/Contents` does not name it, and `vector/decompose.rs` **emits no object for
+  a `Do` it cannot classify** — so the object was on the canvas and absent from
+  the model. Resolvers (`DocumentXObjects` / `DocumentFonts`) are now built
+  from the **session view**.
+- **Structural page edits move the addresses.** `delete_pages`,
+  `insert_pages`, `reorder_pages` and the merge verbs commit into the overlay.
+  Measured before the fix on `fixtures/synthetic/pageops/four-pages.pdf`: after
+  `delete_pages(&[0])`, `page_objects(3)` on a **three**-page document returned
+  **the text of page four**.
+
+**★ THE ONE NAMED EXCEPTION, and it is narrow on purpose.** `reflow_block`'s
+planner (`plan_reflow_from_doc`) is **base-indexed by necessity** — it needs
+extraction provenance the staging buffer does not carry, which is the same
+reason its pre-existing already-edited refusal exists. Converting it silently
+would splice **one sheet's reflowed bytes into a different sheet's content
+object**: **strictly worse** than the defect being fixed, which at least kept
+both halves consistent with each other. It therefore **refuses by name** when
+the base page at `page_index` is not the overlay page at `page_index`.
+Teaching the planner the overlay is a real feature and is **not** `Pass 186.0`.
+
+**The model-agreement query.** `EditSession::page_content_generation(page_index)
+-> u64` — a 64-bit FNV-1a digest of the decomposition memo's key (page id,
+every `/Contents` entry with its staged span, the effective `/Resources`, and —
+since `Pass 188.0` — every form the walk reached). A shell asserts agreement
+**continuously** instead of decomposing twice. **Three non-promises, documented
+at the verb and in `docs/core-api/`:** it is **not** a content digest, **not**
+stable across sessions or saves, and **not** minimal (it may change when the
+model did not).
+
+**★★ THE TESTING PROPERTY THIS SECTION EXISTS TO PIN.** Base and overlay
+**agree by construction** on a session whose page set has not been structurally
+edited and whose content has not been appended this session. **Every** test in
+`pdfce-core` was of that shape, so all **4,861** passed identically before and
+after the fix. **The property needs TWO VERBS IN ONE SESSION to be observable
+at all.** `crates/pdfce-core/tests/session_overlay_skew.rs` (10 tests) is the
+suite that has that shape; a future refactor that reintroduces a base-only read
+is caught **only** there.
+
 ## 12. Decision log
 
 Append-dated entries here whenever an architectural decision is made
@@ -28545,3 +28610,222 @@ construction.
 **Decision ceiling moves `109` → `110`; next free `111`.** **Standing rule
 ceiling moves `R235` → `R236`** — minted in the same filing, text in
 `ROADMAP.md`'s *Standing rules*.
+
+### 2026-08-31 (three-hundred-and-fifty-first filing) — decision 111: **A PAGE INDEX MEANS THE PAGE AS THE *SESSION* HAS IT. THE ENGINE HAS **ONE** PAGE-TREE READER FOR EVERY OPERATOR-FACING VERB — `EditSession::pages()`, THE OVERLAY — WITH ONE NAMED, NARROW EXCEPTION THAT **REFUSES** RATHER THAN CONVERTING**
+
+**Context.** `Pass 186.0` (`7c2ee96`), answering `pdfceGUI`'s
+`request_edit_verbs_read_the_base_not_the_overlay` (2026-08-31). `EditSession`
+had **two** page-tree readers living side by side: the authoring verbs used the
+overlay-aware `EditSession::pages()`; **eight** content-editing entry points
+used `page_tree::pages(&self.base)` — **the document as it was on disk**. One
+cause, two defects.
+
+**The decision.** **Every operator-facing verb resolves a page index through
+`EditSession::pages()`.** There is no second reader, and adding one is a
+defect rather than an optimisation.
+
+**The rationale, in one sentence, because it is the whole argument.** **A front
+end computes an index against what the operator is looking at — which is the
+overlay, by definition — so any verb that resolves that index against the base
+is addressing a different sheet.** The base is not a stale *view* of the
+document; after a structural page edit it is a **different document with the
+same page numbers**, and page numbers are the one address the two share.
+Nothing about "the file on disk" is the right answer to a question an operator
+asked about the page in front of him.
+
+**What it fixed, measured.**
+
+- **A lost capability.** `add_image`, `add_text`, `paste_objects` and
+  `flatten_fields` append a new content stream (and often a new resource) into
+  the staging overlay only. The base-derived page's `/Contents` never named it,
+  a base-only resolver could not classify the resulting `Do`, and
+  `vector/decompose.rs` **emits no object for a `Do` it cannot classify** — so
+  the shell's decomposition held **N+1** objects, `page_objects` held **N**, and
+  dragging the new one answered `ObjectOutOfRange`. Reported by the operator
+  with his own workaround: *"When I add a new image to a pdf I can't edit it
+  unless I save the document first."*
+- **A wrong-sheet edit that returned `Ok`.** Measured on
+  `fixtures/synthetic/pageops/four-pages.pdf`: after `delete_pages(&[0])`,
+  `page_objects(3)` on a **three**-page document returned **the text of page
+  four**. `delete_objects` on that index destroys real content, with **no
+  refusal and no disclosure**. `pdfceGUI` filed this half as an arithmetic
+  consequence it had explicitly **not** driven; it was driven here and
+  reproduced exactly.
+
+**★★ THE ONE EXCEPTION, NAMED AND NARROW — AND IT REFUSES RATHER THAN
+CONVERTING.** `reflow_block`'s planner (`plan_reflow_from_doc`) is
+**base-indexed by necessity**: it needs extraction provenance the staging
+buffer does not carry — the same reason its pre-existing already-edited refusal
+exists. **Swapping its surrounding reads to the overlay without a guard would
+have spliced one sheet's reflowed bytes into a DIFFERENT sheet's content
+object — strictly worse than the defect being fixed**, which at least kept both
+halves consistent with each other. It therefore **refuses by name** when the
+base page at `page_index` is not the overlay page at `page_index`.
+
+⇒ **Generalisable, and it is the part of this decision most likely to be needed
+again: a consistency fix applied to a half-consistent system can produce an
+inconsistency worse than the one it removes.** Two wrong readings that agree
+with each other are survivable; one right and one wrong is not. **Where a
+component cannot be converted in the same change, it refuses — it does not keep
+its old reading beside the new one.**
+
+**★★★★ THE COROLLARY, RECORDED BECAUSE IT IS THE HALF THAT TRANSFERS.**
+**A base-versus-overlay divergence is INVISIBLE to any test that runs one verb
+per session.** On a session whose page set has not been structurally edited and
+whose content has not been appended this session, **base and overlay agree by
+construction**, so every assertion passes identically with the defect and
+without it. The entire **4,861**-test suite was green before and after the fix
+and **would have stayed green forever**. **The suite was not weak — it was
+VACUOUS with respect to this property, and running it harder would never have
+said so.** The property needs **two verbs in one session** to be observable at
+all; `crates/pdfce-core/tests/session_overlay_skew.rs` (10 tests) is the only
+place in the crate that has that shape.
+
+**The model-agreement query that ships with it.**
+`EditSession::page_content_generation(page_index) -> u64`, asked for **by
+name** by `pdfceGUI`: a 64-bit FNV-1a digest of the decomposition memo's key,
+so a shell can assert agreement continuously instead of decomposing twice.
+**Three non-promises**, documented at the verb and in `docs/core-api/`: not a
+content digest, not stable across sessions or saves, not minimal.
+
+**Named residual, so it is not rediscovered as a new defect.** `edit_text`,
+`format_text` and the two `preview_*` verbs still pass `&self.base` to the text
+planner **as the object resolver**, so a `/Font` created this session cannot be
+resolved through it. **The outcome is a clean refusal, not a wrong edit, and it
+is the same outcome as before `Pass 186.0`.** Filed in `ROADMAP.md`'s *Backlog*
+(threading a view through `text_edit`'s ~40 `doc: &Document` signatures).
+
+**Companion, not duplicate.** Standing rule **`R237`** (minted the same filing)
+governs the **memo key** that caches the decomposition; this decision governs
+**which page tree a verb reads**. `Pass 186.0` needed both, and neither implies
+the other.
+
+**Body-section counterpart:** **§11.7** (added in this filing).
+
+**GUI-core separation:** **not re-verified in this filing and NOT claimed** —
+no code was written here and no crate manifest was touched by the commit; the
+engineer reports `cargo tree -p pdfce-core` / `-p pdfce-render` free of GUI
+deps at `7c2ee96`, and that is his measurement, relayed as such (hard rule 8).
+
+**Decision ceiling moves `110` → `111`; next free `112`** — and `112` is minted
+immediately below, in this same filing.
+
+### 2026-08-31 (three-hundred-and-fifty-first filing) — decision 112: **EDITING INSIDE A SHARED FORM XObject IS EDIT-IN-PLACE, DISCLOSED — FOR *GEOMETRY* AS WELL AS TEXT. THIS *EXTENDS* DECISION `076`; IT DOES NOT REPLACE IT. THE DISCLOSURE IS **STRUCTURED DATA**, DELIBERATELY NOT A SENTENCE**
+
+**Context.** `Pass 188.0` (`a8586cc`), answering `pdfceGUI`'s
+`request_editing_through_recursion_into_a_form_xobject`. A form XObject has
+**one set of bytes** and **§8.10.1 explicitly allows it to be drawn many
+times**, so an edit inside one changes **every place it appears**. `pdfceGUI`
+asked which write contract this project wanted — *require `unshare_form` first*,
+or *edit in place with a disclosure* — and said, correctly, **"what we cannot do
+is guess."**
+
+**★★★ THE ANSWER NEEDED NO NEW RULING, AND SAYING SO IS THE DECISION.**
+**Decision `076` already decided exactly this for editing TEXT inside a form:
+edit in place, disclose, `unshare_form` as the OPTION.** **The argument does not
+change because the operand is a node instead of a glyph** — the container's
+sharing semantics are a property of §8.10.1, not of what is being moved inside
+it.
+
+★ **And this project had already written the extension down by reference.**
+`ROADMAP.md`'s `Pass 136.0`/`136.1` entry (277th filing) states: *"The
+shared-form editing policy question is already ruled (decision 076, extended to
+vector by reference in the 277th filing) — what is unbuilt is the plumbing, not
+the decision."* **This record makes that explicit rather than by-reference**,
+because a policy that exists only as a clause inside another Pass's scope note
+is one a future session will re-open. ⇒ **A decision extended "by reference"
+inside a Pass entry is not findable by anyone looking for the decision.**
+
+**The alternative was considered and DECLINED, for two reasons — recorded so it
+is not re-proposed.**
+
+1. **Two rules for one container is a worse interface than one rule.** Under
+   require-unshare-first, **editing a word in a title block would change twelve
+   sheets while dragging a line two pixels would refuse** — the same container,
+   the same sharing, two opposite behaviours, distinguishable only by what the
+   operator happened to grab. Nothing in §8.10.1 supports that split, and no
+   operator model predicts it.
+2. **Refusing is not neutral.** `unshare_form` **rewrites the document's
+   structure** — it clones the invoked form and privatises the page's
+   `/Resources`/`/XObject` subdict — **as a precondition of a drag.** That is
+   **project rule 3's exact prohibition** (objects pdfce did not logically touch
+   are re-emitted byte-identical or omitted) **with a confirmation step in front
+   of it**, which is precisely the shape rule 4's second narrowing
+   (decision `059`) removed from this project. A refusal that can only be
+   cleared by mutating structure the operator did not ask to mutate is a worse
+   default than an edit that says what it reached.
+
+**★★★ THE DISCLOSURE IS DATA, NOT PROSE, AND THAT IS A LOAD-BEARING CHOICE.**
+`FormSurgeryOutcome` carries **`invocations`** and **`pages`** — separately,
+because they answer **different operator questions**:
+
+| shape | `invocations` / `pages` | what the operator needs to hear |
+|---|---|---|
+| a title block on twelve sheets | **12 / 12** | *"you changed every sheet"* — alarming, correctly |
+| a hatch drawn forty times on one sheet | **40 / 1** | *"you changed this sheet"* — **not** alarming |
+
+**Two reasons the sentence was removed, and the second is the better one.** An
+earlier cut **also** pushed a prose sentence about the reach onto
+`disclosures`; the CLI then **printed the reach twice**. And — the reason that
+generalises — **a sentence generated in the core could never have become the
+consuming shell's one-click offer**: *"this drawing is used on 12 pages; make
+this page's copy separate?"* That offer is the **good** outcome, and it is
+available **precisely because** the unshare is optional and the reach is a
+number the shell can branch on.
+
+⇒ **A disclosure the core renders as prose is a disclosure the shell can only
+re-print. A disclosure the core renders as data is one the shell can act on.**
+This is **project rule 4's** disclosure obligation discharged in its
+**strongest** form — off-canvas, non-blocking, no accept/reject gate — and it is
+the same reasoning decision `059` used to delete provisional-state markings:
+**do not build the shell's UI in the engine.**
+
+**The refusal that ships with it, and is not obvious.**
+`FormLeafSelectionSpansForms` requires a multi-leaf selection to be confined to
+**one INVOCATION**, not merely to one **form**. Two invocations produce leaves
+naming the same form with **different placements**, and their
+`form_object_index` values **collide** — leaf 0 of the first and leaf 3 of the
+second can be **the same bytes**. Accepting such a selection asks pdfce to move
+one object **twice, through two different matrices**; the result is **silently
+wrong rather than refused**.
+
+**Addressing and coordinates, fixed here so a shell can rely on them.** The six
+verbs — `move_node_in_form`, `move_nodes_in_form`, `move_handle_in_form`,
+`move_subpath_in_form`, `move_objects_in_form`, `delete_objects_in_form` — are
+addressed by an index into **`PageObjects::leaves`**, and their coordinates are
+in **PAGE space**. `pdfceGUI` offered two addressing shapes and stated no
+preference; the leaf-scoped one was taken because **widening the existing
+verbs' operands would break six signatures a consuming project already calls,
+for no gain**. `FormLeaf` gains `placement` (the CTM at the form's `Do`,
+composed with its `/Matrix` and every enclosing form's placement) and
+`form_object_index` — the latter **not** derivable from a leaf's position in
+`leaves` once nesting is involved.
+
+**What this decision does NOT cover.** It is scoped to **geometry surgery
+inside a form**. Reflow and `add_text` **inside** a form remain unbuilt
+(`ROADMAP.md` *Planned*); `add_text` additionally needs its own disclosure
+design, because appending changes every invocation site rather than editing in
+place — **the reach disclosure above is about an edit to existing bytes, and an
+append is a different question.** `unshare_form`'s own `FormNestedInAnotherForm`
+refusal (decision `076`) is unchanged.
+
+**Body-section counterpart: none, deliberately.** No crate boundary moves and
+no §4.2 published guarantee changes — `leaves` was already published and its
+**meaning** is unchanged; what changed is that a **write** verb now accepts an
+index into it. The living account of the verbs' contract is
+`docs/core-api/02-editing-and-saving.md` (engineer-owned), following decision
+`076`'s own closing note that a verb-level design policy for one editing
+surgery is `docs/core-api/`'s territory rather than an invariant at this
+document's crate-boundary granularity. **This entry exists because the
+*policy question* was asked by a consuming project and answered by citing an
+existing decision — that answer needs a findable home.**
+
+**GUI-core separation:** **not re-verified in this filing and NOT claimed** —
+no code was written here; the only manifest the Pass touched is
+`fuzz/Cargo.toml`, which is outside the workspace by construction. The engineer
+reports `cargo tree -p pdfce-core` / `-p pdfce-render` free of GUI deps at
+`a8586cc`, relayed as his measurement (hard rule 8).
+
+**Decision ceiling moves `111` → `112`; next free `113`.** **Standing rule
+ceiling moves `R236` → `R237`** — minted in the same filing from `Pass 186.0` +
+`Pass 188.0`, text in `ROADMAP.md`'s *Standing rules*.

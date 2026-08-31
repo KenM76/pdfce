@@ -96,6 +96,591 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 188.0` (`a8586cc`, 2026-08-31) — **★★★★ GEOMETRY INSIDE A FORM XObject IS EDITABLE — SIX LEAF-ADDRESSED VERBS, COORDINATES IN PAGE SPACE, AND A CAPABILITY GAP THAT SYSTEMATICALLY MISSED THE ONE PERSON MOST LIKELY TO REPORT IT** — ★★★ **DECISION `112`: EDIT IN PLACE AND DISCLOSE, EXTENDED FROM DECISION `076`'S *TEXT* RULING TO *GEOMETRY* — NO NEW RULING WAS NEEDED, AND THE PASS SAID SO INSTEAD OF ASKING** — ★★★ **`EditSession::page_objects` RETURNED NO LEAVES AT ALL, WHILE ITS OWN DOC COMMENT CLAIMED EQUIVALENCE TO THE FUNCTION IT RECOMMENDED ITSELF OVER** — ★★ **THE DECOMPOSITION MEMO COULD NOT SEE A FORM EDIT: THE SECOND OCCURRENCE, IN THE SAME CACHE AS `Pass 186.0`'S, ONE LEVEL DEEPER — `R237` IS MINTED FROM THE PAIR** — filed 2026-08-31 (351st filing, together with `Pass 186.0` and `Pass 187.0` below)
+
+**Sourcing (`R228`).** A shell was held and used; **no code was written in this
+filing** and nothing under `crates/`, `fuzz/`, `fixtures/` or `tools/` was
+edited. Measured here, by command: `git log -1 --format=%B` and
+`git show --stat` on all three commits; `git status --porcelain`;
+`git rev-parse HEAD origin/main`; `git rev-list --count origin/main..main`;
+`ls -lt /d/Dev/pdfce-backups/`; `python tools/check-ledger-numbers.py`;
+`ls` on the four new test/fuzz/fixture paths; and a per-verb
+`grep -c` of `crates/pdfce-core/src/edit.rs` against `crates/pdfce-cli/src/`
+to establish the CLI reach of each of the six new verbs (table below).
+**Git state, and the tree MOVED during this filing — both measurements kept.**
+At the start: `HEAD` = **`a8586cc`**, `origin/main` = **`1e63186`**, **3
+commits ahead**, one untracked file (`.g3.log`). Re-measured before the
+commit — per the 349th filing's rule that *on an actively-worked tree,
+re-measure before the commit, not only at the start* — `HEAD` = **`d7c4675`**
+(a `chore(agent-memory)` commit, 15:44:05, four agent-memory files, +121 lines,
+nothing under `crates/`), **4 commits ahead**, and `.g3.log` **is gone** (not
+committed, not ignored). **Neither change touches anything this filing reports
+on, and the three Passes are still NOT pushed.**
+
+#### ★★★★ WHAT WAS MISSING, AND WHY NOBODY FILED IT
+
+`PageObjects::leaves` has been **readable** since form recursion landed: a
+shell can see, name, hit-test and describe every object inside a form XObject
+and walk `containment` to say *"inside Title block"*. It could not **edit** any
+of it. Every geometry verb is addressed by an index into
+`PageObjects::objects`, and a leaf deliberately has no such index — leaves are
+kept out of that list precisely so that eleven page-surgery call sites cannot
+apply a **form-relative** token range to the **page's** stream and corrupt it
+silently. **The reach existed; the write did not.**
+
+`pdfceGUI` measured the cost, and the measurement is the reason this is filed
+as a capability gap rather than a missing nicety:
+
+| fixture | page objects | forms | leaves | leaves per page object |
+|---|---:|---:|---:|---:|
+| print-conformance composite | 28 | 4 | 242 | **8.64** |
+| `ncored-benchmark-cad-drawing` | 129,758 | 1 | 10,256 | **0.079** |
+| a 36-sheet SolidWorks set | 5,903 | 0 | **0** | **0** |
+
+⇒ **On two of three fixtures almost nothing visible was node-editable; on the
+operator's own drawings everything was.** That asymmetry is the finding: **a
+capability gap whose incidence is inversely correlated with the reporter's
+likelihood of hitting it goes unreported for as long as it likes.** The
+operator draws in SolidWorks, whose exports place their content on the page
+stream (0 leaves), so he never met it; the composite and the CAD drawing are
+where it bites, and neither is a document anyone opens to complain about.
+
+#### What shipped
+
+- **Six verbs on `EditSession`**, each addressed by an index into
+  `PageObjects::leaves`, with **coordinates in PAGE space**:
+  `move_node_in_form`, `move_nodes_in_form`, `move_handle_in_form`,
+  `move_subpath_in_form`, `move_objects_in_form`, `delete_objects_in_form`.
+  `pdfceGUI` offered two addressing shapes and stated no preference; the
+  leaf-scoped one was taken because widening the **existing** verbs' operands
+  would break six signatures a consuming project already calls, for no gain.
+- **New public type `FormSurgeryOutcome`**, carrying `invocations` and `pages`
+  — the reach disclosure, as **data** (see decision `112`).
+- **Two new `EditError` variants**: `FormLeafOutOfRange` and
+  `FormLeafSelectionSpansForms`.
+- **`FormLeaf` gains `placement`** (the CTM at the form's `Do`, composed with
+  its `/Matrix` and every enclosing form's placement) **and
+  `form_object_index`** (the object's index in its own form's decomposition,
+  which is **not** derivable from the leaf's position in `leaves` once nesting
+  is involved — a form containing a nested form contributes its own children
+  and then the nested one's, and the two interleave).
+- **`FormLeaf::is_editable()` was a hard `false`** carrying its own note that
+  it was a method *"so that the answer has somewhere to change"*. It changed,
+  and now answers about the **object**: `true` for a path, `false` for anything
+  with no node to drag. **Every claim about the old meaning is corrected in the
+  same commit** — `form_recursion.rs`'s property table, its
+  load-bearing-properties paragraph, the test's own name and doc block, and
+  `linepick.rs`'s *"editing one is not"* note. The engineer's own note on how
+  he found them — *"grep for the CLAIM you falsified, not the section you
+  edited"* — is hard rule 11's practice, executed on the engineer's side of the
+  boundary for once rather than on this role's.
+
+#### ★★★ THE REFUSAL THAT IS NOT OBVIOUS, AND IS THE BEST THING IN THE PASS
+
+`FormLeafSelectionSpansForms` requires a multi-leaf selection to be confined to
+**one INVOCATION**, not merely to one **form**. The obvious guard — same form
+id — is **insufficient**: two invocations produce leaves naming the same form
+with **different placements**, and their `form_object_index` values **collide**
+(leaf 0 of the first and leaf 3 of the second can be the same bytes). Accepting
+such a selection asks pdfce to move one object **twice, through two different
+matrices**, and the result is **silently wrong rather than refused**.
+
+⇒ **A guard keyed on the shared thing is not a guard on the thing that must be
+unique.** This is `R186`'s family (a guard keyed on a marker of the hazard)
+pointed at an identity rather than at a hazard, and it was caught by
+construction rather than by a test failure.
+
+#### ★★★ TWO DEFECTS FOUND WHILE BUILDING IT — BOTH IN CODE THAT WAS ALREADY SHIPPING
+
+**(1) `EditSession::page_objects` returned NO LEAVES AT ALL.** Its
+documentation says it returns *"the same model `vector::decompose_page` returns
+for `self.view()`"* and tells a shell to *"use this instead of
+`vector::decompose_page`"* for a measured **385 ms → 0 ms** win. It was not the
+same model: the descent into forms happens **after** `decompose_with_fonts`
+returns, and this cache never ran it. **A shell that took the advice silently
+lost its entire deep-selection model** — 242 objects on the composite, 10,256
+on the CAD drawing — and the symptom would have been *"nothing inside a form is
+selectable"*, **indistinguishable from the gap this Pass fills.** Nothing
+caught it because **nothing in this crate read `leaves` off `page_objects`**
+until these verbs did.
+
+⇒ Recorded as **`R93`'s fifth instance** (see *Standing rules*): a doc comment
+asserting a cross-module equivalence is a **claim**, not a guarantee — and this
+one was worse than unverified, because it also **recommended itself over the
+thing it claimed to equal**, so following the documentation was the way to lose
+the model. **Not minted as a new rule** — see the standing-rule disposition
+below.
+
+**(2) The decomposition memo could not see a form edit.** `PageModelKey` covers
+the page's id, its `/Contents` spans and its `/Resources` — **none of which a
+form-stream rewrite touches**. So all six new verbs returned `Ok` while the
+model insisted nothing had happened. The cache now also records **every form
+the walk reached**, taken from its **OUTPUT** (`containment` names them),
+because *which forms a page paints cannot be computed before the walk*.
+**Same class as `Pass 186.0`'s widening, one level deeper** — and that pair is
+what mints **`R237`**.
+
+#### Tests, and the fixture that had to be built
+
+`crates/pdfce-core/tests/form_geometry_edit.rs`, **14 tests**.
+
+★ **Every pre-existing form fixture places its form with a pure TRANSLATION**,
+and a translation is exactly the transform under which a wrong page-space →
+form-space conversion **still looks plausible**: a 10 pt drag moves 10 pt
+either way, just from the wrong origin. The new
+`fixtures/synthetic/forms-xobject/scaled-form-placement.pdf` (generated by
+`tools/gen-form-recursion-fixtures.py`, `LEGAL.md` §5 category (a)) places its
+form at `2 0 0 2 40 30 cm`, so an identity-decomposed form moves a node by
+**twice** the requested distance and the answers differ **in magnitude**.
+
+⇒ **A fixture set can be complete in coverage and degenerate in
+discrimination.** Seven form fixtures existed; all seven were blind to this
+class, because they all shared one property nobody had listed as a property.
+
+**Two sabotages, run separately:** reverting the placement to
+`Matrix::IDENTITY` reddens **3**; disabling the form half of the memo key
+reddens **6**.
+
+★ **One assertion was wrong and the correction is recorded at the test rather
+than silently applied:** dragging a rectangle corner **inward** does not change
+the object's bounding box, because the two adjacent corners still hold the
+extremes. **A bounding box is a lossy instrument for a node move.** The test
+now drags **outward** and asserts the subpath's start in **form-space**
+coordinates.
+
+#### Fuzz
+
+`fuzz/fuzz_targets/form_geometry_sequence.rs`. The existing `vector_edit`
+target drives the **planners** over one already-parsed content stream and
+**cannot reach any of this Pass's machinery** — leaf resolution, the
+containment walk, re-decomposing a form from its placement, the selection
+guard, the reach count across the page tree. All of that is index arithmetic
+and graph-walking over attacker-controlled structure, which is what §10.2 asks
+to be driven. Seeded from the seven form fixtures.
+
+**Run: 301,952 executions in 421 s = 717 exec/s, 0 crashes, 0 artifacts.**
+Degenerate placements (`cm` of zeros) and `NaN`/infinite targets are in the
+operand set **deliberately**.
+
+★ **This is `R236` being satisfied for a new verb family at the moment the
+family ships, rather than a target owed and deferred** — which is the first
+time that has happened since `R236` was minted one day earlier. It does **not**
+discharge `R236`'s named uncovered site (annotation deletion,
+`edit.rs:21669`); see *For next session*.
+
+#### CLI
+
+`subpath-move` and `node-move` take **`--leaf N`** as an alternative to
+`--object N`; **exactly one is required**, and passing both or neither is
+**refused by name** rather than resolved by a precedence rule.
+`object-list`'s leaf rows gain `in_form_index=` and `placement=`, and
+**`editable=` is real** — it was a hard-coded `editable=false`, which became a
+**false claim in shipped output** the moment these verbs landed. Driven against
+the binary, not trusted from the unit tests.
+
+⇒ The `editable=false` literal is filed as a fresh instance of **`R180`** (a
+change to a capability falsifies the sentences describing its prior, more
+limited state — and `R180`'s practical form already names shipped operator-
+visible strings by name). **Not minted as a new rule**; see the disposition
+below.
+
+#### ★★ THE CLI REACH, MEASURED PER VERB SO THE `FEATURES.md` TICK CANNOT BE ROUNDED UP
+
+`grep -c` of each verb over `crates/pdfce-core/src/edit.rs` and
+`crates/pdfce-cli/src/`:
+
+| verb | core | cli callers |
+|---|---:|---:|
+| `move_node_in_form` | 6 | **1** |
+| `move_subpath_in_form` | 1 | **1** |
+| `move_nodes_in_form` | 1 | **0** |
+| `move_handle_in_form` | 1 | **0** |
+| `move_objects_in_form` | 2 | **0** |
+| `delete_objects_in_form` | 1 | **0** |
+| `page_content_generation` (`Pass 186.0`) | 2 | **0** |
+
+⇒ **2 of 6 form verbs reach a shell; 4 of 6 do not.** `FEATURES.md`'s `cli`
+column for this capability is therefore **`◐`, not `[x]`** — the dispatch
+proposed `[x]` with the gap stated in the row's sentence, and this filing takes
+the legend's own middle mark instead, because the legend defines `◐` for
+exactly this and a `[x]` beside a sentence saying *"four of six are core-only"*
+is a tick a later reader will quote without the sentence. **`R151`'s precedent
+holds** — a core capability no shell reaches is a **signal**, not an
+embarrassment — and this is the partial form of it.
+
+#### Ledger (`Pass 188.0`)
+
+- **Pass IDs.** `188.0` filed. Next free in-family **`188.1`**; next new major
+  **`189.0`**.
+- **Decisions.** **`111` and `112` both minted this filing** (`ARCHITECTURE.md`
+  §12); `112` is this Pass's, `111` is `Pass 186.0`'s. Ceiling `110` → `112`;
+  next free **`113`**.
+- **Standing rules.** **`R237` minted** from `Pass 186.0` + `Pass 188.0`
+  together; ceiling `R236` → `R237`, next free **`R238`**. Two further
+  candidates **declined**, both with reasons, both recorded under *Standing
+  rules* — see the disposition block there.
+- **`FEATURES.md`** — one new row in *Vector objects*
+  (core `[x]` · cli **`◐`** · gui `[ ]`).
+- **Body-section counterpart.** `ARCHITECTURE.md` §12 decision `112` only. No
+  crate boundary moves and no §4.2 published guarantee changes: `leaves` was
+  already published and its **meaning** is unchanged; what changed is that a
+  **write** verb now accepts an index into it.
+
+---
+
+### `Pass 187.0` (`52beaf6`, 2026-08-31) — **★★★★ A RESIZED WIDGET IS REDRAWN AT THE NEW SIZE, NOT STRETCHED INTO IT — ONE REPORTED DEFECT WAS FOUR, ALL THE SAME SHAPE** — ★★★★ **THE WORST OF THE FOUR SILENTLY DISCARDED THE RESIZE AND REPORTED `resized: true` WITH A `rect_after` NAMING A BOX NEVER WRITTEN: EVERY ASSERTION ANYONE HAD WRITTEN WAS ON THE OUTCOME, AND THE OUTCOME WAS A LIE** — ★★★ **THE REGENERATOR THAT EXISTED TO PREVENT THE STRETCH REPRODUCED IT FAITHFULLY, AT THE OLD SIZE, WHILE ITS OWN DOC COMMENT ASSERTED THE OPPOSITE** — ★★ **THE REFUSE-VS-DISCLOSE ASYMMETRY `pdfceGUI` DECLINED TO RESOLVE IS RESOLVED UNDER `R206`: THE TWO VERBS NOW AGREE, AND THE DEFAULT IS THE REFUSAL** — filed 2026-08-31 (351st filing)
+
+**Sourcing.** As for `Pass 188.0` above — same shell, same commands, one
+filing.
+
+#### The shape all four share, stated once
+
+A widget's appearance is a form XObject whose `/BBox` **§12.5.5 maps onto the
+annotation's `/Rect`**. So **artwork that does not follow a resize is not "the
+old artwork" — it is the old artwork MAGNIFIED**, anisotropically, by
+`Δw/Δh`. Every one of the four defects below is that sentence with a different
+route into it.
+
+#### ROUTE 1 — the reported one
+
+`regen_after_property_change` answered `Ok(false)` for **every field type
+except Text and Choice**, so a check box, radio button or push button was
+**never redrawn at all**. Drag a 12 pt check box to 40 pt and pdfce's own 1 pt
+border draws at **~3.3 pt**. The operator: *"Form shape outlines of checkboxes
+and such scale when I drag them larger."*
+
+★ **And that is the case `resize_annotation` REFUSES BY NAME for a foreign
+appearance.** The widget path took the same unsatisfiable operation
+**silently**, on artwork **pdfce itself drew** and could therefore have rebuilt
+exactly. ⇒ **Two verbs facing the same impossibility, one refusing and one
+proceeding in silence, is a defect even before you decide which is right** —
+which is what `R206` is for, and is why the resolution below is a
+*reconciliation* rather than a preference.
+
+`/Btn` now goes through `regen_button_appearance`. **Ownership is decided by
+BYTES** — rebuild from the **unmodified** geometry and compare, the same test
+`resize_annotation` and `set_markup_style` already use. *"Could pdfce draw a
+check box like this?"* is true of **every conforming check box in existence**,
+which is precisely the set that must not be touched. All-or-nothing across a
+field's widgets, so **a radio group cannot come out half-restyled**.
+
+#### ★★ ROUTE 2 — Text and Choice WERE rebuilt, at the OLD size
+
+The regenerator reads `field.widgets[i].rect`, a snapshot taken **before** the
+caller stages its `/Rect` write. **Measured:** a text field dragged
+**100×24 → 300×100** came back with `/AP` `/BBox [0 0 100 24]` — *a
+regeneration that faithfully reproduced the defect it existed to prevent*, then
+handed it to §12.5.5 to stretch **3× by 4.17×**.
+
+`edit_widget`'s own doc comment asserted the opposite — *"rebuilds the
+appearance whenever the extent changes … keeps the correct case correct"* — so
+**the claim, the code and the pixels disagreed three ways**. Nobody had looked
+because **an empty text field's stretched border reads as a border**.
+
+#### ROUTE 3 — a push button's caption change redrew nothing
+
+The caption is painted **into** the plate, and `needs_regen` did not include
+`edit.caption.is_some()`. So `/MK` `/CA` changed, the field list showed the new
+word, and **the button kept displaying the old one**.
+
+#### ★★★ ROUTE 4 — THE WORST, FOUND BY READING RATHER THAN BY A REPORT
+
+On a **Shape-B** widget — a separate dictionary under a `/Kids` parent, which
+is what a field placed on three pages looks like and what **every radio group
+is** — `set_widget_ap` built a **whole-dictionary write from the PRE-command
+dictionary** and pushed it onto the command. Writes apply in order, last one
+winning, so that `/AP` write **silently discarded the `/Rect` write staged
+moments earlier**.
+
+Measured on `forms/multi-widget-form.pdf`, resizing **140×22 → 380×100**:
+
+| observed | value | reading |
+|---|---|---|
+| `/Rect` after | **140 × 22** | the resize, thrown away |
+| `/AP` `/BBox` | **380 × 100** | the rebuild, applied |
+| `outcome.resized` | `true` | |
+| `outcome.rect_after` | `Rect { .. 400, 250 }` | **a box never written** |
+
+A widget whose artwork §12.5.5 must now **squash into a third of its size**,
+from a call that returned `Ok`.
+
+★★★★ **EVERY ASSERTION ANYONE HAD WRITTEN WAS ON THE OUTCOME, AND THE OUTCOME
+WAS A LIE — which is why 4,861 passing tests said nothing.** Shape A (the
+one-widget field, where the field dictionary **is** the widget) took the
+`merged_ap` branch, which has always folded correctly. **The bug needed a
+multi-widget field, and multi-widget fields are exactly the ones nobody resizes
+in a test.**
+
+⇒ **The reusable half, and it is `R159`'s mechanism pointed at a different
+instrument:** an outcome struct is a **reader the verb writes itself**, so
+asserting on it can only ever see what the verb *believes*. `R159` says a
+defect that lives in the BYTES must be asserted in the BYTES; here the lenient
+"parser" was the verb's own return value. The new test file asserts on the
+`/AP` `/BBox`, not on the outcome — **on three of these four routes the outcome
+was correct and the bytes were not.**
+
+Fixed by **folding `/AP` into the write already in flight** rather than adding
+a second one. `rotate_widget` was on the same path and is fixed by the same
+change.
+
+#### ★★ THE BEHAVIOUR CHANGE, WHICH IS THE PART A CONSUMING SHELL MUST READ
+
+`WidgetEdit` now carries a whole **`ResizeOptions`** — the same type
+`resize_annotation` takes, **reused rather than copied so a shell cannot mirror
+`keep_rect_differences`' opt-OUT spelling backwards.** `pdfceGUI` shipped the
+operator's three Inkscape switches on 2026-08-28 and they were **structurally
+unreachable** from a form field; they reach one now, and **their answer is
+passed through, never derived**.
+
+`pdfceGUI` named the refuse-vs-disclose asymmetry between `resize_annotation`
+and `edit_widget` and **explicitly declined to resolve it** — correctly, that
+is this side's call under **`R206`**. The two verbs now **agree**, and the
+default is `resize_annotation`'s: **refuse**, with
+**`allow_appearance_distortion`** as the escape hatch. New `EditError` usage:
+`ResizeAppearanceNotRebuildable { subtype: "Widget", .. }`. **A silent stretch
+is exactly the report that opened this Pass.**
+
+**The refusal is narrow by construction:** it needs a real change of **extent**,
+**AND** artwork pdfce did not draw, **AND** neither escape — because a uniform
+scale with `scale_stroke_width` on is satisfied **exactly** by §12.5.5's matrix,
+and refusing it would refuse a resize that comes out right. A border or caption
+change on an unrebuildable field **still proceeds with a disclosure**: nothing
+is stretched when the geometry did not move.
+
+Two new outcome fields, `stroke_width` and `rect_differences_scaled`, **named
+and meaning exactly what their `AnnotationResize` twins do**.
+
+#### ★ NOT DONE, DELIBERATELY — filed so it is not smuggled in later
+
+**`/BS` `/W` still does not change a check box's or radio button's drawn
+border**, which pdfce authors at a fixed **1.0**. That is **the artwork's
+existing contract**, not an oversight: changing it would alter how **every
+pdfce-authored check box already in the wild** renders. That is a decision to
+take on its own terms, with the operator, and not under a bug report. **Filed
+as a Backlog item this filing.**
+
+**Rounded corners:** `pdfceGUI` checked and there is **nothing to scale**; no
+engine work was requested and none was done. Their closing line is **adopted as
+the standing answer** — a genuine toggle needs a **rounded-rectangle
+primitive** first, scoped with the operator, not improvised under a bug report.
+
+#### CLI
+
+`pdfce-cli edit-widget` gains `--scale-stroke-width`, `--keep-rect-differences`
+and `--allow-appearance-distortion`, **spelled as `resize-annotation` spells
+them**, and prints both new disclosures. **Driven against the binary rather
+than trusted from the unit tests** — a shell flag can be parsed and never used,
+and unit tests hit core directly.
+
+#### Tests
+
+`crates/pdfce-core/tests/widget_resize_appearance.rs`, **9 tests**, asserting
+on the `/AP` `/BBox` rather than on the outcome. **Six sabotages run
+separately, each caught by exactly the tests that should catch it:** old-rect
+regen (**2**), button regen ignoring the staged rect (**2**), `/Btn` falling
+through to `Ok(false)` (**5**), the Shape-B fold removed (**1**), the caption
+trigger removed (**1**), the ownership test always answering "ours" (**1**).
+**Sum of caught-by counts = 12 over 6 sabotages = 2.0 tests per sabotage**;
+every sabotage was caught by at least one, and no sabotage survived.
+
+The foreign-artwork case uses a **real fixture rather than a mock**:
+`forms/demo-form.pdf` carries a hand-authored check box whose `/AP` is
+`0 0 14 14 re f 4 4 6 6 re f`.
+
+#### Ledger (`Pass 187.0`)
+
+- **Pass IDs.** `187.0` filed. Next free in-family **`187.1`**.
+- **Decisions.** None minted for this Pass — the refuse-vs-disclose
+  reconciliation is **`R206` applied**, not a new architectural boundary, and
+  `R206`'s own text is the record.
+- **Standing rules.** None minted for this Pass.
+- **`FEATURES.md`** — the *Forms (AcroForm)* **Move and resize a widget** row's
+  sentence is **replaced** (not appended to), because the old sentence's
+  `regenerated=1` claim was true only for Text and Choice and only at the old
+  size. Boxes unchanged: core `[x]` · cli `[x]` · gui `[ ]`.
+- **Backlog.** One entry added: `/BS` `/W` as a check-box/radio border width.
+
+---
+
+### `Pass 186.0` (`7c2ee96`, 2026-08-31) — **★★★★ EVERY CONTENT-EDITING VERB READS THE SESSION, NOT THE DISK — ONE CAUSE, TWO DEFECTS, AND THE SECOND ONE ADDRESSED A DIFFERENT SHEET AND RETURNED `Ok`** — ★★★★ **THE ENTIRE 4,861-TEST SUITE WAS GREEN BEFORE *AND* AFTER THE FIX: IT WAS NOT WEAK, IT WAS ***VACUOUS*** WITH RESPECT TO THE PROPERTY, AND THE PROPERTY NEEDS TWO VERBS IN ONE SESSION TO BE VISIBLE AT ALL** — ★★★ **DECISION `111`: A PAGE INDEX MEANS THE PAGE AS THE SESSION HAS IT** — ★★ **THE FIX CREATED A HAZARD STRICTLY WORSE THAN THE DEFECT AND HAD TO GUARD IT: `reflow_block` NOW REFUSES BY NAME** — filed 2026-08-31 (351st filing)
+
+**Sourcing.** As for `Pass 188.0` above — same shell, same commands, one
+filing. Answers `pdfceGUI`'s
+`request_edit_verbs_read_the_base_not_the_overlay` (2026-08-31,
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`).
+
+#### The cause
+
+`EditSession` had **two page-tree readers living side by side**. The authoring
+verbs used the overlay-aware `EditSession::pages()`; **eight content-editing
+entry points** used `page_tree::pages(&self.base)` — **the document as it was
+on disk**.
+
+#### DEFECT 1 — a lost capability, reported by the operator with its own workaround
+
+`add_image`, `paste_objects`, `flatten_fields` and `add_text` append a **new
+content stream**, and the first and last add a **new resource**. All of it
+lands in the staging overlay and **none of it exists in the base**. So the
+base-derived page's `/Contents` did not name the appended stream, a base-only
+resolver could not classify the resulting `Do` — and **`vector/decompose.rs`
+emits NO object for a `Do` it cannot classify.**
+
+The object was therefore **visible on the canvas and absent from the model the
+geometry verbs address**: the shell's decomposition held **N+1** objects,
+`page_objects` held **N**, and dragging the new one answered
+`ObjectOutOfRange`.
+
+The operator found the workaround himself and reported it as one: *"When I add
+a new image to a pdf I can't edit it unless I save the document first. I assume
+this probably affects more than just images."* **He was right, and the class
+was wider than he guessed.**
+
+#### ★★★★ DEFECT 2 — NOBODY HAD REPORTED IT: THE VERBS ADDRESSED A DIFFERENT SHEET
+
+`delete_pages`, `insert_pages`, `reorder_pages` and the merge verbs all commit
+into the **overlay**, so the base still held the original page order and count.
+**A shell computes a page index against the overlay — as it must, because that
+is what the operator is looking at — and handed it to a verb that resolved it
+against the base.**
+
+Delete page one, and what the operator calls page 0 was planned and committed
+against a **different sheet**, with **no refusal and no disclosure**.
+`delete_objects` there **destroys real content and returns `Ok`**.
+
+`pdfceGUI` filed this half as an **arithmetic consequence** of a measured count
+mismatch, explicitly **not driven**, because it needs a fixture with
+distinguishable per-page content. **It was driven here** on
+`fixtures/synthetic/pageops/four-pages.pdf` and **reproduced exactly**: before
+this commit, `page_objects(3)` on a **three**-page document returned **the text
+of page four**.
+
+#### What changed
+
+- The **eight** `page_tree::pages(&self.base)?` sites become `self.pages()?`.
+- `current_page_content` collapses **from two branches to one**:
+  `ContentStream::from_page(&self.view(), page)`. The old staged branch read
+  the first content object's staged bytes directly and **could not see a stream
+  appended beside it**; the old base branch **could not see a staged stream at
+  all**. The "double-handling" worry the base branch documented **does not
+  apply** — `make_raw_stream` writes `/Length` and nothing else, so
+  `decode_stream` runs an empty filter chain and hands the raw bytes straight
+  back.
+- `page_content_and_objects` and the two `&self` decomposition helpers build
+  `DocumentXObjects` / `DocumentFonts` from the **session view**. Their previous
+  comment reasoned that *"page `/Resources` are not rewritten by content
+  surgery, so base and session agree on them"* — **true of content surgery,
+  false of `add_image` and `add_text`.** ⇒ `R93` again: a doc comment stating a
+  cross-module invariant, true of the case it was written against and never
+  re-checked against the ones added since.
+- `ContentStream::from_page` **no longer emits a separator before an EMPTY
+  payload**. `text_edit_command` folds a multi-stream page into its first
+  object and empties the rest **in place**, so an unconditional separator would
+  append **one whitespace byte per emptied stream on every re-read** — and **a
+  session re-reads its own content on every subsequent edit.** An unbounded
+  growth defect, found only because the branch collapse made it reachable.
+- **The decomposition memo's key is widened** from `(first content id, its
+  staged span)` to **the whole dependency set**: page id, every `/Contents`
+  entry with its staged span, and the effective `/Resources`. `add_image`
+  touches **none** of the old key's inputs, so the memo served the pre-insert
+  model back — **and a stale index is not a stale answer, it is an edit applied
+  to the wrong object.** (First of the two occurrences that mint **`R237`**;
+  the second is `Pass 188.0`'s form half.)
+- **New verb `EditSession::page_content_generation(page_index) -> u64`**, asked
+  for **by name** by `pdfceGUI`: a 64-bit FNV-1a digest of that same key, so a
+  shell can assert model agreement **continuously** instead of decomposing
+  twice. Its **three non-promises** — not a content digest, not stable across
+  sessions or saves, not minimal — are documented **at the verb and in
+  `docs/core-api/`**.
+
+#### ★★ A HAZARD THIS PASS CREATED AND HAD TO GUARD
+
+`reflow_block`'s planner is **base-indexed**: `plan_reflow_from_doc` takes
+`(&self.base, page_index)` and **re-derives the page itself**. Swapping the
+surrounding reads to the overlay **without a guard** would have made it splice
+**one sheet's reflowed bytes into a DIFFERENT sheet's content object** —
+**strictly worse than the defect being fixed**, which at least kept both halves
+consistent with each other.
+
+It now **refuses by name** when the base page at `page_index` is not the
+overlay page at `page_index`. Teaching the planner the overlay is a **real
+feature** — it needs extraction provenance the staging buffer does not carry,
+the same reason its existing already-edited refusal exists — and **is not this
+Pass**.
+
+⇒ **A consistency fix applied to a half-consistent system can produce an
+inconsistency worse than the one it removes.** Two wrong readings that agree
+with each other are survivable; one right and one wrong is not. **The guard, not
+the swap, is the load-bearing part of this Pass.** Recorded in decision `111` as
+the rule's one named, narrow exception.
+
+#### ★★★★ WHY THE ENTIRE EXISTING SUITE WAS GREEN ON BOTH HALVES — THE REUSABLE HALF
+
+**Every test in this crate that exercised a content-editing verb did so on a
+session whose page set had not been structurally edited and whose content had
+not been appended to this session.** On such a session **base and overlay agree
+by construction**, so every assertion passed **identically before and after**.
+The full workspace run was green on the first try after the fix, **and would
+have stayed green forever without it**.
+
+⇒ **The suite was not weak — it was VACUOUS with respect to this property, and
+running it harder would never have said so. The property needs TWO VERBS IN ONE
+SESSION to be visible at all.**
+
+This is the sharpest instance this project has recorded of the difference
+between *coverage* and *discrimination*: **4,861 tests, 0 of which could
+distinguish the two states.** A per-verb test suite tests verbs; a property
+that only exists **between** verbs has no home in it. Sits beside `R159` (an
+instrument that repairs the reading on the way out) and `Pass 188.0`'s
+seven-fixtures-one-blind-spot finding — **three different ways for a complete-
+looking measurement to be blind by construction, two of them in this one
+filing.**
+
+#### Tests
+
+`crates/pdfce-core/tests/session_overlay_skew.rs`, **10 tests**, all of the
+two-verbs-in-one-session shape. **Three sabotages run separately:** reverting
+the page tree reddens **10 of 10**; reverting the resolvers reddens **5**;
+narrowing the cache key reddens **4**.
+
+★ **Two tests survived the first sabotage and were STRENGTHENED rather than
+kept** — one was **vacuous** (it compared a post-image count against a baseline
+taken *after* the image, so both measurements were the base count while the
+image was being erased) and one **passed for the wrong reason** (deleting the
+**last** page made `page_objects(3)` fail for an unrelated resolution error
+that *looked like* the right answer). That is `NEXT_SESSION.md` §C item 4's
+three-causes-of-a-surviving-sabotage checklist, applied and paying out on its
+first use after being written down.
+
+#### ★ RESIDUAL, NAMED SO IT IS NOT REDISCOVERED AS A NEW BUG
+
+`edit_text`, `format_text` and the two `preview_*` verbs pass `&self.base` to
+the text planner as the **object resolver**, so a `/Font` created this session
+is named by the overlay page's `/Resources` and **cannot be resolved through
+it**. The outcome is a **clean refusal, not a wrong edit**, and it is **the
+same outcome as before this Pass** — the resource used to be *invisible* and is
+now *unresolvable*. Fixing it means threading a view through `text_edit`'s
+**~40 `doc: &Document` signatures**. **Filed as a Backlog item this filing.**
+
+**Not affected, verified rather than assumed:** annotations are addressed by
+`ObjId` through the overlay-aware `value()` / `locate_annotation()` / `graph()`,
+so markup, ce dimensions, form fields, adopted widgets, redaction marks,
+attachments and bookmarks **were editable the instant they were authored and
+still are**.
+
+#### Ledger (`Pass 186.0`)
+
+- **Pass IDs.** `186.0` filed. Next free in-family **`186.1`**.
+- **Decisions.** **`111` minted** (`ARCHITECTURE.md` §12), with body-section
+  counterpart **§11.7** added in the same filing.
+- **Standing rules.** **`R237` minted** from this Pass's memo widening plus
+  `Pass 188.0`'s; see *Standing rules*.
+- **`FEATURES.md`** — two new rows in *Vector objects*: the
+  edit-content-added-this-session capability (core `[x]` · cli `[x]` · gui
+  `[ ]`) and `page_content_generation` (core `[x]` · cli `[ ]` · gui `[ ]`).
+- **Backlog.** One entry added: the `text_edit` resolver residual.
+
+---
+
 ### `Pass 185.2` (`c17f1b5`, 2026-08-30) — **★★★★ THE OPEN ITEM `Pass 185.1` FILED ONE COMMIT AGO IS CLOSED, AND IT WAS NEVER A SECOND CLASS: THE SAME VERB, THE SAME `NoPageTreeRoot`, WALKING THROUGH THE GUARD BECAUSE THE GUARD WAS BUILT FROM THE THING IT WAS PROTECTING** — ★★★ **A GUARD BUILT FROM *"THE TREE"* IS NOT A GUARD AGAINST *LOSING* THE TREE: THE CATALOG POINTS AT THE PAGE TREE AND IS NOT IN IT** — ★★ **THE SYMPTOM NAMED IT FROM THE FIRST CRASH — `NoPageTreeRoot`, NOT `NoPages` — AND WAS READ PAST, IN EVERY PANIC MESSAGE INCLUDING THE ONES QUOTED IN THE PREVIOUS COMMIT** — filed 2026-08-30 (349th filing, together with `Pass 185.1` below)
 
 ★★★★ **FILED HERE UNASKED, AND THE REASON IS THE WHOLE POINT OF THE DISPATCH
@@ -20395,6 +20980,19 @@ the recursion needs a vector-side invocation census first — `FormLeaf`'s
 shared-form editing *policy* question is already ruled (decision 076,
 extended to vector by reference in the 277th filing) — what is unbuilt is
 the plumbing, not the decision.
+
+**★ AMENDMENT FOOTER, 2026-08-31 (351st filing) — THE PLUMBING IS BUILT AND
+THE "BY REFERENCE" EXTENSION IS NOW ITS OWN RECORD.** `Pass 188.0`
+(`a8586cc`) ships six leaf-addressed geometry verbs, so **"read access only"
+above is history, not current state**, and `FormLeaf::is_editable()` no
+longer returns a hard `false` — it answers about the **object** (`true` for a
+path). **The sentence immediately above is also the reason decision `112`
+exists**: this entry recorded the extension of decision `076` to vector *by
+reference, inside another Pass's scope note*, where nobody looking for the
+decision could find it — which is why the consuming project asked the
+question again and why `112` states it as its own §12 record. ⇒ **A decision
+extended "by reference" inside a Pass entry is not findable by anyone looking
+for the decision.** Nothing above is rewritten; this footer is the pointer.
 
 #### Tests + gates (as supplied by the engineer, this Pass covers both `136.0` and `136.1`)
 
@@ -105604,6 +106202,52 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### Unscoped — **the text planner's resolver still reads the BASE, so a `/Font` created this session cannot be resolved** — filed 2026-08-31 (351st filing, `Pass 186.0`'s named residual)
+
+**This is a NAMED RESIDUAL, not a newly-found bug.** `Pass 186.0` moved eight
+content-editing entry points from `page_tree::pages(&self.base)` to
+`self.pages()` (decision `111`). **Four verbs still pass `&self.base` to the
+text planner as the object RESOLVER**: `edit_text`, `format_text` and the two
+`preview_*` verbs. A `/Font` created this session is named by the **overlay**
+page's `/Resources` and therefore cannot be resolved through a base-only
+resolver.
+
+**The outcome is a CLEAN REFUSAL, not a wrong edit** — and it is **the same
+outcome as before `Pass 186.0`**: the resource used to be *invisible* (no
+refusal, no object) and is now *unresolvable* (a named refusal). **No
+regression; a residual.**
+
+**Why it is not scheduled.** Fixing it means threading a view through
+`text_edit`'s **~40 `doc: &Document` signatures** — a mechanical but wide
+change across the crate's most defect-prone module, and `NEXT_SESSION.md`'s own
+warning (*"the difficulty of the obvious implementation is not the difficulty
+of the problem"*) cuts **both** ways here: it is genuinely wide, and it should
+be re-sized before it is scheduled rather than assumed to be a refactor.
+
+★ **Filed so a future session does not rediscover it as a new defect** and
+spend a day proving something already written down. The visible symptom is
+`edit-text`/`format-text` refusing on a page whose font was added by
+`add_text` earlier in the same session.
+
+### Unscoped — **`/BS` `/W` does not change a check box's or radio button's DRAWN border** — filed 2026-08-31 (351st filing, `Pass 187.0`'s deliberate omission)
+
+pdfce authors a check box's and radio button's border at a **fixed 1.0**, and
+`Pass 187.0` deliberately did **not** change that while fixing four separate
+appearance-regeneration defects around it. **That is the artwork's existing
+contract, not an oversight.**
+
+**Why it was excluded from `Pass 187.0`.** Honouring `/BS` `/W` here would
+alter **how every pdfce-authored check box already in the wild renders** on the
+next regeneration — a fill, a resize or a border change would silently redraw
+an existing document's boxes at a different weight. **That is a decision to
+take on its own terms, with the operator, and not under a bug report.**
+
+**Adjacent and already answered, recorded so it is not re-raised:** *rounded
+corners*. `pdfceGUI` checked and there is **nothing to scale** — no engine work
+was requested and none was done. Their closing line is **adopted as the
+standing answer**: a genuine rounded-corner toggle needs a **rounded-rectangle
+primitive** first, scoped with the operator, not improvised.
+
 ### Unscoped — **rustdoc-cleanliness gate** — filed 2026-08-29 (317th filing, `Pass 161.0`'s Finding 3)
 
 **Measured, not estimated.** `cargo doc --workspace --no-deps` emits **373
@@ -116613,6 +117257,41 @@ not a judgment call:**
   *shelf life*; `R221` two *computed* copies of one predicate; `R222` a
   claim's copies in *format strings*. None is this. Minting per occurrence
   is forbidden by the 2026-08-05 ruling. **Ceiling unmoved at `R224`.**
+
+  **★★★ FIFTH INSTANCE, AMENDED 2026-08-31 (351st filing), from `Pass 188.0`
+  (`a8586cc`): AN EQUIVALENCE CLAIM THAT ALSO RECOMMENDS ITSELF OVER THE THING
+  IT CLAIMS TO EQUAL IS NOT A DESCRIPTION, IT IS AN INSTRUCTION — AND
+  FOLLOWING IT WAS THE WAY TO LOSE THE MODEL.**
+  `EditSession::page_objects`' doc comment said it returned *"the same model
+  `vector::decompose_page` returns for `self.view()`"* and told a shell to
+  *"use this instead of `vector::decompose_page`"* on a measured
+  **385 ms → 0 ms** argument. It returned **that model minus every leaf**: the
+  descent into forms happens **after** `decompose_with_fonts` returns, and this
+  cache never ran it. **242 leaves missing on the print-conformance composite;
+  10,256 on the CAD drawing.** The symptom a shell taking the advice would see
+  — *"nothing inside a form is selectable"* — is **indistinguishable from the
+  capability gap `Pass 188.0` was written to close**, so it could not have been
+  diagnosed from the outside either.
+  **Why nothing caught it:** **nothing in this crate read `leaves` off
+  `page_objects`** until `Pass 188.0`'s six form verbs did — `R151`'s shape
+  seen from the *reader's* side (a published field with no consumer inside the
+  crate that publishes it).
+  ★ **REMEDY CLAUSE ADDED BY THIS INSTANCE, and it is deliberately narrow
+  enough to be free:** where a doc comment says *"the same … as X"* or *"use
+  this instead of X"*, discharge it with a **differential test** — assert the
+  two agree on **one real fixture**. Not a general "test every comment" duty:
+  the trigger is the **word of equivalence**, which is rare, greppable, and
+  exactly the claim a consumer will act on. A performance argument beside it
+  raises the stakes rather than the evidence.
+  **The engineer's own practice, recorded because it worked:** every claim
+  about `FormLeaf::is_editable()`'s old meaning was corrected **in the same
+  commit** — the property table, the load-bearing-properties paragraph, the
+  test's own name and doc block, and `linepick.rs`'s note — found by *"grepping
+  for the CLAIM you falsified, not the section you edited"*, which is hard rule
+  11's practice executed on the engineer's side of the boundary.
+  **Ceiling unmoved. Considered for a fresh number in the 351st filing and
+  DECLINED**; the decline and its reasoning are recorded in this section's
+  *Standing-rule disposition, 351st filing* block below.
 - **R94 — A repair that mutates a value must invalidate any
   "these-bytes-are-verbatim" provenance attached to it (methodology;
   no decision number; librarian-assigned; 2026-08-03, `/Contents`-
@@ -122437,6 +123116,30 @@ and
   it described as missing — is `R180`'s, unchanged; only the CARRIER of
   the falsified claim is new, recorded as a boundary case for whoever
   next corrects a claim that has already left the repository.*
+
+  **★ FURTHER INSTANCE (2026-08-31, `a8586cc`, `Pass 188.0`, 351st filing) —
+  ZERO INTERVAL AGAIN, AND THE FALSE CLAIM WAS A HARD-CODED LITERAL IN SHIPPED
+  CLI OUTPUT, NOT A SENTENCE.** `pdfce-cli object-list` printed a hard-coded
+  **`editable=false`** on every leaf row, and `FormLeaf::is_editable()` was a
+  hard `false` behind it. Both were **true for as long as nothing inside a form
+  could be edited**, and both became **false claims in operator-visible output**
+  the moment `Pass 188.0`'s six form verbs landed. **Same commit; interval
+  zero** — matching Instance 5's tightest recorded gap. **Corrected in that same
+  commit**, so this is a **discharge**, not a survivor: `editable=` is now real,
+  and `is_editable()` answers about the object (`true` for a path).
+  ★ **What makes it worth appending rather than passing over: the literal
+  documented its own provisionality and that did not help.** `is_editable()`
+  carried a note saying it was a method *"so that the answer has somewhere to
+  change"* — a **deliberate** placeholder, correct on the day it was written,
+  and **a lie in shipped output the hour the answer changed.** ⇒ **A
+  placeholder that documents its own provisionality is still a false claim once
+  it is wrong, and the doc comment saying so does not reach the operator**
+  (`R195`: rustdoc is not a disclosure surface). **Considered for a fresh rule
+  number in the 351st filing and DECLINED** — see this section's
+  *Standing-rule disposition, 351st filing* block for the reasoning; `R180`'s
+  practical form already names shipped operator-visible strings, and Instance 3
+  already ruled that a further instance in that shape is **evidence for
+  `R180`, not a new family member**.
 
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate
@@ -129771,6 +130474,151 @@ same cause (hashes exist only at commit time), two different failure modes.
   same filing and is the companion to this rule, not a duplicate of it:
   `R236` is about **finding** the class, `110` is about **what to do** with a
   member of it once found.
+
+- **R237 — A MEMO'S KEY MUST BE THE WHOLE DEPENDENCY SET OF WHAT IT CACHES —
+  AND WHERE THE INPUTS CANNOT NAME A DEPENDENCY, THE KEY IS TAKEN FROM THE
+  WALK'S *OUTPUT*. A STALE INDEX IS NOT A STALE ANSWER; IT IS AN EDIT APPLIED
+  TO THE WRONG OBJECT.** Minted 2026-08-31 (351st filing), librarian-minted,
+  from **`Pass 186.0`** (`7c2ee96`) and **`Pass 188.0`** (`a8586cc`) at
+  **`n = 2`**.
+
+  **The two instances, both in `PageModelKey`, both shipping, both silent.**
+
+  | # | Pass | what the key could not see | the failure |
+  |---|---|---|---|
+  | 1 | `186.0` | an **appended content stream** and a **changed `/Resources`** — `add_image`/`add_text` touch **none** of the old key's inputs (`first content id`, `its staged span`) | the memo served the **pre-insert** model back; a shell's decomposition held **N+1** objects and `page_objects` held **N** |
+  | 2 | `188.0` | a **form-stream rewrite** — a page's id, `/Contents` spans and `/Resources` are all untouched by an edit **inside** a form XObject | **all six new form verbs returned `Ok`** while the model insisted nothing had happened |
+
+  **The failure mode is identical in both and is what makes this worth a
+  number:** the verb succeeds, the write lands, and the **index** the next
+  operation is addressed by is stale. **A stale answer is a wrong readout, which
+  a person notices. A stale INDEX is a correct-looking operation performed on a
+  different object, which nobody notices until the file is wrong.**
+
+  **★ THE SECOND CLAUSE IS THE NON-OBVIOUS ONE, and it is why this is not
+  merely "invalidate your caches".** In instance 2 the dependency set is **not
+  computable from the inputs**: *which forms a page paints* cannot be known
+  before the walk that finds them. The construction that works is to take the
+  key **from the walk's own OUTPUT** — `containment` already names every form
+  reached — and record it alongside the cached value. ⇒ **When a cache's
+  dependency set is discovered by the same traversal that produces the cached
+  value, the key is an OUTPUT of that traversal, not an input to it.** A key
+  built only from what was knowable in advance is, by construction, a key that
+  cannot see the dependencies the walk discovered.
+
+  **Practical form (three checks, cheap, at write time):**
+  1. **Enumerate what the cached value is derived FROM**, not what it is keyed
+     BY. Any input the value can change with, and the key cannot, is a defect
+     already present.
+  2. **Ask which dependencies the producing walk DISCOVERS** rather than
+     receives. Those go in the key from the walk's output.
+  3. **Sabotage the key, not the value:** narrow the key deliberately and run
+     the suite. `Pass 186.0`'s narrowing reddened **4** tests and `Pass 188.0`'s
+     reddened **6** — both only **after** tests that exercise two verbs in one
+     session existed. Before that, narrowing the key reddened **nothing**.
+
+  **★★ THE `n = 2` IS ARGUED, NOT ASSUMED, because this project's own warrant
+  says `n = 2` inside one filing is weaker than `n = 2` across two** (267th
+  filing; restated in the 272nd) — *a sweep looking for a shape finds that
+  shape*. Three things answer that objection here, and if a future reader
+  disagrees with all three the rule should be demoted rather than defended:
+  - **Neither instance was found by a sweep.** Instance 1 surfaced from an
+    operator bug report about images; instance 2 surfaced when six brand-new
+    verbs returned `Ok` and did nothing. **The shape was recognised after the
+    fact, in `Pass 188.0`'s own commit message** (*"same class as `Pass 186.0`'s
+    widening, one level deeper"*), which is the opposite of a sweep.
+  - **The two dependency classes are unrelated** — a sibling content stream and
+    a nested form's bytes. The *cache* is shared; the *cause* is not, which is
+    what distinguishes this from one defect counted twice.
+  - **A third, corroborating precedent exists in a different subsystem and was
+    decided the other way round:** **decision `071`** keyed the display list on
+    `(page, epoch, SCALE)` **deliberately**, over a consumer who asked for
+    `(page, epoch)` — the same question, answered correctly in advance, in
+    `pdfce-render`. That is not counted as an instance (nothing broke), but it
+    **is** evidence the shape is not local to `PageModelKey`.
+
+  **What this rule is NOT.** It is **not** `R186` (a guard keyed on a marker of
+  a hazard failing OPEN) — a memo is not a guard, nothing here was ever asked to
+  refuse, and the failure is a wrong *address* rather than an unreached *check*.
+  It is **not** `R94` (a repair that mutates a value must invalidate a
+  verbatim-bytes provenance) — `R94` is about a fast path whose *stored bytes*
+  disagree with a corrected value; here the cached value is honestly derived and
+  the **key** is the incomplete artefact. It is **not** `R93`, though `R93`
+  applies **alongside** it in both instances: the doc comments asserting that
+  base and session agree on `/Resources`, and that `page_objects` equals
+  `decompose_page`, are `R93` claims; **`R237` is about the key's
+  construction, `R93` about the sentence describing it.**
+
+  **Full records:** this file's `Pass 186.0` and `Pass 188.0` *Shipped* entries
+  (351st filing). **Cross-project derivation owed** to
+  `D:/dev/rag/rust/` (forward slashes deliberately, per hard rule 11's path
+  note) — **not written in this filing**, and named as owed rather than claimed
+  as done.
+
+  **Standing rules ceiling `R236` → `R237`; next free `R238`.** **Decision
+  ceiling `110` → `112`; next free `113`** — decisions `111` and `112` are
+  minted in the same filing and neither duplicates this rule: `111` is about
+  *which page tree a verb reads*, `112` about *the write contract inside a
+  shared container*, and `R237` about *what a cache's key must contain*.
+
+### ★★ STANDING-RULE DISPOSITION, 351st filing — TWO FURTHER CANDIDATES ASSESSED AND **DECLINED**, both because an existing rule already reaches them
+
+The engineer named three candidates and explicitly did **not** mint any of
+them, asking for the promotion bar to be applied and for coverage to be checked
+**before** minting. One was minted (`R237`, above). **The other two are
+declined, and the declines are recorded here so they are not re-noticed and
+re-proposed** — the `R192`/`R193` precedent (*"the rejection is recorded so it
+is not re-noticed and re-proposed"*).
+
+**(b) DECLINED — *"a doc comment that claims equivalence to another function is
+a claim that must be tested."* Already `R93`, and this is its FIFTH recorded
+instance.** `R93`'s own text names *"a cache is still valid"* and *"two
+conventions match"* as members of exactly this family: **a doc comment
+describing a cross-module contract is a claim, not a guarantee.**
+`EditSession::page_objects` claimed it returned *"the same model
+`vector::decompose_page` returns"* and returned **that model minus every
+leaf** — 242 leaves missing on the print-conformance composite, **10,256** on
+the CAD drawing.
+
+★ **What IS new here, and is recorded as an amendment to `R93` rather than as a
+new number:** this comment did not merely assert an equivalence, it
+**recommended itself over the thing it claimed to equal**, on a measured
+**385 ms → 0 ms** argument. ⇒ **A performance argument attached to an
+equivalence claim converts the claim from a description into an INSTRUCTION** —
+following the documentation was the way to lose the model, and the symptom
+(*"nothing inside a form is selectable"*) was **indistinguishable from the
+capability gap `Pass 188.0` was written to close.** **Practical form added to
+`R93` by this filing:** where a doc comment says *"the same … as X"* or *"use
+this instead of X"*, the cheap discharge is a **differential test** asserting
+the two agree on one real fixture — which is what nothing in the crate had,
+because **nothing in the crate read `leaves` off `page_objects`** until these
+verbs did (`R151`'s neighbourhood, from the reader's side).
+
+**(c) DECLINED — *"a hard-coded field in shipped output that became a false
+claim when the code changed."* Already `R180`.** `object-list`'s leaf rows
+printed a hard-coded **`editable=false`**, which became a **false claim in
+shipped operator-visible output** the moment `Pass 188.0`'s six verbs landed.
+`R180`'s founding text is exactly this — *an accurate disclosure can be
+falsified by a later improvement to the very thing it describes; lifting a
+limitation is a trigger to grep for the sentences that described it* — and its
+own practical form **names `--help` text and shipped strings by name** (see
+`R180`'s Instance 3, where a third instance in that same shape was explicitly
+recorded as **evidence for `R180`, not a fifth family member**). **The interval
+here is ZERO** — the falsifying commit and the false string are the **same
+commit**, matching `R180` Instance 5's tightest recorded interval; the string
+was corrected in that same commit, so this instance is a **discharge**, not a
+survivor. Recorded as a fresh `R180` instance; **no new number.**
+
+★ **A note on why (c) is worth recording at all despite being covered.**
+`FormLeaf::is_editable()` was a hard `false` that carried its own note *"so
+that the answer has somewhere to change"* — a **deliberately provisional**
+value that behaved correctly for as long as the answer was `false` **and then
+became a lie in shipped output the same hour the answer changed.** ⇒ **A
+placeholder that documents its own provisionality is still a false claim once
+it is wrong**, and the doc comment saying so does not reach the operator.
+That is `R195`'s sentence — **rustdoc is not a disclosure surface** — arriving
+from the opposite direction, and it is the reason both the method and the CLI
+column had to be corrected in the same commit rather than one of them.
 
 ## Update protocol
 
