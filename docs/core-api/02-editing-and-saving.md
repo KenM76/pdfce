@@ -1472,7 +1472,7 @@ always errors.
 | Author a text-bearing annotation **at an opacity** | `add_text_annotation_with(&mut self, page_index, spec: &TextAnnotSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1`. The twin of the above, shipped in the same Pass because Table 164 is the **markup-annotation** entry list and a sticky note is a markup annotation. `/CA` goes on the parent, never on its `/Popup`. |
 | Author a `/Redact` mark (non-destructive) | `add_redaction(&mut self, page_index, spec: &RedactSpec) -> Result<ObjId, EditError>` | 10480 | A **mark**. Nothing is removed yet. |
 | Un-mark a redaction | `delete_redaction_mark(&mut self, annot_id) -> Result<(), EditError>` | 10617 | Refuses any non-`/Redact` annotation. |
-| Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. |
+| Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. ⚠️ **Refuses with `AnnotationObjectIsStructural` when the `/Annots` entry is the document catalog, the `/AcroForm`, a page-tree node or a page** (`Pass 190.1`) — **an entry in a structural array is not necessarily the kind of object that array is for**, and a page whose `/Annots` named the catalog produced a file with no page-tree root. Same shape as `delete_field`'s `FieldObjectIsInPageTree` above, in a second carrier; the guard is `refuse_if_in_page_tree` plus an identity check plus a `/Type` test (`/Type` is optional on an annotation, so its **absence** proves nothing and its **presence** naming something else is decisive). ★ The refusal lives in `annotation_deletion_guards`, which `annotation_deletion_preview` also calls, **so the dry run and the real run agree.** |
 | **Move** any annotation | `move_annotation(&mut self, annot_id, dx, dy) -> Result<AnnotationMove, EditError>` | 16978 | `Pass 149.0`. Translates `/Rect` **and every geometry key**. **Refuses** a widget and a ce dimension by name — see below. |
 | **Resize** any annotation | `resize_annotation(&mut self, annot_id, anchor: (f64, f64), sx, sy, opts: &ResizeOptions) -> Result<AnnotationResize, EditError>` | 17442 | `Pass 151.0`. Scales `/Rect` **and every geometry key** about `anchor`. `/RD` scales by default; `/BS /W` does not — both are flags. **Re-authors the `/AP` only where pdfce drew it**, refusing rather than distorting a foreign one. Same two refusals as `move_annotation`. |
 | **Rotate** any annotation | `rotate_annotation(&mut self, annot_id, anchor: (f64, f64), degrees: f64) -> Result<AnnotationRotate, EditError>` | 17429 | `Pass 155.0`. Turns geometry keys AND composes the rotation into the appearance's own `/Matrix` (§12.5.5 step a), so a FOREIGN appearance rotates correctly and nothing is redrawn. No options type — a rotation is an isometry, so no stroke can distort. `/Rect` grows to the upright box that bounds the result, which §12.5.2 requires. **★ The angle is applied AS GIVEN and the result is never snapped** — see below. |
@@ -3791,10 +3791,36 @@ borrow it (`tests/image_placement.rs:238-247`).
 ### 6.7 The `EditError` taxonomy
 
 `edit.rs:2300`, `#[derive(Debug, Clone, thiserror::Error)]`, `#[non_exhaustive]`.
-**88 variants** (counted at depth 1 inside `pub enum EditError`). No inherent
-`impl EditError` block and **no `is_*` classification helpers**
+**113 variants** at `77631a6`, counted at depth 1 inside `pub enum EditError`.
+No inherent `impl EditError` block and **no `is_*` classification helpers**
 (`NOT FOUND — searched `impl EditError` in `edit.rs`); callers discriminate with
-`matches!`. The five groups below partition all 57. `edit.rs:2295-2296`: *"Every variant names a
+`matches!`.
+
+> ★ **This paragraph carried TWO different stale figures at once** — *"88
+> variants"* here and *"the five groups below partition all 57"* one sentence
+> later — against a real count of 113. They were not merely out of date; **they
+> contradicted each other inside one paragraph**, and had done for long enough
+> that neither reading looked odd.
+>
+> That is worth a sentence rather than a silent correction, because it names
+> the failure mode: a number in prose has no reader who is obliged to check it,
+> so two of them drift independently and the contradiction between them is
+> nobody's error to notice. `tools/check-core-api-verbs.py` gates the *verb*
+> count and the *stated* variant count; it does not gate a second figure
+> phrased as a group total, and it caught only one of these two.
+>
+> The count is **checkable by command**, which is the only durable form:
+>
+> ```
+> awk '/^pub enum EditError \{/,/^\}/' crates/pdfce-core/src/edit.rs \
+>   | grep -cE '^    [A-Z][A-Za-z0-9_]*( \{|\(|,|$)'
+> ```
+>
+> The five groups below are a **reading aid, not a partition** — they do not
+> claim to cover every variant, and the earlier wording that said they did was
+> the second of the two wrong numbers.
+
+`edit.rs:2295-2296`: *"Every variant names a
 condition the operator (or the calling front end) can act on. There is
 deliberately no catch-all 'edit failed'."*
 
