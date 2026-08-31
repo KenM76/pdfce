@@ -8,107 +8,181 @@ true now, plus a pointer. Corrections and their prior wording live in the
 **append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
 
 Written 2026-08-31, end of the session-model / widget-appearance / form-geometry
-session (`Pass 186.0` → `187.0` → `188.0`). **For the ledger — Pass ceiling,
-standing-rule ceiling, decision ceiling, filing count — run
-`python tools/check-ledger-numbers.py`.** It derives all four and is the only
-thing that cannot be stale.
+session (`Pass 186.0` → `187.0` → `188.0`), **updated the same day after
+`Pass 189.0` (`baf0c29`) and after `Pass 190.0`/`190.1` (`77631a6`) and its
+353rd filing**. **For the ledger — Pass ceiling, standing-rule ceiling, decision
+ceiling, filing count — run `python tools/check-ledger-numbers.py`.** It derives
+all four and is the only thing that cannot be stale.
 
 ---
 
-## §0 FOUR THINGS ARE OWED, AND THE FIRST IS UNCHANGED FROM THE LAST HANDOFF
+## §0 ALL FOUR PRIOR OWED ITEMS ARE CLOSED. ONE NEW ONE IS OPEN, AND ITS SEVERITY IS UNMEASURED.
 
-Today's arc answered three inbound `pdfceGUI` requests end to end. A shell can
-now edit an image it added a moment ago without saving first, resize a check box
-and have it **redrawn** rather than magnified, and drag a node that lives inside
-a form XObject. Three replies are out; **nothing is owed back on any of them.**
+Today's arc answered three inbound `pdfceGUI` requests end to end and then
+closed every open item this file was carrying. **Three replies are out; nothing
+is owed back on any of them.**
 
-None of that touched the items below.
+★ **The closed items are kept below as one-line verdicts rather than deleted**,
+so a reader can see they were **answered**, not dropped.
 
-### ★ OWED ITEM 1 — fuzz finding #3, **still open, untouched, carried forward with its detail intact**
+### ★★★ THE ONE OPEN ITEM — `annot_delete_sequence` STILL FIRES, on a route nothing here has sized
 
-A `debug_assert_eq!` in **`delete_field_group`** at **`edit.rs:17486`**, where
-the emptied-node **cascade** and its **prediction** disagree — specifically,
-`remove_fields_from_form`'s `emptied` fixed point against
-`group_deletion_preflight`'s tree walk. **Two independent derivations of one
-quantity.**
+**A tracked reproducer exists, so this is a bounded chase, not a hunt:**
 
-**Sized honestly, and the sizing is part of the item.** It is a
-`debug_assert_eq!`, so **in the build operators run it is a wrong
-`nodes_removed` in a disclosure — not corruption.** Materially less severe than
-the two page-tree destructions fixed in `Pass 185.1`/`185.2`, which it was found
-beside. Do not spend a day at the wrong priority.
+```
+fuzz/corpus/annot_delete_sequence/seed_openbug_badkid_dupobjnum.bin    (1,618 B)
+```
 
-**Known:** the verb, the assertion, the location.
-**Guess, labelled as one — start here but measure it:** the preview filters
-`form.groups` by `fully_qualified_name != fqn` and then appends `fqn`, so **two
-grouping nodes sharing one FQN** — trivially the empty name for a `/T`-less
-node, which is exactly what a fuzzer reaches — would make the two derivations
-count differently.
+- **Signature: `BadKid(ObjId 3)`** — **not** `NoPageTreeRoot`, which is the one
+  `Pass 190.1` fixed. Different mechanism, and **the catalog/`/Type` guard does
+  not reach it.**
+- **The shape:** a document with **two `3 0 obj` definitions**, where object 3
+  is the page named by `/Kids`.
+- **★★ WHETHER IT IS RELEASE-VISIBLE HAS NOT BEEN MEASURED.** That sentence is
+  the item, not a caveat on it.
 
-**How to run it, because the harness fights you:**
-- **`-seed=1` makes a crash replayable.** Without it the same defect appears and
-  vanishes across runs.
-- **libFuzzer writes NO artifact here.** Rust's abort on Windows exits
-  `0xc0000409` before the crash handler saves one, so there is nothing to
-  reduce — consider making the target print its own input on panic.
-- **Grep for the panic HEAD; never `tail` the output.** A `tail -40` keeps only
-  libFuzzer's internal frames and drops both the message and the verb.
-- ASan DLL path and invocation:
-  `.claude/agent-memory/pdfce-engineer/reference_fuzz_asan_dll.md`.
+⇒ **Start by measuring exactly that**, and standing rule **`R238`** (minted
+2026-08-31, this route is its first customer) says how: *what does the shipping
+build do when this assertion would have fired?* The answer is one of *panics
+anyway* / *returns an error* / **returns `Ok` and writes wrong bytes**, and only
+the third makes it urgent. **Do not size it from the fact that it is a
+`debug_assert` — that is the exact mistake `R238` exists to stop, and it cost a
+day on the item closed immediately below.**
 
-⇒ **The absence of a reproduction is not evidence of a fix.**
+⇒ **Nothing anywhere claims this target runs clean.** `ROADMAP.md`'s `R236`,
+its `Pass 190.0`/`190.1` entry, and the commit message all say so explicitly.
 
-### OWED ITEM 2 — `R236`'s one named uncovered site
+### ~~OWED ITEM 1 — fuzz finding #3 (`delete_field_group`)~~ — **CLOSED 2026-08-31 by `Pass 190.0` (`77631a6`)**
 
-**Annotation DELETION has no fuzz target.** `edit.rs:21669` carries the
-postcondition *"the target was located on some page, so at least that page must
-be patched"*; `annot_walk` **reads** and `annot_author` **writes**, and neither
-deletes. **This is the concrete work `R236` creates**, and this session did not
-do it.
+**VERDICT: the sizing this file carried was WRONG, and that is the reusable
+part.** It read *"a `debug_assert`, so in release it is a wrong `nodes_removed`
+in a disclosure — not corruption"*, and the item was de-prioritised on that for
+a day. **Three of four shapes are release-visible**: a `/T`-less terminal made
+the verb **return `Ok` and delete nothing**; a terminal with no `/Parent` made
+it **write a dangling `/Kids`**. Two root causes — *a name is not an identity*
+(§12.7.3.2: a `/T`-less node contributes no name segment and aliases its
+parent's), and *`/Parent` is a back-link, not the structure*. The outcome struct
+also spliced a COUNT from one derivation and a LIST from another, so
+**`pdfce-cli` and `pdfceGUI` reported different numbers for one deletion** and
+**`--dry-run` disagreed with the real run on a destructive verb**. ⇒ **`R238`
+minted from this at `n = 2`.**
 
-The rule's full site table and its measured denominator (**24 invocations** — 12
-in `pdfce-core`, 12 in `pdfce-render`, decomposed as `grep -c debug_assert` = 56
-mentions = 24 invocations + 6 `cfg(debug_assertions)` + 2 `fn` definitions + 24
-lines of prose) live in **`R236`'s own text** in `ROADMAP.md`'s *Standing
-rules* — deliberately, because the census's first home was a file that gets
-overwritten. This one.
+### ~~OWED ITEM 2 — `R236`'s one named uncovered site~~ — **CLOSED 2026-08-31 by `Pass 190.1` (`77631a6`)**
 
-### OWED ITEM 3 — the ten `cmyk_buffer` `debug_assert`s are **unaudited**
+**VERDICT: `fuzz/fuzz_targets/annot_delete_sequence.rs` exists and is tracked**,
+and **reachability was MEASURED, not assumed** (a temporary `stderr` probe
+confirmed the guarded code runs during the corpus pass; the assert itself has
+not been falsified — *reached* and *not tripped* are two facts). The site has
+moved to **`edit.rs:23079`**.
 
-Render side. `mesh_shading` covers the `mesh.rs` pair; **the `cmyk_buffer.rs`
-ten have never been classified** as *covered* / *open* / *exempt*. Second thing
-to look at after item 2.
+★★ **`R236` NOW HAS NO OUTSTANDING WORK ITEMS**, and three things must be read
+together or the state is misreported:
 
-### OWED ITEM 4 — three stale claims in `docs/core-api/01-reading-and-model.md` (yours to fix)
+1. **The rule does NOT retire.** Its trigger is the postcondition **set**, which
+   grows with the crate. Re-measure the population; do not remember it.
+2. **An empty ledger is NOT a clean verb.** The `BadKid` route above fires at
+   **helper 1**, a site `R236` has recorded **COVERED** since it was minted.
+   **Finding a defect is what coverage is for.** `R236` measures whether every
+   tripwire has an input source, not whether the verbs are correct.
+3. **The denominator is 22** (12 `pdfce-core` + 10 `pdfce-render`), unchanged at
+   `77631a6`. The census's full table lives in **`R236`'s own text** in
+   `ROADMAP.md`'s *Standing rules* — deliberately, because its first home was
+   this file, which gets overwritten.
 
-Found by the 351st filing's hard-rule-11 sweep. **`02-editing-and-saving.md` was
-swept thoroughly and is current; the correction stopped at that file's
-boundary.** `01-reading-and-model.md` is the document a shell reads **first**:
+★ **Its site table did not add up and now does** — it summed to 23 against its
+own denominator of 22, the extra row being a **comment line** counted as an
+invocation, in a rule whose own text names that very line as one it excluded.
+⇒ **A correction that fixes a figure must sweep for the figure's derivatives.**
 
-| line | claim | state |
-|---|---|---|
-| `:1691` | *"A form leaf is reported as `leaf=N containment=… paint_order=… editable=false`"* | **FALSE** — `editable=` is real since `188.0` |
-| `:1706` | field table row: `is_editable()` \| **always `false`** today | **FALSE** — it answers about the object (`true` for a path) |
-| `~:1719` | *"For **selection**, use the deep test. For **editing**, use `hit_test_point` and you get back something you can actually edit."* | **MISLEADING** — a leaf is editable now; the sentence's real subject is that a leaf index must never be handed to an `objects`-indexed verb. Say that instead. |
+### ~~OWED ITEM 3 — the ten `cmyk_buffer` `debug_assert`s are unaudited~~ — **CLOSED 2026-08-31 by `Pass 189.0` (`baf0c29`)**
 
-★ **Two nearby hits are SURVIVING-AND-CORRECT — do not "fix" them:** `:1667`
-(*"Nothing here is gated on `FormLeaf::is_editable()`, and that is correct"* — a
-ce dimension against a form-interior line is a new **page** annotation, so the
-reasoning is independent of editability) and `:1726` (the vocabulary note
-pairing `stream()`/`is_editable()` with `text_extract`'s — **more** correct
-after `188.0`). Likewise `02-editing-and-saving.md:2455` (*"the same model
-`vector::decompose_page` returns"*) — that was the false claim `188.0` **fixed**;
-it is true now.
+**VERDICT: 0 covered / 0 open / 4 EXEMPT / 6 VACUOUS. No fuzz target is owed by
+that file.** Two defects found and fixed in the same commit: six of the ten
+**checked width only** while claiming a shared device grid, and **`into_knockout`
+is the one site whose violation is SILENT in release** (it replaces the
+receiver's planes wholesale, so nothing runs off the end) — promoted to a
+**runtime refusal**. Full per-site table in `R236`'s text.
+
+★ **The survivor this left in `crates/` is FIXED** — `cmyk_buffer.rs:807`'s
+*"eight sibling dimension guards"* now reads **seven siblings**, publishes the
+**command** rather than a figure, and states **4 exempt + 4 vacuous = 8**. ★★
+**And correcting it inflated the grep again — 13 → 17 raw hits, population held
+at 8** — which is why it publishes a command: **a census figure quoted inside
+the prose it counts is self-invalidating.**
+
+★ **A REAL GAP THIS DID NOT FILL, filed to *Backlog* rather than charged to
+`R236`: the harness has NO rendering fuzz target at all.** Reaching that module
+needs one driving a full page render of a subtractive page (`/Group /CS
+/DeviceCMYK`, isolated / non-isolated / knockout groups, `DeviceCMYK` images,
+`/DeviceN` shadings, overprint). It is a **new target family**, not an extension
+— every current `pdfce-render`-linking target takes a byte slice and calls a
+leaf parser. **Scope it with the operator.**
+
+### ~~OWED ITEM 4 — three stale claims in `docs/core-api/01-reading-and-model.md`~~ — **CLOSED 2026-08-31, fixed and pushed in `93dc9ba`**
+
+All three corrected: the `editable=false` example at `:1691`, the *"always
+`false`"* field-table row at `:1706`, the selection-vs-editing paragraph at
+`~:1719`. **`02-editing-and-saving.md` was already current** — the correction
+had stopped at that file's boundary, which was the whole finding.
+
+★ **Two SURVIVING-AND-CORRECT hits stand, and a future sweep must not "fix"
+them:** `:1667` and `:1726`. Likewise `02-editing-and-saving.md:2455`.
+
+### ★ THE SWEEP SURVIVORS FROM `Pass 190.0`/`190.1`, so the next one does not re-open them
+
+All **correct at `77631a6`** and deliberately left alone:
+
+- **`FEATURES.md`** *"matched by prefix on a grouping node, so the subtree counts
+  too"* — that clause is about `action_targets_orphaned`'s census, which **is**
+  still a name-prefix match. (The neighbouring *"named subtree"* claim WAS
+  falsified and is corrected.)
+- **`docs/core-api/03-capabilities.md`** *"do not derive grouping nodes by
+  splitting an FQN … the failure is silent"* — **more** correct after
+  `Pass 190.0`.
+- **`docs/core-api/02-editing-and-saving.md:2698`** — `FieldGroupDeletion`'s
+  field table; the struct's public shape is **unchanged**, only the derivation
+  was collapsed.
+- **`cmyk_buffer.rs`** *"all ten assertions … four exempt … six vacuous"* —
+  **4 + 6 = 10** pre-fix, cross-checking post-fix at **4 + 4 = 8**.
+
+★ **Reported, not fixed:** `docs/core-api/`'s `edit.rs` line citations are
+systematically stale (`:8464` / `:8574` / `:8764` against live `:12975` /
+`:18713` / `:23079` in the same file). **Not a false claim — a stale
+convenience.** Renumbering a contract document is a Pass, not a filing.
+
+★★ **ALSO REPORTED, NOT FIXED, AND IT IS A REAL WRONG NUMBER:**
+`docs/core-api/02-editing-and-saving.md`'s grouped error presenter says *"the
+five groups below partition all **57**"* against an `EditError` enum of
+**113**. **Pre-existing, not caused by `Pass 190.x`, and NO GATE COVERS IT** —
+`check-core-api-verbs.py` checks `index.md`'s figure, not this one. Completing
+and renumbering that list is a Pass.
+
+### ★★★ RUN THE DOC GATES AS PART OF THE FILING, NOT ONLY BEFORE THE PUSH
+
+`check-core-api-verbs.py` went **RED (exit 1)** during the 353rd filing:
+`Pass 190.1` added one `EditError` variant (112 → **113**) and
+`docs/core-api/index.md:17` still said 112. **The hard-rule-11 claim-sweep run
+minutes earlier had missed it** — the sweep searches for *the claims the Pass
+falsified*, and **an error-variant count is not a claim anyone would search for
+after a deletion-guard Pass.** ⇒ **A count-gate and a claim-sweep return
+different sets, and the gate's is not a subset of the sweep's.** Both are fixed
+and the gate is green; the habit is the takeaway.
+
+### ★ A RAG FINDING IS OWED AND NOT WRITTEN
+
+`D:/dev/rag/rust/an_assertions_compile_time_gating_is_not_a_severity_estimate.md`
+— `R238`'s cross-project derivation. A second candidate from the same commit:
+*a guard written for one carrier is a claim about a class* (`R219`'s widened
+trigger). **Reported rather than claimed.**
 
 ### ★ WHAT THIS SESSION ADDED, so the arithmetic is legible
 
-**One** new fuzz target — `fuzz/fuzz_targets/form_geometry_sequence.rs`,
+**Two** new fuzz targets. `fuzz/fuzz_targets/form_geometry_sequence.rs` —
 **301,952 executions in 421 s = 717 exec/s, 0 crashes, 0 artifacts** — covering
-`Pass 188.0`'s six new verbs at the moment they shipped. **It closes neither
-owed item above.** The existing `vector_edit` target could not have covered them:
-it drives the **planners** over one already-parsed content stream and cannot
-reach leaf resolution, the containment walk, re-decomposition from a placement,
-the selection guard or the reach count.
+`Pass 188.0`'s six new verbs at the moment they shipped. And
+`fuzz/fuzz_targets/annot_delete_sequence.rs` (`Pass 190.1`), which **found a
+release-silent page-tree destruction within seconds of first existing**, on a
+**173-byte** input, and **still fires** on the second route in §0 above.
 
 ---
 
@@ -125,10 +199,13 @@ the selection guard or the reach count.
    `request_editing_through_recursion_into_a_form_xobject`), with **three
    outbound replies beside them**. **Nothing is owed back.**
 
-2. **The four owed items in §0.** Items 1–3 are fuzz work: item 1 is a bounded
-   chase with a stated starting guess, item 2 is a new target over a verb family
-   that already exists, item 3 is a classification pass rather than code. **Item
-   4 is three sentences in a doc** and is fifteen minutes.
+2. **The ONE open item in §0 — the `annot_delete_sequence` `BadKid` route.**
+   All four items this file previously carried are **CLOSED** (`Pass 189.0`
+   `baf0c29`, `93dc9ba`, and `Pass 190.0`/`190.1` `77631a6` for the other two).
+   The new one has a **tracked reproducer** and **no severity estimate**, which
+   makes step one *measure the release behaviour*, per `R238`. ⇒ A bounded
+   chase, not a hunt — but **do not assume it is small because it fires a
+   `debug_assert`**; that assumption is what cost a day on the item it replaced.
 
 3. **`Pass 142.0`** — a font face outside the standard 14. The largest remaining
    *named* feature, **de-prioritised by the consuming project's own use report**,
@@ -196,7 +273,7 @@ the selection guard or the reach count.
 
 ---
 
-## §C — ★★ READ BEFORE WRITING CODE. Seven items from this session.
+## §C — ★★ READ BEFORE WRITING CODE. Eleven items from this session.
 
 1. **★★★★ A GREEN SUITE CAN BE *VACUOUS* RATHER THAN WEAK, AND RUNNING IT HARDER
    WILL NEVER SAY SO.** All **4,861** tests were green **before and after**
@@ -292,6 +369,29 @@ the selection guard or the reach count.
     claim once it is wrong**, and the doc comment saying so does not reach the
     operator.
 
+11. **★★★★ A `debug_assert` TELLS YOU *WHERE THE CHECK RUNS*, NEVER *WHAT THE
+    SHIPPING BUILD DOES WHEN THE PROPERTY IS FALSE* — minted as `R238`
+    (`Pass 190.0`).** Fuzz finding #3 was sized as *"a `debug_assert`, so in
+    release it is a wrong number in a disclosure — not corruption"*, that
+    sentence was propagated **verbatim to three documents**, and the item sat a
+    day at the wrong priority. Measured, **three of four shapes are
+    release-visible** and two are worse than a wrong number: **returns `Ok` and
+    deletes nothing**, and **writes a dangling `/Kids`**.
+    ⇒ **Before sizing any assertion, answer in writing: *panics anyway* /
+    *returns an error* / **returns `Ok` and writes wrong bytes***. Only the
+    third is urgent, and only measurement distinguishes them.
+    ★ **The paragraph carrying the wrong sizing was the one headed *"Severity is
+    part of the finding, not a footnote"*.** The moral survived; the figure did
+    not. **Stating a severity is not measuring one**, and the wrong sizing
+    looked *exemplary* — specific, hedged, warning against over-prioritising —
+    which is exactly why nobody checked it.
+    ★★ **Companion, same commit:** *a guard written for one carrier is a claim
+    about a CLASS.* `refuse_if_in_page_tree` was built for `/AcroForm`
+    `/Fields` and **never called from the `/Annots` half**, which cost a second
+    release-silent page-tree destruction a day later. `R219` already required
+    the enumeration and is **widened** to say so for carriers, not just routes.
+    Its unchecked carrier list is in §0.
+
 ---
 
 ## §D — State of the tree
@@ -307,28 +407,43 @@ ls -lt D:/Dev/pdfce-backups/              # newest bundle
 gh run list --limit 3                     # CI's colour, from GitHub
 ```
 
-- **FOUR COMMITS ARE UNPUSHED** as of this handoff — the three Passes (`186.0`
-  `7c2ee96`, `187.0` `52beaf6`, `188.0` `a8586cc`) plus an agent-memory chore
-  (`d7c4675`). `HEAD` = `d7c4675`, `origin/main` = `1e63186`. The filing commit
-  that accompanies this file makes **five**. **Pushing is standing-authorized**
-  (rule 8, decision `090` — *"always push"*); cutting a tag or release is
-  **not**, and neither is a force push or a non-`main` branch. Scrub
-  `check-suite-name-absent.py` green **before** pushing regardless — the
-  repository is public, so a push publishes. (It was run during the 351st
-  filing and was clean; re-run it, do not carry that sentence.)
-- **The backup bundle is 4 commits stale** — newest is
-  `pdfce-20260830-2005-1e63186-full.bundle`, which is `origin/main`, not
-  `HEAD`. A fresh one is cheap: `git bundle create <path> --all`.
+- **THREE COMMITS ARE UNPUSHED**, measured by `git rev-parse` /
+  `git rev-list --count origin/main..main` at the end of the **353rd** filing:
+  `baf0c29` (`Pass 189.0`), `123b437` (`chore(agent-memory)`) and `77631a6`
+  (`Pass 190.0`/`190.1`). `HEAD` = **`77631a6`**, `origin/main` = **`93dc9ba`**.
+  The filing commit that accompanies this file makes **four**. **Pushing is
+  standing-authorized** (rule 8, decision `090` — *"always push"*); cutting a tag
+  or release is **not**, and neither is a force push or a non-`main` branch.
+  Scrub `check-suite-name-absent.py` green **before** pushing regardless — the
+  repository is public, so a push publishes. **It was NOT run in the 352nd or
+  353rd filings**, so there is no sentence here to carry: run it.
+- **The backup bundle is 9 commits stale from `HEAD`, 6 from `origin/main`** —
+  newest is `pdfce-20260830-2005-1e63186-full.bundle` (by
+  `ls -lt D:/Dev/pdfce-backups/`, counts by `git rev-list --count`, both re-run
+  in the 353rd filing). **It is no longer even `origin/main`**. A fresh one is
+  cheap: `git bundle create <path> --all`.
+- **★ THE WORKING TREE IS NOT CLEAN, AND ONE FILE IN IT IS NOT THE LIBRARIAN'S.**
+  Measured at the end of the **353rd** filing: this role's seven `docs/` files,
+  **plus `crates/pdfce-render/src/cmyk_buffer.rs` modified** — the engineer's
+  fix for the *"eight sibling dimension guards"* survivor the 352nd filing
+  reported — **plus untracked `.fz.log`** (77,564 B, a fuzz run's output;
+  neither committed nor ignored by any rule). Everything the 352nd filing saw
+  in flight (`edit.rs`, `fuzz/Cargo.toml`, the fixtures, the target, the corpus)
+  **landed as `77631a6`.**
+  ⇒ **Re-measure and attribute before staging anything**; *stage by path, never
+  `git add -A`* is not a tidiness note when agents share a tree. ⇒ **A
+  `git status` has a shelf life of minutes here** — the **fourth** consecutive
+  filing whose tree moved underneath it.
 - **★ `R217` does NOT constrain pushing.** It constrains what may land **on top
   of** an unfiled commit. Read its third amendment note before assuming
   otherwise.
 - **Read CI's colour from GitHub**, not from a sentence in a document.
-- **The working tree is clean of untracked files** as of this handoff. Two that
-  earlier handoffs named — `.tmp_bench.py` (untracked for seven filings) and
-  `.g3.log` (present at the start of the 351st filing) — are **no longer on
-  disk**; neither was committed and neither is ignored by any rule. **The
-  instruction they motivated stands unchanged: the repository is public, so
-  stage by path, never `git add -A`.**
+- **Untracked files come and go and none has ever been committed.**
+  `.tmp_bench.py` (untracked for seven filings, and still present in this
+  session's own opening `git status`) and `.g3.log` are **gone**; `.fz.log` is
+  **new**. None is ignored by any rule. **The instruction they motivate is
+  unchanged and is not a tidiness note: the repository is public, so stage by
+  path, never `git add -A`.**
 - ★ **The tree moved mid-filing twice this week.** `d7c4675` landed while the
   351st filing was being written, as `c17f1b5` and `8d8dbb5` did during the
   349th. **Re-measure git state before the commit, not only at the start** — a

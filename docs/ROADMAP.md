@@ -96,6 +96,766 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 190.0` + `Pass 190.1` (`77631a6`, 2026-08-31) — **★★★★ TWO DELETION VERBS, TWO CARRIERS, ONE SHAPE: A STRUCTURAL ARRAY WAS TRUSTED TO CONTAIN WHAT IT IS FOR, AND A QUANTITY WAS DERIVED TWICE FROM TWO DIFFERENT KEYS** — ★★★★ **THE SEVERITY OF FUZZ FINDING #3 WAS SIZED FROM ITS ASSERTION'S *COMPILE-TIME GATING* AND THE SIZING WAS WRONG ON THREE OF FOUR SHAPES: IN RELEASE IT RETURNED `Ok` AND DELETED NOTHING, AND WROTE A DANGLING `/Kids` — `R238` IS MINTED FROM THAT AT `n = 2`** — ★★★★ **`Pass 185.1`/`185.2` IN A SECOND CARRIER: `refuse_if_in_page_tree` EXISTED AND THE SECOND CALLER DID NOT — WHICH IS `R219`'S OBLIGATION, ALREADY STANDING SINCE 2026-08-27, UNPAID** — ★★★ **`--dry-run` DISAGREED WITH THE REAL RUN ON A DESTRUCTIVE VERB, AND `pdfce-cli` AND `pdfceGUI` REPORTED DIFFERENT NUMBERS FOR ONE DELETION** — ★★ **`R236`'S LEDGER IS NOW EMPTY — BOTH REMAINING SITES CLOSED IN ONE COMMIT — AND THE FUZZ TARGET STILL FIRES, WHICH IS NOT A CONTRADICTION AND THIS ENTRY SAYS WHY** — ★ **`R236`'S OWN SITE TABLE SUMS TO 23 AGAINST ITS OWN DENOMINATOR OF 22, AND THE EXTRA ROW IS A COMMENT LINE — THE FOURTH BAD NUMBER IN THE RULE'S ORBIT** — filed 2026-08-31 (353rd filing)
+
+**One commit, two Pass IDs.** They are filed under one heading because
+`77631a6` is one commit and its own title names both, and as two IDs because
+they are **two different verbs in two different subsystems** — `Pass 190.0` is
+`delete_field_group` (forms), `Pass 190.1` is `delete_annotation`
+(annotations). Precedent for the shape: `Pass 171.0` + `Pass 172.0` (`3fe901a`)
+above. **Pass ceiling `189` → `190`.**
+
+**Scope, measured here from `git show --stat` rather than taken from the
+dispatch:** 48 files, **+1,667 / −28**. Decomposing exactly:
+`crates/pdfce-core/src/edit.rs` **+334**, the two new test files **494**
+(`form_group_deletion_shapes.rs` 329 + `annot_delete_structural.rs` 165), the
+new fuzz target **509**, the two fixture generators **306**, `fuzz/Cargo.toml`
+**24** — and 334 + 494 + 509 + 306 + 24 = **1,667 ✓**. ⇒ **Test-file share 494
+of 1,667 = 29.6%; test *infrastructure* (tests + target + generators) 1,309 of
+1,667 = 78.5%.** Seven binary fixtures and thirty-three corpus seeds carry no
+line count.
+
+**Fixtures are wholly synthetic and both generators are committed**
+(`LEGAL.md` §5 (a)): `tools/gen-form-group-deletion-fixtures.py` (4 shapes) and
+`tools/gen-annot-structural-fixtures.py` (3).
+
+---
+
+#### ★★★★ `Pass 190.0` — `delete_field_group`, and the sizing that was wrong because it answered a question about the GUARD
+
+**What it was.** `group_deletion_preflight` predicted how many grouping nodes a
+removal takes by walking `form.groups` **by name**; `remove_fields_from_form`
+performed it by walking `/Parent` **by object**. A `debug_assert_eq!` compared
+the two and `form_edit_sequence` tripped it on 2026-08-30. It has been carried
+in `docs/NEXT_SESSION.md` as **fuzz finding #3** ever since — **and
+de-prioritised for a day on a stated sizing.**
+
+**The sizing, quoted so the correction is checkable.** `Pass 185.1`'s filing,
+`ARCHITECTURE.md` §10.4 and `NEXT_SESSION.md` all said the same thing: *"it is
+a `debug_assert`, so in the build operators run it is a wrong `nodes_removed`
+in a disclosure — not corruption."* **Three of the four shapes the two
+derivations disagree on are release-visible, and two of them are worse than a
+wrong number:**
+
+| shape | the assertion said | **what the RELEASE build does** |
+|---|---|---|
+| `/T`-less terminal | 0 vs 1 | ★★ **returns `Ok` and deletes NOTHING** |
+| terminal with no `/Parent` | 0 vs 1 | ★★ **writes a dangling `/Kids` into the saved file** |
+| duplicate `/T` | 2 vs 1 | a wrong count |
+| `/T`-less intermediate | 2 vs 1 | a wrong count |
+
+⇒ **A `debug_assert` that fires is evidence that two derivations disagree. It
+is NOT evidence about what the disagreement costs.** Sizing the defect from the
+assertion's `#[cfg(debug_assertions)]`-ness answered a question about the
+**guard**, not about the **bug it was guarding**. Minted below as **`R238`** at
+`n = 2` — the second instance is `Pass 189.0`'s `into_knockout`, recorded one
+filing ago as an observation on `R236` and explicitly not minted then.
+
+**★★ AND THE PARAGRAPH THAT CARRIED THE WRONG SIZING IS THE ONE THAT DEMANDED A
+SIZING AT ALL.** `ARCHITECTURE.md` §10.4's block is headed *"Severity is part
+of the finding, not a footnote"* and closes *"an open item inherits the
+severity of what it was found next to unless its own severity is stated."*
+**The moral survives intact and the figure beside it does not** — which is a
+sharper lesson than either: **stating a severity is not measuring one, and a
+paragraph that insists on the statement supplies no pressure at all toward the
+measurement.** Corrected in place in this filing, with the old wording struck
+rather than deleted.
+
+**TWO ROOT CAUSES, and they are different from each other.**
+
+1. **★★★ A NAME IS NOT AN IDENTITY.** Two grouping nodes share one fully
+   qualified name whenever any `/T`-less node sits in the chain — §12.7.3.2
+   says such a node contributes no segment, so it silently **aliases** its
+   parent's name — or whenever a producer writes a duplicate `/T`, which
+   nothing forbids. A `Vec<String>` **cannot represent two nodes bearing one
+   name**, and the cascade it was checked against is keyed by `ObjId`. Fixed by
+   keying the prediction on ids (`named_ids`) and by selecting the subtree
+   **structurally** through the new `field_subtree_ids` rather than by
+   `Form::descendants_of`'s string-prefix match — **which is exactly why the
+   `/T`-less case selected nothing, deleted nothing, and returned `Ok`**: a
+   `/T`-less child's FQN *equals* its parent's and therefore never carries the
+   `"parent."` prefix the name walk searches for.
+   ★ **This is `docs/core-api/03-capabilities.md`'s own standing warning —
+   *"do not derive grouping nodes by splitting an FQN … it does not, and the
+   failure is silent"* (`forms.rs:718-721`) — arriving from the other
+   direction.** The contract doc told callers not to reason about structure
+   from names, and the verb did it internally. **Checked in this filing and
+   left standing: that note is now *more* correct, not less.**
+2. **★★ `/Parent` IS A BACK-LINK, NOT THE STRUCTURE.** The new
+   `field_owner_index` derives each node's container by walking `/Kids` **down**
+   from `/AcroForm` `/Fields`, falling back to `/Parent` only for a node
+   unreachable from the roots. The old map was used **twice** — to cascade
+   emptied parents and to build the `/Kids` patches — so a field with no
+   `/Parent` was deleted while **the array naming it was never patched**.
+   `delete_field` shares that function and shared the hole; **one change fixes
+   both verbs**, which is `R219`'s obligation discharged on the forms side of
+   this commit.
+
+**★★★ ONE DERIVATION IN THE OUTCOME, AND THE TWO SHELLS HAD BEEN READING
+DIFFERENT FIELDS.** `FieldGroupDeletion` was built as
+`nodes_removed: emptied.len(), ..preview` — **the COUNT from the cascade and
+the LIST from the prediction, spliced by a struct update.** `pdfce-cli` prints
+`nodes_removed`; `pdfceGUI` prints `nodes.len() - 1`, under a comment saying it
+reads the list *"so the number and the keys just purged cannot disagree"* —
+**right about the hazard and pointed at the wrong field.** ⇒ **The same
+deletion on the same document reported different numbers depending on which
+program ran it, and `--dry-run` disagreed with the real run ON A DESTRUCTIVE
+VERB.** The two walks now agree by construction, so the splice *could* have
+been left; it is not, and the reason is worth keeping: **"they agree" is a
+property of today's code, "there is only one of them" is a property of the
+type.** `R159`'s neighbourhood — a lenient reader standing in for the thing
+being read.
+
+**★ The struct's public shape is UNCHANGED** — `group_name`, `terminals`,
+`widgets_removed`, `nodes_removed`, `nodes` — so
+`docs/core-api/02-editing-and-saving.md:2698`'s field table is still accurate.
+**Checked here rather than assumed**, because a "collapse two derivations into
+one" change is exactly the shape that quietly drops a field.
+
+---
+
+#### ★★★★ `Pass 190.1` — an `/Annots` entry is not necessarily an annotation
+
+**What it was.** `annotation_deletion_guards` tested `/F` bit 8, `/TrapNet` and
+`/Widget`. **All three ask what KIND of annotation this is; none asked whether
+it is one.** `annot::page_annotations` accepts any `/Annots` entry that
+resolves to a dictionary — **correct for a READER** under §10's fail-clean
+posture, **a hole under a DELETION**.
+
+Found by the new `annot_delete_sequence` target **within seconds of its first
+existing**, on a **173-byte** input: a page whose `/Annots` named the
+**document catalog**. `delete_annotation` deleted the catalog, **returned
+`Ok`**, and produced a file with **no page-tree root** — noticed only by
+`debug_assert_page_tree_still_walks`, compiled out of the build operators run.
+
+**★★★ THIS IS `Pass 185.1`/`185.2` IN A SECOND CARRIER, AND THE REPETITION IS
+THE FINDING.** There, an `/AcroForm` `/Fields` named an object that was also a
+`/Page`; here, a page's `/Annots` does. **`refuse_if_in_page_tree` was written
+for the form half and was never called from the annotation half — the fix
+existed and the second caller did not.** So the lesson is not *"add a guard"*:
+**a guard written for one carrier is a claim about a CLASS, and the other
+members of that class need enumerating at the time rather than when a fuzzer
+finds them one at a time.**
+
+★★ **AND THAT OBLIGATION WAS ALREADY STANDING AND WENT UNPAID.** `R219`
+(minted 2026-08-27, 288th filing) says: *when a Pass fixes one of several
+routes to the same behaviour, enumerate the other routes in the same Pass and
+say explicitly which are left.* `Pass 185.1`/`185.2` fixed the `/Fields`
+carrier of *"a structural array entry that is also a structural object"* and
+named **no other carrier** — `/Annots` is the one it did not name, and it cost
+a second release-silent page-tree destruction found by a fuzzer a day later.
+⇒ **`R219` is AMENDED rather than duplicated by a new rule** (see *What was NOT
+minted*): its trigger is widened from *routes to a behaviour* to **carriers of
+a hazard**, with this as its fourth instance and its **first recorded
+violation**.
+
+**Three halves to the fix, and the sabotage found that out.** The page-tree
+walk, an identity check against the catalog (and `/AcroForm`), and a `/Type`
+test. **Sabotaging only two left the catalog case still refused by the third**
+— redundancy rather than a weak test, but it means **the first sabotage proved
+less than it appeared to**; sabotaging all three reddens all three tests.
+★ `/Type` is **optional on an annotation in practice, so its ABSENCE proves
+nothing and is not tested; its PRESENCE naming something else is decisive** —
+`/Catalog`, `/Pages`, `/Page`. That half is the cheap one and it reaches what
+the walk cannot: a `/Catalog` no page tree reaches, or a `/Pages` node orphaned
+from the root.
+
+**★ Preview parity is PRESERVED, and this was checked rather than assumed.**
+The three new refusals live inside `annotation_deletion_guards` (`:23762`),
+which `annotation_deletion_preview` calls — so
+`docs/core-api/02-editing-and-saving.md:3714`'s claim that
+`the_preview_refuses_exactly_what_the_deletion_refuses` still holds. **Worth
+checking precisely because the other half of this same commit exists to fix a
+preview that disagreed with its verb**: a commit that fixes a dry-run
+divergence in one verb is the commit most able to introduce one in another.
+
+**★★ WHAT MUST NOT BE RECORDED AS CLEAN: THE TARGET STILL FIRES.** On a
+**second and distinct route** — a document with **two `3 0 obj` definitions**,
+where object 3 is the page named by `/Kids`. Signature **`BadKid(ObjId 3)`**,
+not `NoPageTreeRoot`: a different mechanism from the one fixed here, which
+**the catalog guard does not reach**, and **whether it is release-visible has
+NOT been measured.** Reproducer preserved as a **tracked corpus seed**,
+`fuzz/corpus/annot_delete_sequence/seed_openbug_badkid_dupobjnum.bin`
+(**1,618 B**, `git ls-files`-confirmed here), beside
+`seed_fixed_catalog_in_annots.bin` (**173 B**) for the one that is fixed.
+**Deliberately NOT left in `fuzz/artifacts/`**, which `fuzz/.gitignore`
+excludes — the commit message records that its own first draft said *"the
+reproducer is in the tree"* while pointing at a path git would have dropped,
+**which is the same class of false claim the Pass is about**, caught before it
+shipped.
+⇒ **The fuzz target does not run clean, this commit does not claim it does, and
+neither does this entry.** Filed as a new owed item in `NEXT_SESSION.md`.
+
+---
+
+#### ★★ `R236`'s LEDGER IS NOW EMPTY, AND THAT IS NOT THE SAME CLAIM AS "ANNOTATION DELETION IS CLEAN"
+
+Both of the rule's remaining work items closed in this one commit:
+
+| site (re-measured at the working tree, **line numbers MOVED**) | was | **now** |
+|---|---|---|
+| `edit.rs:18713` — group cascade vs prediction (was cited as `:17486`) | ★★ **OPEN, finding #3** | **CLOSED** — the disagreement is fixed; the assertion is retained and now **agrees by construction**. Reached by `form_edit_sequence`. |
+| `edit.rs:23079` — *"the target was located on some page…"* (was cited as `:21669`) | ★★ **UNCOVERED — the concrete work `R236` creates** | **COVERED** — `fuzz/fuzz_targets/annot_delete_sequence.rs` exists and is tracked |
+
+★★ **Reachability was MEASURED, not assumed** — the step `Pass 189.0` added to
+this rule's check, applied on its first opportunity. **Engineer-reported** (no
+`cargo fuzz` run was made by this filing): a temporary `stderr` probe confirmed
+the guarded code runs during the corpus pass. **The assert itself has not been
+falsified**, which is the honest state — *reached* and *not tripped* are two
+facts and only the first is established by running the corpus.
+
+⇒ **`R236` now has NO outstanding work items.** ★ **The rule does not retire**,
+and this entry says so in words because a ledger reaching zero is exactly when
+a reader assumes it has: **`R236`'s trigger is the postcondition SET, which
+grows with the crate**, and the population is re-measured, not remembered.
+
+★★★ **AND THE EMPTY LEDGER COEXISTS WITH A LIVE OPEN DEFECT, which is not a
+contradiction and is the distinction most likely to be lost.** The `BadKid`
+route above fires `debug_assert_page_tree_still_walks` — **helper 1, which
+`R236` has recorded as COVERED since the day the rule was minted.** A covered
+site is one with an input source pointed at it; **finding a defect is what
+coverage is FOR.** ⇒ **`R236`'s ledger measures whether every tripwire has a
+fuzzer. It does not measure whether the verbs are correct**, and a filing that
+reports "the rule's ledger is empty" without this sentence hands the next
+session a false all-clear.
+
+#### ★ AND THE RULE'S OWN SITE TABLE DOES NOT ADD UP — the FOURTH bad number in `R236`'s orbit
+
+Counted here, row by row, against the rule's own stated denominator:
+1 (helper 1) + 1 (cascade) + 1 (annotation) + 3 (`ccitt`/`lexer`/`parser`)
++ 8 (`cmyk_buffer`) + 2 (`mesh`) + 7 (the exempt row) = **23**, against a
+denominator of **22**.
+
+**The extra row is `writer/xref_out.rs`, listed as ×2.** Live measurement:
+`grep -nE "debug_assert" crates/pdfce-core/src/writer/xref_out.rs` returns two
+lines, `:282` and `:292` — and **`:282` is a comment**, reading *"…what keeps
+the entry at 20 and the `debug_assert_eq!` below honest."* ⇒ **The site table
+inherited the exact defect the census's own correction had already removed.**
+`R236`'s text *names* `writer/xref_out.rs:282` as one of the three comment
+lines it excluded to get from 27 hits to 24 invocations — **the correction was
+performed in the count and not propagated to the table beside it**, four
+paragraphs away in the same rule. Corrected in this filing: **the exempt row is
+6, and the table now sums to 22.**
+
+★★ **That is hard rule 11's shape inside a single document**, and it is the
+third time in eleven days that `R236`'s numbers have failed: `34` (never
+correct), `27` (the correction inherited the defect), the *"eight sibling
+dimension guards"* comment (this filing's parent), and now the table's own sum.
+⇒ **A correction that fixes a figure must sweep for the figure's DERIVATIVES**
+— a total, a table, a per-row breakdown — and the derivatives are usually in
+the same document, which is why nobody greps for them.
+
+#### ★★ THE INFLATION MECHANISM DEMONSTRATED A SECOND TIME, BY ACCIDENT, ON THIS ROLE'S OWN CORRECTION
+
+`Pass 189.0`'s finding was that **satisfying `R236` inflates the grep `R236`'s
+census is taken with**. The 352nd filing reported one survivor to `crates/` —
+`cmyk_buffer.rs:807`'s *"this and the **eight** sibling dimension guards"*,
+which no reading made true. The engineer fixed it. Measured here on the working
+tree, decomposing exactly at both ends:
+
+| `crates/pdfce-render/src/cmyk_buffer.rs` | `93dc9ba` | `baf0c29` | **working tree** |
+|---|---|---|---|
+| `grep -c debug_assert` — **raw hits** | 10 | 13 | ★ **17** |
+| macro **invocations** — the graded population | 10 | **8** | **8** |
+| prose lines *about* `debug_assert` | 0 | 5 | **9** |
+| checks by addition | 10 = 10 + 0 ✓ | 13 = 8 + 5 ✓ | 17 = 8 + 9 ✓ |
+
+⇒ **Correcting the sentence inflated the grep again — raw hits 13 → 17 while
+the population held at 8.** The fix is right and the measurement got worse
+again, in the same file, for the same reason, one commit later.
+
+★★★ **AND THE CORRECTION'S FIRST DRAFT QUOTED A RAW-HIT FIGURE, WHICH ITS OWN
+LANDING CHANGED.** The figure was therefore removed rather than updated, and
+the comment now publishes the **command** — `grep -cE
+'debug_assert(_eq|_ne)?!' crates/pdfce-render/src/cmyk_buffer.rs` → **8** — and
+the decomposition **4 exempt + 4 vacuous = 8** (the `into_knockout` pair having
+become a runtime refusal). ⇒ **A CENSUS FIGURE QUOTED INSIDE THE PROSE IT
+COUNTS IS SELF-INVALIDATING**: editing the sentence changes the number the
+sentence quotes, so the figure is wrong at the instant it is written and no
+gate can see it. **Publish the command, not the count.** Recorded in `R236`'s
+text; **declined as a standing rule at `n = 1`, with the mint trigger named**
+(see below).
+
+★ **Surviving and correct in the same comment, quoted so no sweep "fixes" it:**
+*"all ten assertions in this file: four exempt … six vacuous"* — **4 + 6 = 10**
+is the pre-fix population and cross-checks post-fix exactly (**4 exempt + 4
+surviving vacuous = 8**).
+
+#### The population is UNCHANGED at 22 — measured, not assumed
+
+`Pass 190.0`/`190.1` added **+334 lines to `edit.rs`** and **no new
+`debug_assert`**, and removed none. Re-measured at the working tree by
+`R236`'s own command: **22 invocations (12 `pdfce-core` + 10 `pdfce-render`)**,
+identical to `baf0c29`. **The line numbers moved and the count did not**, which
+is the ordinary case and worth one sentence because the *last* two filings both
+moved the count.
+
+#### Gates
+
+| gate | result | source |
+|---|---|---|
+| `cargo test --workspace` | **4,887 passed / 0 failed** | engineer-reported; **no `cargo` run made by this filing** |
+| `cargo fmt --check` | clean | engineer-reported |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean | engineer-reported |
+| `tools/check-string-gaps.sh` | clean | engineer-reported — ★ **and it caught a line continuation eaten out of this Pass's own new error message**, its **second** save in this session (`Pass 188.0`'s was the first) |
+| `tools/check-ledger-numbers.py` | **clean** | **run here, twice** |
+| `tools/check-commits-filed.py` | **RED (deferred) on `77631a6` at dispatch → GREEN after this filing** | **run here, twice** |
+| `tools/check-core-api-verbs.py` | ★ **RED (exit 1) in this filing — `EditError` 112 → 113, caused by `Pass 190.1` — then GREEN** | **run here, twice** |
+| `tools/check-suite-name-absent.py` | **clean** — and **run**, unlike in the 352nd filing | **run here** |
+| `check-cited-commits-exist` · `check-passes-filed` · `check-cited-verbs-exist` · `check-history-not-rewritten` · `check-one-commit-per-command` · `check-metrics-line-contract` · `check-outcome-disclosed` · `check-shipped-assets` · `check-ci-job-names` | all **exit 0** | **run here** |
+
+★ The new-test count is **10** (`form_group_deletion_shapes.rs` **7** +
+`annot_delete_structural.rs` **3**), **counted here from the files** rather
+than taken from the dispatch.
+
+★★ **The tests assert on the SAVED BYTES and on the outcome's internal
+consistency, not on the `debug_assert`** — which is both the thing already
+known to fire and the thing a release build cannot see (`Pass 187.0`'s lesson,
+`R159`'s mechanism). **The dangling-reference assertion is structural, not a
+count**, and the reason is exact: **shape 4's node count is 0 both before and
+after the fix**, so a count assertion passes on the broken engine at `0 == 0`
+while the bytes it wrote are damaged.
+
+★ **The load-bearing fixture is the third annotation one** —
+`structural-annots-mixed.pdf`, a **real `/Square` annotation beside a
+structural entry** — so a "fix" that refuses **every** deletion fails it.
+**Without that file the other two would pass on an engine that had stopped
+working**, which is `R224`'s empty-subject-set shape pointed at a refusal
+instead of at a corpus.
+
+#### ★★★ A GATE CAUGHT WHAT THE CLAIM-SWEEP DID NOT — `check-core-api-verbs.py` WENT RED ON THIS FILING'S OWN SUBJECT
+
+`Pass 190.1` added **one `EditError` variant** (`AnnotationObjectIsStructural`),
+taking the enum from **112 to 113**. `docs/core-api/index.md:17` states that
+count in a table cell — *"`EditError`'s **112** variants"* — and
+`tools/check-core-api-verbs.py` **failed with exit 1** in this filing, naming
+the file, the line and both numbers. **The hard-rule-11 claim-sweep run minutes
+earlier had not found it**, because the sweep searched for the *claims the Pass
+falsified* (`nodes_removed`, the finding-#3 sizing, *"named subtree"*, the two
+stale `edit.rs` line numbers) — and **an error-variant count is not a claim
+anyone would think to search for after a deletion-guard Pass.**
+
+⇒ **A mechanical count-gate and a claim-sweep return different sets, and the
+gate's set is NOT a subset of the sweep's.** This is the mirror of hard rule
+11's own founding observation — *the engineer's greps find the copies he wrote
+and miss the ones phrased differently; reading for meaning returns the larger
+set* — and **here the machine returned something the reading did not.**
+⇒ **Run the doc gates as part of the filing, not only before the push.**
+Recorded as an observation rather than minted: one instance, and the remedy is
+already mechanised.
+
+★ **Both halves fixed in this filing:** the count corrected to **113**, and the
+refusal **documented on `delete_annotation`'s own row** in
+`docs/core-api/02-editing-and-saving.md` — placed beside `delete_field`'s
+`FieldObjectIsInPageTree`, the same hazard in the first carrier, so a shell
+author meets the pair together. **`check-core-api-verbs.py` is green** (`exit
+0`, re-run here).
+
+★★ **A PRE-EXISTING STALE COUNT IN THE SAME FILE, REPORTED AND NOT FIXED:**
+`02-editing-and-saving.md`'s grouped error presenter says *"the five groups
+below partition all **57**"*, against an enum of **113**. **Not caused by this
+Pass**, and not a false claim about behaviour — an incomplete list that
+misstates how many it lists. **Completing and renumbering it is a Pass, not a
+filing**, and **no gate covers it**: the gate checks `index.md`'s figure, not
+this one.
+
+#### `FEATURES.md`
+
+**Two clause edits, no box changes**, and the check is stated because the
+dispatch's read was *no changes at all*:
+
+- **Forms `:225`** — *"a grouping node and its **named** subtree"* was
+  falsified by `Pass 190.0`: the selection is now **structural** (`/Kids`), and
+  the name walk it replaced is precisely what returned `Ok` having deleted
+  nothing. **The neighbouring *"matched by prefix on a grouping node"* clause
+  SURVIVES and is correct** — that sentence is about
+  `action_targets_orphaned`'s census, which is still a name-prefix match
+  (`name == fqn || name.starts_with(&group_prefix)`), and a sweep must not
+  "fix" it.
+- **Annotations `:208`** — *"Delete an annotation."* gains the new refusal, in
+  the file's established habit of naming refusals by name.
+
+**No box changed**, and nothing moved between *Planned* and *Implemented*:
+both verbs were already `[x]` core / `[x]` cli, these are **correctness fixes
+to shipped verbs**, and a refusal on a shape no honest producer emits is not a
+capability an operator gains or loses.
+
+#### ★ What was NOT minted, with reasons, so it is not re-derived
+
+- **A DECISION RECORD — DECLINED.** Decision `110` already rules that the
+  remedy for a found structural collision is **a named refusal in the release
+  build, not a promoted assertion**. `Pass 190.1` is its **third application**
+  (`185.1`/`185.2` the first, `Pass 189.0`'s `into_knockout` the second), in a
+  third carrier. **Filing a decision for an application of a decision is how a
+  decision log stops being readable** — the same warrant the 352nd filing used
+  one filing ago, applied consistently rather than re-argued. **Decision
+  ceiling `112` — UNCHANGED; next free `113`.**
+- **A NEW RULE FOR *"a guard written for one carrier is a claim about a
+  class"* — DECLINED, AND `R219` AMENDED INSTEAD.** `R219` already carries this
+  obligation for *"routes to the same behaviour"*, and its own three founding
+  instances are distinct features sharing one defect mechanism, not gestures
+  reaching one capability — so the fit is real and the gap is in the **wording
+  of its trigger**, not in its coverage. **Widening the existing rule is
+  cheaper than a fourth phrasing of one idea**, which is the failure the 352nd
+  filing declined *"linking is not reaching"* to avoid. See the amendment in
+  *Standing rules*.
+- **A NEW RULE FOR *"a census figure quoted inside the prose it counts is
+  self-invalidating"* — DECLINED at `n = 1`**, recorded inside `R236`'s
+  inflation block where the number lives, and governed already by **hard rule
+  10**'s *file a figure in a form that can disagree with something*. ⇒ **Mint
+  trigger, named so the count starts at one rather than zero: a second
+  self-invalidating figure ANYWHERE OUTSIDE `R236`'s orbit.** Inside it, the
+  general inflation mechanism is already written down twice.
+
+#### Documents edited by this filing — `docs/` only, seven files
+
+`ROADMAP.md` (this entry, `R238` minted, `R219` and `R236` amended, three
+historical forward pointers), `ARCHITECTURE.md` (§10.4 corrected),
+`SESSION_LOG.md` (353rd filing), `NEXT_SESSION.md` (§0 rewritten, §C item 11,
+§D re-measured), `FEATURES.md` (two clauses), `core-api/index.md` (the 112 →
+113 count) and `core-api/02-editing-and-saving.md` (the new refusal on
+`delete_annotation`'s row). **Nothing under `crates/`, `fuzz/`, `fixtures/` or
+`tools/`** — the modified `crates/pdfce-render/src/cmyk_buffer.rs` in the tree
+is the **engineer's**, measured here and not touched.
+
+#### Ledger
+
+**Pass `189.0` → `190.0`/`190.1`; next free family `191`.** **Standing rules
+`R237` → `R238`** (`R238` minted below), next free **`R239`**; **`R219`
+amended**, **`R236` amended** (both site verdicts, the table's arithmetic, the
+inflation second instance, the self-invalidating-figure observation).
+**Decisions `112` — UNCHANGED**, next free **`113`**. **Filings `352` → `353`.**
+All four derived by `python tools/check-ledger-numbers.py`, run in this filing,
+**clean — no duplicate Pass, rule or decision numbers**.
+
+### `Pass 189.0` (`baf0c29`, 2026-08-31) — **★★★★ THE `R236` AUDIT OF `cmyk_buffer.rs`: 0 COVERED / 0 OPEN / 4 EXEMPT / 6 VACUOUS, NO FUZZ TARGET OWED — AND THE ONE GUARD IN THE FILE WHOSE VIOLATION IS *SILENT*, PROMOTED TO A RUNTIME REFUSAL** — ★★★★ **SATISFYING `R236` INFLATES THE GREP `R236`'S CENSUS IS TAKEN WITH: THIS FILE WENT FROM 10 RAW / 10 REAL TO 13 RAW / 8 REAL — THE MEASUREMENT GOT *WORSE* BECAUSE THE RULE WAS *OBEYED*** — ★★★ **SIX OF THE TEN CHECKED WIDTH ONLY WHILE THEIR MESSAGE CLAIMED A SHARED DEVICE GRID** — ★★ **REACHABILITY WAS ESTABLISHED, NOT ASSUMED: LINKING IS NOT REACHING** — ★ **A REAL GAP NAMED AND DELIBERATELY *NOT* FILED UNDER `R236` — THE HARNESS HAS NO RENDERING FUZZ TARGET AT ALL** — filed 2026-08-31 (352nd filing)
+
+**Sourcing (`R228`).** A shell was held and used. **No code was written in this
+filing**; nothing under `crates/`, `fuzz/`, `fixtures/` or `tools/` was edited —
+two other agents held `fuzz/` and `crates/pdfce-core/tests/` concurrently and
+this filing touched **only `docs/`**. Measured here, by command:
+`git log -1 --format=%B baf0c29` and `git show --stat baf0c29`;
+`git show baf0c29 -- crates/pdfce-render/src/cmyk_buffer.rs` read in full;
+`git log --oneline -12`; `python tools/check-ledger-numbers.py`;
+`python tools/check-commits-filed.py` (before and after);
+`bash tools/check-string-gaps.sh`; and the five census greps tabulated below,
+run against `93dc9ba` (the parent), `baf0c29`, `7ac98da` and `HEAD` via
+`git show <rev>:<path>` and `git archive`, so every figure in this entry is a
+measurement rather than a restatement of the dispatch.
+
+#### ★ WHY THIS IS A PASS AND NOT A MAINTENANCE NOTE UNDER `R236` — THE CALL, AND THE ARGUMENT AGAINST IT
+
+The case for filing it as an audit note is real and was weighed: the work
+**discharges an existing rule's owed item**, it produced no new capability, and
+its largest artefact by line count is a **doc comment**. `FEATURES.md` is
+untouched by it (checked, §*What did not change* below), which is normally a
+strong signal that a commit is not a Pass.
+
+It is filed as a **Pass** anyway, on one fact that outweighs all of that:
+**`into_knockout` behaves differently in the build operators run.** Before
+`baf0c29` a mismatched backdrop produced a **sheared image, in release, with no
+panic and no diagnostic**; after it, the function **refuses** and returns
+`None`. That is decision `110`'s remedy — *"where a specific collision is found,
+the remedy is a named refusal in the release build, not a promoted
+assertion"* — applied for the **second time and in a second crate**, and it is
+the same shape as `Pass 185.1`/`185.2`, both of which are Passes. A behaviour
+change in a shipping crate, carrying a new sabotage-verified test, is above this
+project's Pass bar regardless of what motivated it.
+
+**The audit VERDICT is filed elsewhere on purpose, and the split is the point.**
+The classification (0/0/4/6) and the per-site table belong in **`R236`'s own
+text**, not in this Pass entry — that is the 350th filing's lesson, taken
+literally: *the census's first home was a file that gets overwritten, so the
+denominator lives in the rule, where the rule is read from.* A Pass entry is
+read once, when someone is auditing that Pass. `R236` is read every time
+somebody asks whether a `debug_assert` owes a target. **The verdict is an
+attribute of the rule; the code change is an attribute of the Pass.**
+
+#### ★★★★ THE HEADLINE FINDING, AND IT IS NOT THE ONE THE COMMIT LEADS WITH: OBEYING `R236` MAKES `R236`'S OWN CENSUS HARDER TO TAKE
+
+`R236`'s remedy for a non-adversarial assertion is *"a written exemption at the
+site."* `baf0c29` wrote one — 30 lines of it, correctly, in the shape
+`writer/content.rs:649` established. **The exemption mentions the word
+`debug_assert` five times, and the census command is a grep for that word.**
+
+Measured, per file, both sides of the commit (`git show <rev>:<path>` then the
+four greps; the decomposition **balances exactly at both ends**, which is the
+form hard rule 10 asks for):
+
+| `crates/pdfce-render/src/cmyk_buffer.rs` | at `93dc9ba` (before) | at `baf0c29` (after) |
+|---|---|---|
+| `grep -c debug_assert` — **raw hits** | **10** | **13** |
+| macro **invocations** (the population `R236` grades) | **10** | **8** |
+| `cfg(debug_assertions)` attributes | 0 | 0 |
+| `fn debug_assert*` definitions | 0 | 0 |
+| **prose lines** *about* `debug_assert` | **0** | **5** |
+| decomposition checks by addition | 10 = 10 + 0 + 0 + 0 ✓ | 13 = 8 + 0 + 0 + 5 ✓ |
+
+⇒ **The raw grep rose 30% (10 → 13) while the real population fell 20%
+(10 → 8), in one commit, and the rise is caused by the compliance action the
+rule demands.** The commit message calls this file *"the clean case for the
+inflation mechanism"* because its doc comments explained compositing rather than
+assertions — **that was true of the parent commit and is no longer true of the
+commit that says it.** It stopped being the clean case at the moment it complied.
+
+**Why this generalises past a cute observation.** The 350th filing found that a
+source grep over a **documentation-first codebase counts the codebase's own
+prose about the construct**, and located the cause in the project's general
+documentation discipline. This is the sharper, second-order form: **the
+mechanism is not merely adjacent to the rule, it is driven by the rule.** Every
+future discharge of `R236` writes more prose containing the census's own search
+term, so **the denominator degrades monotonically in the direction of compliance
+and the degradation is fastest where the rule is best obeyed.** A census whose
+noise grows with its own remedy cannot be taken with the naive command
+indefinitely.
+
+⇒ **The remedy is the one already in `R236` and it must not be relaxed: the
+figure filed is the INVOCATION count, and it is filed with its decomposition, so
+the prose term is visible rather than folded into the total.** A bare raw-hit
+figure for this file would now read `13` and be wrong by five in a way nobody
+could see. Both figures above are recorded so a future reader can check the
+subtraction rather than trust either.
+
+#### ★★★ WHAT THE AUDIT GRADED — the verdict, in one line, with the table in `R236`
+
+**0 covered / 0 open / 4 exempt / 6 vacuous, over the ten assertions the file
+carried at `93dc9ba`. No fuzz target is owed by this file.** The two grades are
+not synonyms and the distinction is the substance:
+
+- **Exempt (4)** — `composite_mask` and its three siblings. The mask or pixmap
+  operand is **allocated by the caller from *this buffer's own*
+  `width()`/`height()`**, never from an image dictionary or a `/MediaBox`. A
+  page's size *is* document-derived — but it is **read once and handed to both
+  sides**, so the comparison is **one pdfce number against itself**, not two
+  derivations a hostile file could drive apart. Written at the site, once, in
+  `writer/content.rs:649`'s established shape, with the other sites pointing
+  back at it.
+- **Vacuous (6)** — stronger, and the stronger word is chosen deliberately.
+  Their operand is obtainable **only from the receiver** (`take_child`,
+  `child_from_backdrop`, `finish_knockout`), so a **sabotage of the plumbing
+  moves both sides of the comparison together** and the assertion still passes.
+  An exempt assertion could fail if a caller misbehaved; a vacuous one cannot
+  fail at all through the paths that exist.
+
+⇒ **"Exempt" says adversarial input cannot reach it. "Vacuous" says nothing can
+reach it.** A future audit that collapses the two loses the ability to say which
+assertions would notice a refactor.
+
+#### ★★★ DEFECT 1 — SIX OF THE TEN CHECKED WIDTH ONLY WHILE THEIR MESSAGE CLAIMED A SHARED DEVICE GRID
+
+`debug_assert_eq!(coverage.width(), self.width, "coverage mask and colorant
+buffer must share a device grid")` checks **one** of the two numbers named in
+its own message. A **same-width, short-height** operand passed the guard and
+then indexed off the end.
+
+**Severity, stated rather than inherited** (§10.4's rule that *an open item
+inherits the severity of what it was found next to unless its own severity is
+stated*): this one is **detectable**, because running off the end panics even in
+release. The defect is not a silent corruption — it is a **guard that claimed
+more than it checked**, which is `R159`'s mechanism (a lenient reader standing
+in for a strict one) applied to an assertion's message rather than to a parser.
+All six now assert the **pair**: `(a.width(), a.height())` against
+`(self.width, self.height)`.
+
+⇒ **An assertion's MESSAGE is a claim, and it is not checked by anything.** Six
+messages named two quantities while their conditions compared one, and the
+messages are the half a reader believes. There is no gate for this and none is
+proposed — the same warrant `R236` itself gives for declining one.
+
+#### ★★★★ DEFECT 2 — `into_knockout` IS THE ONE SITE IN THE FILE WHOSE VIOLATION IS SILENT, AND IT BECOMES A RUNTIME REFUSAL
+
+**This is the finding that makes the entry a Pass**, and the reasoning is worth
+carrying whole because it is a *discriminator*, not a blanket policy.
+
+Every other dimension guard in this file **fails loudly**. The compositing loops
+index by `y * width + x`, so a mismatched operand runs off the end and **panics
+in release**. For those, a `debug_assert` is an adequate tripwire: it names the
+cause in a debug run, and the shipping build still refuses to emit wrong pixels.
+
+`into_knockout` is different, and the difference is structural. It **replaces
+the receiver's planes wholesale with clones of `initial`'s**. A larger `initial`
+therefore leaves every plane **longer** than `width * height`; every subsequent
+`idx` addresses the **wrong** pixel; and **nothing ever runs off the end.** The
+image is **sheared — silently, in release, with no panic and no diagnostic** —
+guarded only by an assertion that is **compiled out of the build operators
+run.**
+
+⇒ **The discriminator is not "is this state untrusted-derived?" but "what does
+the shipping build do when the assertion would have fired?"** Nine of these ten
+answered *panic*; one answered *emit a wrong page*. `R236` finds the class by
+provenance; **this finding says the class also has to be sorted by
+release-build consequence**, and the two orderings do not agree. Recorded as an
+observation on `R236` below rather than as a new rule — see *What was NOT
+minted*.
+
+**The refusal is stronger than the assertion it replaces**, which is worth
+noting because "promoted to a runtime check" usually means "same condition, now
+in release". It is not. The assertion compared `width` and `height`; the guard
+compares those **and** `initial.alpha.len()` **and** every plane's length
+against `n = width * height`, so a buffer whose dimensions agree but whose
+planes were built wrong is refused too.
+
+**Cost and reachability, both measured rather than asserted.**
+`Canvas::begin_knockout_group` binds one `(w, h)` and builds both buffers from
+it, **five lines apart** — so the condition is **unreachable today** and the
+check costs **one comparison per knockout group**, on a path taken once per
+group, not once per pixel. `None` is **already** this function's "cannot build
+the group" answer (its doc comment: *"`None` if the extra planes cannot be
+allocated"*), so the refusal needed **no new vocabulary** — no new error
+variant, no new disclosure surface, nothing for rule 4 to route.
+
+⇒ **"Unreachable today" is a statement about today's call sites, and a Pass that
+relies on it should say so in those words.** The test asserts the guard
+**directly**, because that is the only way to reach it.
+
+**The test is built against its own vacuity.**
+`a_knockout_group_refuses_a_backdrop_of_the_wrong_size` asserts **both
+directions** — smaller backdrop refused, larger backdrop refused — **and, in the
+same test, that a matching pair still succeeds.** That third assertion is what
+stops it going vacuous if the guard ever degenerates into refusing everything,
+which is exactly the failure the 351st filing's §C item 9 warns about.
+**Sabotage-verified: neutering the condition reddens exactly that test**, no
+more and no less.
+
+#### ★★ REACHABILITY WAS ESTABLISHED, NOT ASSUMED — "LINKING IS NOT REACHING"
+
+The audit's *"0 covered"* is a **measurement**, and this is the paragraph that
+makes it one. Every item in `cmyk_buffer.rs` is `pub(crate)`. The **three fuzz
+targets that link `pdfce-render` all stop at a leaf parser.** `mesh_shading`
+builds a `ParseInput` and calls `mesh::parse` — **it never paints.** Its
+`CmykIntent::default()` is a **field of the parse input**, which is the sole
+reason a grep for `cmyk` lists that target at all, and it is a **false positive
+for reachability**.
+
+⇒ **Linking is not reaching.** A target that links a crate produces a
+plausible-looking grep hit for every symbol in it; a target that *reaches* a
+module is a claim about the **call graph**, which no grep answers. Without this
+step *"0 covered"* would have been an assumption dressed as a verdict — and the
+assumption points the safe way (*"something probably covers it"*), which is the
+direction that does not get checked.
+
+This is the same species as `R236`'s own caveat (*a target's **compilation** is
+not its **execution***) and `R209` (*a CI job with no local runner is
+**unobserved**, not **passing***). All three are one shape: **an artefact's
+existence is not the artefact's effect.** See *What was NOT minted*.
+
+#### ★ A REAL GAP NAMED, AND DELIBERATELY NOT FILED AS AN `R236` OBLIGATION
+
+**The harness has NO rendering fuzz target at all.** Reaching this module would
+need one that drives a **full page render of a subtractive page** — `/Group /CS
+/DeviceCMYK`, isolated / non-isolated / knockout transparency groups,
+`DeviceCMYK` images, `/DeviceN` shadings, overprint.
+
+**It is filed under *Backlog*, not under `R236`, and the distinction is
+load-bearing.** `R236`'s obligation is created **by an assertion that would
+catch something**. **None of these ten is that tripwire** — four are exempt, six
+are vacuous, and a target that reached them would find nothing *through them*.
+The hole is real, and the honest statement is that it is a **fuzz-surface gap
+that `R236` does not reach**, not an `R236` debt going unpaid.
+
+⇒ **A rule that gets credited with every obligation in its neighbourhood stops
+being checkable.** Filing this under `R236` would have made the rule's ledger
+read *"one uncovered site and one rendering target owed"*, and the second half
+would never have been discharged by anything `R236` can measure. See the new
+*Backlog* entry **"A rendering fuzz target over a subtractive page"**.
+
+#### ★★★ ONE SURVIVOR FOUND BY THIS FILING (hard rule 11), ENGINEER-OWNED, REPORTED AND NOT EDITED
+
+`crates/pdfce-render/src/cmyk_buffer.rs:807` — the exemption's opening sentence
+reads *"this and the **eight** sibling dimension guards in this file"*. **No
+reading of the file makes that eight.** Measured at `HEAD`:
+
+| what is counted | figure |
+|---|---|
+| `debug_assert` **invocations** remaining (lines 842, 920, 1007, 1176, 1308, 1309, 1601, 1602) | **8** — so *"this and the **seven** siblings"* |
+| distinct dimension-guard **sites** (the `1308`/`1309` and `1601`/`1602` pairs each guarding one call) | **6** |
+| dimension guards **including** `into_knockout`'s promoted runtime refusal | **9** — so *"this and the **eight** siblings"* is reachable only under this reading, and the same sentence then says *"none of them owes a `cargo-fuzz` target"* of a check that is not a `debug_assert` at all |
+
+**The audit's own arithmetic is correct where it matters** and is quoted here as
+surviving-and-correct so a future sweep does not "fix" it: *"all ten assertions
+in this file: four exempt … six vacuous"* — **4 + 6 = 10**, the pre-fix
+population, and it cross-checks against the post-fix count exactly (**4 exempt +
+4 surviving vacuous = 8**, the two promoted ones being vacuous). It is the
+**sibling count in the first sentence** that does not resolve.
+
+★ **The shape, because it is the third time in this rule's eleven-day life:
+`R236` is a rule about a number, and a number in its own compliance text does
+not check out.** The 350th filing recorded two (`34`, then `27`); this is the
+third, and it is in the exemption prose rather than in a census. **Reported, not
+edited** — hard rule 11 scopes this role to reporting on `crates/`, and this
+session held `docs/` only while two other agents held `fuzz/` and
+`crates/pdfce-core/tests/`.
+
+#### WHAT DID NOT CHANGE, checked rather than assumed
+
+- **`FEATURES.md`: no row moves, and this was verified by grep, not by
+  inference.** The four rows that could plausibly be touched —
+  `:266` (subtractive colorant buffer), `:267` (its memory ceiling),
+  `:272` (transparency **GROUP** compositing, which names §11.4.8's knockout
+  variant explicitly) and `:358` (knockout for the `/TK` population, still
+  unbuilt) — describe **capabilities**, and no capability changed. A dimension
+  mismatch that `Canvas` cannot produce is not a capability an operator can
+  observe, gain or lose. **`:358` in particular stays `[ ]`** — this Pass did
+  not touch `/TK`, and a reader skimming a knockout-flavoured Pass title might
+  assume otherwise.
+- **No decision record.** Decision `110` already rules on this exact remedy
+  (*"the remedy is a named refusal in the release build"*); this is its **second
+  application**, not a new ruling. Filing a decision for an application of a
+  decision is how a decision log stops being readable. **Decision ceiling
+  unchanged at `112`; next free `113`.**
+- **Rule 4 is not engaged.** The refusal returns `None` on a path
+  `Canvas::begin_knockout_group` cannot drive; nothing is inferred, so there is
+  nothing to disclose. Stated because a Pass containing the words *"refuses"*
+  and *"silent"* invites a rule-4 audit that would find nothing.
+- **GUI-core separation untouched** — `pdfce-render` gained no dependency; the
+  commit is one file, `+117 / −11`.
+
+#### WHAT WAS NOT MINTED, AND WHY — *"linking is not reaching"* considered at `n = 1` and DECLINED
+
+The observation is good and it is **recorded in `R236`'s text** (below) rather
+than given a number. Three reasons, applying this project's own two-occurrence
+bar rather than waiving it:
+
+1. **`n = 1` for this spelling.** One audit, one false positive (`mesh_shading`).
+   `R236` itself was minted at `n = 1`, but on an argued warrant that does not
+   transfer: there, *waiting for a second instance meant waiting for a second
+   release-silent corruption to ship*. Here a second instance costs a reader one
+   wasted grep.
+2. **The parent shape is already written down, twice, and one of the two is in
+   the very rule this would attach to.** `R236`'s caveat says a target's
+   **compilation** is not its **execution**; `R209` says a CI job with no local
+   runner is **unobserved**, not **passing**. *Linking is not reaching* is the
+   same sentence about a third artefact. **Three phrasings of one idea in three
+   rules is how a standing-rules list becomes unreadable** — the warrant on
+   which `R235` was declined at `n = 1` and decision `108` declined `R236` a day
+   before it was minted for a different reason.
+3. **It is a step in a procedure, not a trigger.** It tells you *how to
+   establish* a coverage claim; `R236` tells you *when you owe one*. It belongs
+   inside `R236`'s check, and that is where it is now written.
+
+⇒ **`R237` remains the ceiling; next free `R238`.** Recorded so a future filing
+does not re-derive the decline from scratch — and so that a **second** false
+positive of the same kind is recognised as the mint trigger when it arrives.
+
+#### Gate state at the end of this filing — measured, per hard rule 8
+
+| gate / check | result | how |
+|---|---|---|
+| `cargo test -p pdfce-render` | **606 passed / 0 failed** | engineer-reported with the dispatch; not re-run in this filing (no `cargo` run made here) |
+| `cargo fmt --check` | clean | engineer-reported |
+| `cargo clippy -p pdfce-render --all-targets -- -D warnings` | clean | engineer-reported |
+| `tools/check-string-gaps.sh` | **PASS — no baked-in gaps** | **re-run here**, exit 0 |
+| `tools/check-commits-filed.py` | **RED on `baf0c29` at dispatch → re-run at the end of this filing** | see the closing note of the 352nd `SESSION_LOG.md` entry |
+| `tools/check-ledger-numbers.py` | clean; no duplicate Pass, rule or decision numbers | **re-run here** |
+
+**Ceilings after this filing.** **Pass `188.0` → `189.0`.** **Standing rules
+`R237` — UNCHANGED**, next free `R238`; **`R236`'s text amended** (denominator,
+site table, and two observations) **without a substantive change to the rule**.
+**Decisions `112` — UNCHANGED**, next free `113`. **`SESSION_LOG.md` filings
+`351` → `352`.**
+
+---
+
 ### `Pass 188.0` (`a8586cc`, 2026-08-31) — **★★★★ GEOMETRY INSIDE A FORM XObject IS EDITABLE — SIX LEAF-ADDRESSED VERBS, COORDINATES IN PAGE SPACE, AND A CAPABILITY GAP THAT SYSTEMATICALLY MISSED THE ONE PERSON MOST LIKELY TO REPORT IT** — ★★★ **DECISION `112`: EDIT IN PLACE AND DISCLOSE, EXTENDED FROM DECISION `076`'S *TEXT* RULING TO *GEOMETRY* — NO NEW RULING WAS NEEDED, AND THE PASS SAID SO INSTEAD OF ASKING** — ★★★ **`EditSession::page_objects` RETURNED NO LEAVES AT ALL, WHILE ITS OWN DOC COMMENT CLAIMED EQUIVALENCE TO THE FUNCTION IT RECOMMENDED ITSELF OVER** — ★★ **THE DECOMPOSITION MEMO COULD NOT SEE A FORM EDIT: THE SECOND OCCURRENCE, IN THE SAME CACHE AS `Pass 186.0`'S, ONE LEVEL DEEPER — `R237` IS MINTED FROM THE PAIR** — filed 2026-08-31 (351st filing, together with `Pass 186.0` and `Pass 187.0` below)
 
 **Sourcing (`R228`).** A shell was held and used; **no code was written in this
@@ -266,7 +1026,11 @@ operand set **deliberately**.
 family ships, rather than a target owed and deferred** — which is the first
 time that has happened since `R236` was minted one day earlier. It does **not**
 discharge `R236`'s named uncovered site (annotation deletion,
-`edit.rs:21669`); see *For next session*.
+`edit.rs:21669`); see *For next session*. ★ **AMENDED 2026-08-31 (353rd
+filing): that site is now COVERED — `fuzz/fuzz_targets/annot_delete_sequence.rs`,
+`Pass 190.1` (`77631a6`), and the line has moved to `:23079`. `R236`'s ledger
+is empty; the verb is not clean.** See `Pass 190.0`/`190.1` at the *Shipped*
+head.
 
 #### CLI
 
@@ -827,12 +1591,23 @@ two:**
 |---|---|---|---|
 | 1 | `delete_field` | a field that is also a **page** → no page tree | **FIXED**, `Pass 185.1` |
 | 2 | `delete_field` | a field that is the **catalog** → `NoPageTreeRoot` | **FIXED**, `Pass 185.2` |
-| 3 | `delete_field_group` | `debug_assert_eq!` at `edit.rs:17486` — the emptied-node **cascade and prediction disagree** | ★★ **OPEN** |
+| 3 | `delete_field_group` | `debug_assert_eq!` at ~~`edit.rs:17486`~~ → **`:18713`** — the emptied-node **cascade and prediction disagree** | ~~★★ **OPEN**~~ → ★★ **FIXED 2026-08-31, `Pass 190.0` (`77631a6`)** |
 
-★★★ **#3 IS SIZED HONESTLY RATHER THAN CARRIED AT ITS NEIGHBOURS' SEVERITY,
+★★★★ **AMENDED 2026-08-31 (353rd filing, `Pass 190.0`): THE SIZING BELOW WAS
+WRONG, AND ITS WRONGNESS IS A BIGGER FINDING THAN THE SIZING WAS.** Four
+hand-built shapes reproduce the disagreement deterministically and **three are
+release-visible**: a `/T`-less terminal makes the verb **return `Ok` and delete
+nothing**; a terminal with no `/Parent` makes it **write a dangling `/Kids`
+into the saved file**; two shapes give a wrong count. ⇒ **A `debug_assert`
+that fires is evidence that two derivations disagree; it is NOT evidence about
+what the disagreement COSTS.** The paragraph below is kept in full, struck, as
+the worked example — it is *why* the deduction is so easy to make. **Minted as
+`R238`** (see *Standing rules*), at `n = 2` with `Pass 189.0`'s `into_knockout`.
+
+~~★★★ **#3 IS SIZED HONESTLY RATHER THAN CARRIED AT ITS NEIGHBOURS' SEVERITY,
 AND THAT SIZING IS THE FINDING.** It is a `debug_assert_eq!`, so in the build
 operators run it is a **wrong `nodes_removed` in a disclosure — not
-corruption.** The engineer's reason for saying so explicitly: *"filing it
+corruption.**~~ The engineer's reason for saying so explicitly: *"filing it
 beside two page-tree destructions without saying so would make the next session
 spend a day at the wrong priority."* ⇒ **An open item inherits the severity of
 the thing it was found NEXT TO unless its own severity is stated**, and a
@@ -940,7 +1715,7 @@ tidy the table would erase the evidence for the practice.
 |---|---|---|
 | **The instance** — `/Fields` naming an object that is also a `/Page` | **FIXED** — refused by name, reproduced deterministically before the fix, green after | unchanged |
 | **The class** — any form-edit verb leaving a page tree the crate's own reader rejects | ★★ **OPEN** — a second crash at the same postcondition, at a different line; replayable at `-seed=1`, **not reduced**, **no libFuzzer artifact** | ★★★ **CLOSED by `Pass 185.2`** — and it was **the same class all along**: `delete_field` again, same `NoPageTreeRoot`, walking through the guard because the protected set omitted the **catalog** |
-| **The TARGET's findings overall** | 2 known | ★★ **THREE, AND THE THIRD IS OPEN** — `delete_field_group`, a `debug_assert_eq!` at `edit.rs:17486` where the emptied-node **cascade and prediction disagree**. **Materially less severe and must be sized as such:** it is a `debug_assert_eq!`, so in the build operators run it is a **wrong `nodes_removed` in a disclosure, not corruption.** `NEXT_SESSION.md` §C item 5 (rewritten as a table in `8d8dbb5`) carries it, with the known/guessed split |
+| **The TARGET's findings overall** | 2 known | ~~★★ **THREE, AND THE THIRD IS OPEN**~~ → ★★ **THREE, ALL FIXED as of 2026-08-31 (`Pass 190.0`, `77631a6`) — and the sizing in this row is struck: see the amendment above the table** — `delete_field_group`, a `debug_assert_eq!` at ~~`edit.rs:17486`~~ → `:18713` where the emptied-node **cascade and prediction disagree**. **Materially less severe and must be sized as such:** it is a `debug_assert_eq!`, so in the build operators run it is a **wrong `nodes_removed` in a disclosure, not corruption.** `NEXT_SESSION.md` §C item 5 (rewritten as a table in `8d8dbb5`) carries it, with the known/guessed split |
 
 ★★★ **THE SENTENCE THE ENGINEER ASKED TO HAVE FILED, AND IT IS NOW FILED WITH
 ITS PAYOFF ATTACHED: *the fix addresses one member of the class, and the
@@ -106202,6 +106977,59 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### Unscoped — **a rendering fuzz target over a SUBTRACTIVE page: the harness has NO rendering target at all** — filed 2026-08-31 (352nd filing, named by `Pass 189.0`'s `R236` audit)
+
+**★ FILED HERE AND DELIBERATELY *NOT* UNDER `R236`, and that placement is the
+substance of the entry.** `Pass 189.0` audited all ten `debug_assert`s in
+`crates/pdfce-render/src/cmyk_buffer.rs` and graded them **4 exempt / 6
+vacuous — no fuzz target owed.** The verdict is correct **and** the module is
+genuinely unfuzzed, which sounds like a contradiction and is not: **`R236`'s
+obligation is created by an assertion that would CATCH something, and none of
+these ten is that tripwire.** Four cannot be driven apart by any input; six
+cannot fail at all. A target that reached them would find nothing *through
+them*. ⇒ **The hole is real; it is a fuzz-surface gap `R236` does not reach, not
+an `R236` debt going unpaid.** A rule credited with every obligation in its
+neighbourhood stops being checkable — filing this under `R236` would have made
+its ledger read *"one uncovered site and one rendering target owed"*, and the
+second half could never be discharged by anything the rule can measure.
+
+**What exists today, measured 2026-08-31.** Three fuzz targets link
+`pdfce-render` and **all three stop at a leaf parser.** `mesh_shading` builds a
+`ParseInput` and calls `mesh::parse`; **it never paints.** Every item in
+`cmyk_buffer.rs` is `pub(crate)`. **Nothing in the harness drives a page
+render.** (Its `CmykIntent::default()` is a field of the parse input — the sole
+reason a grep for `cmyk` lists that target, and a **false positive for
+reachability**. *Linking is not reaching.*)
+
+**What such a target would have to drive**, from the audit's own enumeration —
+this is the acceptance criterion in embryo, not a wish list:
+
+- a page whose group declares `/Group /CS /DeviceCMYK` (the subtractive
+  compositing buffer's entry condition);
+- **isolated, non-isolated and knockout** transparency groups, so
+  `take_child`, `child_from_backdrop`, `into_knockout` and `finish_knockout` are
+  all exercised — these are exactly the paths the ten assertions sit on;
+- `DeviceCMYK` **images** (the bridged-pixmap composite path);
+- `/DeviceN` **shadings**;
+- **overprint**, including the `/Indexed`-colorant and image cases `Pass 97.1a`
+  /`97.1b` touched.
+
+**Sizing, honestly, because it is the part that decides whether this ever gets
+built.** This is a **new target family**, not an extension of an existing one:
+every current `pdfce-render`-linking target is a parser target, and a render
+target needs a document, a page and a rasterizer invocation rather than a byte
+slice and a leaf `parse`. **Scope it with the operator before starting** — and
+note `R236`'s standing caveat, which applies here with full force: CI's
+`fuzz-smoke` runs `cargo +nightly fuzz build` and **never `cargo fuzz run`**, so
+**building this target schedules its compilation, not its execution.** Both
+defects in `R236`'s founding arc were found by a **person choosing to fuzz**.
+
+**Related:** `R236` (and its site table, which now records `cmyk_buffer.rs` as
+audited-and-owing-nothing); `ARCHITECTURE.md` §10.2 (the bootstrap-era
+fuzz-coverage plan, which enumerates *filter decoders* and never mentions
+rendering) and §10.4; `Pass 97.0`–`97.1g` (the compositing arithmetic this would
+fuzz); `Pass 189.0` (`baf0c29`).
+
 ### Unscoped — **the text planner's resolver still reads the BASE, so a `/Font` created this session cannot be resolved** — filed 2026-08-31 (351st filing, `Pass 186.0`'s named residual)
 
 **This is a NAMED RESIDUAL, not a newly-found bug.** `Pass 186.0` moved eight
@@ -127798,6 +128626,62 @@ same cause (hashes exist only at commit time), two different failure modes.
 
   No re-mint; **ceiling stays `R224`, next free `R225`.**
 
+  **★★★★ AMENDED 2026-08-31 (353rd filing, `Pass 190.1`, `77631a6`) — THE
+  TRIGGER IS WIDENED FROM *ROUTES TO A BEHAVIOUR* TO *CARRIERS OF A HAZARD*,
+  AND THIS IS THE RULE'S FIRST RECORDED VIOLATION RATHER THAN ITS FOURTH
+  DISCHARGE.**
+
+  **What happened.** `Pass 185.1`/`185.2` (2026-08-30) fixed a release-silent
+  page-tree destruction in `delete_field`: an `/AcroForm` `/Fields` naming an
+  object that was **also a `/Page`**. The remedy was a new helper,
+  `refuse_if_in_page_tree`. **No other carrier was named.** A day later
+  `Pass 190.1` found the identical defect in `delete_annotation` — a page's
+  `/Annots` naming the **document catalog** — where **`refuse_if_in_page_tree`
+  already existed and was simply never called.** ⇒ **The fix existed and the
+  second caller did not**, and the cost of not enumerating was a second
+  release-silent page-tree destruction, found by a fuzzer rather than by
+  reading.
+
+  **Why this is `R219` and not a new rule.** This rule's own three founding
+  instances are **distinct features sharing one defect mechanism** — images
+  then shadings, analytic then mesh, the click then the marquee and the
+  line-pick — not several gestures reaching one capability. The fit is exact;
+  the gap was in the **wording of the trigger**, which said *"routes to the same
+  behaviour"* and so did not obviously reach *"two unrelated verbs that both
+  trust a structural array."* **Widening the existing rule is cheaper than a
+  fourth phrasing of one idea**, which is the failure the 352nd filing declined
+  *"linking is not reaching"* to avoid.
+
+  **The widened obligation, in one sentence:** *when a Pass fixes one carrier of
+  a hazard — a route, a gesture, a container, an array, a verb family — name the
+  other carriers in the same filing and say for each whether it is already
+  fixed, known-broken-and-filed, or not-yet-checked.* **A guard written for one
+  carrier is a claim about a CLASS**, and the class members are usually
+  greppable at the moment the first one is understood well enough to fix. What
+  the rule still does **not** ask for is a pre-emptive audit of everything
+  adjacent (`R38`'s caution in the other direction) — the obligation is to
+  *say so*, not to *find out*.
+
+  ★ **The concrete carrier list this instance produces, for the next session
+  rather than for the archive:** structural arrays whose entries a verb deletes
+  or rewrites — `/AcroForm` `/Fields` (**guarded**, `Pass 185.1`/`185.2`), a
+  page's `/Annots` (**guarded**, `Pass 190.1`), `/Kids` in the page tree and in
+  the field tree, `/Names` trees, `/Outlines`, `/EmbeddedFiles`, `/OCProperties`
+  `/OCGs`. **None of the remaining ones is checked**, and this sentence is the
+  rule being obeyed rather than a claim that they are broken.
+
+  ★★ **The related fact `R236` already carries, and it points the other way:**
+  *enumerating the CALLERS of a guard says nothing about the correctness of what
+  the guard CONTAINS* (`Pass 185.2` — total route coverage over an incomplete
+  set). **Both failures are real and they are opposite**: `185.2` had every
+  caller and the wrong set; `190.1` had the right set and a missing caller.
+  ⇒ **Check both, and do not let having done one feel like having done the
+  other** — caller enumeration is the more visible and more satisfying half,
+  which is why it absorbs the attention.
+
+  No re-mint; **ceiling stays at `R237` → `R238` for this filing's own mint (see
+  `R238`), and `R219` is amended in place.**
+
 - **R220 — A CAPABILITY IS DOCUMENTED WHERE THE READER'S *QUESTION* LIVES,
   NOT ONLY WHERE ITS *MECHANISM* LIVES; AND A CLAIM THAT PDFCE HAS NO VERB
   FOR SOMETHING IS CHECKED AGAINST **SOURCE** BEFORE IT IS SENT ANYWHERE.**
@@ -130296,6 +131180,9 @@ same cause (hashes exist only at commit time), two different failure modes.
     crates/pdfce-core/src/ crates/pdfce-render/src/ \
     | grep -vE ":\s*(//|\*)"
   # -> 24  (12 core + 12 render), measured 2026-08-30 at `7ac98da`
+  # -> 22  (12 core + 10 render), re-measured 2026-08-31 at `baf0c29` --
+  #        `Pass 189.0` promoted two of `cmyk_buffer.rs`'s ten out of the
+  #        population into a runtime refusal. See *THE DENOMINATOR MOVED*.
   ```
 
   **★★★ THE DENOMINATOR — TRANSPLANTED HERE ON PURPOSE, BECAUSE ITS FIRST HOME
@@ -130305,22 +131192,218 @@ same cause (hashes exist only at commit time), two different failure modes.
   defers — the exact failure mode `R236` was minted about — so the denominator
   lives **in the rule**, where the rule is read from.
 
-  **24 invocations across `pdfce-core` + `pdfce-render`**, measured 2026-08-30
-  at `7ac98da` by the command above. What the rule actually reaches:
+  ~~**24 invocations across `pdfce-core` + `pdfce-render`**, measured 2026-08-30
+  at `7ac98da` by the command above.~~ **22**, re-measured 2026-08-31 at
+  `baf0c29` and again at `77631a6` (`Pass 190.0`/`190.1` added +334 lines to
+  `edit.rs` and **no new `debug_assert`**). What the rule actually reaches:
+
+  ★★ **THE LINE NUMBERS IN THIS TABLE MOVE AND THE ROWS DO NOT.** Every
+  `edit.rs` citation below has been re-measured at `77631a6` and struck where
+  it changed; three of them moved by more than a thousand lines in eleven days.
+  **Cite the site by its message and its verb, and treat the line number as a
+  dated convenience** — a stale line number sends a reader to an unrelated
+  assertion, which is worse than no number at all.
 
   | site(s) | count | verdict |
   |---|---|---|
-  | `edit.rs:12095` — page-tree postcondition (helper 1) | 1 | **COVERED** — `form_edit_sequence`, `pageops_sequence` |
-  | `edit.rs:17486` — group cascade vs prediction | 1 | **OPEN, finding #3** — the target reaches it; see `Pass 185.2`'s amendment |
-  | ★ **`edit.rs:21669`** — *"the target was located on some page, so at least that page must be patched"* | 1 | ★★ **UNCOVERED — THE CONCRETE WORK `R236` CREATES.** No fuzz target drives annotation **DELETION**: `annot_walk` reads, `annot_author` writes. Verified 2026-08-30 — neither target's source contains `delete` or `remove`. |
+  | ~~`edit.rs:12095`~~ → **`:12975`** — page-tree postcondition (helper 1) | 1 | **COVERED** — `form_edit_sequence`, `pageops_sequence`, and (2026-08-31) `annot_delete_sequence` |
+  | ~~`edit.rs:17486`~~ → **`:18713`** — group cascade vs prediction | 1 | ~~**OPEN, finding #3**~~ ★★ **CLOSED 2026-08-31 by `Pass 190.0` (`77631a6`).** The two derivations now agree **by construction** — the prediction is keyed on `ObjId` (`named_ids`) and the subtree is selected structurally (`field_subtree_ids`), not by name prefix. The assertion is **retained**; reached by `form_edit_sequence`. |
+  | ~~★ **`edit.rs:21669`**~~ → **`:23079`** — *"the target was located on some page, so at least that page must be patched"* | 1 | ~~★★ **UNCOVERED — THE CONCRETE WORK `R236` CREATES.**~~ ★★ **COVERED 2026-08-31 by `Pass 190.1` (`77631a6`)** — `fuzz/fuzz_targets/annot_delete_sequence.rs`, tracked. ★ **Reachability MEASURED, not assumed** (this rule's own added step, first opportunity): engineer-reported temporary `stderr` probe confirms the guarded code runs during the corpus pass. **The assert itself has NOT been falsified** — *reached* and *not tripped* are two facts and only the first is established. |
   | `ccitt.rs:236`, `lexer.rs:400`, `parser.rs:699` | 3 | COVERED — `image_codec_ccitt` / `parse_object` / `load_document` |
-  | `cmyk_buffer.rs` | 10 | ★ **UNAUDITED — the second thing to look at.** Render side; no verdict claimed either way. |
+  | `cmyk_buffer.rs` | ~~10~~ → **8** | ★★ **AUDITED 2026-08-31 (`Pass 189.0`, `baf0c29`) — 0 covered / 0 open / 4 EXEMPT / 6 VACUOUS. NO FUZZ TARGET IS OWED.** Exemption written once at `composite_mask` in `writer/content.rs:649`'s shape: the operand is allocated by the caller from **this buffer's own** `width()`/`height()`, so the comparison is one pdfce number against itself. The six vacuous are stronger — their operand is obtainable **only from the receiver** (`take_child` / `child_from_backdrop` / `finish_knockout`), so a sabotage moves both sides together. **Two of the six were promoted to a runtime refusal** (`into_knockout`), which is why the count is now **8**. |
   | `mesh.rs` | 2 | COVERED — `mesh_shading` |
-  | `text_edit/edit.rs:2998`, `addtext.rs:682`, `xref_out.rs` ×2, `writer/content.rs` ×2 (helper 2), `crypto/rc4.rs:56` | 7 | **EXEMPT** — caller-convention or pdfce-constructed state, not untrusted-derived. This is the reasoning `writer/content.rs:649` had already written for itself. |
+  | `text_edit/edit.rs:2998`, `addtext.rs:682`, ~~`xref_out.rs` ×2~~ → **`xref_out.rs:292` ×1**, `writer/content.rs:225` + `:650` (helper 2) ×2, `crypto/rc4.rs:56` | ~~7~~ → **6** | **EXEMPT** — caller-convention or pdfce-constructed state, not untrusted-derived. This is the reasoning `writer/content.rs:650` had already written for itself. |
 
-  ⇒ **One named uncovered site and one unaudited group of ten.** That is a
-  finite work item, not an exhortation, and it is what makes the rule
-  survivable by a session in a hurry.
+  ★ **AND THE TABLE'S OWN SUM DID NOT MATCH ITS OWN DENOMINATOR — corrected
+  2026-08-31 (353rd filing), and it is the FOURTH bad number in this rule's
+  orbit.** As written above it summed to **23** (1 + 1 + 1 + 3 + 8 + 2 + 7)
+  against a stated denominator of **22**. The extra row was
+  `writer/xref_out.rs`, listed **×2**: live measurement returns two lines,
+  `:282` and `:292`, and **`:282` is a comment** — *"…what keeps the entry at 20
+  and the `debug_assert_eq!` below honest."* ⇒ **The table inherited the exact
+  defect the census's own correction had already removed**, and this rule's text
+  *names* `writer/xref_out.rs:282` as one of the three comment lines it excluded
+  to get from 27 hits to 24 invocations. **The correction was performed in the
+  count and not propagated to the table four paragraphs below it.**
+  ⇒ **A correction that fixes a figure must sweep for the figure's
+  DERIVATIVES** — a total, a table, a per-row breakdown — and the derivatives
+  are usually in the same document, which is why nobody greps for them. Sum now
+  1 + 1 + 1 + 3 + 8 + 2 + 6 = **22 ✓**.
+
+  ⇒ ~~**One named uncovered site and one unaudited group of ten.**~~
+  ~~**★ AMENDED 2026-08-31 (352nd filing, `Pass 189.0`): the group of ten is
+  AUDITED and owes nothing. `edit.rs:21669` — annotation deletion — is now the
+  SOLE outstanding item.**~~
+
+  **★★★ AMENDED AGAIN 2026-08-31 (353rd filing, `Pass 190.0`/`190.1`,
+  `77631a6`): `R236` HAS NO OUTSTANDING WORK ITEMS.** Both remaining sites
+  closed in one commit — the group cascade's two derivations now agree by
+  construction, and annotation deletion has a tracked fuzz target whose
+  reachability was measured. **A ledger reaching zero is a finite, checkable
+  state and that is the point of having filed a denominator at all.**
+
+  ★★ **THE RULE DOES NOT RETIRE, and this is stated in words because an empty
+  ledger is exactly when a reader assumes it has.** `R236`'s trigger is **the
+  postcondition SET, which grows with the crate** — every new assertion over
+  committed state or over two derivations of one quantity joins the population
+  the moment it is written. **The population is re-measured, not remembered.**
+
+  ★★★ **AND AN EMPTY LEDGER COEXISTS WITH A LIVE OPEN DEFECT — not a
+  contradiction, and the distinction most likely to be lost.**
+  `annot_delete_sequence` **still fires**, on a second and distinct route: a
+  document with **two `3 0 obj` definitions**, signature **`BadKid(ObjId 3)`**
+  rather than `NoPageTreeRoot`, which the catalog guard does not reach and whose
+  release-visibility **has not been measured**. Reproducer:
+  `fuzz/corpus/annot_delete_sequence/seed_openbug_badkid_dupobjnum.bin`
+  (1,618 B, tracked). **The site it fires at is helper 1, which this table has
+  recorded COVERED since the day the rule was minted** — and **finding a defect
+  is what coverage is FOR.** ⇒ **`R236`'s ledger measures whether every tripwire
+  has an input source. It does NOT measure whether the verbs are correct**, and
+  a filing that reports "the ledger is empty" without this sentence hands the
+  next session a false all-clear.
+
+  **★★★★ THE DENOMINATOR MOVED, AND IT MOVED *BECAUSE THE RULE WAS OBEYED* —
+  amended 2026-08-31 (352nd filing).** The population is now **22 macro
+  invocations** (12 `pdfce-core` + **10** `pdfce-render`), ~~24 (12 + 12)~~,
+  measured at `HEAD` = `baf0c29` by the same command as before. Two of
+  `cmyk_buffer.rs`'s ten were promoted out of the population into a runtime
+  refusal by `Pass 189.0`.
+
+  **The half that generalises, and it is a defect in the CENSUS COMMAND rather
+  than in anyone's arithmetic.** `R236`'s remedy for a non-adversarial
+  assertion is *"a written exemption at the site"*. `Pass 189.0` wrote one, 30
+  lines, correctly — **and it says `debug_assert` five times, which is the word
+  the census greps for.** Measured on that one file, both sides of one commit,
+  decomposing exactly at both ends:
+
+  | `crates/pdfce-render/src/cmyk_buffer.rs` | at `93dc9ba` | at `baf0c29` |
+  |---|---|---|
+  | `grep -c debug_assert` — **raw hits** | **10** | **13** |
+  | macro **invocations** — the graded population | **10** | **8** |
+  | prose lines *about* `debug_assert` | **0** | **5** |
+  | checks by addition | 10 = 10 + 0 ✓ | 13 = 8 + 5 ✓ |
+
+  ⇒ **The raw grep rose 30% while the real population fell 20%, in one commit,
+  and the rise is caused by the compliance action this rule demands.** The 350th
+  filing found that a source grep over a documentation-first codebase counts the
+  codebase's own prose about the construct, and located the cause in the
+  project's general documentation discipline. **This is the sharper form: the
+  mechanism is DRIVEN BY THE RULE.** Every future discharge of `R236` writes
+  more prose containing the census's own search term, so **the denominator
+  degrades monotonically in the direction of compliance, fastest where the rule
+  is best obeyed.** `Pass 189.0`'s commit message called this file *"the clean
+  case for the inflation mechanism"* — **true of its parent, and false of the
+  commit that says it.** It stopped being the clean case at the moment it
+  complied.
+
+  ⇒ **The remedy is the one already stated and it must not be relaxed: file the
+  INVOCATION count, always with its decomposition**, so the prose term is
+  visible rather than folded into a total. A bare raw-hit figure for that file
+  now reads `13` and is wrong by five in a way no reader could see.
+
+  **★★★ SECOND DEMONSTRATION, BY ACCIDENT, ON THE CORRECTION TO THE FIRST —
+  added 2026-08-31 (353rd filing).** The 352nd filing reported a survivor to
+  `crates/`: `cmyk_buffer.rs:807`'s *"this and the **eight** sibling dimension
+  guards"*, which no reading made true. The engineer fixed it. Measured on the
+  working tree at `77631a6`, decomposing exactly at every column:
+
+  | `crates/pdfce-render/src/cmyk_buffer.rs` | `93dc9ba` | `baf0c29` | **working tree** |
+  |---|---|---|---|
+  | `grep -c debug_assert` — **raw hits** | 10 | 13 | ★ **17** |
+  | macro **invocations** — the graded population | 10 | **8** | **8** |
+  | prose lines *about* `debug_assert` | 0 | 5 | **9** |
+  | checks by addition | 10 = 10 + 0 ✓ | 13 = 8 + 5 ✓ | 17 = 8 + 9 ✓ |
+
+  ⇒ **Correcting the sentence inflated the grep AGAIN — 13 → 17 raw while the
+  population held at 8.** The fix is right and the measurement got worse again,
+  in the same file, for the same reason, one commit later. **The mechanism is
+  not a one-off of `Pass 189.0`'s exemption; it is what this rule's compliance
+  actions do.**
+
+  **★★★★ AND THE SHARPER FORM, WHICH IS THE PART TO CARRY: A CENSUS FIGURE
+  QUOTED INSIDE THE PROSE IT COUNTS IS SELF-INVALIDATING.** The correction's
+  first draft **quoted a raw-hit figure**, and the act of landing the correction
+  **changed the number the sentence quoted** — the figure was wrong at the
+  instant it was written, and **no gate can see that**, because the figure and
+  the text that invalidates it are the same edit. So the figure was **removed
+  rather than updated**, and the comment now publishes the **command** —
+  `grep -cE 'debug_assert(_eq|_ne)?!' crates/pdfce-render/src/cmyk_buffer.rs`
+  → **8** — with the decomposition **4 exempt + 4 vacuous = 8** (the
+  `into_knockout` pair having become a runtime refusal).
+  ⇒ **Publish the command, not the count, wherever the prose is inside the
+  census's own search space.** This is hard rule 10's *file a figure in a form
+  that can disagree with something* met by its hardest case: a figure that
+  cannot disagree with anything because it edits its own denominator.
+
+  ⇒ **DECLINED as a standing rule at `n = 1`** — it lives here, where the number
+  lives, and hard rule 10 already governs the general obligation. ★ **Mint
+  trigger, named so the count starts at one rather than zero: a second
+  self-invalidating figure ANYWHERE OUTSIDE `R236`'s orbit.** Inside it, the
+  inflation mechanism is already written down twice and a third phrasing would
+  make the rule less readable, not more.
+
+  ★ **Surviving and correct in the same comment, quoted so no sweep "fixes"
+  it:** *"all ten assertions in this file: four exempt … six vacuous"* —
+  **4 + 6 = 10** is the pre-fix population and cross-checks post-fix exactly
+  (**4 exempt + 4 surviving vacuous = 8**).
+
+  **★★ HOW TO ESTABLISH "COVERED" — LINKING IS NOT REACHING.** Added 2026-08-31
+  as a step in this rule's check, **not as a new standing rule** (declined at
+  `n = 1`; see `Pass 189.0`'s *What was NOT minted*). A verdict of *covered* is
+  a claim about the **call graph**, and a grep answers a different question.
+  `Pass 189.0`'s *"0 covered"* was established, not assumed: every item in
+  `cmyk_buffer.rs` is `pub(crate)`, and the **three fuzz targets that link
+  `pdfce-render` all stop at a leaf parser** — `mesh_shading` builds a
+  `ParseInput` and calls `mesh::parse` and **never paints**. Its
+  `CmykIntent::default()` is a **field of the parse input**, which is the sole
+  reason a grep for `cmyk` lists that target, and it is a **false positive for
+  reachability**. ⇒ **A target that LINKS a crate produces a plausible grep hit
+  for every symbol in it.** Same shape as this rule's own caveat (a target's
+  *compilation* is not its *execution*) and `R209` (a CI job with no local
+  runner is *unobserved*, not *passing*): **an artefact's existence is not the
+  artefact's effect.** The unsafe direction is the comfortable one — *"something
+  probably covers it"* is the assumption that never gets checked.
+
+  **★★ AND THE CLASS HAS A SECOND ORDERING THIS RULE DOES NOT PRODUCE.** `R236`
+  sorts assertions by **provenance** (is the state untrusted-derived?).
+  `Pass 189.0` found that the operationally decisive question is a different
+  one: **what does the SHIPPING BUILD do when the assertion would have fired?**
+  Nine of `cmyk_buffer.rs`'s ten answered *panic* — the compositing loops index
+  by `y * width + x`, so a mismatched operand runs off the end even in release,
+  and a `debug_assert` is an adequate tripwire for them. **One answered *emit a
+  wrong page*:** `into_knockout` replaces the receiver's planes wholesale with
+  clones of `initial`'s, so a larger operand leaves every plane **longer** than
+  `width * height`, every index addresses the wrong pixel, and **nothing ever
+  runs off the end** — the image is sheared, silently, in release. That one is
+  now a **runtime refusal**, per decision `110`. ⇒ **The two orderings do not
+  agree, and an assertion can be exempt under this rule while still being the
+  most dangerous one in its file.** ~~Recorded here as an observation on the rule
+  rather than as `R238`, for the reasons in `Pass 189.0`.~~
+
+  **★★★ AMENDED 2026-08-31 (353rd filing): IT IS NOW `R238`, MINTED AT `n = 2`
+  — this is instance 1 and the decline above is superseded rather than
+  deleted.** Instance 2 arrived one filing later and cost a day: **fuzz finding
+  #3's severity was sized from its assertion's compile-time gating** (*"a
+  `debug_assert`, so in release it is a wrong `nodes_removed` in a disclosure —
+  not corruption"*), and `Pass 190.0` measured the release behaviour as
+  **returns `Ok` and deletes nothing** on one shape and **writes a dangling
+  `/Kids`** on another. **Same omission — nobody asked what the shipping build
+  does — with two different harms: a mis-ranked audit here, a mis-prioritised
+  work item there.** The observation stays in this rule because it is what
+  `R236`'s own ordering fails to produce; the **obligation** now lives in
+  `R238`, below.
+
+  **★ A THIRD NUMBER IN THIS RULE'S ORBIT DID NOT CHECK OUT**, after the two
+  recorded below — reported 2026-08-31, **engineer-owned, not edited by this
+  role**. `crates/pdfce-render/src/cmyk_buffer.rs:807` reads *"this and the
+  **eight** sibling dimension guards in this file"*; the file carries **8**
+  invocations total (*"this and the **seven** siblings"*), **6** distinct guard
+  sites, or **9** dimension guards if `into_knockout`'s promoted runtime refusal
+  is counted — which the same sentence then calls a thing that *"owes no
+  `cargo-fuzz` target"*, of a check that is not a `debug_assert`. **Surviving
+  and correct in the same comment, quoted so no sweep "fixes" it:** *"all ten
+  assertions in this file: four exempt … six vacuous"* — **4 + 6 = 10**, and it
+  cross-checks post-fix exactly (**4 exempt + 4 surviving vacuous = 8**).
 
   **★★★★ AND THE CENSUS'S OWN FIRST TWO PUBLISHED FIGURES WERE BOTH WRONG —
   BY THE SAME MECHANISM, IN THE SAME RULE, WITHIN ONE DAY OF EACH OTHER.**
@@ -130369,8 +131452,8 @@ same cause (hashes exist only at commit time), two different failure modes.
 
   | # | helper | site | state derived from untrusted input? | fuzz target |
   |---|---|---|---|---|
-  | 1 | `debug_assert_page_tree_still_walks` | `edit.rs:12079` | **YES** — it re-walks a document the operator opened | ★ `fuzz/fuzz_targets/form_edit_sequence.rs` (`Pass 185.1`) — **fired twice: once at two minutes old (`185.1`), once again after the first fix (`185.2`)** |
-  | 2 | `debug_assert_not_in_path` | `writer/content.rs:649` | **NO — exemption already written** | none owed |
+  | 1 | `debug_assert_page_tree_still_walks` | ~~`edit.rs:12079`~~ → **`:12975`** | **YES** — it re-walks a document the operator opened | ★ `fuzz/fuzz_targets/form_edit_sequence.rs` (`Pass 185.1`) — **fired twice: once at two minutes old (`185.1`), once again after the first fix (`185.2`)**; ★★ **and a THIRD time 2026-08-31 under the new `annot_delete_sequence` target (`Pass 190.1`), on TWO distinct routes — one fixed (`NoPageTreeRoot`, an `/Annots` entry naming the catalog), one STILL OPEN (`BadKid(ObjId 3)`, a duplicate object definition)** |
+  | 2 | `debug_assert_not_in_path` | ~~`writer/content.rs:649`~~ → **`:650`** (the `fn` is at `:649`) | **NO — exemption already written** | none owed |
 
   **★★★ THE FINDING ABOVE THE RULE: HELPER 2 ALREADY CARRIED EXACTLY THE
   EXEMPTION THIS RULE ASKS FOR, INCLUDING THE WORD.** Its doc comment, written
@@ -130560,6 +131643,125 @@ same cause (hashes exist only at commit time), two different failure modes.
   minted in the same filing and neither duplicates this rule: `111` is about
   *which page tree a verb reads*, `112` about *the write contract inside a
   shared container*, and `R237` about *what a cache's key must contain*.
+
+- **R238 — AN ASSERTION'S COMPILE-TIME GATING IS NOT A SEVERITY ESTIMATE. WHEN
+  A `debug_assert` FIRES, OR WHEN ONE IS WRITTEN, THE QUESTION THAT SIZES IT IS
+  *WHAT DOES THE SHIPPING BUILD DO WHEN THIS WOULD HAVE FIRED?* — AND THE ANSWER
+  IS MEASURED AND WRITTEN DOWN, NEVER INFERRED FROM THE
+  `#[cfg(debug_assertions)]`.** Minted 2026-08-31 (353rd filing),
+  librarian-minted, at **`n = 2`**, from `Pass 189.0` (`baf0c29`) and
+  `Pass 190.0` (`77631a6`) — **one filing apart, same omission, two different
+  harms.**
+
+  **The shape.** `debug_assert` is a statement about **where the check runs**.
+  It says nothing whatsoever about **what happens when the checked property is
+  false in a build without it** — and that second thing is the only input to a
+  severity estimate. The two get conflated because the construct's own name
+  carries the word *assert*, which reads as *"this is guarded"*, and because its
+  compile-time gating is the most visible fact about it. **The visible fact is
+  the irrelevant one.**
+
+  **Instance 1 — a mis-ranked audit (`Pass 189.0`, 352nd filing).**
+  `crates/pdfce-render/src/cmyk_buffer.rs` carried ten `debug_assert`s. Nine
+  answer *panic*: the compositing loops index by `y * width + x`, so a
+  mismatched operand runs off the end **even in release**, and for those a
+  `debug_assert` is an adequate tripwire. **One answered *emit a wrong page*:**
+  `into_knockout` replaces the receiver's planes wholesale with clones of
+  `initial`'s, so a larger operand leaves every plane **longer** than
+  `width * height`, every index addresses the wrong pixel, and **nothing ever
+  runs off the end.** The image is **sheared, silently, in release**. Under
+  `R236`'s provenance ordering that site is **exempt**; it was the most
+  dangerous one in its file. Remedy: a **runtime refusal** (decision `110`).
+
+  **Instance 2 — a mis-prioritised work item, and it cost a day
+  (`Pass 190.0`, this filing).** Fuzz finding #3 — a `debug_assert_eq!` in
+  `delete_field_group` where a cascade and its prediction disagree — was filed
+  on 2026-08-30 with a stated sizing that appeared, identically worded, in
+  `ROADMAP.md`, `ARCHITECTURE.md` §10.4 **and** `NEXT_SESSION.md`:
+
+  > *"It is a `debug_assert_eq!`, so **in the build operators run it is a wrong
+  > `nodes_removed` in a disclosure — not corruption.** Materially less severe
+  > than the two page-tree destructions fixed in `Pass 185.1`/`185.2`, which it
+  > was found beside. Do not spend a day at the wrong priority."*
+
+  **Every clause of that is a deduction from the construct, and three of the
+  four shapes are release-visible with two of them worse than a wrong number:**
+  a `/T`-less terminal made the verb **return `Ok` and delete nothing**; a
+  terminal with no `/Parent` made it **write a dangling `/Kids` into the saved
+  file**. The measurement that produced that table cost about an hour — **four
+  hand-built fixtures** — against a day spent at the wrong priority.
+
+  **★★★ AND THE PARAGRAPH CARRYING THE WRONG SIZING IS THE ONE THAT DEMANDED A
+  SIZING AT ALL.** `ARCHITECTURE.md` §10.4's block is headed *"Severity is part
+  of the finding, not a footnote"* and closes *"an open item inherits the
+  severity of what it was found next to unless its own severity is stated."*
+  **The moral survives and the figure beside it does not.** ⇒ **Stating a
+  severity is not measuring one, and a rule that insists on the statement
+  supplies no pressure at all toward the measurement.** That is the half a
+  future session will otherwise re-learn, because the wrong sizing looked
+  *exemplary* — it was specific, it was hedged, it warned against
+  over-prioritising, and it was propagated to three documents on the strength of
+  being all three.
+
+  **THE CHECK, so this is falsifiable rather than exhortative.** For an
+  assertion over committed state or over two derivations of one quantity, answer
+  in writing, at the site or in the filing:
+
+  1. **What does the release build do when this property is false?** The answer
+     is one of: *panics anyway* (an index runs off the end, an unwrap fails) /
+     *returns an error* / ★ ***returns `Ok` and writes wrong bytes***.
+  2. **If it is the third, the assertion is not the remedy** — it is a
+     **detector for a corruption class with no shipping guard**, and the remedy
+     is a **named refusal in the release build** (decision `110`).
+  3. **A firing assertion sizes nothing.** It reports *two derivations
+     disagree*. The cost of the disagreement is a separate measurement, and the
+     cheapest form of it is **building the input the assertion described and
+     running the release path**.
+
+  **★ WHY `n = 2` RATHER THAN WAITING FOR A THIRD.** Same cause both times, not
+  merely the same symptom (`R230`'s minting note, `R221`'s precedent): the
+  question in step 1 was **never asked**, in both cases by people who were
+  otherwise being careful — instance 1 inside a deliberate audit, instance 2
+  inside an explicitly-sized open item. **The evidence for a third instance
+  would be another release-silent defect shipping, or another day at the wrong
+  priority** — which is the cost the rule exists to avoid, the same warrant
+  `R236` used for its own `n = 1` mint, applied here at two.
+
+  **★★ WHAT THIS RULE DOES NOT SAY**, so it is not over-read. It does **not**
+  say `debug_assert` is the wrong construct — `Pass 111.0`'s
+  `debug_assertions`-gating reasoning stands untouched (an `O(pages)` re-walk
+  per command must not sit in a batch job's path), and `R236` explicitly does
+  not move guards into the release build. It does **not** say every assertion
+  needs a release-build twin. It says the **severity question is separate from
+  the construct question**, and that the answer must be **written**, because an
+  unwritten answer is indistinguishable from an unasked one — which is exactly
+  how instance 2 travelled to three documents.
+
+  **Relation to `R236`, the rule this one is most likely to be confused with.**
+  `R236` sorts assertions by **provenance** — *is the state untrusted-derived?*
+  — and asks *does this owe a fuzz target?* `R238` sorts them by **release
+  consequence** and asks *how bad is it when it is wrong?* **The two orderings
+  do not agree**, and that disagreement is the observation `R236`'s own text
+  records as its second ordering (now cross-referenced there). ⇒ `R236` tells
+  you **which assertions need an input source**; `R238` tells you **which need a
+  shipping guard, and how urgently.** An assertion can be exempt under one and
+  critical under the other.
+
+  **Related:** decision `110` (the remedy when the answer is *"returns `Ok` and
+  writes wrong bytes"*); `R236` (the input-source obligation and its second
+  ordering); `R159` (a lenient reader standing in for the thing being read — the
+  same mechanism pointed at an assertion's own message); `ARCHITECTURE.md`
+  §10.4, corrected in this filing.
+
+  **Cross-project derivation:**
+  `D:/dev/rag/rust/an_assertions_compile_time_gating_is_not_a_severity_estimate.md`
+  (forward slashes deliberately, per hard rule 11's path note) — **owed, not yet
+  written**; reported to the engineer in this filing rather than claimed.
+
+  **Standing rules ceiling `R237` → `R238`; next free `R239`.** **Decision
+  ceiling `112` — UNCHANGED, next free `113`** — no decision is minted with this
+  rule, because decision `110` already supplies the remedy and `Pass 190.1` is
+  its **third application**, not a new ruling.
 
 ### ★★ STANDING-RULE DISPOSITION, 351st filing — TWO FURTHER CANDIDATES ASSESSED AND **DECLINED**, both because an existing rule already reaches them
 

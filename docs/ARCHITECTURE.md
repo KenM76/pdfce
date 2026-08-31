@@ -7159,27 +7159,134 @@ assertion is the *detector*, and it needs an *input source*.
 ★★ **The unit is NOT "a named helper", and that scoping was corrected before
 the rule shipped.** `grep -rn "fn debug_assert" crates/*/src/` finds **2**; the
 population of real **invocations** across `pdfce-core` + `pdfce-render` is
-**24** (12 + 12), measured 2026-08-30 at `7ac98da` — census and per-site
-verdicts in `ROADMAP.md`'s `R236` under *THE DENOMINATOR*.
+~~**24** (12 + 12), measured 2026-08-30 at `7ac98da`~~ → **22** (12 core + **10**
+render), **re-measured 2026-08-31 at `baf0c29` (`Pass 189.0`)** and
+**unchanged at `77631a6`** (`Pass 190.0`/`190.1` added +334 lines to `edit.rs`
+and no new `debug_assert`) — census and per-site verdicts in `ROADMAP.md`'s
+`R236` under *THE DENOMINATOR*. ★ **The line numbers in that table move and the
+rows do not**; cite a site by its message and verb, not by a line.
+
+★★★★ **AND THE DENOMINATOR MOVED *BECAUSE THE RULE WAS OBEYED*, which is a
+defect in the census COMMAND rather than in anyone's arithmetic.** `R236`'s
+remedy for a non-adversarial assertion is *"a written exemption at the site."*
+`Pass 189.0` wrote one — 30 lines, correctly — and **it says `debug_assert` five
+times, which is the word the census greps for.** On that one file, both sides of
+one commit, decomposing exactly at both ends: `grep -c debug_assert` went
+**10 → 13** (raw hits) while the graded population went **10 → 8**
+(invocations), the difference being **0 → 5 prose lines**. ⇒ **The raw grep rose
+30% while the real population fell 20%, in a single commit, driven by the
+compliance action the rule demands.** The 350th filing found that a source grep
+over a documentation-first codebase counts the codebase's own prose about the
+construct and blamed the project's general documentation discipline; **this is
+the sharper form — the mechanism is driven by the RULE, so the denominator
+degrades monotonically in the direction of compliance and fastest where the rule
+is best obeyed.** The remedy is unchanged and must not be relaxed: **file the
+invocation count, always with its decomposition**, so the prose term stays
+visible instead of folding into a total.
+
+★★ **Establishing "covered" is a claim about the CALL GRAPH — linking is not
+reaching.** Added 2026-08-31 from `Pass 189.0`, whose *"0 covered"* over
+`cmyk_buffer.rs` was **measured rather than assumed**: every item in the module
+is `pub(crate)`, and the **three fuzz targets that link `pdfce-render` all stop
+at a leaf parser** — `mesh_shading` builds a `ParseInput`, calls `mesh::parse`
+and **never paints**; its `CmykIntent::default()` is a *field of the parse
+input*, the sole reason a grep for `cmyk` lists it, and a **false positive for
+reachability**. Same shape as `R236`'s own execution caveat below and as `R209`:
+**an artefact's existence is not the artefact's effect.** The unsafe direction
+is the comfortable one — *"something probably covers it"* is the assumption that
+never gets checked. Recorded here as a step in the check rather than minted as a
+rule (`n = 1`; see `Pass 189.0`).
+
+★★ **The class has a SECOND ordering this rule does not produce, and the two
+disagree.** `R236` sorts assertions by **provenance** — *is the state
+untrusted-derived?* `Pass 189.0` found the operationally decisive question to be
+*what does the **shipping build** do when the assertion would have fired?* Nine
+of `cmyk_buffer.rs`'s ten answered **panic** (the compositing loops index by
+`y * width + x`, so a mismatched operand runs off the end even in release, which
+makes a `debug_assert` an adequate tripwire). **One answered *emit a wrong
+page*:** `into_knockout` replaces the receiver's planes wholesale with clones of
+`initial`'s, so a larger operand leaves every plane **longer** than
+`width * height`, every index addresses the wrong pixel, and **nothing ever runs
+off the end** — the image is sheared, silently, in release. That one is now a
+**runtime refusal** (decision `110`'s remedy, second application). ⇒ **An
+assertion can be EXEMPT under this rule and still be the most dangerous one in
+its file.** ★★ **That second ordering is now standing rule `R238`** (minted
+2026-08-31, 353rd filing, at `n = 2` — this instance plus fuzz finding #3's
+mis-sizing, corrected above). `R236` asks *does this owe an input source?*;
+`R238` asks *how bad is it when it is wrong?*, and the two orderings disagree.
+
+★★★ **`R236`'S LEDGER IS EMPTY AS OF 2026-08-31 (`Pass 190.0`/`190.1`,
+`77631a6`), AND THAT IS NOT THE SAME CLAIM AS "THESE VERBS ARE CLEAN."** Both
+of the rule's remaining sites closed in one commit — the group cascade's two
+derivations now agree by construction (`edit.rs:18713`), and annotation
+deletion has a tracked fuzz target whose reachability was **measured**
+(`fuzz/fuzz_targets/annot_delete_sequence.rs`, `edit.rs:23079`). **The target
+still fires**, on a second and distinct route — a document with two `3 0 obj`
+definitions, signature `BadKid(ObjId 3)` — at a site this section's own ledger
+has recorded **COVERED** since the rule was minted. ⇒ **Finding a defect is
+what coverage is FOR. `R236`'s ledger measures whether every tripwire has an
+input source; it does not measure whether the verbs are correct.** A reader who
+collapses those two hands the next session a false all-clear. **The rule also
+does not retire** — its trigger is the postcondition set, which grows with the
+crate.
+
+★★★ **AND THE SECOND CARRIER IS THE STRUCTURAL LESSON OF `Pass 190.1`.**
+`Pass 185.1`/`185.2` fixed *"a structural array entry that is also a structural
+object"* for `/AcroForm` `/Fields` and built `refuse_if_in_page_tree` to do it.
+`delete_annotation` — a page's `/Annots` — had the identical defect, and **the
+helper existed and was never called from it.** ⇒ **A guard written for one
+carrier is a claim about a CLASS**, and the class members are greppable at the
+moment the first one is understood well enough to fix. That obligation was
+already standing as **`R219`** and went unpaid; `R219`'s trigger is widened
+from *routes to a behaviour* to **carriers of a hazard** in the same filing.
+★ Note the pairing with the bullet below: `Pass 185.2` had **every caller and
+the wrong set**; `Pass 190.1` had **the right set and a missing caller.** Both
+failures are real, they are opposite, and **doing one does not discharge the
+other.**
 ~~`grep -rn "debug_assert" crates/pdfce-core/src/` finds **34**~~ — **struck
 2026-08-30 (350th filing): that command returns 44, not 34, and always did;
 of those, 7 are `cfg(debug_assertions)` attributes and 10 are comment prose
 ABOUT `debug_assert`. A source grep over a documentation-first codebase counts
 the codebase's own self-description.** The same fuzz
 target's **third** finding is a **bare inline `debug_assert_eq!`**
-(`edit.rs:17486`) comparing two independent derivations of one quantity — a
-postcondition in substance whatever its syntax. **The unit is: any assertion
+(~~`edit.rs:17486`~~ → **`:18713`**, re-measured at `77631a6`) comparing two
+independent derivations of one quantity — a postcondition in substance whatever
+its syntax. **Fixed 2026-08-31 by `Pass 190.0`**: the two now agree by
+construction, the prediction keyed on `ObjId` and the subtree selected
+structurally rather than by name prefix. **The unit is: any assertion
 made after a mutation, over committed state or over two independent derivations
 of one quantity.** The named-helper grep is the cheap first cut, not the
 population. **Discriminator:** *could two parts of this program disagree about
 this?* If yes, adversarial input can make them.
 
-★ **Severity is part of the finding, not a footnote.** That third item is a
-`debug_assert_eq!` over a **disclosure count**, so its release-build
-consequence is a **wrong `nodes_removed` reported to the operator — not
-corruption.** Filing it beside two page-tree destructions without saying so
-would send the next reader to the wrong priority. **An open item inherits the
-severity of what it was found next to unless its own severity is stated.**
+★★★★ **Severity is part of the finding, not a footnote — AND THE FIGURE THIS
+PARAGRAPH GAVE WAS WRONG, WHICH IS THE SHARPER LESSON. Amended 2026-08-31
+(353rd filing, `Pass 190.0`, `77631a6`); standing rule `R238` is minted from
+it.** The struck text:
+
+> ~~That third item is a `debug_assert_eq!` over a **disclosure count**, so its
+> release-build consequence is a **wrong `nodes_removed` reported to the
+> operator — not corruption.** Filing it beside two page-tree destructions
+> without saying so would send the next reader to the wrong priority.~~
+
+**Measured.** Four hand-built shapes reproduce the two derivations'
+disagreement deterministically, and **three are release-visible**: a `/T`-less
+terminal makes `delete_field_group` **return `Ok` and delete nothing**; a
+terminal with no `/Parent` makes it **write a dangling `/Kids` into the saved
+file**; two shapes give a wrong count. The item was carried at the struck
+sizing for a day and de-prioritised on it.
+
+★★ **The moral survives and the figure beside it does not**, and the two halves
+must not be collapsed. **An open item inherits the severity of what it was
+found next to unless its own severity is stated** — still true, still the
+reason to write a sizing at all. But: ⇒ **STATING a severity is not MEASURING
+one.** A `debug_assert`'s `#[cfg(debug_assertions)]` gating says **where the
+check runs** and **nothing** about what the shipping build does when the
+checked property is false; deducing the second from the first answers a
+question about the **guard**, not about the **bug**. **`R238`** makes the
+release-behaviour question an explicit, written step. ★ The struck sizing
+looked exemplary — specific, hedged, warning against over-prioritising — and
+was propagated verbatim to three documents on the strength of being all three.
 
 **★ This does NOT move a guard into the release build.** `Pass 111.0`'s
 reasoning stands: the page-tree postcondition re-walks the whole tree,
