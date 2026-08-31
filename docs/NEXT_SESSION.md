@@ -168,12 +168,49 @@ after a deletion-guard Pass.** ⇒ **A count-gate and a claim-sweep return
 different sets, and the gate's is not a subset of the sweep's.** Both are fixed
 and the gate is green; the habit is the takeaway.
 
-### ★ A RAG FINDING IS OWED AND NOT WRITTEN
+**★★★ AND THE SEQUEL, ONE HOUR LATER (354th filing, `2ab18dd`): THE SAME GATE
+HAD ALREADY MISSED THE SAME NUMBER, IN THE FILE NEXT DOOR, FOR THREE DAYS.**
+`docs/core-api/02-editing-and-saving.md` §6.7 carried *"**88 variants**"* and,
+one sentence later, *"the five groups below partition all **57**"* — **two
+stale figures for one quantity in one paragraph, contradicting each other**,
+against a real **113**. The gate's `errvars` check was minted on **2026-08-28**
+precisely because this role found `index.md` claiming **88**; it was written to
+that copy's phrasing (`` `EditError`'s (\d+) variants ``) and **§6.7's copy of
+the same wrong number, lacking the prefix, was invisible to it.**
+⇒ **A GATE MINTED TO FIX A NUMBER PROTECTS THE PHRASING THAT PROMPTED IT** —
+hard rule 11's *"a minted rule protects the document it was minted in"* with a
+**gate** in the sweep's place. `R239` minted from this pair.
 
-`D:/dev/rag/rust/an_assertions_compile_time_gating_is_not_a_severity_estimate.md`
-— `R238`'s cross-project derivation. A second candidate from the same commit:
-*a guard written for one carrier is a claim about a class* (`R219`'s widened
-trigger). **Reported rather than claimed.**
+### ★★ NEW AND OWED — ONE LINE IN `tools/check-core-api-verbs.py`, WITH ITS MEASUREMENT ALREADY DONE
+
+**`docs/core-api/02-editing-and-saving.md:3794` says *"113 variants"* and is
+CORRECT AND UNGATED right now.** The next `EditError` variant makes it stale
+**silently**, exactly as 88 did. `index.md:17`'s copy **is** gated.
+
+**The fix is a proximity anchor, not a wider regex** — measured in the 354th
+filing over `docs/core-api/`:
+
+| pattern | hits | false positives |
+|---|---|---|
+| `[0-9]+ variants`, bare | 7 | ★ **5** (`CommandKind` 46, `xref` 12, `SnapKind` 8, `FunctionError` ~28, `Destination` 6) |
+| same line **also names `EditError`** | **2** | ★ **0** — and both are the right targets |
+
+⇒ **Narrow the file set and widen the pattern** (hard rule 11 clause (e)
+verbatim). ★ **Do not "fix" `FunctionError`'s *"~28 variants"*** — the tilde is
+honest about being unchecked and is doing real work.
+★ **The same measurement names five more ungated derivable counts in that
+directory. Scoping those is a Pass, not a filing.**
+
+### ★ TWO RAG FINDINGS ARE OWED AND NEITHER IS WRITTEN
+
+- `D:/dev/rag/rust/an_assertions_compile_time_gating_is_not_a_severity_estimate.md`
+  — `R238`'s cross-project derivation (owed since the 353rd filing). A second
+  candidate from the same commit: *a guard written for one carrier is a claim
+  about a class* (`R219`'s widened trigger).
+- `D:/dev/rag/rust/publish_the_command_not_the_count.md` — `R239`'s derivation
+  (owed from the 354th).
+
+**Reported rather than claimed.**
 
 ### ★ WHAT THIS SESSION ADDED, so the arithmetic is legible
 
@@ -407,33 +444,40 @@ ls -lt D:/Dev/pdfce-backups/              # newest bundle
 gh run list --limit 3                     # CI's colour, from GitHub
 ```
 
-- **THREE COMMITS ARE UNPUSHED**, measured by `git rev-parse` /
-  `git rev-list --count origin/main..main` at the end of the **353rd** filing:
-  `baf0c29` (`Pass 189.0`), `123b437` (`chore(agent-memory)`) and `77631a6`
-  (`Pass 190.0`/`190.1`). `HEAD` = **`77631a6`**, `origin/main` = **`93dc9ba`**.
-  The filing commit that accompanies this file makes **four**. **Pushing is
+- **SIX COMMITS ARE UNPUSHED**, re-measured by `git rev-parse` /
+  `git rev-list --count origin/main..main` at the start of the **354th**
+  filing: `baf0c29` (`Pass 189.0`), `123b437` (`chore(agent-memory)`),
+  `77631a6` (`Pass 190.0`/`190.1`), `4c178ab` (353rd filing), `2ab18dd`
+  (`docs(core-api)`) and `4dc6bcb` (`render`, the `R236` exemption's own
+  sibling count). `HEAD` = **`4dc6bcb`**, `origin/main` = **`93dc9ba`**
+  (unmoved). The filing commit that accompanies this file makes **seven**.
+  ★ **The engineer reported a full gate sweep running at that moment and will
+  push when it is green**, so this figure is the pre-push one by construction.
+  ~~**THREE COMMITS ARE UNPUSHED** … `HEAD` = `77631a6` — measured at the end
+  of the 353rd filing, superseded above.~~ **Pushing is
   standing-authorized** (rule 8, decision `090` — *"always push"*); cutting a tag
   or release is **not**, and neither is a force push or a non-`main` branch.
   Scrub `check-suite-name-absent.py` green **before** pushing regardless — the
   repository is public, so a push publishes. **It was NOT run in the 352nd or
   353rd filings**, so there is no sentence here to carry: run it.
-- **The backup bundle is 9 commits stale from `HEAD`, 6 from `origin/main`** —
-  newest is `pdfce-20260830-2005-1e63186-full.bundle` (by
-  `ls -lt D:/Dev/pdfce-backups/`, counts by `git rev-list --count`, both re-run
-  in the 353rd filing). **It is no longer even `origin/main`**. A fresh one is
-  cheap: `git bundle create <path> --all`.
-- **★ THE WORKING TREE IS NOT CLEAN, AND ONE FILE IN IT IS NOT THE LIBRARIAN'S.**
-  Measured at the end of the **353rd** filing: this role's seven `docs/` files,
-  **plus `crates/pdfce-render/src/cmyk_buffer.rs` modified** — the engineer's
-  fix for the *"eight sibling dimension guards"* survivor the 352nd filing
-  reported — **plus untracked `.fz.log`** (77,564 B, a fuzz run's output;
-  neither committed nor ignored by any rule). Everything the 352nd filing saw
-  in flight (`edit.rs`, `fuzz/Cargo.toml`, the fixtures, the target, the corpus)
-  **landed as `77631a6`.**
+- **The backup bundle is 12 commits stale from `HEAD`, 6 from `origin/main`** —
+  newest is `pdfce-20260830-2005-1e63186-full.bundle` (2026-08-30 20:05, by
+  `ls -lt /d/Dev/pdfce-backups/`; counts by `git rev-list --count 1e63186..HEAD`
+  and `..origin/main`, **both re-run in the 354th filing**, up from 9/6 in the
+  353rd). **It is no longer even `origin/main`**, and it has gone staler by
+  three since the last filing said so. A fresh one is cheap:
+  `git bundle create <path> --all`.
+- **★ THE WORKING TREE WAS CLEAN OF TRACKED MODIFICATIONS** at the start of the
+  **354th** filing — untracked **`.fz.log`** and **`.gfinal.log`** only, neither
+  committed nor ignored by any rule. Everything the 353rd filing saw in flight
+  landed: `crates/pdfce-render/src/cmyk_buffer.rs` as **`4dc6bcb`**, that
+  filing's own seven `docs/` files as **`4c178ab`**, and the §6.7 correction as
+  **`2ab18dd`**.
   ⇒ **Re-measure and attribute before staging anything**; *stage by path, never
   `git add -A`* is not a tidiness note when agents share a tree. ⇒ **A
-  `git status` has a shelf life of minutes here** — the **fourth** consecutive
-  filing whose tree moved underneath it.
+  `git status` has a shelf life of minutes here** — the **fifth** consecutive
+  filing whose tree moved underneath it, and this one's figure was taken
+  **before** the engineer's gate sweep finished.
 - **★ `R217` does NOT constrain pushing.** It constrains what may land **on top
   of** an unfiled commit. Read its third amendment note before assuming
   otherwise.

@@ -82991,3 +82991,215 @@ UNCHANGED**, next free `113`. **Filings `352` → `353`.**
   the page tree and the field tree, `/Names` trees, `/Outlines`,
   `/EmbeddedFiles`, `/OCProperties /OCGs`. Naming them is the rule being obeyed;
   checking them is a Pass.
+
+## 2026-08-31 (354th filing) — **ADDENDUM to the 353rd**: the two commits that landed AFTER it and that it described but could not cite — `4dc6bcb` and `2ab18dd` — ★★★★ **`R239` MINTED: *PUBLISH THE COMMAND, NOT THE COUNT*, AT `n = 2` — AND THE MINT TRIGGER THAT PRODUCED IT FIRED ON THE WRONG FEATURE, WHICH IS RECORDED RATHER THAN SMOOTHED** — ★★★ **A GATE MINTED TO FIX A NUMBER PROTECTED THE PHRASING THAT PROMPTED IT: THE SAME WRONG `88` SAT IN TWO FILES OF ONE DIRECTORY, ONE GATED AND ONE NOT, AND THE UNGATED COPY SURVIVED THREE DAYS AND A CLAIM SWEEP** — ★★ **THE GATE GAP IS REAL, BOUNDED AND MEASURED: A PROXIMITY ANCHOR RETURNS 2 HITS AND 0 FALSE POSITIVES WHERE A BARE WIDENING RETURNS 5** — ★ **AND CORRECTING A NUMBER CAN PRESERVE A FALSE CLAIM: §6.7's SECOND FIGURE WAS DELETED, NOT FIXED, BECAUSE *"partition"* WAS FALSE IN KIND**
+
+**An addendum, deliberately small.** The 353rd filing (`4c178ab`) described both
+of these commits and **could not cite either**, because neither existed when it
+was written. `Pass 190.0`/`190.1` are **filed and are not re-stated here.** This
+entry adds the two hashes to the record, mints one standing rule, and answers
+one gate question. **Two commits, one of which is four lines of comment.**
+
+**★ Scope of this role's edits.** `docs/` only — three files: `ROADMAP.md`,
+`SESSION_LOG.md`, `NEXT_SESSION.md`. **Nothing under `crates/`, `fuzz/`,
+`fixtures/` or `tools/`**, and **no commit made by this filing.**
+`FEATURES.md` **deliberately unchanged**: no capability changed, no box moved —
+both commits are corrections to prose about shipped verbs.
+
+**Commits filed:**
+- **`4dc6bcb`** (2026-08-31, `crates/pdfce-render/src/cmyk_buffer.rs`) —
+  **a code commit**, and the reason this addendum could not wait.
+  `tools/check-commits-filed.py` reported it `DEFERRED, not yet filed` at
+  dispatch — deferred only because a commit cannot cite its own hash — and it is
+  **checked in full on the next run**.
+- **`2ab18dd`** (2026-08-31, `docs/core-api/`) — docs-only, so invisible to that
+  gate by design, and filed here because it belongs to the same finding.
+
+**Findings + decisions:**
+
+- **★★★★ `R239` MINTED — *publish the command, not the count* — at `n = 2`, on
+  the REMEDY rather than on the mechanism.** The two founding instances do
+  **not** share a disease:
+
+  | | **`4dc6bcb`** | **`2ab18dd`** |
+  |---|---|---|
+  | figure | a quoted `grep -c debug_assert` total | *"88 variants"* **and** *"the five groups partition all 57"* |
+  | truth | population **8** = 4 exempt + 4 vacuous | **113** |
+  | mechanism | ★ **self-invalidating** — prose inside the census's own search space | ★ **independent drift** — two figures, one quantity, mutually contradictory |
+  | remedy | delete the count, publish `grep -cE 'debug_assert(_eq\|_ne)?!' …` → **8** | delete both counts, publish `awk … \| grep -cE …` → **113** |
+
+  ⇒ **Two mechanisms converging on one remedy is a stronger warrant than two
+  instances of one mechanism**, because a standing rule prescribes an **action**,
+  not a diagnosis. Two instances of one mechanism argue the mechanism is common;
+  **two mechanisms sharing one cure argue the cure is general.**
+
+- **★★★★ THE MINT TRIGGER FIRED ON THE WRONG FEATURE, AND THAT IS THE FINDING,
+  NOT AN AWKWARDNESS TO BE SMOOTHED.** The 353rd filing declined this rule at
+  `n = 1` and named its trigger: ***a second self-invalidating figure ANYWHERE
+  OUTSIDE `R236`'s orbit.*** **That has not happened.** §6.7's figures counted
+  nothing they sat inside. **Self-invalidation is still `n = 1`**, and this entry
+  says so instead of counting to two.
+
+  ⇒ **A MINT TRIGGER IS A PREDICTION, AND THIS ONE PREDICTED THE MECHANISM WOULD
+  RECUR WHEN WHAT RECURRED WAS THE REMEDY.** A trigger written against a
+  mechanism can be satisfied in spirit by an instance that fails it in letter,
+  and the filing then faces two bad options — **force the mis-fit** and record an
+  `n = 2` that does not exist, or **decline on a technicality** and turn the
+  trigger into decoration. ⇒ **Write mint triggers against the REMEDY wherever
+  one is already identified**, because the remedy is what a standing rule
+  contains. The dispatch's own framing — *"a trigger that does not fire when its
+  condition is met is worse than no trigger"* — is accepted; the correction is
+  that **the condition as written was not met, and a better-written condition
+  would have been.**
+
+- **★★★ A GATE MINTED TO FIX A NUMBER PROTECTS THE PHRASING THAT PROMPTED IT.**
+  `tools/check-core-api-verbs.py`'s `errvars` check was added **2026-08-28**,
+  after this role found `docs/core-api/index.md` claiming **88** variants against
+  a real 90. It was written to the phrasing of the copy that prompted it —
+  `` `EditError`'s (\d+) variants ``. **The same wrong `88`, in the same
+  directory, in `02-editing-and-saving.md` §6.7, said *"88 variants"* with no
+  `` `EditError`'s `` prefix — and survived three more days, the gate, and the
+  hard-rule-11 claim sweep the 353rd filing ran minutes before `2ab18dd`.**
+  ⇒ This is hard rule 11's *"a minted rule protects the document it was minted
+  in"* and clause (e)'s *"a sweep for a claim is only as good as its spelling of
+  the claim"* — **with a mechanical GATE standing in the sweep's place**, a
+  carrier neither clause names. Recorded as their **third instance and their
+  first with a gate as the protector**.
+  ★ **Recommended to the engineer, NOT made here:** extend clause (e) to name
+  gates explicitly. The agent file is the engineer's to amend — the `R219` and
+  hard-rule-11 precedent, where this role drafted and declined to adopt
+  unilaterally.
+
+- **★★ THE GATE GAP — ANSWERED, AND IT IS A SPLIT VERDICT.** The dispatch asked
+  whether `check-core-api-verbs.py`'s blindness to a figure phrased as a group
+  total is worth a gate change or is correctly out of scope. **It is both, and
+  the two halves are different questions:**
+
+  | figure | verdict | why |
+  |---|---|---|
+  | *"88 variants"* → **113** | ★ **IN SCOPE — worth a one-line change** | The concept was **already gated**; only the *spelling* escaped. Nothing new has to be made derivable. |
+  | *"the five groups partition all 57"* | **CORRECTLY OUT OF SCOPE** | There is **no derivable quantity** called *"what the five groups cover"*. A gate would have to know what the groups are **for**. |
+
+  **Measured here** over `docs/core-api/`: `[0-9]+ variants` returns **7** hits;
+  **anchoring on same-line `EditError` returns exactly 2** — `index.md:17`
+  (already gated) and `02-editing-and-saving.md:3794` (**not** gated) — with
+  **zero false positives**. A **bare** widening returns **5 false positives**
+  (`CommandKind` 46, `xref` 12, `SnapKind` 8, `FunctionError` ~28, `Destination`
+  6). ⇒ **Narrow the file set and widen the pattern** — clause (e) verbatim, and
+  the reason the fix is a *proximity anchor* rather than a looser regex.
+  ★★ **The live consequence, checked at `4dc6bcb`:** §6.7's **113** is
+  **currently correct and currently ungated.** The next `EditError` variant makes
+  it stale **silently**, exactly as 88 did. That is a prediction, and it is
+  cheap to falsify.
+  ★ **The same measurement found five more ungated derivable counts** in the same
+  directory. **Scoping those is a Pass, not a filing.** One of them,
+  `FunctionError` *"~28 variants"*, is **honest about being unchecked** — the
+  tilde is load-bearing and a sweep must not "fix" it into a bare 28.
+
+- **★ CORRECTING THE VALUE CAN PRESERVE A FALSE CLAIM.** §6.7's second figure was
+  **deleted, not corrected to 113**, because *"the five groups partition all N"*
+  was **false in kind as well as in value**: the groups are a **reading aid**,
+  never a partition. *"The five groups partition all 113"* would have been a
+  **new wrong claim with better arithmetic** — and it would have looked freshly
+  audited. ⇒ **Before fixing a number, check the sentence around it is a claim
+  worth making.** A stale figure is loud; a false predicate wearing a fresh
+  figure is silent. Folded into `R239` as its corollary.
+
+- **★ THE SIBLING COUNT, and the independent measurement that confirmed the
+  mechanism.** `4dc6bcb` corrected `cmyk_buffer.rs`'s *"this and the **eight**
+  sibling dimension guards"* to **seven**, published
+  `grep -cE 'debug_assert(_eq|_ne)?!'` and stated the decomposition **4 exempt +
+  4 vacuous = 8**. This role's independent measurement in the 353rd filing —
+  **13 → 17 raw hits with the population held at 8** — is the **confirming
+  datum**: the mechanism ran a second time **on the correction to its own first
+  instance**, which is why the quoted total was **removed rather than updated**.
+  There is no value of that figure that stays right.
+
+**Mints considered and DECLINED:**
+
+- **A DECISION RECORD — DECLINED.** `R239` prescribes **how a figure is
+  written**, which is a filing convention, not an architectural ruling. Nothing
+  about a crate boundary, an invariant or a library choice moved.
+  **Decision ceiling `112` — UNCHANGED, next free `113`.**
+- **A SECOND RULE FOR THE GATE-SPELLING FINDING — DECLINED.** Hard rule 11
+  clause (e) **already carries it**; what is new is the **carrier** (a gate, not
+  a grep), and that is an extension to an existing clause, not a fourth phrasing
+  of one idea — the same warrant the 353rd filing used to widen `R219` instead of
+  minting. Recommended to the engineer above.
+
+**Documents edited — `docs/` only, three files:**
+
+- **`docs/ROADMAP.md`** — **`R239` minted** in *Standing rules*; `R236`'s
+  self-invalidating-figure decline **struck in place** with the
+  wrong-feature-fired argument beside it; `Pass 190.0`/`190.1`'s *What was NOT
+  minted* bullet given a dated supersede pointer. **No Shipped entry added** —
+  neither commit is a Pass.
+- **`docs/SESSION_LOG.md`** — this entry.
+- **`docs/NEXT_SESSION.md`** — tree state re-measured; the gate-widening item
+  added as owed.
+
+**Ceilings after this filing** (`python tools/check-ledger-numbers.py`, run
+here): **Standing rules `R238` → `R239`**, next free **`R240`**. **Passes
+`190.0`/`190.1` — UNCHANGED**, next free family `191`. **Decisions `112` —
+UNCHANGED**, next free `113`. **Filings `353` → `354`.**
+
+**Gate state — measured here where run in this filing, attributed where not
+(hard rule 8):**
+
+| gate | result | source |
+|---|---|---|
+| `tools/check-commits-filed.py` | **`4dc6bcb` DEFERRED at dispatch → GREEN after this filing** | **run here, before and after** |
+| `tools/check-core-api-verbs.py` | **exit 0** — 184 public verbs, count agrees | **run here** |
+| `tools/check-ledger-numbers.py` | clean | **run here** |
+| `tools/check-cited-commits-exist.py` | clean | **run here** |
+| `cargo test` / `fmt` / `clippy` | **not run by this filing** — a full gate sweep was running at dispatch | **engineer-reported; NOT measured here** |
+
+**Git state — measured at the START of this filing** (`git rev-parse`,
+`git rev-list --count`), and stated with its shelf life:
+
+- `HEAD` = **`4dc6bcb`**, `origin/main` = **`93dc9ba`**, **6 commits ahead**.
+  The engineer reports a **full gate sweep running** and will push when green;
+  **pushing is standing-authorized** (rule 8, decision `090`) and is the
+  engineer's act, not this role's.
+- Working tree: **clean of tracked modifications** at dispatch; untracked
+  **`.fz.log`** and **`.gfinal.log`**, neither committed nor ignored.
+  ★ **`.tmp_bench.py`, named in this session's opening `git status`, is gone.**
+  **Stage by path, never `git add -A`** — the repository is public.
+- ★ **The tree has now moved mid-filing for the FIFTH consecutive filing.**
+  A `git status` here has a shelf life of minutes, and this figure was taken
+  before the sweep completed.
+- **Backup bundle STALE, RE-MEASURED HERE rather than carried forward.** Newest
+  is still `pdfce-20260830-2005-1e63186-full.bundle` (2026-08-30 20:05, by
+  `ls -lt /d/Dev/pdfce-backups/`); by `git rev-list --count 1e63186..HEAD` it is
+  **12 commits behind `HEAD`** and **6 behind `origin/main`** — up from **9/6**
+  in the 353rd filing. ★ **The first draft of this bullet said "not re-measured
+  … at least two commits staler"; it was three, and the check was one command.**
+  Hard rule 8 exists for exactly that gap, and hard rule 10's corollary — *a
+  correction names its world-source* — is why the commands are printed above.
+  One command to fix it: `git bundle create <path> --all`.
+
+**Still in flight / owed** (carried forward, not re-argued):
+
+- **★ NEW — the `errvars` proximity anchor**, one line in
+  `tools/check-core-api-verbs.py`, with the measurement above (2 hits, 0 false
+  positives) ready to use. **`tools/` is engineer-owned; reported, not made.**
+- **★ NEW — clause (e) of hard rule 11 extended to name GATES**, not only greps.
+  Drafted here, **not adopted unilaterally**.
+- **TWO RAG findings owed, neither written:**
+  `D:/dev/rag/rust/an_assertions_compile_time_gating_is_not_a_severity_estimate.md`
+  (`R238`, owed since the 353rd filing) and
+  `D:/dev/rag/rust/publish_the_command_not_the_count.md` (`R239`, owed from
+  this one). **Reported rather than claimed.**
+- **`annot_delete_sequence` still fires** — `BadKid(ObjId 3)`, tracked
+  reproducer, **release-visibility unmeasured**. Unchanged by this filing.
+- **Five more ungated derivable counts in `docs/core-api/`** — a Pass.
+
+**For next session:**
+
+- **`R239` has one immediately actionable customer**: §6.7's **113** is correct
+  and ungated **right now**, and the one-line anchor closes it.
+- **The self-invalidation mechanism is at `n = 1`, deliberately.** If a third
+  figure appears that edits its own denominator **outside** `R236`, it is
+  `R239`'s clause 4 that earns the promotion — not a new rule.
+- **Mint triggers get written against remedies from here on.** That is the
+  transferable half of this filing, and it is the half with no gate.

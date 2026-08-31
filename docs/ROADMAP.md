@@ -499,13 +499,21 @@ capability an operator gains or loses.
   cheaper than a fourth phrasing of one idea**, which is the failure the 352nd
   filing declined *"linking is not reaching"* to avoid. See the amendment in
   *Standing rules*.
-- **A NEW RULE FOR *"a census figure quoted inside the prose it counts is
+- ~~**A NEW RULE FOR *"a census figure quoted inside the prose it counts is
   self-invalidating"* — DECLINED at `n = 1`**, recorded inside `R236`'s
   inflation block where the number lives, and governed already by **hard rule
   10**'s *file a figure in a form that can disagree with something*. ⇒ **Mint
   trigger, named so the count starts at one rather than zero: a second
   self-invalidating figure ANYWHERE OUTSIDE `R236`'s orbit.** Inside it, the
-  general inflation mechanism is already written down twice.
+  general inflation mechanism is already written down twice.~~
+  **★★ SUPERSEDED 2026-08-31 (354th filing) — `R239` MINTED.** The trigger
+  fired **on a different feature than it named**: the second instance
+  (`2ab18dd`, `docs/core-api/02-editing-and-saving.md` §6.7) is **not**
+  self-invalidating, it is **independent drift of two figures for one
+  quantity**. The mint is therefore made on the shared **remedy** —
+  *publish the command, not the count* — rather than on the mechanism, and
+  **self-invalidation stays at `n = 1`** inside the new rule. Full argument at
+  `R236`'s struck decline and at `R239`.
 
 #### Documents edited by this filing — `docs/` only, seven files
 
@@ -131335,12 +131343,50 @@ same cause (hashes exist only at commit time), two different failure modes.
   that can disagree with something* met by its hardest case: a figure that
   cannot disagree with anything because it edits its own denominator.
 
-  ⇒ **DECLINED as a standing rule at `n = 1`** — it lives here, where the number
-  lives, and hard rule 10 already governs the general obligation. ★ **Mint
+  ~~⇒ **DECLINED as a standing rule at `n = 1`** — it lives here, where the
+  number lives, and hard rule 10 already governs the general obligation. ★ **Mint
   trigger, named so the count starts at one rather than zero: a second
   self-invalidating figure ANYWHERE OUTSIDE `R236`'s orbit.** Inside it, the
   inflation mechanism is already written down twice and a third phrasing would
-  make the rule less readable, not more.
+  make the rule less readable, not more.~~
+
+  **★★★ SUPERSEDED 2026-08-31 (354th filing) — `R239` IS MINTED, AND THE TRIGGER
+  ABOVE FIRED ON THE WRONG FEATURE.** The decline is struck rather than deleted
+  because **what it predicted and what happened are different**, and that
+  difference is the finding.
+
+  **What the trigger asked for:** a second **self-invalidating** figure — one
+  that edits its own denominator — outside this rule's orbit. **That has NOT
+  happened, and this filing says so rather than smoothing the fit.** The
+  self-invalidation mechanism remains at **`n = 1`**: `cmyk_buffer.rs`'s quoted
+  `grep -c` total, corrected in `4dc6bcb`.
+
+  **What DID happen, hours later, in `2ab18dd`:** `docs/core-api/02-editing-and-saving.md`
+  §6.7 carried **two different stale figures for one quantity inside one
+  paragraph** — *"88 variants"* and *"the five groups below partition all 57"* —
+  against a real **113**. Neither counted the prose it sat in. **Different
+  disease.** But the remedy adopted was **the same one**, reached independently,
+  in a different tree, by a different author, on the same day: **delete the
+  count, publish the command.**
+
+  ⇒ **Two mechanisms converging on one remedy is a STRONGER warrant for a
+  standing rule than two instances of one mechanism**, because a standing rule
+  prescribes an ACTION, not a diagnosis. Two instances of one mechanism argue
+  the mechanism is common; two mechanisms sharing one cure argue the **cure is
+  general**. So the mint is made on the remedy — **`R239`, *publish the command,
+  not the count*** — with self-invalidation recorded inside it as its **hardest
+  case at `n = 1`**, not as half of a founding pair it is not half of.
+
+  **★★ AND THE LESSON ABOUT TRIGGERS, which is why this is struck in place: A
+  MINT TRIGGER IS A PREDICTION, AND THIS ONE PREDICTED THE WRONG FEATURE.** It
+  named the **mechanism** as the thing that would recur. What recurred was the
+  **remedy**. A trigger written against a mechanism can be satisfied in spirit by
+  an instance that fails it in letter — and the failure mode then is not that the
+  trigger stays silent, it is that a filing either **forces the mis-fit** (and
+  records an `n = 2` that does not exist) or **declines on a technicality** (and
+  the trigger becomes decoration). Neither is acceptable. ⇒ **Write mint triggers
+  against the REMEDY where one is already identified**, because the remedy is
+  what a standing rule contains. See `R239`.
 
   ★ **Surviving and correct in the same comment, quoted so no sweep "fixes"
   it:** *"all ten assertions in this file: four exempt … six vacuous"* —
@@ -131762,6 +131808,127 @@ same cause (hashes exist only at commit time), two different failure modes.
   ceiling `112` — UNCHANGED, next free `113`** — no decision is minted with this
   rule, because decision `110` already supplies the remedy and `Pass 190.1` is
   its **third application**, not a new ruling.
+
+- **R239 — PUBLISH THE COMMAND, NOT THE COUNT. A DERIVABLE FIGURE STATED IN
+  PROSE IS PUBLISHED AS THE INVOCATION THAT PRODUCES IT — OR, WHERE A BARE
+  NUMBER IS UNAVOIDABLE, BESIDE ONE. A NUMBER WITH NO RECOVERABLE DEFINITION
+  HAS NO READER WHO IS OBLIGED TO CHECK IT, AND TWO COPIES OF IT DRIFT
+  INDEPENDENTLY UNTIL THEY CONTRADICT EACH OTHER AND THE CONTRADICTION IS
+  NOBODY'S ERROR TO NOTICE.** Minted 2026-08-31 (354th filing),
+  librarian-minted, at **`n = 2`**, from `4dc6bcb` and `2ab18dd` — **two
+  commits, hours apart, in two different trees, by two different mechanisms,
+  reaching the same remedy independently.**
+
+  **★ WHAT THE `n = 2` IS COUNTING, stated first because the mint trigger it
+  answers asked for something else.** `R236`'s block predicted a second
+  **self-invalidating** figure and got a second **undetectable-drift** figure.
+  **The two founding instances share the REMEDY, not the disease** — and that is
+  the deliberate basis of this mint, argued in full at `R236`'s struck decline.
+  **Self-invalidation remains at `n = 1`** and is recorded below as this rule's
+  hardest case, **not** as one of its two instances.
+
+  | | **instance 1 — `4dc6bcb`** | **instance 2 — `2ab18dd`** |
+  |---|---|---|
+  | site | `crates/pdfce-render/src/cmyk_buffer.rs` | `docs/core-api/02-editing-and-saving.md` §6.7 |
+  | the figure | a quoted `grep -c debug_assert` total | *"88 variants"* **and** *"the five groups partition all 57"* |
+  | real value | population **8** (4 exempt + 4 vacuous) | **113** |
+  | mechanism | ★ **self-invalidating** — the prose is inside the census's own search space, so correcting the sentence moved the number | ★ **independent drift** — two figures for one quantity, neither counting its own prose, stale for long enough that neither looked odd |
+  | who found it | a reader; **no gate could** | a reader; **the gate that exists missed it on SPELLING** |
+  | remedy taken | delete the count, publish `grep -cE 'debug_assert(_eq\|_ne)?!' …` → **8** | delete both counts, publish `awk '/^pub enum EditError \{/,/^\}/' … \| grep -cE …` → **113** |
+
+  **THE CHECK, so this is falsifiable rather than exhortative.** Before writing a
+  number into prose, a doc comment, a table label or a commit message, ask:
+
+  1. **Is this figure DERIVED or DECIDED?** A decided figure — a version, a
+     budget, an operator's ruling — is fine as a bare number; it is an assertion
+     with an author. A **derived** figure is a function of the tree, and the
+     function is the durable half.
+  2. **If derived: can a reader re-run it in one line?** If yes, **publish the
+     line.** `tools/check-core-api-verbs.py`'s own `rewrite_self_sizes` docstring
+     already states this rule's premise for the case it automates — *"a figure
+     nobody can re-derive is a figure nobody can check"* — and `R239` is that
+     sentence generalised off the gate and onto the prose.
+  3. **If a bare number is genuinely unavoidable** (a heading, a table label),
+     **file its decomposition beside it** so it can disagree with itself — hard
+     rule 10(a). `4 exempt + 4 vacuous = 8` survives a re-count; `8` does not.
+  4. ★ **If the figure sits inside its own search space, do not state it at
+     all.** There is no correct value: writing it changes it. **This is the
+     hardest case, and it is `n = 1`** — `cmyk_buffer.rs`, where the correcting
+     edit moved the total twice (10 → 13 → 17 raw, population **8** throughout).
+
+  **★★ AND THE COROLLARY THAT COST THE SECOND INSTANCE: CORRECTING THE VALUE CAN
+  PRESERVE A FALSE CLAIM.** §6.7's second figure was not replaced with **113**,
+  because *"the five groups partition all N"* was **false in KIND, not only in
+  value** — the five groups are a **reading aid**, never a partition, and never
+  covered every variant. *"The five groups partition all 113"* would have been a
+  **new wrong claim with better arithmetic**, and it would have looked freshly
+  audited. ⇒ **Before fixing a number, check that the sentence around it is a
+  claim you want to make at all.** A stale figure is loud; a false predicate
+  wearing a fresh figure is silent.
+
+  **★★★ THE GATE HALF, and it is the sharpest thing in this rule.**
+  `tools/check-core-api-verbs.py` grew its `errvars` check on **2026-08-28**,
+  minted precisely because this role found `index.md` claiming **88** variants
+  against a real 90. The gate was written to match the phrasing of the copy that
+  prompted it — `` `EditError`'s (\d+) variants ``. **§6.7's copy of the SAME
+  WRONG NUMBER, in the SAME DIRECTORY, said *"88 variants"* with no
+  `` `EditError`'s `` prefix — and survived three more days, the gate, and a
+  hard-rule-11 claim sweep run minutes before `2ab18dd`.**
+  ⇒ **A GATE MINTED TO FIX A NUMBER PROTECTS THE PHRASING THAT PROMPTED IT.**
+  This is hard rule 11's *"a minted rule protects the document it was minted
+  in"* and clause (e)'s *"a sweep for a claim is only as good as its spelling of
+  the claim"* — **with a mechanical gate in the sweep's place**, which is a
+  carrier neither clause names. Recorded as those rules' **third instance and
+  their first with a gate as the protector**; an extension of clause (e) to name
+  gates explicitly is **recommended to the engineer, not made here** (the agent
+  file is the engineer's to amend — `R219`/hard-rule-11 precedent).
+
+  **THE GAP IS REAL, BOUNDED, AND MEASURED — reported to the engineer, not fixed
+  here (`tools/` is outside this role's remit).** Live at `4dc6bcb`:
+
+  - `docs/core-api/index.md:17` says *"`EditError`'s 113 variants"* — **gated.**
+  - `docs/core-api/02-editing-and-saving.md:3794` says *"**113 variants** … inside
+    `pub enum EditError`"* — ★ **currently CORRECT and NOT GATED.** The next
+    variant added makes it stale silently, exactly as 88 did.
+  - **The fix is one proximity anchor, not a wider regex.** Measured here:
+    `[0-9]+ variants` over `docs/core-api/` returns **7** hits; anchoring on
+    same-line `EditError` returns **exactly 2** — both correct targets, **zero
+    false positives**. A bare widening returns **5 false positives**
+    (`CommandKind` 46, `xref` 12, `SnapKind` 8, `FunctionError` ~28,
+    `Destination` 6). **Narrow the file set and widen the pattern**, clause (e)
+    verbatim.
+  - ★ **The same measurement names five more ungated derivable counts** in the
+    same directory. Scoping those is a **Pass**, not a filing. One of them,
+    `FunctionError` *"~28 variants"*, is **honest about being unchecked** — the
+    tilde is doing real work and a sweep must not "fix" it into a bare 28.
+
+  **★ WHAT THIS RULE DOES NOT SAY**, so it is not over-read. It does **not**
+  demand a command beside every number — a decided figure, a spec clause, a
+  measured benchmark with its denominator (hard rule 10(a)) are all fine as
+  written. It does **not** demand a new gate per figure; the `R236` census's own
+  history shows a gate can carry the defect it was minted against. And it does
+  **not** retire hard rule 10 — **10 says file a figure so it CAN disagree with
+  something; `R239` says prefer the form that has nothing to disagree with,
+  because it is re-derived at read time.** 10 makes error visible; `R239` makes
+  it impossible. Use `R239` where the figure is derivable and 10 where it is not.
+
+  **Related:** hard rule 10 (a figure filed in a form that can disagree);
+  hard rule 11 clause (e) (spelling of the claim — extended here to gates);
+  `R236` (the census whose four bad numbers in eleven days are this rule's
+  prehistory, and whose struck mint trigger is superseded by it);
+  `tools/check-core-api-verbs.py` (`rewrite_self_sizes`, the same premise
+  already automated for `index.md`'s self-sizes).
+
+  **Cross-project derivation:**
+  `D:/dev/rag/rust/publish_the_command_not_the_count.md` (forward slashes
+  deliberately, per hard rule 11's path note) — **owed, not yet written**;
+  reported to the engineer in this filing rather than claimed. It joins the
+  `R238` derivation still owed from the 353rd filing.
+
+  **Standing rules ceiling `R238` → `R239`; next free `R240`.** **Decision
+  ceiling `112` — UNCHANGED, next free `113`** — no decision is minted with this
+  rule: it prescribes how a figure is written, which is a filing convention, not
+  an architectural ruling.
 
 ### ★★ STANDING-RULE DISPOSITION, 351st filing — TWO FURTHER CANDIDATES ASSESSED AND **DECLINED**, both because an existing rule already reaches them
 
