@@ -1228,8 +1228,84 @@ as wide would render its text twice as wide rather than gaining room).
 `edit_widget` takes the cheap path automatically.
 
 `WidgetEditOutcome::appearance_stale` is non-empty when a resize could not
-rebuild the artwork — a push button's baked caption, or a signature. The
-widget now renders **distorted**, and that string says so.
+rebuild the artwork. The widget renders **distorted**, and that string says so.
+
+### ★★★ `edit_widget` changed in four ways — `Pass 187.0`
+
+Read this before wiring a resize. Three of the four were defects nobody had
+reported, and one is a **behaviour change** that can turn a call that used to
+return `Ok` into an `Err`.
+
+**1. A `/Btn` appearance is now rebuilt.** `regen_after_property_change`
+answered `Ok(false)` for every field type except Text and Choice, so a check
+box, radio button or push button was **never redrawn** — the old stream was
+kept and §12.5.5 scaled it into the new `/Rect`. Drag a 12 pt check box to
+40 pt and its 1 pt border drew at ~3.3 pt. Reported by `pdfceGUI`:
+*"Form shape outlines of checkboxes and such scale when I drag them larger."*
+
+**2. ★★ Text and Choice were rebuilt at the OLD size.** The regenerator read
+`field.widgets[i].rect`, a snapshot taken *before* the caller staged its
+`/Rect` write. A text field dragged from 100×24 to 300×100 came back with
+`/AP` `/BBox [0 0 100 24]` — a regeneration that faithfully reproduced the
+defect it existed to prevent. `appearance_regenerated` was `true` throughout,
+which is why nothing caught it. **If your shell asserted on that flag, it was
+asserting on the wrong thing;** assert on the `/BBox`.
+
+**3. ★★★ On a Shape-B widget the resize was silently DISCARDED.** A widget
+that is a separate dictionary under a `/Kids` parent — what a field placed on
+three pages looks like — took a second whole-dictionary write for `/AP`, built
+from the pre-command dictionary, which `commit` applied last and which
+therefore threw away the `/Rect`. Measured on a three-widget field: `/Rect`
+stayed 140×22, the artwork was rebuilt at 380×100, and the outcome reported
+`resized: true` with a `rect_after` naming a box that was never written. **The
+outcome was a lie**, so no assertion on it could have found this. Shape A (the
+one-widget field, where the field dictionary *is* the widget) took a different
+branch and was always correct.
+
+**4. A push button's caption now redraws its plate.** The caption is drawn
+*into* the artwork, and `/MK` `/CA` changed without triggering a rebuild, so
+the button kept showing its previous word.
+
+#### The behaviour change: `WidgetEdit::resize`
+
+`WidgetEdit` now carries a whole `ResizeOptions` — the same type
+`resize_annotation` takes, deliberately reused rather than copied so a shell
+cannot mirror `keep_rect_differences`' opt-**out** spelling backwards. Set it
+with `.with_resize(..)`; pass the operator's answer through unchanged and do
+not derive it.
+
+- `scale_stroke_width` scales `/BS` `/W` (geometric mean under a non-uniform
+  scale), reported in the new `WidgetEditOutcome::stroke_width`.
+- `keep_rect_differences` reaches `/RD`, reported in the new
+  `WidgetEditOutcome::rect_differences_scaled`. A widget rarely has an `/RD`;
+  the option is accepted anyway so the two verbs take identical inputs.
+- **`allow_appearance_distortion` changes the default answer.** `edit_widget`
+  used to *proceed and disclose* where `resize_annotation` *refuses*.
+  `pdfceGUI` flagged that asymmetry without asking us to resolve it; it is
+  resolved, and **the two verbs now agree**. A resize that would stretch an
+  appearance pdfce cannot rebuild returns
+  `EditError::ResizeAppearanceNotRebuildable { subtype: "Widget", .. }`. Set
+  this flag to proceed.
+
+The refusal is **narrow by construction** and will not fire on the ordinary
+case. It requires all of: a real change of extent, artwork pdfce did not draw
+(a foreign `/AP` on a button, or a signature field), *and* neither escape —
+because a uniform scale with `scale_stroke_width` on is satisfied exactly by
+§12.5.5's matrix and refusing it would refuse a resize that comes out right.
+A border or caption change on an unrebuildable field still proceeds with a
+disclosure: nothing is stretched when the geometry did not move.
+
+**Ownership is decided by bytes, not by parsing.** pdfce rebuilds a button's
+artwork only when the existing `/AP` is byte-identical to what pdfce would
+draw for those properties **at the size it is currently drawn at** — the same
+test `resize_annotation` and `set_markup_style` already use. "Could pdfce draw
+a check box like this?" is true of every conforming check box in existence,
+which is precisely the set that must not be touched.
+
+**One thing deliberately not consulted:** `/BS` `/W` does not change a check
+box's or radio button's drawn border, which pdfce authors at a fixed 1.0. That
+is the artwork's existing contract, not an oversight of this Pass; changing it
+would alter how every pdfce-authored check box already in the wild renders.
 
 ### 1.13 Form-field values (10)
 

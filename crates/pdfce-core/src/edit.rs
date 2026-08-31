@@ -13184,6 +13184,98 @@ pub struct AnnotationRotate {
 ///
 /// See [`EditSession::page_objects`] for what it is worth and why the key is
 /// a span rather than a digest of the content.
+/// **What a command has STAGED for one widget but has not yet committed**
+/// (`Pass 187.0`, generalising `Pass 177.0`'s `pending_rotation`).
+///
+/// # Why the regenerator cannot just read the widget
+///
+/// Every appearance rebuild goes through one function (`R92`), and every
+/// caller of it reaches that function holding a `forms::Field` snapshot taken
+/// **before** the caller staged its own writes. `edit_widget` reads the field,
+/// builds a new `/Rect` / `/MK` dictionary, pushes it onto `objects`, and only
+/// then asks for a redraw — at which point `field.widgets[i]` still describes
+/// the widget as it was a moment ago.
+///
+/// Passing the staged values explicitly is honest. The two alternatives are
+/// worse in specific ways:
+///
+/// - **Re-reading `self.state`** would make a half-applied session a second
+///   source of truth for one fact, which `Pass 177.0` rejected by name.
+/// - **Re-parsing the `objects` vector** would work, but it makes the
+///   regenerator depend on the shape of a command under construction, and
+///   nothing would fail if a caller later staged its `/Rect` through a
+///   different write.
+///
+/// # ★ Why it grew from a tuple to a struct
+///
+/// It carried the rotation alone and needed the rect and the caption too, and
+/// three parallel `Option<(ObjId, T)>` parameters on a function that already
+/// takes ten is how a caller comes to pass the right value in the wrong slot.
+/// One `id` for the widget, one field per staged value.
+///
+/// `id` is `None` for a caller with nothing staged — `edit_field` and
+/// `set_field_value` change no widget geometry — and the accessors then
+/// return `None` for every widget, so the snapshot is used unchanged.
+#[derive(Debug, Clone, Default)]
+struct PendingWidgetEdit {
+    /// The widget these staged values belong to. `None` = nothing staged.
+    id: Option<ObjId>,
+    /// `/MK` `/R`, counterclockwise degrees.
+    rotation: Option<i64>,
+    /// `/Rect`, already normalised.
+    rect: Option<page_tree::Rect>,
+    /// `/MK` `/CA`, the normal caption. `Some("")` means it was REMOVED —
+    /// which for a push button is a real state, not an absence, because the
+    /// caption is baked into the artwork and an emptied one must be redrawn
+    /// away rather than left on the plate.
+    caption: Option<String>,
+}
+
+impl PendingWidgetEdit {
+    /// The staged rotation for `id`, or `None` if this pending edit is about a
+    /// different widget (or about nothing).
+    fn rotation_for(&self, id: ObjId) -> Option<i64> {
+        self.id.filter(|p| *p == id).and(self.rotation)
+    }
+
+    /// The staged `/Rect` for `id`. Same scoping rule as
+    /// [`Self::rotation_for`] — a field's OTHER widgets keep their own
+    /// geometry, which is what makes a radio group survive one button being
+    /// resized.
+    fn rect_for(&self, id: ObjId) -> Option<page_tree::Rect> {
+        self.id.filter(|p| *p == id).and(self.rect)
+    }
+
+    /// The staged caption for `id`.
+    fn caption_for(&self, id: ObjId) -> Option<&str> {
+        if self.id == Some(id) {
+            self.caption.as_deref()
+        } else {
+            None
+        }
+    }
+}
+
+/// One button widget's appearance-rebuild plan (`Pass 187.0`).
+///
+/// Separate from the rebuild itself so that a field's widgets can ALL be
+/// checked for ownership before ANY of them is rewritten — see
+/// [`EditSession::regen_button_appearance`]'s all-or-nothing note.
+#[derive(Debug, Clone)]
+struct ButtonApPlan {
+    /// The appearance stream objects to overwrite, in
+    /// `build_button_states` order: `[off, on]` for a check box or radio
+    /// button, `[plate]` for a push button.
+    ///
+    /// Existing ids, reused. Allocating fresh ones would mean rewriting the
+    /// widget dictionary to point at them, and `edit_widget` has already
+    /// staged a whole-dictionary write for that widget.
+    slots: Vec<ObjId>,
+    /// The caption the CURRENT artwork was drawn with (`/MK` `/CA`), used as
+    /// the redraw's caption unless the command staged a new one.
+    caption: String,
+}
+
 #[derive(Debug)]
 struct PageObjectsCache {
     /// Everything the decomposition depends on, so a stale hit is not
@@ -15370,7 +15462,47 @@ pub struct WidgetEdit {
     /// all (§12.7.4.2.2), so the caption is the only thing distinguishing
     /// *Submit* from *Reset* to anyone reading the field list. `Some("")`
     /// removes it.
+    ///
+    /// **Since `Pass 187.0` this also redraws the artwork.** A push button's
+    /// caption is drawn into its plate, so writing `/MK` `/CA` alone left the
+    /// button showing its previous word.
     pub caption: Option<String>,
+    /// **How the resize treats things that are not the box** — the same three
+    /// answers [`ResizeOptions`] carries, for the same reasons, spelled
+    /// identically (`Pass 187.0`).
+    ///
+    /// # ★ Why this is a whole `ResizeOptions` and not three new fields
+    ///
+    /// `pdfceGUI` shipped the operator's own Inkscape-style switches — *Scale
+    /// line weight*, *Keep the inner margins the same size*, *Allow the
+    /// artwork to distort* — on 2026-08-28, and they were **structurally
+    /// unreachable from a form field**: the markup branch of its resize
+    /// passes them to [`EditSession::resize_annotation`], the form-field
+    /// branch twenty lines later builds a `WidgetEdit`, and a `WidgetEdit` had
+    /// nowhere to put them. `resize_annotation` refuses a `/Widget` by name,
+    /// so there was no route round it either.
+    ///
+    /// Reusing the type rather than copying its three fields is deliberate and
+    /// they asked for it in as many words — *"field names copied from
+    /// `ResizeOptions` verbatim, including the opt-**out** spelling of
+    /// `keep_rect_differences`, so a shell cannot mirror them wrongly."* Two
+    /// structures with the same meaning and different spellings is how a front
+    /// end comes to invert a flag.
+    ///
+    /// # What each one reaches on a widget
+    ///
+    /// - [`ResizeOptions::scale_stroke_width`] — scales `/BS` `/W`. Widgets
+    ///   carry `/BS` routinely, so this is the one that bites most often.
+    /// - [`ResizeOptions::keep_rect_differences`] — `/RD`. A widget rarely has
+    ///   one (it is a markup-annotation key), so this is usually inert. It is
+    ///   accepted anyway rather than rejected, because a shell that must
+    ///   remember *which* of two identical-looking option sets omits a field
+    ///   is a shell that will eventually pass the wrong one.
+    /// - [`ResizeOptions::allow_appearance_distortion`] — proceed when the
+    ///   appearance cannot be rebuilt. **Default `false`, and that is a
+    ///   behaviour change**: this verb used to proceed and disclose. See
+    ///   [`EditSession::edit_widget`]'s own documentation for the argument.
+    pub resize: ResizeOptions,
 }
 
 impl FieldEdit {
@@ -15530,6 +15662,27 @@ impl WidgetEdit {
         self.caption = Some(caption.into());
         self
     }
+
+    /// How the resize treats stroke width, `/RD` and an appearance pdfce
+    /// cannot rebuild (`Pass 187.0`).
+    ///
+    /// Pass the operator's answer through unchanged. **Do not derive it** —
+    /// inferring `scale_stroke_width` from whether the drag was proportional
+    /// silently overrides the operator on exactly the resizes where they are
+    /// most likely to have had an opinion, which is a workaround `pdfceGUI`
+    /// shipped once and deleted.
+    ///
+    /// ```
+    /// use pdfce_core::edit::{ResizeOptions, WidgetEdit};
+    /// let edit = WidgetEdit::new().with_resize(ResizeOptions::new().with_scale_stroke_width(true));
+    /// assert!(edit.resize.scale_stroke_width);
+    /// assert!(!edit.resize.allow_appearance_distortion, "the other answers are untouched");
+    /// ```
+    #[must_use]
+    pub const fn with_resize(mut self, resize: ResizeOptions) -> Self {
+        self.resize = resize;
+        self
+    }
 }
 
 /// What [`EditSession::edit_field`] changed, and everything about it the
@@ -15655,7 +15808,34 @@ pub struct WidgetEditOutcome {
     /// under which the appearance must be rebuilt rather than carried.
     pub resized: bool,
     /// Whether the appearance stream was rebuilt.
+    ///
+    /// ★ **Key your "the contents were redrawn" message off THIS, never off
+    /// [`Self::resized`].** They answered different questions the whole time
+    /// and `pdfceGUI` shipped the wrong one — telling the operator the artwork
+    /// had been rebuilt when the outcome said it had not. Since `Pass 187.0`
+    /// they agree far more often (a `/Btn` pdfce drew is now rebuilt), which
+    /// makes the remaining disagreement rarer and therefore *more* likely to
+    /// be missed.
     pub appearance_regenerated: bool,
+    /// `Some((before, after))` when `/BS` `/W` was scaled with the geometry,
+    /// `None` when it was left alone (`Pass 187.0`).
+    ///
+    /// `None` is the default and is a fact worth saying: an operator who
+    /// dragged a box 3× larger and expected a heavier border needs telling it
+    /// stayed at 1.0 pt. Same field, same meaning and same name as
+    /// [`AnnotationResize::stroke_width`], because the two verbs now take the
+    /// same [`ResizeOptions`].
+    ///
+    /// Under a **non-uniform** scale there is no exact answer — PDF has one
+    /// `w`, not one per axis — so the area-preserving geometric mean is used
+    /// and this pair is how that choice is disclosed rather than hidden.
+    pub stroke_width: Option<(f64, f64)>,
+    /// Whether `/RD` was present, and whether it was scaled (`Pass 187.0`).
+    ///
+    /// `None` = the widget has no `/RD`, which is the ordinary case (it is a
+    /// markup-annotation key). `Some(false)` = present and deliberately left
+    /// alone, per [`ResizeOptions::keep_rect_differences`].
+    pub rect_differences_scaled: Option<bool>,
     /// **A disclosure, not a statistic.** How many other widgets this field
     /// has that this edit did NOT touch.
     ///
@@ -17997,7 +18177,7 @@ impl EditSession {
         field: &forms::Field,
         flags: forms::FieldFlags,
         objects: &mut Vec<ObjectWrite>,
-        pending_rotation: Option<(ObjId, i64)>,
+        pending: &PendingWidgetEdit,
     ) -> Result<bool, EditError> {
         let (display, multiline) = match field.field_type {
             Some(forms::FieldType::Text) => match &field.value {
@@ -18014,6 +18194,27 @@ impl EditSession {
                 choice_display_text(field).unwrap_or_default(),
                 !flags.has(forms::FieldFlags::COMBO),
             ),
+            // ★ A BUTTON'S ARTWORK IS NOT TEXT, and until `Pass 187.0` that
+            // meant it was not rebuilt at all — `_ => return Ok(false)` swept
+            // up `/Btn` alongside `/Sig`.
+            //
+            // The consequence was the one `pdfceGUI` reported: *"Form shape
+            // outlines of checkboxes and such scale when I drag them larger."*
+            // Nothing was rewritten, so §12.5.5 stretched pdfce's own
+            // check-box artwork — a hard-coded 1.0-wide border on a `/BBox`
+            // sized to the ORIGINAL box — into the new `/Rect`. Drag a 12 pt
+            // box to 40 pt and its 1 pt border draws at ~3.3 pt.
+            //
+            // ★★ And that is the case `resize_annotation` REFUSES BY NAME for
+            // a foreign appearance — *"a foreign appearance cannot be rebuilt
+            // without replacing somebody else's artwork with pdfce's rendering
+            // of it"*. The widget path took the same unsatisfiable operation
+            // silently, on artwork **pdfce itself drew** and could therefore
+            // rebuild exactly. Two verbs, one situation, opposite stances;
+            // this is the half that was wrong.
+            Some(forms::FieldType::Button) => {
+                return self.regen_button_appearance(field, objects, pending);
+            }
             _ => return Ok(false),
         };
         let default_da = crate::vartext::default_appearance_string(
@@ -18036,7 +18237,7 @@ impl EditSession {
             objects,
             &mut applied_autosize,
             &mut unencodable,
-            pending_rotation,
+            pending,
         )?;
         // Shape A: the field dict IS the widget, so its `/AP` `/N` is folded
         // into the dictionary write the caller is already making — found by
@@ -18208,7 +18409,11 @@ impl EditSession {
             &field,
             field.flags,
             &mut objects,
-            Some((widget.id, quarter)),
+            &PendingWidgetEdit {
+                id: Some(widget.id),
+                rotation: Some(quarter),
+                ..PendingWidgetEdit::default()
+            },
         )?;
         if !appearance_regenerated {
             appearance_stale = Some(
@@ -18356,6 +18561,69 @@ impl EditSession {
         if let Some(border) = edit.border {
             updated.insert(Name::from(b"BS"), Object::Dict(border_dict(border)));
         }
+
+        // ---- the operator's three resize answers (`Pass 187.0`), applied
+        // through the SAME reasoning `resize_annotation` documents at length.
+        // The comments there are the argument; these are the two lines that
+        // enact it for a widget.
+        let scale = rect_before
+            .zip(rect_after)
+            .filter(|_| resized)
+            .map(|(b, a)| (a.width() / b.width(), a.height() / b.height()));
+        let mut stroke_width = None;
+        let mut rect_differences_scaled = None;
+        if let Some((sx, sy)) = scale {
+            // `/RD` — four DISTANCES in Table 175's [left, top, right, bottom]
+            // order, so they scale by the factor alone and are not mapped
+            // about an anchor. A widget rarely carries one; the branch is
+            // here so that the one that does behaves the way the identically
+            // named option behaves on a markup annotation.
+            let rd = updated.get(b"RD").map(|o| self.graph().resolve(o).clone());
+            if let Some(Object::Array(items)) = rd
+                && !items.is_empty()
+            {
+                if edit.resize.keep_rect_differences {
+                    rect_differences_scaled = Some(false);
+                } else {
+                    let out: Vec<Object> = items
+                        .iter()
+                        .enumerate()
+                        .map(|(i, o)| match o.as_number() {
+                            Some(v) => {
+                                Object::Real(v * if i % 2 == 0 { sx.abs() } else { sy.abs() })
+                            }
+                            None => o.clone(),
+                        })
+                        .collect();
+                    updated.insert(Name::from(b"RD"), Object::Array(out));
+                    rect_differences_scaled = Some(true);
+                }
+            }
+
+            // `/BS` `/W` — one scalar, so a non-uniform scale has no exact
+            // answer and the area-preserving geometric mean is DISCLOSED
+            // rather than picked silently. `edit.border` wins if both were
+            // given: an explicit width is an instruction, a scale factor is a
+            // policy.
+            if edit.resize.scale_stroke_width && edit.border.is_none() {
+                let uniform = (sx.abs() - sy.abs()).abs() < f64::EPSILON;
+                let factor = if uniform {
+                    sx.abs()
+                } else {
+                    (sx.abs() * sy.abs()).sqrt()
+                };
+                let before = annot_author::read_border_width(&self.graph(), &updated);
+                let after = before * factor;
+                let mut bs = match updated.get(b"BS").map(|o| self.graph().resolve(o).clone()) {
+                    Some(Object::Dict(d)) => d,
+                    _ => Dict::new(),
+                };
+                bs.insert(Name::from(b"W"), Object::Real(after));
+                updated.insert(Name::from(b"BS"), Object::Dict(bs));
+                stroke_width = Some((before, after));
+            }
+        }
+
         if let Some(visibility) = edit.visibility {
             updated.insert(Name::from(b"F"), Object::Integer(visibility.flags()));
         }
@@ -18392,27 +18660,41 @@ impl EditSession {
             after: Some(Object::Dict(updated)),
         }];
 
-        // A resize invalidates the baked appearance; a border change does
-        // too, because the border is drawn INTO the stream rather than
-        // synthesised from `/BS` at display time (R43 — pdfce paints the
-        // baked `/AP`, it does not reconstruct appearance from `/MK`).
+        // What this command has staged for this widget, so the one shared
+        // regenerator draws at the NEW geometry rather than at the snapshot's.
+        // See [`PendingWidgetEdit`].
+        let pending = PendingWidgetEdit {
+            id: Some(widget.id),
+            rotation: None,
+            rect: rect_after,
+            caption: edit.caption.clone(),
+        };
+
+        // ★ THREE THINGS INVALIDATE THE BAKED APPEARANCE, and the third was
+        // missing until `Pass 187.0`:
+        //
+        //   * a RESIZE — §12.5.5 would scale the old artwork into the new box;
+        //   * a BORDER change — the border is drawn INTO the stream rather
+        //     than synthesised from `/BS` at display time (R43: pdfce paints
+        //     the baked `/AP`, it does not reconstruct appearance from `/MK`);
+        //   * a CAPTION change — a push button's caption is drawn into its
+        //     plate by `build_push_button_appearance`. Writing `/MK` `/CA`
+        //     alone changed the field list and left the button still reading
+        //     its old word. Same class of silent staleness as the other two,
+        //     and found by enumerating this verb's routes rather than by a
+        //     report.
         let mut appearance_stale = None;
-        let needs_regen = resized || edit.border.is_some();
+        let needs_regen = resized || edit.border.is_some() || edit.caption.is_some();
         let appearance_regenerated = if needs_regen {
-            let done = self.regen_after_property_change(&field, field.flags, &mut objects, None)?;
+            let done =
+                self.regen_after_property_change(&field, field.flags, &mut objects, &pending)?;
             if !done {
-                // A button or signature field: this engine builds a TEXT
-                // appearance and such a field has none. Said out loud,
-                // because the widget now has a stale stream that §12.5.5 will
-                // stretch — which is a visible defect the operator would
-                // otherwise discover by looking at a distorted button.
-                appearance_stale = Some(
-                    "this field's appearance is not text laid out by pdfce (a push button's \
-                     caption artwork, or a signature), so the existing stream was kept and a \
-                     viewer will SCALE it into the new rectangle — re-place the field if it \
-                     now looks distorted"
-                        .to_owned(),
-                );
+                // Nothing here is pdfce's to rebuild: a signature field, or a
+                // button carrying another producer's artwork. Whether that is
+                // a refusal or a disclosure depends on whether the geometry
+                // actually changed — see the helper.
+                appearance_stale =
+                    Self::widget_appearance_not_rebuilt(&field, rect_before, rect_after, edit)?;
             }
             done
         } else {
@@ -18434,6 +18716,8 @@ impl EditSession {
             rect_after,
             resized,
             appearance_regenerated,
+            stroke_width,
+            rect_differences_scaled,
             siblings_untouched,
             appearance_stale,
         })
@@ -18715,7 +18999,12 @@ impl EditSession {
             || edit.max_len.is_some()
             || options_after.is_some();
         let appearance_regenerated = if layout_changed {
-            self.regen_after_property_change(&field, flags, &mut objects, None)?
+            self.regen_after_property_change(
+                &field,
+                flags,
+                &mut objects,
+                &PendingWidgetEdit::default(),
+            )?
         } else {
             false
         };
@@ -24412,7 +24701,7 @@ impl EditSession {
                 &mut unencodable_chars,
                 // Not a rotation call: each widget's own `/MK /R` is read
                 // inside the loop, so a rotated field stays rotated.
-                None,
+                &PendingWidgetEdit::default(),
             )?;
             widgets_updated += field.widgets.len();
 
@@ -25778,7 +26067,7 @@ impl EditSession {
                         &mut None,
                         &mut 0,
                         // Not a rotation call -- see the sibling above.
-                        None,
+                        &PendingWidgetEdit::default(),
                     )?;
                     out.widgets_updated += field.widgets.len();
                     if let Some(ap_id) = merged_ap {
@@ -25849,7 +26138,7 @@ impl EditSession {
         objects: &mut Vec<ObjectWrite>,
         applied_autosize: &mut Option<f64>,
         unencodable: &mut usize,
-        pending_rotation: Option<(ObjId, i64)>,
+        pending: &PendingWidgetEdit,
     ) -> Result<Option<ObjId>, EditError> {
         let da = field
             .default_appearance
@@ -25858,7 +26147,32 @@ impl EditSession {
         let quad = field.quadding;
         let mut merged_ap: Option<ObjId> = None;
         for widget in &field.widgets {
-            let (rw, rh) = widget.rect.map_or((0.0, 0.0), |r| (r.width(), r.height()));
+            // ★★ THE STAGED RECT, NOT THE SNAPSHOT'S (`Pass 187.0`).
+            //
+            // `field.widgets` was read BEFORE the caller staged its `/Rect`
+            // write, so `widget.rect` is the box the operator dragged AWAY
+            // from. Building the appearance from it produced a `/BBox` at the
+            // OLD size, which §12.5.5 then maps onto the NEW `/Rect` --
+            // stretching the very artwork the rebuild existed to keep
+            // undistorted.
+            //
+            // ★ This was silent and it was the general case, not a corner:
+            // measured on a text field dragged from 100x24 to 300x100, the
+            // regenerated `/AP` came back `/BBox [0 0 100 24]`. `edit_widget`'s
+            // own documentation asserted the opposite -- "this verb rebuilds
+            // the appearance whenever the extent changes ... which keeps the
+            // correct case correct" -- so the claim, the code and the pixels
+            // disagreed three ways.
+            //
+            // Found while scoping `pdfceGUI`'s check-box report, which named
+            // the `/Btn` route (where nothing is rebuilt at all). The text
+            // route rebuilds and was wrong in the same direction; nobody had
+            // looked because an empty text field's stretched border reads as
+            // a border.
+            let (rw, rh) = pending
+                .rect_for(widget.id)
+                .or(widget.rect)
+                .map_or((0.0, 0.0), |r| (r.width(), r.height()));
 
             // ★ THE WIDGET'S ROTATION IS PART OF WHAT "REGENERATE THIS
             // APPEARANCE" MEANS (`Pass 177.0`), and threading it through HERE
@@ -25877,9 +26191,8 @@ impl EditSession {
             // still carries the OLD rotation. Passing the new value explicitly
             // is honest; reading it back out of half-applied session state
             // would be a second source of truth for one fact.
-            let rot = pending_rotation
-                .filter(|(id, _)| *id == widget.id)
-                .map(|(_, deg)| deg)
+            let rot = pending
+                .rotation_for(widget.id)
                 .or(widget.rotation)
                 .unwrap_or(0);
             let quarter = rot.rem_euclid(360);
@@ -25944,11 +26257,440 @@ impl EditSession {
             });
             if widget.merged {
                 merged_ap = Some(ap_id);
+            } else if let Some(existing) = objects
+                .iter_mut()
+                .find(|w| w.id == widget.id)
+                .and_then(|w| w.after.as_mut())
+                .and_then(|o| match o {
+                    Object::Dict(d) => Some(d),
+                    _ => None,
+                })
+            {
+                // ★★★ PATCH THE WRITE THIS COMMAND HAS ALREADY STAGED, never
+                // add a second one (`Pass 187.0`).
+                //
+                // `set_widget_ap` builds a whole-dictionary write from
+                // `self.value(widget_id)` — the PRE-command dictionary — and
+                // `commit` applies a command's writes in order, last one
+                // winning. So on a Shape-B widget (a separate widget
+                // dictionary under a `/Kids` parent) the `/AP` write silently
+                // DISCARDED the caller's own `/Rect` or `/MK` write, which is
+                // the very thing the regeneration was triggered by.
+                //
+                // ★ Measured on `forms/multi-widget-form.pdf`: resizing widget
+                // 0 of a three-widget text field from 140x22 to 380x100 left
+                // `/Rect` at 140x22 and rebuilt the appearance at `/BBox`
+                // 380x100 — a widget whose artwork §12.5.5 then squashes, from
+                // a call that returned `Ok` with `resized: true` and a
+                // `rect_after` naming a box that was never written. The
+                // outcome was a lie, and every assertion anyone had written
+                // was on the outcome.
+                //
+                // Nothing caught it because the one-widget field — Shape A,
+                // where the field dictionary IS the widget — takes the
+                // `merged` branch above, which has always folded correctly.
+                // Shape B is the multi-widget case, and multi-widget fields
+                // are exactly the ones nobody resizes in a test.
+                //
+                // The same fold as `merged_ap`'s, one level out: `/AP` `/N`
+                // goes into the dictionary that is already on its way, and
+                // `/R`, `/D` and every other `/AP` entry survive.
+                let mut ap = match existing.get(b"AP").and_then(Object::as_dict) {
+                    Some(e) => e.clone(),
+                    None => Dict::new(),
+                };
+                ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+                existing.insert(Name::from(b"AP"), Object::Dict(ap));
             } else {
                 objects.push(self.set_widget_ap(widget.id, ap_id)?);
             }
         }
         Ok(merged_ap)
+    }
+
+    /// **What to say — or refuse — when a widget's appearance could not be
+    /// rebuilt** (`Pass 187.0`).
+    ///
+    /// `Ok(Some(msg))` is a disclosure and the edit proceeds; `Err` refuses
+    /// and the session is left untouched (the caller has staged nothing yet).
+    ///
+    /// # ★★ THIS RESOLVES AN ASYMMETRY `pdfceGUI` NAMED, AND IT CHANGES BEHAVIOUR
+    ///
+    /// Two verbs, one situation, opposite stances, in their words:
+    ///
+    /// | | cannot rebuild the appearance |
+    /// |---|---|
+    /// | `resize_annotation` | **refuses**, and the refusal is worded and names the remedy |
+    /// | `edit_widget` | **performs** it, and returns an outcome we then describe wrongly |
+    ///
+    /// They declined to pick, correctly — *"we are not asking you to choose
+    /// refuse-or-disclose here; we are noting that the two verbs currently
+    /// choose differently for the same situation."* Choosing is this side's
+    /// job (`R206`: two defensible answers ship as two options with a chosen
+    /// default), and the answer is that **the two verbs now agree**, with
+    /// [`ResizeOptions::allow_appearance_distortion`] as the escape hatch on
+    /// both.
+    ///
+    /// The refusal is the default because a silent stretch is exactly the
+    /// operator report that opened this Pass, and because a refusal is
+    /// actionable in a way a distorted button is not.
+    ///
+    /// # But only where a distortion is actually possible
+    ///
+    /// A rebuild is triggered by three things and only ONE of them can
+    /// distort. A border change or a caption change on a field pdfce cannot
+    /// redraw leaves the artwork exactly as it was — stale with respect to the
+    /// new property, which is worth saying, but not stretched. Refusing those
+    /// would break callers over a hazard that is not present.
+    ///
+    /// And a resize that carries the artwork **exactly** is not a distortion
+    /// either: a uniform scale with [`ResizeOptions::scale_stroke_width`] on
+    /// is satisfied precisely by §12.5.5's matrix, which scales the drawn
+    /// stroke by the requested factor. Refusing that would refuse a resize
+    /// that comes out right — the same three-branch reasoning
+    /// [`Self::resize_annotation`] carries, including the same trap: `sx = -1`
+    /// is a MIRROR, an isometry, so the uniformity test compares MAGNITUDES.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::ResizeAppearanceNotRebuildable`] with `subtype: "Widget"`.
+    fn widget_appearance_not_rebuilt(
+        field: &forms::Field,
+        rect_before: Option<page_tree::Rect>,
+        rect_after: Option<page_tree::Rect>,
+        edit: &WidgetEdit,
+    ) -> Result<Option<String>, EditError> {
+        let what = match field.field_type {
+            Some(forms::FieldType::Signature) => {
+                "a signature field's appearance, which pdfce does not author"
+            }
+            Some(forms::FieldType::Button) => {
+                "this button's artwork, which pdfce did not draw (its /AP does not match what \
+                 pdfce would render for these properties, so redrawing it would replace another \
+                 producer's appearance with pdfce's)"
+            }
+            _ => "this field's appearance, which pdfce cannot author",
+        };
+        let changed = rect_after != rect_before;
+        let Some((before, after)) = rect_before.zip(rect_after).filter(|_| changed) else {
+            return Ok(Some(format!(
+                "{what} — the existing appearance stream was kept, so it no longer reflects the \
+                 property that changed. The geometry did not change, so nothing is stretched."
+            )));
+        };
+        let (sx, sy) = (
+            after.width() / before.width(),
+            after.height() / before.height(),
+        );
+        let uniform = (sx.abs() - sy.abs()).abs() < f64::EPSILON;
+        if (uniform && edit.resize.scale_stroke_width) || edit.resize.allow_appearance_distortion {
+            let shape = if uniform {
+                "The scale is uniform, so the artwork keeps its proportions."
+            } else {
+                "The scale is NON-UNIFORM, so the artwork and its drawn stroke are distorted \
+                 along one axis."
+            };
+            return Ok(Some(format!(
+                "{what} — the existing appearance stream was kept and a viewer will scale it \
+                 into the new rectangle. {shape}"
+            )));
+        }
+        Err(EditError::ResizeAppearanceNotRebuildable {
+            subtype: "Widget".to_owned(),
+            uniform,
+            why: if uniform {
+                "the placement matrix will scale the drawn stroke, but scale_stroke_width is \
+                 off — set it (the resize is then exact) or accept the distortion"
+            } else {
+                "the scale is non-uniform, so the drawn stroke becomes anisotropic and no \
+                 scalar /BS /W can describe it in either option state"
+            },
+        })
+    }
+
+    /// **Rebuild a `/Btn` field's appearance streams at their current
+    /// geometry** — check box, radio button and push button (`Pass 187.0`).
+    ///
+    /// Returns `true` when every widget of the field was rebuilt, `false` when
+    /// nothing was (so the caller's stale-appearance disclosure or refusal
+    /// fires). Never rebuilds *some*: see the all-or-nothing note below.
+    ///
+    /// # ★ The ownership test, and why parsing is not it
+    ///
+    /// A rebuild replaces the artwork in the file with pdfce's rendering of
+    /// the same field. That is correct exactly when the artwork already IS
+    /// pdfce's rendering, and a catastrophe otherwise — an Acrobat check box
+    /// with a company-styled tick would come back as pdfce's two-line vector
+    /// check, silently, as a side effect of a drag.
+    ///
+    /// So the test is the one [`Self::resize_annotation`] already ships and
+    /// [`Self::set_markup_style`] before it: **rebuild from the UNMODIFIED
+    /// geometry and compare BYTES.** Only an appearance pdfce would have
+    /// drawn, at the size it is currently drawn at, is pdfce's to redraw.
+    ///
+    /// The tempting alternative — "does this look like a check box we could
+    /// draw?" — succeeds for every conforming check box in existence, which is
+    /// precisely the set this must not touch.
+    ///
+    /// **The order is the whole trick.** The comparison is against the OLD
+    /// size (`widget.rect`), never the new one. Comparing a rebuild at the new
+    /// size against the bytes drawn at the old size would disagree every time
+    /// and would therefore refuse every resize — which is the same trap
+    /// `resize_annotation` documents at its own `dict`-versus-`updated` line.
+    ///
+    /// # All-or-nothing across the field's widgets
+    ///
+    /// A radio group is one field with N widgets and one shared artwork
+    /// language. Rebuilding the two pdfce drew and leaving the third — the one
+    /// somebody restyled — would produce a group whose buttons no longer match
+    /// each other, from a gesture that named one of them. If any widget's
+    /// appearance is foreign, none is rebuilt and the caller says so.
+    ///
+    /// # What is deliberately NOT consulted
+    ///
+    /// `/BS` `/W`. pdfce's check-box and radio artwork draws a **1.0-wide**
+    /// border unconditionally (`annot_author::build_check_box_appearances`),
+    /// so a widget whose `/BS` says 2.0 still carries a 1.0-wide stroke and
+    /// a rebuild reproduces it. That is not this Pass papering over a gap: it
+    /// is the artwork's actual contract, and making the border width follow
+    /// `/BS` would change how every existing pdfce-authored check box renders.
+    /// Filed as its own question rather than smuggled in under a resize.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NotADictionary`] for a widget whose object is not a
+    /// dictionary; a `VarTextError` surfaced from the push-button caption
+    /// layout.
+    fn regen_button_appearance(
+        &mut self,
+        field: &forms::Field,
+        objects: &mut Vec<ObjectWrite>,
+        pending: &PendingWidgetEdit,
+    ) -> Result<bool, EditError> {
+        let Some(kind) = field.button_kind else {
+            // `/FT /Btn` with no resolvable kind. Not pdfce's to guess at.
+            return Ok(false);
+        };
+
+        // ---- pass 1: is EVERY widget's artwork pdfce's own? Writes nothing.
+        //
+        // Two passes rather than one, so a field whose third widget turns out
+        // to be foreign does not leave the first two already rebuilt in a
+        // command the caller then commits.
+        let mut plans = Vec::with_capacity(field.widgets.len());
+        for widget in &field.widgets {
+            let Some(old) = widget.rect else {
+                return Ok(false);
+            };
+            let Some(plan) = self.button_ap_plan(field, widget, kind, old.width(), old.height())?
+            else {
+                return Ok(false);
+            };
+            plans.push((widget, plan));
+        }
+
+        // ---- pass 2: redraw each at its EFFECTIVE size.
+        //
+        // The streams are rewritten IN PLACE, under their existing object ids,
+        // and the widget dictionary is not touched at all. That is not merely
+        // tidy — `edit_widget` has already staged a whole-dictionary write for
+        // this widget carrying the new `/Rect`, and a second whole-dictionary
+        // write to one object in one command does not compose (the second
+        // one's `after` is built from the PRE-command dictionary, so it would
+        // silently discard the resize it was triggered by). Reusing the ids
+        // means there is no second write to compose.
+        for (widget, plan) in plans {
+            let (w, h) = pending
+                .rect_for(widget.id)
+                .or(widget.rect)
+                .map_or((0.0, 0.0), |r| (r.width(), r.height()));
+            let caption = pending
+                .caption_for(widget.id)
+                .map(str::to_owned)
+                .unwrap_or_else(|| plan.caption.clone());
+            let redrawn = self.build_button_states(field, kind, w, h, &caption)?;
+            for (id, content) in plan.slots.iter().zip(redrawn) {
+                let before = self.state.get(id).cloned();
+                let span = self.stage_bytes(&content.content);
+                let mut dict = content.ap_dict;
+                dict.insert(
+                    Name::from(b"Length"),
+                    Object::Integer(i64::try_from(content.content.len()).unwrap_or(i64::MAX)),
+                );
+                objects.push(ObjectWrite {
+                    id: *id,
+                    before,
+                    after: Some(Object::Stream(Stream {
+                        dict,
+                        data_span: span,
+                    })),
+                });
+            }
+        }
+        Ok(true)
+    }
+
+    /// One widget's rebuild plan: the appearance objects to overwrite, in the
+    /// order [`Self::build_button_states`] returns their replacements, plus
+    /// the caption the existing artwork was drawn with.
+    ///
+    /// `None` means **this widget's artwork is not pdfce's** — a foreign `/AP`,
+    /// a missing one, a state dictionary of an unexpected shape, or bytes that
+    /// do not match what pdfce draws for these properties at this size.
+    fn button_ap_plan(
+        &self,
+        field: &forms::Field,
+        widget: &forms::Widget,
+        kind: forms::ButtonKind,
+        w: f64,
+        h: f64,
+    ) -> Result<Option<ButtonApPlan>, EditError> {
+        let Some(Object::Dict(dict)) = self.value(widget.id) else {
+            return Err(EditError::NotADictionary {
+                id: widget.id,
+                key: "AP",
+            });
+        };
+        let Some(Object::Dict(ap)) = dict.get(b"AP").map(|o| self.graph().resolve(o).clone())
+        else {
+            return Ok(None);
+        };
+        let Some(n) = ap.get(b"N") else {
+            return Ok(None);
+        };
+        let caption = widget
+            .caption
+            .as_deref()
+            .map(|b| decode_text_string(b).text)
+            .unwrap_or_default();
+
+        match kind {
+            forms::ButtonKind::Push => {
+                // `/AP` `/N` is a single stream (§12.7.4.2.2 — a push button
+                // has no states because it has no value).
+                let Some(id) = n.as_reference() else {
+                    return Ok(None);
+                };
+                let expected = self.build_button_states(field, kind, w, h, &caption)?;
+                let Some(first) = expected.first() else {
+                    return Ok(None);
+                };
+                if !self.stream_bytes_match(id, &first.content) {
+                    return Ok(None);
+                }
+                Ok(Some(ButtonApPlan {
+                    slots: vec![id],
+                    caption,
+                }))
+            }
+            forms::ButtonKind::Check | forms::ButtonKind::Radio => {
+                // `/AP` `/N` is a SUB-DICTIONARY keyed by state name
+                // (§12.7.4.2.3). pdfce always writes exactly two entries —
+                // `Off` and one on-state — so anything else is another
+                // producer's, including the legal case of an on-state with no
+                // `Off` (which pdfce deliberately never emits, so that an
+                // unticked box still shows its border).
+                let Some(states) = self.graph().resolve(n).as_dict().cloned() else {
+                    return Ok(None);
+                };
+                if states.0.len() != 2 {
+                    return Ok(None);
+                }
+                let Some(off_id) = states.get(b"Off").and_then(Object::as_reference) else {
+                    return Ok(None);
+                };
+                let Some(on_id) = states
+                    .0
+                    .iter()
+                    .find(|(k, _)| k.0 != b"Off")
+                    .and_then(|(_, v)| v.as_reference())
+                else {
+                    return Ok(None);
+                };
+                let expected = self.build_button_states(field, kind, w, h, &caption)?;
+                let [off, on] = expected.as_slice() else {
+                    return Ok(None);
+                };
+                if !self.stream_bytes_match(off_id, &off.content)
+                    || !self.stream_bytes_match(on_id, &on.content)
+                {
+                    return Ok(None);
+                }
+                Ok(Some(ButtonApPlan {
+                    slots: vec![off_id, on_id],
+                    caption,
+                }))
+            }
+        }
+    }
+
+    /// Draw the appearance states pdfce authors for one button widget, in the
+    /// order `button_ap_plan` records their object ids: `[off, on]` for a
+    /// check box or radio button, `[plate]` for a push button.
+    ///
+    /// One function for both the ownership test and the redraw, deliberately.
+    /// Two would be two definitions of "what pdfce draws for this field", and
+    /// the day they drifted the ownership test would start declaring pdfce's
+    /// own artwork foreign — which fails closed, silently, as a resize that
+    /// stopped redrawing.
+    fn build_button_states(
+        &self,
+        field: &forms::Field,
+        kind: forms::ButtonKind,
+        w: f64,
+        h: f64,
+        caption: &str,
+    ) -> Result<Vec<annot_author::CheckBoxStateAppearance>, EditError> {
+        Ok(match kind {
+            forms::ButtonKind::Check => {
+                let (off, on) = annot_author::build_check_box_appearances(w, h);
+                vec![off, on]
+            }
+            forms::ButtonKind::Radio => {
+                let (off, on) = annot_author::build_radio_button_appearances(w, h);
+                vec![off, on]
+            }
+            forms::ButtonKind::Push => {
+                // The same `/DA` and font resource `add_push_button` used, so
+                // the ownership comparison can succeed at all. A field whose
+                // `/DA` differs simply fails the byte match and is treated as
+                // foreign, which is the honest answer rather than a guess.
+                let da = field.default_appearance.clone().unwrap_or_else(|| {
+                    crate::vartext::default_appearance_string(
+                        b"Helv",
+                        0.0,
+                        crate::vartext::TextColor::Gray(0.0),
+                    )
+                });
+                let fonts = [crate::vartext::FontResource {
+                    name: b"Helv".to_vec(),
+                    font: crate::fontdata::Std14::Helvetica,
+                }];
+                let built = annot_author::build_push_button_appearance(w, h, caption, &da, &fonts)?;
+                vec![annot_author::CheckBoxStateAppearance {
+                    ap_dict: built.ap_dict,
+                    content: built.content,
+                }]
+            }
+        })
+    }
+
+    /// Whether the stream object `id` currently holds exactly `expected`.
+    ///
+    /// The session-aware twin of [`Self::appearance_matches`], which answers
+    /// the same question for an annotation's single `/AP` `/N`. This one takes
+    /// the object id directly, because a button's states are reached through a
+    /// sub-dictionary that helper cannot walk.
+    fn stream_bytes_match(&self, id: ObjId, expected: &[u8]) -> bool {
+        let Some(Object::Stream(stream)) = self.value(id) else {
+            return false;
+        };
+        StreamSource::Split {
+            base: self.base.bytes(),
+            staged: &self.staging,
+        }
+        .slice(stream.data_span)
+        .is_some_and(|bytes| bytes == expected)
     }
 
     /// The form-XObject `/Matrix` for a quarter-turn widget rotation, or `None`
@@ -26200,7 +26942,7 @@ impl EditSession {
                 &mut unencodable_chars,
                 // Not a rotation call: each widget's own `/MK /R` is read
                 // inside the loop, so a rotated field stays rotated.
-                None,
+                &PendingWidgetEdit::default(),
             )?;
             widgets_updated += field.widgets.len().max(objects.len() - before_len);
 
@@ -26540,7 +27282,7 @@ impl EditSession {
                 &mut applied_autosize,
                 &mut unencodable,
                 // Not a rotation call -- see the sibling above.
-                None,
+                &PendingWidgetEdit::default(),
             )?;
             regenerated += 1;
             // Shape A: fold the new /AP /N into the field dictionary.

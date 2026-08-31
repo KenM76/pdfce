@@ -4723,8 +4723,34 @@ enum Command {
         /// `/MK` `/CA` -- the widget's caption. On a push button this is the
         /// only human-readable thing distinguishing Submit from Reset, since
         /// a push button has no value at all. Pass an empty string to remove.
+        ///
+        /// On a push button pdfce drew, this also REDRAWS the plate: the
+        /// caption is painted into the artwork, so writing the key alone
+        /// would leave the button showing its previous word.
         #[arg(long)]
         caption: Option<String>,
+
+        /// Scale `/BS /W` with the geometry. Off by default -- a line weight
+        /// is a drafting convention, not a length in the scaled space.
+        ///
+        /// Same three options `resize-annotation` takes, spelled identically.
+        #[arg(long)]
+        scale_stroke_width: bool,
+        /// Leave `/RD` unscaled. By default rect differences DO scale. A
+        /// widget rarely has an `/RD`; accepted so both verbs take the same
+        /// answers.
+        #[arg(long)]
+        keep_rect_differences: bool,
+        /// Proceed when the appearance cannot be rebuilt, accepting that a
+        /// viewer will stretch it.
+        ///
+        /// Needed only for artwork pdfce did not draw -- a foreign `/AP` on a
+        /// button, or a signature field. A check box, radio button or push
+        /// button pdfce authored is REDRAWN at the new size and needs none of
+        /// this.
+        #[arg(long)]
+        allow_appearance_distortion: bool,
+
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -8894,6 +8920,9 @@ fn run() -> ExitCode {
             border_width,
             visibility,
             caption,
+            scale_stroke_width,
+            keep_rect_differences,
+            allow_appearance_distortion,
             output,
             mode,
         } => cmd_edit_widget(&EditWidgetArgs {
@@ -8905,6 +8934,10 @@ fn run() -> ExitCode {
             border_width,
             visibility: visibility.as_deref(),
             caption: caption.as_deref(),
+            resize: pdfce_core::edit::ResizeOptions::new()
+                .with_scale_stroke_width(scale_stroke_width)
+                .with_keep_rect_differences(keep_rect_differences)
+                .with_allow_appearance_distortion(allow_appearance_distortion),
             output: &output,
             mode,
         }),
@@ -25759,6 +25792,10 @@ struct EditWidgetArgs<'a> {
     border_width: Option<f64>,
     visibility: Option<&'a str>,
     caption: Option<&'a str>,
+    /// How the resize treats stroke width, `/RD` and an appearance pdfce
+    /// cannot rebuild (`Pass 187.0`) — the same three answers
+    /// `resize-annotation` takes.
+    resize: pdfce_core::edit::ResizeOptions,
     output: &'a Path,
     mode: SaveMode,
 }
@@ -25832,6 +25869,7 @@ fn cmd_edit_widget(args: &EditWidgetArgs<'_>) -> u8 {
     if let Some(c) = args.caption {
         edit = edit.with_caption(c);
     }
+    edit = edit.with_resize(args.resize);
 
     let outcome = match session.edit_widget(args.name, args.index, &edit) {
         Ok(o) => o,
@@ -25841,6 +25879,25 @@ fn cmd_edit_widget(args: &EditWidgetArgs<'_>) -> u8 {
     if let Some(stale) = &outcome.appearance_stale {
         eprintln!(
             "pdfce-cli: field {:?} widget {}: ★ {stale}",
+            args.name, args.index
+        );
+    }
+    // Rule 4 in the shell that has no session: the invocation IS the commit,
+    // so anything pdfce decided on the way past is printed on the way past.
+    match outcome.stroke_width {
+        Some((before, after)) => eprintln!(
+            "pdfce-cli: field {:?} widget {}: border width scaled with the box, {before} -> {after} pt.",
+            args.name, args.index
+        ),
+        None if outcome.resized => eprintln!(
+            "pdfce-cli: field {:?} widget {}: its border width was NOT scaled — a line weight is a drafting convention rather than a length in the scaled space, which is why the default leaves it alone. Pass --scale-stroke-width if you wanted it to follow.",
+            args.name, args.index
+        ),
+        None => {}
+    }
+    if outcome.rect_differences_scaled == Some(false) {
+        eprintln!(
+            "pdfce-cli: field {:?} widget {}: this widget has /RD (rect differences) and they were left UNSCALED, so its inner margins are now a different proportion of the box.",
             args.name, args.index
         );
     }
