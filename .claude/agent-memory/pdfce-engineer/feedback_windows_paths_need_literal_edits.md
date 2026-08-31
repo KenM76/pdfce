@@ -454,3 +454,44 @@ good.
 then splice it with a script whose own text contains **no backslash at all**
 (`s.replace(anchor, open(f).read() + anchor, 1)`). The payload never meets a
 shell; the script never needs an escape.
+
+---
+
+## ★★★ 2026-08-31 — `git checkout` AGAIN, and this time on the FIRST case the rule names
+
+The `git checkout` half of this note has three prior instances and says, in
+bold, with no scope on it: *"NEVER use `git checkout`, `git restore` or
+`git stash` to undo anything while uncommitted work is in the tree."* The very
+first sentence of that section is about undoing **a sabotage check**.
+
+I ran `git checkout -- crates/pdfce-render/src/cmyk_buffer.rs` to undo a
+sabotage check, and lost four uncommitted changes to that file: six corrected
+guards, a runtime refusal, a 30-line rule exemption and a new test.
+
+**Two things make this instance worth appending rather than just counting.**
+
+**(1) It was in the SAME COMPOUND COMMAND as the sabotage.** I wrote
+`python -c "...sabotage..." ; cargo test ; git checkout -- <file>` as one line,
+so the restore was authored *before* the test had run and there was no moment
+between reading the result and destroying the work. The rule fires at the point
+of *deciding to restore*, and I had removed that point from the sequence.
+
+⇒ **Never put the restore in the same command as the sabotage.** Copy the file
+aside first (`cp x /tmp/x.bak`), run the sabotage, read the result, then restore
+from the copy as a separate deliberate act. That is also what the note two
+sections up already says about `rm` beside a check — same shape, same day.
+
+**(2) The blast radius was invisible because it was PATH-SCOPED.** `git status`
+afterwards showed a clean `crates/pdfce-render/`, three untracked agent files
+and two unrelated modifications — which reads as a *tidy tree*, not as a loss.
+Nothing was reported. I only knew because I had just written the code and could
+grep for it.
+
+⇒ **After any `git checkout`/`restore`, grep for a token you know you wrote.**
+`git status` cannot tell you about work it has already discarded.
+
+**The cheap structural fix, which I did not take and should have: commit
+first.** All four changes were finished, tested and green before the sabotage.
+A throwaway commit costs nothing and is reversible; a checkout is not. The rule
+above already says this. Sabotage AFTER committing, restore with `git checkout`
+freely, and the whole class disappears.
