@@ -802,9 +802,46 @@ impl CmykBuffer {
         alpha: Chan,
         blend: Blend,
     ) -> u32 {
+        // ★ `R236` EXEMPTION — this and the eight sibling dimension guards in
+        // this file are NOT untrusted-derived, so none of them owes a
+        // `cargo-fuzz` target. Stated once here; the other sites point back.
+        //
+        // The rule asks a `debug_assert` postcondition over state derived from
+        // untrusted input to owe a fuzz target *or a written exemption at the
+        // site*. This is the exemption, and the argument is the same one
+        // `writer/content.rs:649` makes for its own:
+        //
+        // **The operand is allocated by the caller from THIS BUFFER'S own
+        // `width()`/`height()`**, never from an image dictionary, a `/MediaBox`
+        // or any other document-supplied number. A page's size is
+        // document-derived, certainly — but it is read ONCE and handed to both
+        // sides, so the two quantities compared here are one pdfce number
+        // against itself, not two derivations a hostile file could drive apart.
+        // There is no input that makes them differ.
+        //
+        // What the guard is actually for is a **future call site** that
+        // allocates at the *image's* dimensions instead of the canvas's —
+        // exactly the mistake `cmyk_paint.rs`'s `Brush::Image` arm already
+        // refuses by name. That is a caller-convention tripwire, which is what
+        // a `debug_assert` is the right tool for.
+        //
+        // Audited 2026-08-31, all ten assertions in this file: four exempt on
+        // this reasoning, six vacuous (their operand is obtainable ONLY from
+        // the receiver, via `take_child` / `child_from_backdrop` /
+        // `finish_knockout`, so a sabotage of the plumbing moves both sides
+        // together). None open. The audit also established that no existing
+        // fuzz target reaches this module at all: every item here is
+        // `pub(crate)`, and the three targets that link `pdfce-render` stop at
+        // a leaf parser — `mesh_shading` calls `mesh::parse` and never paints.
+        // Linking is not reaching.
+        //
+        // ★ And both axes are checked now. Six of these guards compared WIDTH
+        // ONLY while their message claimed a shared device grid, so a
+        // same-width, short-height operand passed and then indexed off the end.
+        // Corrected in the same audit.
         debug_assert_eq!(
-            coverage.width(),
-            self.width,
+            (coverage.width(), coverage.height()),
+            (self.width, self.height),
             "coverage mask and colorant buffer must share a device grid"
         );
         let cov = coverage.data();
@@ -881,8 +918,8 @@ impl CmykBuffer {
         blend: Blend,
     ) -> u32 {
         debug_assert_eq!(
-            src.width(),
-            self.width,
+            (src.width(), src.height()),
+            (self.width, self.height),
             "bridged pixmap and colorant buffer must share a device grid"
         );
         let (x0, y0, x1, y1) = region;
@@ -968,8 +1005,8 @@ impl CmykBuffer {
         blend: Blend,
     ) -> u32 {
         debug_assert_eq!(
-            cmy.width(),
-            self.width,
+            (cmy.width(), cmy.height()),
+            (self.width, self.height),
             "ink plane and colorant buffer must share a device grid"
         );
         let (x0, y0, x1, y1) = region;
@@ -1136,7 +1173,10 @@ impl CmykBuffer {
         source: [Chan; 4],
         alpha: Chan,
     ) -> u32 {
-        debug_assert_eq!(coverage.width(), self.width);
+        debug_assert_eq!(
+            (coverage.width(), coverage.height()),
+            (self.width, self.height)
+        );
         let cov = coverage.data();
         let (x0, y0, x1, y1) = region;
         let x1 = x1.min(self.width);
@@ -1558,8 +1598,8 @@ impl CmykBuffer {
         blend: Blend,
         mask: Option<&[u8]>,
     ) -> u32 {
-        debug_assert_eq!(iso.width, self.width);
-        debug_assert_eq!(nis.width, self.width);
+        debug_assert_eq!((iso.width, iso.height), (self.width, self.height));
+        debug_assert_eq!((nis.width, nis.height), (self.width, self.height));
         let alpha = alpha.clamp(0.0, 1.0);
         let Some((x0, y0, x1, y1)) = iso.dirty_region() else {
             return 0;
@@ -1672,9 +1712,42 @@ impl CmykBuffer {
     ///
     /// `None` if the extra planes cannot be allocated.
     pub(crate) fn into_knockout(mut self, initial: &Self) -> Option<Self> {
-        debug_assert_eq!(initial.width, self.width);
-        debug_assert_eq!(initial.height, self.height);
         let n = (self.width as usize).checked_mul(self.height as usize)?;
+        // ★★ A REAL CHECK, NOT A `debug_assert`, AND THIS IS THE ONE SITE IN
+        // THIS FILE THAT EARNS THE DIFFERENCE.
+        //
+        // Every other dimension guard here fails LOUDLY when it is violated:
+        // the compositing loops index by `y * width + x`, so a mismatched
+        // operand runs off the end and panics even in the shipping build. That
+        // makes a `debug_assert` an adequate tripwire — it names the cause in a
+        // debug run, and release still refuses to produce wrong pixels.
+        //
+        // This one is different. The two lines below **replace this buffer's
+        // planes wholesale** with clones of `initial`'s. If `initial` were
+        // larger, every plane would be longer than `width * height`, every
+        // subsequent `idx` would address the wrong pixel, and nothing would
+        // ever run off the end. The output would simply be sheared — silently,
+        // in release, with no panic and no diagnostic.
+        //
+        // `debug_assert` is compiled out of the build operators run, so the
+        // only guard against that was one that is not there when it matters.
+        // Found by the `R236` audit of this file (2026-08-31), which graded all
+        // ten of its assertions and singled this pair out: they were the only
+        // ones whose violation is invisible rather than fatal.
+        //
+        // Unreachable today — `Canvas::begin_knockout_group` binds `(w, h)`
+        // once and builds both buffers from it, five lines apart. So this costs
+        // one comparison on a path taken once per knockout group, and buys a
+        // wrong-pixel class that would otherwise have no detector at all.
+        // `None` is already this function's "cannot build the group" answer, so
+        // the refusal needs no new vocabulary.
+        if initial.width != self.width
+            || initial.height != self.height
+            || initial.alpha.len() != n
+            || initial.planes.iter().any(|p| p.len() != n)
+        {
+            return None;
+        }
         // C_0 = C_b, α_0 = α_b: the accumulator IS the backdrop at element
         // zero. Copying rather than referencing because the backdrop must
         // survive every element while the accumulator is overwritten by
@@ -1912,6 +1985,39 @@ mod tests {
         let (w, h) = (b.width, b.height);
         let m = full_mask(w, h);
         b.composite_mask(&m, (0, 0, w, h), c, alpha, blend);
+    }
+
+    /// ★★ The one dimension mismatch in this file whose consequence is
+    /// SILENT, so it is refused at runtime rather than merely asserted in
+    /// debug (`R236` audit, 2026-08-31).
+    ///
+    /// `into_knockout` replaces the receiver's planes wholesale with clones of
+    /// `initial`'s. Every other guard here fails loudly — the compositing
+    /// loops index by `y * width + x` and run off the end. This one would not:
+    /// longer planes simply shear the image, in release, with no panic.
+    ///
+    /// It is unreachable through `Canvas`, which binds one `(w, h)` and builds
+    /// both buffers from it. Asserted directly because that is the only way to
+    /// reach it, and because "unreachable today" is a statement about today's
+    /// call sites.
+    #[test]
+    fn a_knockout_group_refuses_a_backdrop_of_the_wrong_size() {
+        let big = CmykBuffer::new(8, 8, CmykIntent::default(), None).unwrap();
+        let small = CmykBuffer::new(4, 4, CmykIntent::default(), None).unwrap();
+
+        assert!(
+            big.clone().into_knockout(&small).is_none(),
+            "a smaller backdrop must be refused, not cloned into place"
+        );
+        assert!(
+            small.clone().into_knockout(&big).is_none(),
+            "and a larger one must be too — that is the direction that shears \
+             silently rather than panicking"
+        );
+        // The matching case still works, so the guard is not simply refusing
+        // everything, which is how this test would go vacuous.
+        let same = CmykBuffer::new(8, 8, CmykIntent::default(), None).unwrap();
+        assert!(big.into_knockout(&same).is_some());
     }
 
     /// ★★ THE IDENTITY THE THREE-WAY TEST IN `Canvas::group` RESTS ON.
