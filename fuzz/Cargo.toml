@@ -445,3 +445,17 @@ path = "fuzz_targets/form_edit_sequence.rs"
 test = false
 doc = false
 bench = false
+
+# `Pass 188.0` — the form-scoped geometry verbs. `vector_edit` drives the
+# PLANNERS over one already-parsed content stream and cannot reach any of the
+# machinery this Pass added: resolving a leaf index, finding its enclosing
+# form, re-decomposing that form from the leaf's placement matrix, refusing a
+# selection that spans two invocations, and counting the form's reach across
+# the page tree. All of that is index arithmetic and graph-walking over
+# attacker-controlled structure (ARCHITECTURE.md §10.2).
+[[bin]]
+name = "form_geometry_sequence"
+path = "fuzz_targets/form_geometry_sequence.rs"
+test = false
+doc = false
+bench = false

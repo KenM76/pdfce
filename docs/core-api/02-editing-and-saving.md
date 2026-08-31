@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 178 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 184 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 178 public `EditSession` methods
+## 1. Verb index — all 184 public `EditSession` methods
 
-**Count: 178.** Established by brace-matched extraction of the four
+**Count: 184.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -636,7 +636,7 @@ not — it was filed the same day and built a week later. A decision can certify
 its compliance with a standing rule using a fact that is not true, and nothing
 downstream checks it.
 
-### 1.10 Vector geometry (19) — detail in part 3
+### 1.10 Vector geometry (25) — detail in part 3
 
 Eleven of the thirteen return `Result<Vec<String>, EditError>`. **The
 `Vec<String>` is the disclosure list**
@@ -1041,6 +1041,130 @@ said nothing about identity across edits — this section is that gap closed.*
 iterations because each call re-splices the content stream, and N calls are N
 undo entries. Use `move_objects` / `delete_objects` / `move_nodes`
 (`edit.rs:4600-4620`).
+
+#### ★★★ 1.10.1 Editing INSIDE a form XObject — `Pass 188.0`
+
+Every verb above addresses an index into `PageObjects::objects`. **A leaf — an
+object drawn inside a form XObject — has no such index**, and that is
+deliberate: leaves are kept out of that list so the page-surgery verbs cannot
+apply a form-relative token range to the page's stream and corrupt it silently.
+
+Until this Pass the consequence was that **nothing inside a form could be
+edited at all**. `pdfceGUI` measured what that costs on real drawings: a
+print-conformance composite has 28 page objects and **242 leaves**; a CAD
+drawing has 129,758 and **10,256**; a 36-sheet SolidWorks set has 5,903 and
+**none**. On two of three fixtures almost nothing visible was node-editable,
+and on the operator's own drawings everything was — which is why this had never
+been reported as a defect.
+
+Six verbs, addressed by an index into `PageObjects::leaves`:
+
+| I want to… | Call |
+|---|---|
+| Drag one node inside a form | `move_node_in_form(page_index, leaf_index, node_index, to: Point)` |
+| Drag several, ONE undo entry | `move_nodes_in_form(page_index, leaf_index, moves: &[(usize, Point)])` |
+| Drag a Bézier handle | `move_handle_in_form(page_index, leaf_index, node_index, handle, to: Point)` |
+| Move one subpath | `move_subpath_in_form(page_index, leaf_index, subpath_index, dx, dy)` |
+| Move whole objects | `move_objects_in_form(page_index, leaf_indices: &[usize], dx, dy)` |
+| Delete objects | `delete_objects_in_form(page_index, leaf_indices: &[usize])` |
+
+All six return `FormSurgeryOutcome` rather than `Vec<String>`, because there is
+one more thing to say — see below.
+
+**Coordinates stay in PAGE space.** `to`, `dx` and `dy` mean exactly what they
+mean for the page verbs. The conversion into the form's own space happens
+inside, from `FormLeaf::placement` — the CTM in force at the form's `Do`,
+composed with its `/Matrix` and with every enclosing form's placement. Do not
+pre-convert.
+
+**`FormLeaf` gained two fields** that a shell may find useful and that the
+verbs depend on: `placement` (above) and `form_object_index` (the object's
+index in its own form's decomposition, which is **not** derivable from the
+leaf's position in `leaves` once nesting is involved).
+
+**`FormLeaf::is_editable()` changed meaning.** It was a hard `false` — *"editing
+through the recursion is not built"*. It is built, so it now answers about the
+**object**: `true` for a path, `false` for anything with no node, handle or
+subpath to drag. `pdfceGUI` asked to be able to *"ask YOUR predicate instead of
+our proxy for it"*; this is it. A shell that greys out a node handle on `false`
+is still right; one that greys out the whole container is now wrong. (Text
+inside a form has been editable since `Pass 119.0` via `edit_text` with
+`EditTarget::Form`.)
+
+##### ★★ The write semantics: decision 076, and it did not need a new ruling
+
+A form XObject has **one set of bytes**, and §8.10.1 explicitly allows it to be
+drawn many times — naming CAD output as its own illustration. So an edit inside
+one **changes every place that form appears, on every page.** pdfce cannot
+prevent that structurally: there is one stream object to write.
+
+`pdfceGUI` asked which of two contracts we wanted — require `unshare_form`
+first, or edit in place with a disclosure — and said *"what we cannot do is
+guess."* It does not need a new ruling: **decision 076 already decided exactly
+this for text editing inside a form**, and the argument does not change because
+the operand is a node instead of a glyph. **Edit in place, disclose, with
+`unshare_form` as the option rather than the precondition.** Two reasons that
+answer carries over rather than being re-opened:
+
+- **One rule per container beats two.** Under require-unshare-first, editing a
+  word in a title block would change all twelve sheets and dragging a line two
+  pixels would refuse until the operator ran a structural command.
+- **Refusing is not neutral.** `unshare_form` rewrites the document's structure
+  as a precondition of a drag. Project rule 3 exists to stop pdfce
+  restructuring a file as a side effect of an edit; making that restructure
+  *mandatory* is the same thing with a confirmation step.
+
+##### The disclosure is DATA, not prose — read `invocations` and `pages`
+
+`FormSurgeryOutcome::invocations` is how many `Do`s of that form the document
+contains; `pages` is across how many pages they fall. They are reported
+separately because they answer different operator questions: a title block on
+each of twelve sheets is **12 / 12** (*"you changed every sheet"*), and a hatch
+pattern drawn forty times on one sheet is **40 / 1** (*"you changed one sheet
+forty times over"*), which is not alarming.
+
+They are deliberately **not** pushed onto `disclosures` as a sentence. An
+earlier cut did both and the CLI printed the reach twice; more importantly, a
+sentence generated in the core could never have become `pdfceGUI`'s one-click
+offer — *"this drawing is used on 12 pages; make this page's copy separate?"* —
+which is the good outcome and is available precisely **because** the unshare is
+not compulsory. `disclosures` carries the planner's own notes (a rectangle
+rewritten as four lines, and so on) and nothing else.
+
+Per project rule 4 the edit is not gated on that offer and the drawn result is
+not marked: the disclosure lives off-canvas and Save is the commit point.
+
+##### Two refusals
+
+- `EditError::FormLeafOutOfRange { index, count }` — counts **leaves**, not
+  page objects. Named separately from `ObjectOutOfRange` because a shell told
+  "object 4 of 28" after asking about leaf 4 of 242 would look for the wrong
+  bug.
+- `EditError::FormLeafSelectionSpansForms { first, other }` — a multi-leaf
+  selection must be confined to **one invocation of one form**. ★ Requiring the
+  same *form* is not enough: two invocations produce leaves that name the same
+  form with different placements, and their `form_object_index` values
+  **collide** (leaf 0 of the first and leaf 3 of the second can be the same
+  bytes). Accepting such a selection would ask to move one object twice,
+  through two different matrices.
+
+##### ⚠️ `EditSession::page_objects` had NO leaves until this Pass
+
+Worth its own warning because the row above recommends that method. It claimed
+to return *"the same model `vector::decompose_page` returns for
+`self.view()`"*. It did not — the descent into forms happens **after**
+`decompose_with_fonts` returns, and this cache never ran it. So a shell that
+took the advice and the 385 ms → 0 ms win **silently lost its entire
+deep-selection model**. Fixed; the memo's key now also tracks every form the
+page paints, so an edit to a form invalidates it.
+
+##### CLI
+
+`subpath-move` and `node-move` take `--leaf N` as an alternative to
+`--object N`; exactly one is required and passing both is refused by name.
+`object-list` prints `leaf` rows carrying `index=`, `in_form_index=`,
+`placement=` and a real `editable=` — it was a hard-coded `editable=false`,
+which became a false claim in shipped output the day these verbs landed.
 
 ### 1.11 Form-field authoring (5) — see also §1.26, the field clipboard
 

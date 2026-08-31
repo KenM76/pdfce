@@ -427,13 +427,19 @@ pub fn pick_line_of(
 /// which is the same "fixing one half exposes the other" shape this
 /// subsystem has now produced three times.
 ///
-/// # Authoring against a leaf is allowed; editing one is not
+/// # Authoring against a leaf was allowed before editing one was
 ///
-/// A ce dimension placed against a line inside a form is a **new annotation
-/// on the page**, not a change to the form, so nothing here is gated on
-/// [`FormLeaf::is_editable`]. The distinction the target carries is needed
-/// for a different reason: a shell has to report which list the line came
-/// from and re-resolve it after an edit.
+/// A ce dimension placed against a line inside a form is a **new annotation on
+/// the page**, not a change to the form, so nothing here is gated on
+/// [`FormLeaf::is_editable`]. That was written when `is_editable` was a hard
+/// `false`; since `Pass 188.0` a leaf that is a path *is* editable, through the
+/// form-scoped geometry verbs. **This function is unaffected either way** —
+/// the ungating was never a concession to the old answer, it was the
+/// observation that authoring and editing are different acts.
+///
+/// The distinction the target carries is still needed, and for the same
+/// reason: a shell has to report which list the line came from and re-resolve
+/// it after an edit.
 #[must_use]
 pub fn pick_line_in_page(model: &PageObjects, point: Point, tolerance: f64) -> Option<PickedLine> {
     let mut best: Option<(f64, PickedLine)> = None;

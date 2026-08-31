@@ -38,6 +38,7 @@ Each is 200 × 200 pt and isolates one property.
 | `nested-forms.pdf` | form A holds form B holds one square | containment depth **2**, and that an intermediate form is **not** itself a leaf |
 | `self-referential-form.pdf` | a form that invokes **itself** | the cycle guard: the walk terminates **and counts it** |
 | `shared-form-twice.pdf` | one form invoked **twice**, at different offsets | the same form's contents appear once per invocation, in two places, naming one form |
+| `scaled-form-placement.pdf` | one form placed at `2 0 0 2 40 30 cm`, drawing **two subpaths in one path object** | ★ that a page-space edit is converted through the form's **placement matrix** — see below |
 
 ### ★★ `self-referential-form.pdf` is not a corrupt file
 
@@ -52,6 +53,33 @@ The guard is keyed on the form's **object number**, not its resource name: the
 same stream is reachable under different names in different resource
 dictionaries, so a name-keyed guard misses the cycle entirely. Same key, same
 reasoning, as `text_extract`'s form walk.
+
+### ★★ `scaled-form-placement.pdf` exists because a TRANSLATION cannot falsify the conversion
+
+Added for `Pass 188.0`, which made objects inside a form editable. A leaf's
+geometry is page space; its bytes are form space, and the conversion between
+them runs through the matrix that placed the form.
+
+**Every other fixture in this directory places its form with a pure
+translation**, and a translation is exactly the transform under which a *wrong*
+conversion still produces a plausible result: drag a node 10 pt right and it
+moves 10 pt right whether or not the placement was applied — just from the
+wrong starting point, which a bounding-box assertion may not even see.
+
+At `2 0 0 2 40 30` the two answers differ in **magnitude**. A decomposition
+started from the identity moves a node by twice the requested distance, and the
+assertion goes red. That is the whole reason for the file.
+
+The form draws **two subpaths in ONE path object** so a subpath move has a
+sibling to leave alone — which is what distinguishes *"the subpath moved"* from
+*"the object moved"*, and is also the real shape of CAD output (a SolidWorks
+view arrives as one path holding 1,194 subpaths).
+
+```text
+form space          -> page space (x*2+40, y*2+30)
+  10 10 20 20 re    -> [ 60,  50, 100,  90]
+  50 10 20 20 re    -> [140,  50, 180,  90]
+```
 
 ### ★ `shared-form-twice.pdf` looks like a bug and is not
 

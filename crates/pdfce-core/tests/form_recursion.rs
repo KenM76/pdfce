@@ -35,7 +35,7 @@
 //! | a form invoking itself terminates, and says it did | `a_self_referential_form_terminates_and_is_counted` |
 //! | a form invoked twice contributes twice, in two places | `a_form_invoked_twice_contributes_its_contents_twice` |
 //! | the flat list does **not** move | `the_flat_object_list_is_unchanged_by_recursion` |
-//! | a leaf refuses to claim it is editable | `a_leaf_names_its_own_stream_and_is_not_editable` |
+//! | a leaf names the form's stream, and `is_editable` answers about the OBJECT | `a_leaf_names_its_own_stream_and_reports_its_editability` |
 //!
 //! ## ★★ The last two are the load-bearing ones, and not for obvious reasons
 //!
@@ -48,8 +48,24 @@
 //! the lists separate is what makes those eleven sites correct by construction
 //! rather than by a guard somebody must remember to add to each.
 //!
-//! `a_leaf_names_its_own_stream_and_is_not_editable` is the same fact from the
-//! caller's side, in the vocabulary the shell already uses for text.
+//! `a_leaf_names_its_own_stream_and_reports_its_editability` is the same fact
+//! from the caller's side, in the vocabulary the shell already uses for text.
+//!
+//! ## ★ `is_editable` changed meaning in `Pass 188.0`, and the change is narrow
+//!
+//! It used to be a hard `false` — *"editing through the recursion is not
+//! built"*. It is built: the geometry verbs have form-scoped twins addressed by
+//! a leaf index (`crates/pdfce-core/tests/form_geometry_edit.rs`). So the
+//! predicate now answers about **the object**: `true` for a path, `false` for
+//! anything with no node, handle or subpath to drag.
+//!
+//! **The safety property above is untouched and must stay untouched.** Leaves
+//! are still absent from `PageObjects::objects`; the form verbs reach them
+//! through `PageObjects::leaves` and write to the *form's* stream, never the
+//! page's. `the_flat_object_list_is_unchanged_by_recursion` is what guards
+//! that, and it guards it exactly as hard now as it did before — arguably
+//! harder, because there is now a second family of verbs that must not confuse
+//! the two lists.
 
 #![allow(
     clippy::unwrap_used,
@@ -250,14 +266,28 @@ fn the_flat_object_list_is_unchanged_by_recursion() {
     }
 }
 
-/// A leaf names its own content stream and refuses to claim it is editable.
+/// A leaf names its own content stream, and reports whether the OBJECT can be
+/// edited.
 ///
 /// Deliberately the same vocabulary `text_extract` uses for a `TextRun` inside
 /// a form, so a form-interior path and a form-interior text run describe
 /// themselves identically. A shell reconciles both in one selection; two
 /// vocabularies for one fact would be its problem and our fault.
+///
+/// # ★ What each half now asserts, because they came apart in `Pass 188.0`
+///
+/// - **`stream()` is a fact about the BUFFER** and has not changed: the leaf's
+///   token range indexes the form's bytes, not the page's. That is the safety
+///   property, and every form-scoped verb writes to the form accordingly.
+/// - **`is_editable()` is a fact about the OBJECT** and has changed. It was a
+///   hard `false` meaning *"editing through the recursion is not built"*; it is
+///   built, so it now means *"this leaf is a path, so there is something to
+///   drag"*.
+///
+/// The two are asserted separately here precisely so that a future change to
+/// one cannot be mistaken for a change to the other.
 #[test]
-fn a_leaf_names_its_own_stream_and_is_not_editable() {
+fn a_leaf_names_its_own_stream_and_reports_its_editability() {
     let m = model("page-sized-form.pdf");
     let leaf = &m.leaves[0];
 
@@ -271,10 +301,12 @@ fn a_leaf_names_its_own_stream_and_is_not_editable() {
         !leaf.stream().is_page(),
         "a leaf is never in the page's own stream"
     );
-    assert!(
-        !leaf.is_editable(),
-        "editing through the recursion is not built; claiming otherwise is how \
-         a caller reaches for a verb that would corrupt the page"
+    assert_eq!(
+        leaf.is_editable(),
+        matches!(leaf.object, VectorObject::Path(_)),
+        "since Pass 188.0 this answers about the object, not about whether the \
+         feature exists: a path inside a form is editable through the \
+         form-scoped verbs, and anything with no node to drag is not"
     );
 }
 

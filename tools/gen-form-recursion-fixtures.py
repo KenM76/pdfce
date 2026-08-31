@@ -181,6 +181,40 @@ def shared_form_twice() -> bytes:
     ])
 
 
+def scaled_form_placement() -> bytes:
+    """A form placed with a NON-UNIT SCALE, and a path with two subpaths.
+
+    ★ The fixture that makes the placement matrix falsifiable (`Pass 188.0`).
+
+    Every other fixture here places its form with a pure translation, and a
+    translation is exactly the transform under which a *wrong* conversion still
+    produces a plausible-looking result: drag a node 10 pt right and it moves
+    10 pt right either way, just from the wrong starting point. Under a scale
+    the two answers differ in MAGNITUDE, so a verb that decomposed the form's
+    stream from the identity instead of from the placement moves the node by
+    2x the requested distance and no fixture without a scale can say so.
+
+    `2 0 0 2 40 30 cm` — a uniform 2x at (40, 30). The form draws two separate
+    subpaths in ONE path object so that `move_subpath_in_form` has a second
+    subpath to leave alone, which is the assertion that distinguishes "the
+    subpath moved" from "the object moved".
+
+    Form space          -> page space (x*2+40, y*2+30)
+      10 10 20 20 re    -> [ 60,  50, 100,  90]
+      50 10 20 20 re    -> [140,  50, 180,  90]
+    """
+    form = b"0 0 1 rg\n10 10 20 20 re\n50 10 20 20 re\nf\n"
+    page = b"q 2 0 0 2 40 30 cm /Fm0 Do Q\n"
+    return assemble([
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] "
+        b"/Resources << /XObject << /Fm0 5 0 R >> >> /Contents 4 0 R >>",
+        stream(b"", page),
+        stream(b"/Type /XObject /Subtype /Form /BBox [0 0 80 40]", form),
+    ])
+
+
 def shared_across_two_pages() -> bytes:
     """One form invoked by BOTH pages — the fixture `unshare_form` needs.
 
@@ -237,6 +271,7 @@ def main() -> None:
         "nested-forms.pdf": nested_forms(),
         "self-referential-form.pdf": self_referential_form(),
         "shared-form-twice.pdf": shared_form_twice(),
+        "scaled-form-placement.pdf": scaled_form_placement(),
         "shared-across-two-pages.pdf": shared_across_two_pages(),
         "inherited-resources-shared-form.pdf": inherited_resources_shared_form(),
     }.items():

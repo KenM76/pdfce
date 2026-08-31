@@ -70,6 +70,9 @@ pub use clip::{
     CLIP_MAGIC, CLIP_VERSION, ClipAnnotation, ClipBinding, ClipError, ClipItem, ClipObject,
     ClipPdf, ObjectClip, PastePlan, plan_paste,
 };
+pub(crate) use decompose::collect_form_leaves;
+#[allow(unused_imports)]
+pub use decompose::{};
 pub use decompose::{
     DecomposeDiagnostics, DocumentFonts, DocumentXObjects, FillRule, FontResolver, ImageObject,
     ImageSource, MAX_FONT_NAME_BYTES, MAX_NODES, MAX_OBJECTS, MAX_TEXT_PREVIEW_CHARS, NoFonts,

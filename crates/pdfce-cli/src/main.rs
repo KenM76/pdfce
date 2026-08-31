@@ -6835,9 +6835,20 @@ enum Command {
         /// 1-based page number.
         #[arg(long, default_value_t = 1)]
         page: u32,
-        /// 0-based paint-order object index.
+        /// 0-based paint-order object index, as `object-list` prints it on an
+        /// `object index=` row.
+        ///
+        /// Mutually exclusive with `--leaf`; pass exactly one.
         #[arg(long)]
-        object: usize,
+        object: Option<usize>,
+        /// 0-based FORM LEAF index -- an object drawn INSIDE a form XObject,
+        /// as `object-list` prints it on a `leaf index=` row.
+        ///
+        /// A form has one set of bytes and may be drawn many times, so this
+        /// edit changes every place that form appears. How many is printed on
+        /// stderr; `unshare-form` gives one page its own copy first.
+        #[arg(long)]
+        leaf: Option<usize>,
         /// 0-based subpath index within that object.
         #[arg(long)]
         subpath: usize,
@@ -7076,9 +7087,21 @@ enum Command {
         /// 1-based page number.
         #[arg(long, default_value_t = 1)]
         page: u32,
-        /// 0-based paint-order object index on the page.
+        /// 0-based paint-order object index on the page, as `object-list`
+        /// prints it on an `object index=` row.
+        ///
+        /// Mutually exclusive with `--leaf`; pass exactly one.
         #[arg(long)]
-        object: usize,
+        object: Option<usize>,
+        /// 0-based FORM LEAF index -- an anchor of a path drawn INSIDE a form
+        /// XObject, as `object-list` prints it on a `leaf index=` row.
+        ///
+        /// `--x`/`--y` stay in PAGE space; the conversion into the form's own
+        /// coordinates uses the placement matrix `object-list` prints beside
+        /// the leaf. A form drawn many times is edited in every one of them,
+        /// and the count is printed on stderr.
+        #[arg(long)]
+        leaf: Option<usize>,
         /// 0-based anchor node index (decomposition order).
         #[arg(long)]
         node: usize,
@@ -9626,6 +9649,7 @@ fn run() -> ExitCode {
             input,
             page,
             object,
+            leaf,
             subpath,
             dx,
             dy,
@@ -9636,6 +9660,7 @@ fn run() -> ExitCode {
             input: &input,
             page,
             object,
+            leaf,
             subpath,
             dx,
             dy,
@@ -9711,6 +9736,7 @@ fn run() -> ExitCode {
             input,
             page,
             object,
+            leaf,
             node,
             x,
             y,
@@ -9721,6 +9747,7 @@ fn run() -> ExitCode {
             input: &input,
             page,
             object,
+            leaf,
             node,
             x,
             y,
@@ -30646,11 +30673,30 @@ numbered 1..={})",
             .map(|id| id.num.to_string())
             .collect::<Vec<_>>()
             .join(">");
+        // `editable=` used to be the literal `false`, which was true when this
+        // row was written and became a FALSE CLAIM IN SHIPPED OUTPUT the day
+        // `Pass 188.0` gave the geometry verbs form-scoped twins. A hard-coded
+        // field is the kind that goes stale silently: nothing type-checks a
+        // string, and the row kept printing an answer the engine had stopped
+        // giving. It asks the leaf now.
+        //
+        // `in_form_index=` and `placement=` are printed because they are what
+        // `--leaf` addressing is built on, and an operator who cannot see them
+        // cannot check that a refused edit was refused for the reason claimed.
+        let p = leaf.placement;
         println!(
             "leaf page={page_number} index={index} kind={kind} bbox={} containment={containment} \
-paint_order={} editable=false {detail}",
+paint_order={} in_form_index={} placement={},{},{},{},{},{} editable={} {detail}",
             bbox_token(leaf.object.page_bbox()),
             leaf.paint_order,
+            leaf.form_object_index,
+            p.a,
+            p.b,
+            p.c,
+            p.d,
+            p.e,
+            p.f,
+            u32::from(leaf.is_editable()),
         );
     }
 
@@ -31729,7 +31775,12 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
 struct SubpathMoveArgs<'a> {
     input: &'a Path,
     page: u32,
-    object: usize,
+    /// The page paint-order index, when addressing a page object.
+    object: Option<usize>,
+    /// The index into this page's form leaves, when addressing an
+    /// object INSIDE a form XObject (`Pass 188.0`). Exactly one of
+    /// this and `object` is set; `object_or_leaf` enforces it.
+    leaf: Option<usize>,
     subpath: usize,
     dx: f64,
     dy: f64,
@@ -31738,16 +31789,108 @@ struct SubpathMoveArgs<'a> {
     verify_undo: bool,
 }
 
+/// How the machine-readable line names the object that was edited.
+///
+/// `object=N` or `leaf=N`, never a bare number: the two index different lists
+/// and a script that could not tell them apart would reconstruct the wrong
+/// command. Replaced the old unconditional `object=` field, which would have
+/// printed a page paint-order index for an edit that never used one.
+fn target_token(object: Option<usize>, leaf: Option<usize>) -> String {
+    match (object, leaf) {
+        (Some(o), _) => format!("object={o}"),
+        (None, Some(l)) => format!("leaf={l}"),
+        (None, None) => "object=?".to_owned(),
+    }
+}
+
+/// State how far a form edit reached, on stderr, before the machine-readable
+/// stdout line (`Pass 188.0`).
+///
+/// The CLI has no session and no undo: the invocation IS the commit, so rule 4
+/// is satisfied by printing what pdfce decided **on the way past** rather than
+/// by any confirm step. What it decided here is that one edit changed several
+/// places, which the operator did not ask for and cannot see.
+fn report_form_reach(outcome: Option<&pdfce_core::edit::FormSurgeryOutcome>) {
+    let Some(o) = outcome else { return };
+    if o.invocations <= 1 && o.pages <= 1 {
+        return;
+    }
+    eprintln!(
+        "pdfce-cli: ★ this object is inside form XObject {} 0 R, which is drawn {} time(s) across \
+         {} page(s). A form has ONE set of bytes, so this edit changed every one of them. Run \
+         `unshare-form` first if you wanted only this page's copy to change.",
+        o.form.num, o.invocations, o.pages
+    );
+}
+
+/// Which object a geometry subcommand is addressing — a page paint-order
+/// index or a form leaf (`Pass 188.0`).
+///
+/// `--object` and `--leaf` name **different lists**, and a page has both. An
+/// operator who passes neither is asking for nothing; one who passes both is
+/// asking for two different objects. Both are refused by name here rather than
+/// resolved by a precedence rule, because a precedence rule silently picks one
+/// of the two things they meant.
+enum GeometryTarget {
+    Page(usize),
+    Leaf(usize),
+}
+
+/// Resolve the `--object` / `--leaf` pair, or print the refusal and return the
+/// exit code.
+fn object_or_leaf(
+    input: &Path,
+    object: Option<usize>,
+    leaf: Option<usize>,
+) -> Result<GeometryTarget, u8> {
+    match (object, leaf) {
+        (Some(o), None) => Ok(GeometryTarget::Page(o)),
+        (None, Some(l)) => Ok(GeometryTarget::Leaf(l)),
+        (Some(_), Some(_)) => {
+            eprintln!(
+                "pdfce-cli: {}: --object and --leaf name different lists (page paint order vs \
+                 the objects inside form XObjects) — pass exactly one. `object-list` prints both, \
+                 as `object index=` and `leaf index=` rows.",
+                input.display()
+            );
+            Err(exit::RUNTIME_ERROR)
+        }
+        (None, None) => {
+            eprintln!(
+                "pdfce-cli: {}: pass --object N to address a page object, or --leaf N to address \
+                 one inside a form XObject. `object-list` prints both.",
+                input.display()
+            );
+            Err(exit::RUNTIME_ERROR)
+        }
+    }
+}
+
 /// `subpath-move` — translate ONE subpath of a path object.
 fn cmd_subpath_move(args: &SubpathMoveArgs<'_>) -> u8 {
     let page_index = (args.page.max(1) - 1) as usize;
+    let target = match object_or_leaf(args.input, args.object, args.leaf) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
     let (source, mut session) = match open_for_edit(args.input) {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    match session.move_subpath(page_index, args.object, args.subpath, args.dx, args.dy) {
+    let result = match target {
+        GeometryTarget::Page(object) => session
+            .move_subpath(page_index, object, args.subpath, args.dx, args.dy)
+            .map(|d| (d, None)),
+        GeometryTarget::Leaf(leaf) => session
+            .move_subpath_in_form(page_index, leaf, args.subpath, args.dx, args.dy)
+            .map(|o| (o.disclosures.clone(), Some(o))),
+    };
+    match result {
         Err(err) => return report_edit_error(args.input, &err),
-        Ok(disclosures) => report_disclosures(&disclosures),
+        Ok((disclosures, form)) => {
+            report_disclosures(&disclosures);
+            report_form_reach(form.as_ref());
+        }
     }
     let outcome = match save_edited(
         &mut session,
@@ -31762,10 +31905,10 @@ fn cmd_subpath_move(args: &SubpathMoveArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "subpath-move {} page {} object={} subpath={} dx={} dy={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "subpath-move {} page {} {} subpath={} dx={} dy={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.input.display(),
         args.page,
-        args.object,
+        target_token(args.object, args.leaf),
         args.subpath,
         args.dx,
         args.dy,
@@ -31917,7 +32060,12 @@ fn cmd_node_delete(args: &NodeDeleteArgs<'_>) -> u8 {
 struct NodeMoveArgs<'a> {
     input: &'a Path,
     page: u32,
-    object: usize,
+    /// The page paint-order index, when addressing a page object.
+    object: Option<usize>,
+    /// The index into this page's form leaves, when addressing an
+    /// object INSIDE a form XObject (`Pass 188.0`). Exactly one of
+    /// this and `object` is set; `object_or_leaf` enforces it.
+    leaf: Option<usize>,
     node: usize,
     x: f64,
     y: f64,
@@ -32534,17 +32682,27 @@ fn cmd_node_move(args: &NodeMoveArgs<'_>) -> u8 {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    match session.move_node(
-        page_index,
-        args.object,
-        args.node,
-        Point::new(args.x, args.y),
-    ) {
+    let target = match object_or_leaf(args.input, args.object, args.leaf) {
+        Ok(t) => t,
+        Err(code) => return code,
+    };
+    let result = match target {
+        GeometryTarget::Page(object) => session
+            .move_node(page_index, object, args.node, Point::new(args.x, args.y))
+            .map(|d| (d, None)),
+        GeometryTarget::Leaf(leaf) => session
+            .move_node_in_form(page_index, leaf, args.node, Point::new(args.x, args.y))
+            .map(|o| (o.disclosures.clone(), Some(o))),
+    };
+    match result {
         Err(err) => return report_edit_error(args.input, &err),
         // stderr, not stdout: the stdout line is a fixed-shape record other
         // tools parse, and a variable-length prose block in the middle of it
         // would break them.
-        Ok(disclosures) => report_disclosures(&disclosures),
+        Ok((disclosures, form)) => {
+            report_disclosures(&disclosures);
+            report_form_reach(form.as_ref());
+        }
     }
     let outcome = match save_edited(
         &mut session,
@@ -32559,11 +32717,11 @@ fn cmd_node_move(args: &NodeMoveArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "node-move {} page {} object={} node={} to=({},{}) mode={} -> {}; changed={} objects={} \
+        "node-move {} page {} {} node={} to=({},{}) mode={} -> {}; changed={} objects={} \
 appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.input.display(),
         args.page,
-        args.object,
+        target_token(args.object, args.leaf),
         args.node,
         args.x,
         args.y,

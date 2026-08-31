@@ -1042,6 +1042,46 @@ pub struct FormLeaf {
     /// [`super::hit_test_point_deep`] — can interleave the two lists into the
     /// order the renderer actually painted them.
     pub paint_order: usize,
+    /// **The matrix that placed this leaf's directly-enclosing form on the
+    /// page** — the CTM in force at its `Do`, already composed with the form's
+    /// `/Matrix` and with every enclosing form's placement (`Pass 188.0`).
+    ///
+    /// # Why the surgery cannot work without it
+    ///
+    /// A leaf's geometry above is **page space**; its bytes live in the form's
+    /// own stream, which is **form space**. Editing means decomposing that
+    /// stream and planning against it, and the planners convert a page-space
+    /// target into stream space by inverting the object's `ctm`. That `ctm` is
+    /// only page-space if the decomposition of the form's stream *starts* from
+    /// this matrix. Pass [`Matrix::IDENTITY`] instead and every drag lands in
+    /// the wrong place by exactly the form's placement — silently, and
+    /// invisibly on the common case where a form is placed at the origin with
+    /// no scale.
+    ///
+    /// # ★ It is per INVOCATION, not per form
+    ///
+    /// A form legally appears more than once on a page (§8.10.1 names CAD
+    /// output as its own illustration), and each `Do` has its own CTM. Two
+    /// leaves can therefore name the same form object and carry different
+    /// placements. That is not a wrinkle to be smoothed over — it is why an
+    /// edit must be addressed by *which leaf the operator clicked* rather than
+    /// by *which form it is in*.
+    pub placement: Matrix,
+    /// The index of this object in its directly-enclosing form's **own**
+    /// decomposition (`Pass 188.0`).
+    ///
+    /// This is what a geometry verb addresses once it is inside the form: the
+    /// operand `object_index` means, for a page, an index into
+    /// [`PageObjects::objects`], and for a leaf it means this.
+    ///
+    /// **Not derivable from the leaf's position in [`PageObjects::leaves`].** A
+    /// form that contains a nested form contributes its own children to the
+    /// leaf list and then, from the recursion, the nested form's children too;
+    /// the two interleave, and the nested ones belong to a different stream
+    /// entirely. Recomputing this later would be a second walk that has to
+    /// agree with the first in every detail, which is the shape of a bug that
+    /// only appears on nested CAD output.
+    pub form_object_index: usize,
 }
 
 impl FormLeaf {
@@ -1073,19 +1113,55 @@ impl FormLeaf {
             })
     }
 
-    /// Whether this object can be edited through the page-stream surgeries.
+    /// Whether this leaf can be edited — **true for a path, false otherwise**
+    /// (`Pass 188.0`).
     ///
-    /// **Always `false`**, and it is a method rather than a constant so that
-    /// the answer has somewhere to change when editing-through-recursion is
-    /// built. Mirrors [`crate::text_extract::TextRun::is_editable`], which a
-    /// consuming shell already calls for text.
+    /// # It was a hard `false`, and the note it carried has been honoured
     ///
-    /// A caller that wants to know *why* should read [`Self::stream`]: the
-    /// object lives in a form's buffer, and the verbs that take a paint-order
-    /// index all write to the page's.
+    /// The previous body was `false` with a comment saying it was *"a method
+    /// rather than a constant so that the answer has somewhere to change when
+    /// editing-through-recursion is built"*. It is built: the geometry verbs
+    /// have form-scoped twins —
+    /// [`move_node_in_form`](crate::edit::EditSession::move_node_in_form),
+    /// [`move_nodes_in_form`](crate::edit::EditSession::move_nodes_in_form),
+    /// [`move_handle_in_form`](crate::edit::EditSession::move_handle_in_form),
+    /// [`move_subpath_in_form`](crate::edit::EditSession::move_subpath_in_form),
+    /// [`move_objects_in_form`](crate::edit::EditSession::move_objects_in_form)
+    /// and
+    /// [`delete_objects_in_form`](crate::edit::EditSession::delete_objects_in_form)
+    /// — each addressed by this leaf's index in
+    /// [`PageObjects::leaves`].
+    ///
+    /// `pdfceGUI` asked for exactly this: *"so that our guards can ask YOUR
+    /// predicate instead of our proxy for it. We currently test
+    /// `page_object_index().is_none()`, which is a structural stand-in for a
+    /// question only you can answer."* Ask this one.
+    ///
+    /// # ★ What `false` means now, and it is a different fact
+    ///
+    /// It no longer means *"nothing inside a form can be edited"*. It means
+    /// **this particular leaf is not a path**, so there is no node, handle or
+    /// subpath to drag. A text run inside a form is edited through
+    /// [`EditSession::edit_text`](crate::edit::EditSession::edit_text) with
+    /// [`EditTarget::Form`](crate::text_edit::EditTarget), which has worked
+    /// since `Pass 119.0`; an image inside a form has no geometry of its own
+    /// to grab.
+    ///
+    /// So a shell that greys out a node handle on `false` is still right, and
+    /// a shell that greys out *the whole container* on `false` is now wrong.
+    ///
+    /// # It says nothing about whether the edit is LOCAL
+    ///
+    /// Editing a shared form changes every place it is drawn. That is a
+    /// disclosure, not a permission — see
+    /// [`FormSurgeryOutcome::invocations`](crate::edit::FormSurgeryOutcome::invocations)
+    /// and decision 076. This predicate deliberately does not fold the two
+    /// questions together: *"can I drag this"* and *"how many sheets will
+    /// change"* have different answers and need different words in front of
+    /// the operator.
     #[must_use]
     pub const fn is_editable(&self) -> bool {
-        false
+        matches!(self.object, VectorObject::Path(_))
     }
 }
 
@@ -1490,7 +1566,7 @@ impl FontResolver for DocumentFonts<'_> {
 /// the nested walk as its initial matrix. Every leaf therefore comes back in
 /// **page space**, and a caller can hit-test the flat list and the leaf list
 /// against one point without transforming anything.
-fn collect_form_leaves(
+pub(crate) fn collect_form_leaves(
     view: &DocumentView<'_>,
     objects: &[VectorObject],
     path: &mut Vec<ObjId>,
@@ -1558,7 +1634,7 @@ fn collect_form_leaves(
         };
 
         path.push(id);
-        for child in &nested.objects {
+        for (form_object_index, child) in nested.objects.iter().enumerate() {
             // A nested form is a container, not a leaf: recursion below emits
             // what is inside it. Emitting the container here too would put a
             // second page-sized hit target into the very list built to stop
@@ -1571,6 +1647,19 @@ fn collect_form_leaves(
                 out.push(FormLeaf {
                     object: child.clone(),
                     containment: path.clone(),
+                    // `img.ctm` is the CTM in force at this form's `Do`,
+                    // already composed with `/Matrix` and with every enclosing
+                    // form's placement — because the outer walk passed ITS
+                    // placement in as `initial`. So this is page-space at every
+                    // depth, which is the property the surgery needs.
+                    placement: img.ctm,
+                    // The index into THIS form's own decomposition, which is
+                    // NOT derivable from a leaf's position in `out`: a form
+                    // containing a nested form contributes children here and
+                    // more children from the recursion below, and the two
+                    // interleave. Recording it is one `enumerate`; recovering
+                    // it later would be a second, subtly different walk.
+                    form_object_index,
                     paint_order: root,
                 });
             }

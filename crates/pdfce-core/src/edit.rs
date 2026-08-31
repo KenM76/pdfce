@@ -4673,6 +4673,41 @@ pub enum EditError {
         /// resize exact rather than merely permitted.
         why: &'static str,
     },
+    /// The leaf index is past the end of this page's
+    /// [`PageObjects::leaves`](crate::vector::PageObjects) (`Pass 188.0`).
+    ///
+    /// A **leaf** is an object inside a form XObject. It is addressed by its
+    /// index in that list rather than by a page paint-order index, because a
+    /// leaf deliberately has no page paint-order index — leaves are kept out
+    /// of `PageObjects::objects` precisely so that the page-surgery verbs
+    /// cannot apply a form-relative token range to the page's stream.
+    ///
+    /// Named separately from [`Self::ObjectOutOfRange`] rather than reusing
+    /// it: the two count different lists, and a shell told "object 4 of 28" by
+    /// a verb it asked about leaf 4 of 242 would look for the wrong bug.
+    #[error("form-leaf index {index} is out of range (this page has {count} leaf object(s))")]
+    FormLeafOutOfRange {
+        /// The 0-based index that was asked for.
+        index: usize,
+        /// How many leaves the page actually has.
+        count: usize,
+    },
+    /// A multi-leaf selection named leaves in more than one form XObject, or
+    /// in two different invocations of the same one (`Pass 188.0`).
+    ///
+    /// One command rewrites one stream, so a selection spanning two forms is
+    /// two edits and would be two undo entries for one gesture (`R179`).
+    /// Refused rather than silently split.
+    #[error(
+        "this selection spans more than one form XObject ({first:?} and {other:?}), and one \
+         command can rewrite only one form's stream"
+    )]
+    FormLeafSelectionSpansForms {
+        /// The form the first named leaf belongs to.
+        first: ObjId,
+        /// The first form that disagreed with it.
+        other: ObjId,
+    },
     /// The page index is past the end of the document.
     #[error("page index {index} is out of range (the document has {count} page(s))")]
     PageOutOfRange {
@@ -11586,6 +11621,604 @@ impl EditSession {
         plan(&stream, &model)
     }
 
+    /// **Drag one node of a path INSIDE a form XObject** — the form-scoped
+    /// twin of [`Self::move_node`] (`Pass 188.0`).
+    ///
+    /// `leaf_index` indexes
+    /// [`PageObjects::leaves`](crate::vector::PageObjects::leaves) for
+    /// `page_index`, which is what
+    /// [`hit_test_point_deep`](crate::vector::hit_test_point_deep) already
+    /// hands a shell. `to` is a **page-space** point, exactly as it is for the
+    /// page verb — the conversion into the form's own coordinate space happens
+    /// inside, from the leaf's recorded placement matrix.
+    ///
+    /// # ★ Read [`FormSurgeryOutcome::invocations`] before showing success
+    ///
+    /// A form is one set of bytes and may be drawn many times. This edit
+    /// changed all of them, and the outcome says how many. That is the
+    /// disclosure decision 076 requires; [`Self::unshare_form`] is the option
+    /// beside it, not a precondition.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FormLeafOutOfRange`], [`EditError::DocumentEncrypted`], a
+    /// certification refusal, or the planner's own refusal (a non-path object,
+    /// a node index out of range, a degenerate CTM).
+    pub fn move_node_in_form(
+        &mut self,
+        page_index: usize,
+        leaf_index: usize,
+        node_index: usize,
+        to: crate::vector::Point,
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        self.form_surgery_inner(
+            CommandKind::MoveNode,
+            page_index,
+            leaf_index,
+            |stream, model, object_index| {
+                let path = Self::leaf_as_path(model, object_index)?;
+                Ok(crate::vector::plan_move_node(stream, path, node_index, to)?)
+            },
+        )
+    }
+
+    /// **Drag a multi-node selection inside a form XObject** — the form-scoped
+    /// twin of [`Self::move_nodes`] (`Pass 188.0`).
+    ///
+    /// One command, one undo entry, whatever the selection size (`R179`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::move_node_in_form`], plus the planner's duplicate-node and
+    /// empty-move refusals.
+    pub fn move_nodes_in_form(
+        &mut self,
+        page_index: usize,
+        leaf_index: usize,
+        moves: &[(usize, crate::vector::Point)],
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        self.form_surgery_inner(
+            CommandKind::MoveNode,
+            page_index,
+            leaf_index,
+            |stream, model, object_index| {
+                let path = Self::leaf_as_path(model, object_index)?;
+                Ok(crate::vector::plan_move_nodes(stream, path, moves)?)
+            },
+        )
+    }
+
+    /// **Drag a Bézier handle inside a form XObject** — the form-scoped twin
+    /// of [`Self::move_handle`] (`Pass 188.0`).
+    ///
+    /// This is what makes a curve inside a title block or a CAD view actually
+    /// reshapeable: [`Self::move_node_in_form`] can only move points the curve
+    /// passes through.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::move_node_in_form`].
+    pub fn move_handle_in_form(
+        &mut self,
+        page_index: usize,
+        leaf_index: usize,
+        node_index: usize,
+        handle: crate::vector::Handle,
+        to: crate::vector::Point,
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        self.form_surgery_inner(
+            CommandKind::MoveHandle,
+            page_index,
+            leaf_index,
+            |stream, model, object_index| {
+                let path = Self::leaf_as_path(model, object_index)?;
+                Ok(crate::vector::plan_move_handle(
+                    stream, path, node_index, handle, to,
+                )?)
+            },
+        )
+    }
+
+    /// **Translate one subpath inside a form XObject** — the form-scoped twin
+    /// of [`Self::move_subpath`] (`Pass 188.0`).
+    ///
+    /// The verb that matters most on CAD output, and the measurement says so:
+    /// a SolidWorks view arrives as ONE path object holding 1,194 subpaths, so
+    /// "move that line" is a subpath move and nothing else will do.
+    ///
+    /// `dx`/`dy` are a **page-space** delta.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::move_node_in_form`], plus a subpath index out of range.
+    pub fn move_subpath_in_form(
+        &mut self,
+        page_index: usize,
+        leaf_index: usize,
+        subpath_index: usize,
+        dx: f64,
+        dy: f64,
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        self.form_surgery_inner(
+            CommandKind::MoveSubpath,
+            page_index,
+            leaf_index,
+            |stream, model, object_index| {
+                let path = Self::leaf_as_path(model, object_index)?;
+                Ok(crate::vector::plan_move_subpath(
+                    stream,
+                    path,
+                    subpath_index,
+                    dx,
+                    dy,
+                )?)
+            },
+        )
+    }
+
+    /// **Translate whole objects inside a form XObject** — the form-scoped
+    /// twin of [`Self::move_objects`] (`Pass 188.0`).
+    ///
+    /// Takes several `leaf_index` values, but they must all live in the **same
+    /// form**: one command rewrites one stream, and a selection spanning two
+    /// forms is two edits. Refused by name rather than silently split, because
+    /// splitting would produce two undo entries for one gesture (`R179`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::move_node_in_form`], plus
+    /// [`EditError::FormLeafSelectionSpansForms`] when the selection is not
+    /// confined to one form.
+    pub fn move_objects_in_form(
+        &mut self,
+        page_index: usize,
+        leaf_indices: &[usize],
+        dx: f64,
+        dy: f64,
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        let siblings = self.leaf_siblings(page_index, leaf_indices)?;
+        let Some(&first) = leaf_indices.first() else {
+            return Err(EditError::FormLeafOutOfRange { index: 0, count: 0 });
+        };
+        self.form_surgery_inner(
+            CommandKind::MoveObject,
+            page_index,
+            first,
+            |stream, model, _| {
+                let count = model.objects.len();
+                let paths = siblings
+                    .iter()
+                    .map(|&i| {
+                        let obj = model.objects.get(i).ok_or(
+                            crate::vector::VectorEditError::ObjectOutOfRange { index: i, count },
+                        )?;
+                        vector_object_as_path(obj, i)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(crate::vector::plan_move_many(stream, &paths, dx, dy)?)
+            },
+        )
+    }
+
+    /// **Delete objects inside a form XObject** — the form-scoped twin of
+    /// [`Self::delete_objects`] (`Pass 188.0`).
+    ///
+    /// # ★ This is the one to put a disclosure in front of
+    ///
+    /// Deleting inside a shared form removes the object from **every place
+    /// that form is drawn**. A move is at least visible everywhere it
+    /// happened; a deletion on sheet 3 silently empties the same corner of
+    /// sheets 1, 2 and 4–12. [`FormSurgeryOutcome::invocations`] is the number
+    /// that says so, and this verb is where a shell should show it before the
+    /// gesture rather than after.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::move_objects_in_form`].
+    pub fn delete_objects_in_form(
+        &mut self,
+        page_index: usize,
+        leaf_indices: &[usize],
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        let siblings = self.leaf_siblings(page_index, leaf_indices)?;
+        let Some(&first) = leaf_indices.first() else {
+            return Err(EditError::FormLeafOutOfRange { index: 0, count: 0 });
+        };
+        self.form_surgery_inner(
+            CommandKind::DeleteObject,
+            page_index,
+            first,
+            |stream, model, _| {
+                let count = model.objects.len();
+                let objs = siblings
+                    .iter()
+                    .map(|&i| {
+                        model.objects.get(i).ok_or(
+                            crate::vector::VectorEditError::ObjectOutOfRange { index: i, count },
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(crate::vector::plan_delete_many(stream, &objs)?)
+            },
+        )
+    }
+
+    /// Resolve a multi-leaf selection to the in-form object indices it names,
+    /// refusing a selection that spans more than one form or more than one
+    /// invocation of the same form.
+    ///
+    /// # ★★ Why the INVOCATION has to match, not just the form
+    ///
+    /// The obvious check is "are these leaves in the same form object?", and
+    /// it is not sufficient. A form drawn twice on a page produces two sets of
+    /// leaves that name the same form and carry **different placement
+    /// matrices**. Their `form_object_index` values collide — leaf 3 of the
+    /// first invocation and leaf 3 of the second are the *same* object in the
+    /// form's stream — so a selection mixing them would silently ask to move
+    /// one object twice, by deltas converted through two different matrices.
+    ///
+    /// Requiring one invocation makes the whole selection convertible through
+    /// one matrix, which is what the planner assumes and what the operator
+    /// meant: they dragged a box around things they could see in one place.
+    fn leaf_siblings(
+        &mut self,
+        page_index: usize,
+        leaf_indices: &[usize],
+    ) -> Result<Vec<usize>, EditError> {
+        let model = self.page_objects(page_index)?;
+        let count = model.leaves.len();
+        let mut key: Option<(ObjId, crate::vector::Matrix)> = None;
+        let mut out = Vec::with_capacity(leaf_indices.len());
+        for &i in leaf_indices {
+            let leaf = model
+                .leaves
+                .get(i)
+                .ok_or(EditError::FormLeafOutOfRange { index: i, count })?;
+            let form = *leaf
+                .containment
+                .last()
+                .ok_or(EditError::FormLeafOutOfRange { index: i, count })?;
+            match key {
+                None => key = Some((form, leaf.placement)),
+                Some((f, m)) if f == form && m == leaf.placement => {}
+                Some((f, _)) => {
+                    return Err(EditError::FormLeafSelectionSpansForms {
+                        first: f,
+                        other: form,
+                    });
+                }
+            }
+            out.push(leaf.form_object_index);
+        }
+        Ok(out)
+    }
+
+    /// A leaf's object as a path, or the planner's own refusal.
+    ///
+    /// The form-side twin of the `vector_object_as_path` the page verbs use,
+    /// kept separate only because the index it reports is an **in-form** index
+    /// and reporting it as a page paint-order index would send a shell after
+    /// the wrong object.
+    fn leaf_as_path(
+        model: &crate::vector::PageObjects,
+        object_index: usize,
+    ) -> Result<&crate::vector::PathObject, crate::vector::VectorEditError> {
+        let count = model.objects.len();
+        let obj = model.objects.get(object_index).ok_or(
+            crate::vector::VectorEditError::ObjectOutOfRange {
+                index: object_index,
+                count,
+            },
+        )?;
+        vector_object_as_path(obj, object_index)
+    }
+
+    /// **Content surgery INSIDE a form XObject** — the shared body behind
+    /// every `*_in_form` geometry verb (`Pass 188.0`).
+    ///
+    /// # What this exists to reach
+    ///
+    /// `PageObjects::leaves` has been readable since form recursion landed:
+    /// a shell can see, name and hit-test every object inside a form, and can
+    /// walk the `containment` chain to say *"inside Title block"*. What it
+    /// could not do is **edit** any of it. Every geometry verb is addressed by
+    /// an index into [`PageObjects::objects`], and a leaf deliberately has no
+    /// such index — leaves are kept out of that list precisely so that eleven
+    /// page-surgery call sites cannot apply a form-relative token range to the
+    /// page's stream and corrupt it silently.
+    ///
+    /// So the reach existed and the write did not, and `pdfceGUI` measured
+    /// what that costs on real drawings:
+    ///
+    /// | fixture | page objects | forms | leaves |
+    /// |---|---|---|---|
+    /// | print-conformance composite | 28 | 4 | **242** |
+    /// | `ncored-benchmark-cad-drawing.pdf` | 129,758 | 1 | **10,256** |
+    /// | a 36-sheet SolidWorks set | 5,903 | 0 | 0 |
+    ///
+    /// On two of three fixtures almost nothing visible was node-editable. The
+    /// asymmetry is why this had never been reported as a defect: the
+    /// operator's own drawings happen to be the good case.
+    ///
+    /// # ★★ THE THREE THINGS THAT MAKE THIS CORRECT
+    ///
+    /// **1. The decomposition starts from the leaf's `placement`, not from
+    /// the identity.** The planners take page-space targets and convert them
+    /// by inverting the object's `ctm`. That `ctm` is page-space only if the
+    /// form's own stream is decomposed *starting from the matrix that placed
+    /// it*. Starting from the identity would put every drag off by exactly the
+    /// form's placement — and would look perfectly correct on the common case
+    /// of a form placed at the origin with no scale, which is the worst
+    /// possible failure mode for a geometry bug.
+    ///
+    /// **2. The byte spans index the FORM's stream, and so does the write.**
+    /// The planner rewrites the buffer it was given, and
+    /// [`Self::form_edit_command`] stages that buffer back into the form
+    /// object. Nothing here touches the page's `/Contents`.
+    ///
+    /// **3. The object is addressed by `leaf.form_object_index`**, recorded by
+    /// the decomposer at the moment it walked the form, rather than recovered
+    /// by counting. A form containing a nested form interleaves its own
+    /// children with the nested one's in the leaf list, and those belong to a
+    /// different stream.
+    ///
+    /// # ★★★ THE WRITE SEMANTICS — decision 076 governs, and it already did
+    ///
+    /// Writing into a form's buffer changes **every invocation of that form,
+    /// on every page**. `pdfceGUI` asked which of two contracts pdfce wanted —
+    /// require `unshare_form` first, or edit in place with a disclosure — and
+    /// said, correctly, *"what we cannot do is guess."*
+    ///
+    /// It does not need a new ruling: **decision 076 already decided exactly
+    /// this question for text editing inside a form**, and the argument does
+    /// not change because the operand is a node instead of a glyph. Editing is
+    /// **in place, disclosed**, with [`Self::unshare_form`] as the operator's
+    /// option. Two reasons that answer is the right one to carry over rather
+    /// than to re-open:
+    ///
+    /// - **Consistency inside one document beats local tidiness.** Under a
+    ///   require-unshare-first rule, editing a word inside a title block would
+    ///   change all twelve sheets and dragging a line two pixels away would
+    ///   refuse until the operator ran a structural command. Two rules for one
+    ///   container is a worse interface than one rule, whichever rule it is.
+    /// - **Refusing is not neutral.** `unshare_form` rewrites the document's
+    ///   structure — a new stream object, a changed `/XObject` entry — as a
+    ///   precondition of a drag. Project rule 3 exists to stop pdfce
+    ///   restructuring a file as a side effect of an edit, and making that
+    ///   restructure *mandatory* is the same thing with a confirmation step.
+    ///
+    /// So the disclosure is the mechanism, and it is returned rather than
+    /// implied: the count of invocations this edit reached. A shell can turn
+    /// that into `pdfceGUI`'s own one-click offer — *"this drawing is used on
+    /// 12 pages; make this page's copy separate?"* — which is the good
+    /// outcome they described, and it is available **without** making the
+    /// unshare compulsory.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DocumentEncrypted`], a certification refusal,
+    /// [`EditError::PageOutOfRange`], [`EditError::FormLeafOutOfRange`], and
+    /// whatever the planner refuses.
+    fn form_surgery_inner(
+        &mut self,
+        kind: CommandKind,
+        page_index: usize,
+        leaf_index: usize,
+        plan: impl FnOnce(
+            &crate::content::ContentStream,
+            &crate::vector::PageObjects,
+            usize,
+        ) -> Result<crate::vector::PlannedEdit, EditError>,
+    ) -> Result<FormSurgeryOutcome, EditError> {
+        // The same guard set the page path runs, in the same order. Any change
+        // to one belongs in the other; `vector_surgery_inner` carries the twin
+        // of this note.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let model = self.page_objects(page_index)?;
+        let leaf = model
+            .leaves
+            .get(leaf_index)
+            .ok_or(EditError::FormLeafOutOfRange {
+                index: leaf_index,
+                count: model.leaves.len(),
+            })?
+            .clone();
+        // `containment` is documented as never empty — an object with no
+        // enclosing form is not a leaf. Handled rather than unwrapped anyway:
+        // this is reached with an index a shell supplied.
+        let form_id = *leaf
+            .containment
+            .last()
+            .ok_or(EditError::FormLeafOutOfRange {
+                index: leaf_index,
+                count: model.leaves.len(),
+            })?;
+
+        // The form's CURRENT content, through the session view, so a second
+        // edit to the same form composes on top of the first exactly as a
+        // second edit to a page does. A staged form stream carries no
+        // `/Filter` (see `make_form_stream`), so the decode inside `from_form`
+        // is a no-op on it and the raw staged bytes come back verbatim.
+        let stream = crate::content::ContentStream::from_form(&self.view(), form_id)
+            .map_err(EditError::VectorEditContent)?;
+        let Some(Object::Stream(form_stream)) = self.value(form_id) else {
+            return Err(EditError::NotADictionary {
+                id: form_id,
+                key: "Subtype",
+            });
+        };
+        let form_dict = form_stream.dict.clone();
+
+        let planned = {
+            let view = self.view();
+            // §7.8.3: a form's own `/Resources` if it has one, otherwise the
+            // invoking context's. The decomposer inherits exactly this way, so
+            // a form without its own resources resolves its `Do`s and `Tf`s
+            // through the page's — and a resolver that defaulted to empty here
+            // would classify those as nothing and drop them from the model.
+            let resources = view
+                .resolve(form_dict.get(b"Resources").unwrap_or(&Object::Null))
+                .as_dict()
+                .cloned()
+                .unwrap_or_else(|| {
+                    self.pages()
+                        .ok()
+                        .and_then(|p| p.get(page_index).map(|p| p.resources.clone()))
+                        .unwrap_or_default()
+                });
+            let resolver = crate::vector::DocumentXObjects {
+                view: &view,
+                resources: &resources,
+            };
+            let fonts = crate::vector::DocumentFonts::new(&view, &resources);
+            // ★ `leaf.placement`, NOT `Matrix::IDENTITY`. See the doc block.
+            let form_model =
+                crate::vector::decompose_with_fonts(&stream, leaf.placement, &resolver, &fonts);
+            plan(&stream, &form_model, leaf.form_object_index)?
+        };
+
+        // ★ THE REACH IS STRUCTURED DATA, NOT PROSE, and it deliberately
+        // does NOT go into `disclosures`.
+        //
+        // The first cut pushed a sentence about it onto that list *as well as*
+        // returning the counts, and the CLI then printed the reach twice --
+        // once from the prose and once from its own, better-worded line naming
+        // `unshare-form` as the CLI spells it rather than as the Rust API
+        // spells it. Two renderings of one fact, and the shell had no way to
+        // suppress either without matching on a string.
+        //
+        // `invocations` and `pages` are the fact. Each shell words it: the CLI
+        // prints a sentence on the way past (the invocation IS the commit, so
+        // there is nowhere else to put it), and a GUI turns the same two
+        // numbers into `pdfceGUI`'s one-click offer -- "this drawing is used on
+        // 12 pages; make this page's copy separate?" -- which no sentence
+        // generated here could have become.
+        let reach = self.form_invocation_reach(form_id);
+        let disclosures = planned.disclosures.clone();
+
+        let command = self.form_edit_command_kind(kind, form_id, &form_dict, planned.content);
+        self.commit(command);
+        Ok(FormSurgeryOutcome {
+            form: form_id,
+            invocations: reach.invocations,
+            pages: reach.pages,
+            disclosures,
+        })
+    }
+
+    /// How many `Do` invocations of `form_id` this document contains, and
+    /// across how many pages — the number that makes an in-place form edit
+    /// honest rather than surprising (`Pass 188.0`).
+    ///
+    /// Counted over the page tree as this session has it, so a page added or
+    /// removed this session is reflected. A form invoked from inside another
+    /// form is counted through the outer form's own invocations, because that
+    /// is how many times it actually reaches paper.
+    fn form_invocation_reach(&self, form_id: ObjId) -> FormReach {
+        let mut invocations = 0usize;
+        let mut pages = 0usize;
+        let Ok(page_list) = self.pages() else {
+            return FormReach {
+                invocations: 1,
+                pages: 1,
+            };
+        };
+        for (i, page) in page_list.iter().enumerate() {
+            let Ok(model) = self.page_form_invocations(i, page) else {
+                continue;
+            };
+            let n = model.into_iter().filter(|id| *id == form_id).count();
+            if n > 0 {
+                invocations += n;
+                pages += 1;
+            }
+        }
+        if invocations == 0 {
+            // The form is on a page pdfce could not decompose, or is reached
+            // some way this walk does not model. Reporting 1/1 would CLAIM a
+            // reach that was not measured; reporting 0 would read as "this
+            // edit changes nothing". The caller compares against 1, so 1/1 is
+            // the value that discloses nothing rather than something false.
+            return FormReach {
+                invocations: 1,
+                pages: 1,
+            };
+        }
+        FormReach { invocations, pages }
+    }
+
+    /// Every form XObject invoked by one page, in `Do` order, including those
+    /// reached through nested forms.
+    fn page_form_invocations(
+        &self,
+        _page_index: usize,
+        page: &Page,
+    ) -> Result<Vec<ObjId>, EditError> {
+        let stream = self
+            .current_page_content(page)
+            .map_err(EditError::VectorEditContent)?;
+        let view = self.view();
+        let resolver = crate::vector::DocumentXObjects {
+            view: &view,
+            resources: &page.resources,
+        };
+        let fonts = crate::vector::DocumentFonts::new(&view, &page.resources);
+        let model = crate::vector::decompose_with_fonts(
+            &stream,
+            crate::vector::Matrix::IDENTITY,
+            &resolver,
+            &fonts,
+        );
+        let mut out: Vec<ObjId> = Vec::new();
+        for obj in &model.objects {
+            if let crate::vector::VectorObject::Image(img) = obj
+                && img.source == crate::vector::ImageSource::Form
+                && let Some(id) = img.xobject
+            {
+                out.push(id);
+            }
+        }
+        // Nested forms: a leaf's containment chain names every form above it,
+        // so the set of forms reached on this page is the union of the direct
+        // `Do`s and every chain entry.
+        for leaf in &model.leaves {
+            for id in &leaf.containment {
+                out.push(*id);
+            }
+        }
+        Ok(out)
+    }
+
+    /// [`Self::form_edit_command`] with a caller-chosen [`CommandKind`], so a
+    /// node drag inside a form appears in the undo history as a node drag
+    /// rather than as a text edit.
+    fn form_edit_command_kind(
+        &mut self,
+        kind: CommandKind,
+        form_id: ObjId,
+        form_dict: &Dict,
+        new_content: Vec<u8>,
+    ) -> Command {
+        use crate::text_edit::edit::make_form_stream;
+        let before = self.state.get(&form_id).cloned();
+        let len = new_content.len();
+        let span = self.stage_bytes(&new_content);
+        Command {
+            kind,
+            objects: vec![ObjectWrite {
+                id: form_id,
+                before,
+                after: Some(make_form_stream(form_dict, span, len)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        }
+    }
+
     fn vector_surgery(
         &mut self,
         kind: CommandKind,
@@ -11658,6 +12291,19 @@ impl EditSession {
             return Err(EditError::VectorEditNoContents { page_index });
         }
         Ok(self.page_content_and_objects(page)?.1)
+    }
+
+    /// The staged span of `id` when this session has rewritten it, `None`
+    /// when the object is still the base document's and therefore immutable.
+    ///
+    /// One definition, used by both halves of the decomposition memo — the
+    /// page's `/Contents` entries and the forms it paints. Two spellings of
+    /// "has this stream changed" is how the two halves come to disagree.
+    fn staged_span(&self, id: ObjId) -> Option<crate::span::ByteSpan> {
+        match self.state.get(&id) {
+            Some(Object::Stream(st)) => Some(st.data_span),
+            _ => None,
+        }
     }
 
     /// The dependency set a page's decomposition is a function of, built
@@ -11770,6 +12416,9 @@ impl EditSession {
         let key = self.page_model_key(page);
         if let Some(c) = &self.page_objects_cache
             && c.key == key
+            && c.forms
+                .iter()
+                .all(|(id, span)| self.staged_span(*id) == *span)
         {
             return Ok((
                 std::sync::Arc::clone(&c.stream),
@@ -11799,15 +12448,64 @@ impl EditSession {
                 resources: &page.resources,
             };
             let fonts = crate::vector::DocumentFonts::new(&view, &page.resources);
-            std::sync::Arc::new(crate::vector::decompose_with_fonts(
+            let mut model = crate::vector::decompose_with_fonts(
                 &stream,
                 crate::vector::Matrix::IDENTITY,
                 &resolver,
                 &fonts,
-            ))
+            );
+            // ★★ THE DESCENT, which this path did not do (`Pass 188.0`).
+            //
+            // `decompose_with_fonts` leaves `leaves` empty and says so —
+            // descending needs a form's CONTENT STREAM and that entry point
+            // has only the classification seam. `decompose_page` fills it
+            // afterwards; this cache did not, and this method's own
+            // documentation claimed it returned *"the same model
+            // `vector::decompose_page` returns for `self.view()`"*.
+            //
+            // It was not the same model. It was that model with every object
+            // inside every form XObject missing — 242 of them on a
+            // print-conformance composite, 10,256 on a CAD drawing. So a
+            // shell that took the advice one line above (*"use this instead of
+            // `vector::decompose_page`"*) and took the 385 ms → 0 ms win
+            // silently lost its entire deep-selection model, and would have
+            // found out by clicking.
+            //
+            // Nothing caught it because nothing in this crate read `leaves`
+            // off `page_objects` until the form-geometry verbs did.
+            let mut path = Vec::new();
+            let mut leaves = Vec::new();
+            crate::vector::collect_form_leaves(
+                &view,
+                &model.objects,
+                &mut path,
+                &mut leaves,
+                &mut model.diagnostics,
+                None,
+            );
+            model.leaves = leaves;
+            std::sync::Arc::new(model)
         };
+        // Which forms the walk actually reached, taken from its OUTPUT.
+        // `containment` names every form above a leaf, so the union over all
+        // leaves is exactly the set whose bytes this model depends on.
+        let mut form_ids: Vec<ObjId> = objects
+            .leaves
+            .iter()
+            .flat_map(|l| l.containment.iter().copied())
+            .collect();
+        form_ids.sort_unstable();
+        form_ids.dedup();
+        let forms = form_ids
+            .into_iter()
+            .map(|id| {
+                let span = self.staged_span(id);
+                (id, span)
+            })
+            .collect();
         self.page_objects_cache = Some(PageObjectsCache {
             key,
+            forms,
             stream: std::sync::Arc::clone(&stream),
             objects: std::sync::Arc::clone(&objects),
         });
@@ -13256,6 +13954,60 @@ impl PendingWidgetEdit {
     }
 }
 
+/// What an edit **inside a form XObject** did, and the one thing about it the
+/// operator must be told (`Pass 188.0`).
+///
+/// # ★★ `invocations` is the whole point of this type
+///
+/// A form XObject has **one set of bytes**, and §8.10.1 explicitly allows it
+/// to be drawn many times — naming CAD output as its own illustration. So an
+/// edit to an object inside a form necessarily changes **every place that form
+/// is drawn**, on every page. pdfce cannot prevent that structurally: there is
+/// exactly one stream object to write.
+///
+/// Decision 076 ruled that this is **edit-in-place, disclosed**, with
+/// [`EditSession::unshare_form`] as the operator's option, and `Pass 188.0`
+/// carries that ruling over from text editing to geometry unchanged. This
+/// struct is the disclosure half. A shell turns it into an offer —
+/// *"this drawing is used on 12 pages; make this page's copy separate?"* —
+/// which is the good outcome, and is available precisely **because** the
+/// unshare is not compulsory.
+///
+/// Per project rule 4 the edit is not gated on that offer and the drawn result
+/// is not marked: the disclosure lives off-canvas and Save is the commit
+/// point.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FormSurgeryOutcome {
+    /// The form XObject whose stream was rewritten.
+    pub form: ObjId,
+    /// How many `Do` invocations of that form the document contains — i.e.
+    /// how many places on paper this one edit changed.
+    ///
+    /// `1` means the edit was local after all. Anything higher is the number a
+    /// shell should put in front of the operator.
+    pub invocations: usize,
+    /// Across how many pages those invocations fall.
+    ///
+    /// Reported separately from [`Self::invocations`] because they answer
+    /// different operator questions: a title block drawn once on each of
+    /// twelve sheets is 12/12, and a hatch pattern drawn forty times on one
+    /// sheet is 40/1. The first is *"you changed every sheet"*; the second is
+    /// *"you changed one sheet forty times over"*, which is not alarming.
+    pub pages: usize,
+    /// Everything the planner disclosed, plus the reach sentence when the form
+    /// is drawn more than once.
+    pub disclosures: Vec<String>,
+}
+
+/// How far one form XObject reaches — the measured pair behind
+/// [`FormSurgeryOutcome`]'s disclosure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FormReach {
+    invocations: usize,
+    pages: usize,
+}
+
 /// One button widget's appearance-rebuild plan (`Pass 187.0`).
 ///
 /// Separate from the rebuild itself so that a field's widgets can ALL be
@@ -13278,9 +14030,25 @@ struct ButtonApPlan {
 
 #[derive(Debug)]
 struct PageObjectsCache {
-    /// Everything the decomposition depends on, so a stale hit is not
-    /// representable. See [`PageModelKey`].
+    /// Everything the PAGE-level decomposition depends on. See
+    /// [`PageModelKey`].
     key: PageModelKey,
+    /// ★ Every form XObject the model descended into, with its staged span at
+    /// fill time (`Pass 188.0`).
+    ///
+    /// Kept beside the key rather than inside it because it cannot be computed
+    /// before the decomposition: which forms a page reaches is an OUTPUT of
+    /// the walk, not an input to it. So the lookup compares the key first and
+    /// then re-reads these ids -- which is exact, because a fill that reached
+    /// a different set of forms must have had a different key to begin with.
+    ///
+    /// Without this, editing a form stream leaves the page key untouched (the
+    /// page's `/Contents`, `/Resources` and dictionary are all unchanged) and
+    /// the memo serves the pre-edit model straight back. The verbs then
+    /// address objects by index into a model of the document as it was before
+    /// their own edit -- and every one of the six form verbs returned `Ok`
+    /// while the model said nothing had happened.
+    forms: Vec<(ObjId, Option<crate::span::ByteSpan>)>,
     /// The decoded content — the expensive half, cached so a hit does not
     /// repeat the flate decode.
     stream: std::sync::Arc<crate::content::ContentStream>,
