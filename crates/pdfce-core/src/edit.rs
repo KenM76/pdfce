@@ -24149,6 +24149,48 @@ impl EditSession {
     /// stream doubling as a page XObject is a shape no producer in the
     /// corpus emits. **If that changes, this is the function to fix**, and
     /// the fix is a reference census, not a special case here.
+    ///
+    /// # ★★★ EVERY COLLECTED OBJECT MUST BE A STREAM (`Pass 191.0`)
+    ///
+    /// §12.5.5 is unambiguous and it is the whole guard: *"Each appearance
+    /// stream **is a form XObject**"*, and where Table 168's `/N`, `/R` or
+    /// `/D` holds a subdictionary instead, *"the subdictionary **shall
+    /// define multiple appearance streams** corresponding to different
+    /// appearance states"*. So every value this function reaches — directly
+    /// under `/AP`, or one level down inside an appearance-state
+    /// subdictionary — **shall resolve to a stream**. Anything else is not
+    /// an appearance stream, is therefore not this annotation's to delete,
+    /// and is dropped rather than doomed.
+    ///
+    /// **Without that test this function was a deletion primitive pointed at
+    /// an attacker-chosen object.** Measured on
+    /// `fuzz/corpus/annot_delete_sequence/seed_openbug_badkid_dupobjnum.bin`:
+    /// a `/Stamp` whose `/AP` `/N` referenced a **`/Widget` dictionary**
+    /// rather than a stream fell into the subdictionary branch, so *every
+    /// reference inside that widget* was harvested as an "appearance state"
+    /// — including its `/P`, which points at the **page**. The page was
+    /// deleted, `cut_selection` returned `Ok`, and `to_full_bytes` wrote a
+    /// 904-byte file that reloads with `PageTreeError::BadKid`. In a release
+    /// build nothing complained: `debug_assert_page_tree_still_walks` is
+    /// compiled out, and the incremental path happened to refuse this
+    /// particular document for an unrelated reason (a recovered base xref),
+    /// which is precisely the kind of accident that lets a route be sized as
+    /// harmless. `save_full` — the sanctioned path for a recovered document,
+    /// and so the one an operator actually reaches — carried it through.
+    ///
+    /// Note *which* check closes this, because the narrower one would not.
+    /// Refusing structural objects by name (catalog, `/Pages`, `/Page`) is
+    /// what [`Self::annotation_deletion_guards`] does for the deletion
+    /// *target*, and it would have caught this reproducer — while leaving
+    /// every other non-stream reachable. The type test is **categorical**:
+    /// a font dictionary, a `/Metadata` reference, an `/AcroForm`, an
+    /// unrelated annotation are all equally not-a-stream, and none of them
+    /// needs to be enumerated for this to hold. This is `R219`'s widened
+    /// trigger applied on purpose — *a guard written for one carrier is a
+    /// claim about a class* — so the guard is written about the class.
+    ///
+    /// It costs nothing a conforming file would miss: a real appearance
+    /// stream passes, and this function's entire output is fed to deletion.
     fn appearance_streams_owned_by(
         &self,
         removing: &[ObjId],
@@ -24166,20 +24208,46 @@ impl EditSession {
                 return out;
             };
             let Some(ap) = ap.as_dict() else { return out };
+            // §12.5.5: an appearance stream IS a form XObject, so nothing
+            // this collects may be doomed unless it resolves to a stream.
+            // See the "EVERY COLLECTED OBJECT MUST BE A STREAM" section
+            // above for the measured defect this closes; the test is applied
+            // at the single point every branch below funnels through, so a
+            // future fourth branch cannot bypass it by omission.
+            let push_if_stream = |r: ObjId, out: &mut Vec<ObjId>| {
+                if matches!(graph.resolved(r), Object::Stream(_)) {
+                    out.push(r);
+                }
+            };
             for key in [b"N".as_slice(), b"R".as_slice(), b"D".as_slice()] {
                 let Some(entry) = ap.get(key) else { continue };
                 if let Some(r) = entry.as_reference() {
                     // A `/N` that resolves to a DICTIONARY is a state
                     // sub-dictionary reached through a reference; its own
                     // object is not a stream to delete, but its members are.
+                    //
+                    // ★ A dictionary here is only an appearance-state
+                    // subdictionary if §12.5.5 says it is — "the
+                    // subdictionary shall define multiple appearance
+                    // streams". A dictionary whose members are NOT streams
+                    // is some other object the file pointed `/AP` at, and
+                    // harvesting its references is how a `/Widget`'s `/P`
+                    // once got the page deleted.
                     match graph.resolved(r) {
                         Object::Dict(states) => {
-                            out.extend(states.iter().filter_map(|(_, v)| v.as_reference()));
+                            for member in states.iter().filter_map(|(_, v)| v.as_reference()) {
+                                push_if_stream(member, &mut out);
+                            }
                         }
-                        _ => out.push(r),
+                        Object::Stream(_) => out.push(r),
+                        // Neither a stream nor a subdictionary: not an
+                        // appearance at all. Dropped, not doomed.
+                        _ => {}
                     }
                 } else if let Some(states) = entry.as_dict() {
-                    out.extend(states.iter().filter_map(|(_, v)| v.as_reference()));
+                    for member in states.iter().filter_map(|(_, v)| v.as_reference()) {
+                        push_if_stream(member, &mut out);
+                    }
                 }
             }
             out
