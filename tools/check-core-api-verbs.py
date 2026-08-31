@@ -334,7 +334,32 @@ def main() -> int:
     # in a table whose OWN heading says "Every figure above was stale". One
     # figure in that cell had a gate and the rest did not, which is the entire
     # explanation for why only that one stayed current.
-    errvars = re.compile(r"`EditError`'s (\d+) variants")
+    # ANCHORED BY PROXIMITY, NOT BY PHRASING (2026-08-31). This was
+    # `` `EditError`'s (\d+) variants ``, matching the exact wording of the
+    # ONE cell that prompted it on 2026-08-28 -- and three days later the same
+    # wrong number, in the same directory, survived in
+    # `02-editing-and-saving.md` as "**88 variants**" beside a second stale
+    # figure saying 57. Neither was matched, and the 353rd filing's own claim
+    # sweep missed both.
+    #
+    # A GATE MINTED TO FIX A NUMBER PROTECTS THE PHRASING THAT PROMPTED IT.
+    # That is hard rule 11 clause (e) with a gate standing where the sweep
+    # usually does, and it is why this now matches any `N variants` on a line
+    # that also names `EditError`.
+    #
+    # The file set is narrowed and the pattern widened, which is what keeps it
+    # precise. Measured over `docs/core-api/` before the change: a bare
+    # `[0-9]+ variants` gives 7 hits of which 5 are OTHER types
+    # (`xref.rs`, `SnapKind`, `FunctionError`, `Destination`, `CommandKind`);
+    # requiring `EditError` on the same line gives exactly 2, both real, both
+    # correct today. Widening without narrowing would have made this gate a
+    # generator of false failures, which is the way a gate gets disabled.
+    #
+    # Deliberately NOT gated: "the five groups below partition all N". No
+    # derivable quantity exists for what those groups cover, so a checker could
+    # only compare it against something it invented. That figure was wrong in
+    # KIND as well as value and is now removed rather than corrected.
+    errvars = re.compile(r"(\d+) variants")
     # The routing table's own self-description: "N,NNN lines - N clauses
     # cited". Both halves are DERIVED here rather than maintained, because a
     # figure nobody can re-derive is a figure nobody can check. The count this
@@ -366,7 +391,7 @@ def main() -> int:
                     print()
                     print(f"  {f.relative_to(ROOT)}:{n} says {found.group(1)} is")
                     print(f"  {claimed:,} lines; it is {actual:,}")
-            for found in errvars.finditer(line):
+            for found in errvars.finditer(line) if "EditError" in line else []:
                 if int(found.group(1)) != error_variants:
                     failed = True
                     print()
