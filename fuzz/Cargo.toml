@@ -459,3 +459,27 @@ path = "fuzz_targets/form_geometry_sequence.rs"
 test = false
 doc = false
 bench = false
+
+# The annotation-DELETION target, and the one named uncovered site `R236`
+# created. `annot_walk` reads annotations and `annot_author` writes them;
+# NEITHER DELETES, so `delete_annotation`'s router, its four refusals, its
+# three cascades (`/Popup` both directions, `/IRT` referrers, appearance
+# streams), both delegations (`delete_redaction_mark`, `delete_dimension`)
+# and `cut_selection`'s N-into-one undo fold all shipped with zero
+# untrusted-input coverage.
+#
+# `R236`: a `debug_assert` postcondition over state derived from untrusted
+# input is a tripwire for a fuzzer, not a guard for an operator, so it owes
+# a fuzz target over the verbs it guards or a written exemption at the
+# site. `delete_annotation`'s is `!pages_touched.is_empty()` immediately
+# before the `/Annots` patch loop, and every input to it -- the page tree,
+# the `/Annots` arrays, the object ids -- comes out of the file. The target
+# also asserts that postcondition's OBSERVABLE consequence (a deleted
+# annotation is no longer listed on any page), so the claim survives a
+# build with `debug-assertions` off.
+[[bin]]
+name = "annot_delete_sequence"
+path = "fuzz_targets/annot_delete_sequence.rs"
+test = false
+doc = false
+bench = false

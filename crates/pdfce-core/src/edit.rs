@@ -4673,6 +4673,34 @@ pub enum EditError {
         /// resize exact rather than merely permitted.
         why: &'static str,
     },
+    /// The object named in a page's `/Annots` is a **structural object**, not
+    /// an annotation (`Pass 190.1`).
+    ///
+    /// # ★ The same defect as `FieldObjectIsInPageTree`, in a second carrier
+    ///
+    /// A page's `/Annots` array can name anything. `annot::page_annotations`
+    /// accepts any entry that resolves to a dictionary — correct for a reader
+    /// under §10's fail-clean posture, and a hole under a deletion verb, which
+    /// would remove the object the entry names.
+    ///
+    /// Found by `annot_delete_sequence` on a 173-byte input whose `/Annots`
+    /// named the document catalog: `delete_annotation` deleted it, returned
+    /// `Ok`, and produced a file with no page-tree root.
+    ///
+    /// Refused rather than repaired, on the reasoning `Pass 185.1` records:
+    /// the file says the object is two things, and choosing silently on a
+    /// destructive verb is an inference about a malformed document the
+    /// operator never gets to see.
+    #[error(
+        "object {id:?} is named in a page's /Annots but is {what}, so deleting it would remove \
+         part of the document's structure"
+    )]
+    AnnotationObjectIsStructural {
+        /// The object the `/Annots` entry named.
+        id: ObjId,
+        /// What it actually is, in the operator's terms.
+        what: &'static str,
+    },
     /// The leaf index is past the end of this page's
     /// [`PageObjects::leaves`](crate::vector::PageObjects) (`Pass 188.0`).
     ///
@@ -18697,8 +18725,36 @@ impl EditSession {
             &|name: &str| name == fqn || name.starts_with(&group_prefix),
             None,
         );
+        // ★★ ONE DERIVATION IN, ONE DERIVATION OUT (`Pass 190.0`).
+        //
+        // This used to be `nodes_removed: emptied.len(), ..preview` — the
+        // COUNT from the cascade and the LIST from the prediction, spliced
+        // into one struct by a struct-update. Two names for one quantity,
+        // filled from two different walks.
+        //
+        // ★ And the two shells read different ones. `pdfce-cli` prints
+        // `nodes_removed`; `pdfceGUI` prints `nodes.len() - 1`, with a comment
+        // saying it reads the list "so the number and the keys just purged
+        // cannot disagree" — reasoning that was exactly right about the hazard
+        // and pointed at the wrong field. So the same deletion on the same
+        // document reported different numbers depending on which program the
+        // operator ran, and `--dry-run` disagreed with the real run on a
+        // DESTRUCTIVE verb.
+        //
+        // The two walks now agree by construction (both keyed by object id),
+        // so this could be left as a splice. It is not, because "they agree"
+        // is a property of today's code and "there is only one of them" is a
+        // property of the type. The list is truncated to the cascade's own
+        // membership rather than to its length: a name whose node the cascade
+        // did not take must not appear in the list either.
+        let mut nodes = preview.nodes;
+        if nodes.len() > emptied.len() {
+            nodes.truncate(emptied.len());
+        }
+        let nodes_removed = nodes.len();
         Ok(FieldGroupDeletion {
-            nodes_removed: emptied.len(),
+            nodes,
+            nodes_removed,
             action_targets_orphaned,
             ..preview
         })
@@ -18739,7 +18795,27 @@ impl EditSession {
         // verb on a document that is fine; "no such name" is a wrong name.
         // Collapsing them told an operator their visible field did not
         // exist.
-        if !form.groups.iter().any(|g| g.fully_qualified_name == fqn) {
+        // ★★ EVERY NODE BEARING THIS NAME, BY ID — not "the one node called
+        // this" (`Pass 190.0`).
+        //
+        // Two grouping nodes share one fully qualified name more easily than
+        // the model suggests, and neither way is malformed:
+        //
+        // * §12.7.3.2 — a node with **no `/T`** contributes no segment, so it
+        //   silently ALIASES its parent's name. `A -> (no /T) -> X` gives two
+        //   nodes both called `A`.
+        // * Nothing forbids two siblings with the **same `/T`**.
+        //
+        // A `Vec<String>` cannot represent two nodes bearing one name, and the
+        // cascade this list is checked against is keyed by OBJECT. That is the
+        // whole disagreement: the prediction collapsed n nodes to one entry
+        // while the removal took all n.
+        let named: Vec<&forms::FieldGroupNode> = form
+            .groups
+            .iter()
+            .filter(|g| g.fully_qualified_name == fqn)
+            .collect();
+        if named.is_empty() {
             return Err(if form.field_by_name(fqn).is_some() {
                 EditError::NotAGroupingNode {
                     name: fqn.to_owned(),
@@ -18750,33 +18826,59 @@ impl EditSession {
                 }
             });
         }
+        let named_ids: BTreeSet<ObjId> = named.iter().map(|g| g.id).collect();
 
-        let terminals: Vec<forms::Field> = form.descendants_of(fqn).cloned().collect();
-
-        // The grouping nodes this removal takes, BY NAME: the named node,
-        // plus every other node whose descendants all lie inside this
-        // subtree. A node with a terminal elsewhere survives — that is the
-        // `Personal.Name` case, and getting it wrong would take a field in
-        // a branch nobody named.
+        // ★★★ THE SUBTREE IS SELECTED STRUCTURALLY, NOT BY NAME PREFIX.
         //
-        // `form.groups` is already deepest-first, so this inherits that
-        // order and the named node is appended last, keeping the whole list
-        // deepest-first including its own root.
+        // `descendants_of` is a **string prefix match** on `"{fqn}."`. A
+        // `/T`-less descendant contributes no segment, so its FQN *equals* its
+        // parent's and never starts with the prefix — the whole subtree is
+        // invisible to a name-keyed search.
+        //
+        // The consequence was not a wrong count. `terminals` came back EMPTY,
+        // so `field_ids` was empty, so the removal removed nothing — and the
+        // verb returned `Ok`. An operator asked to delete a subtree, was told
+        // it worked, and the document was unchanged. Measured on
+        // `fixtures/synthetic/forms/group-delete-t-less-child.pdf`.
+        //
+        // Walking `/Kids` down from each named node answers the question the
+        // name was standing in for, and answers it for the aliased case too.
+        let subtree = self.field_subtree_ids(&named_ids);
+        let terminals: Vec<forms::Field> = form
+            .fields
+            .iter()
+            .filter(|f| subtree.contains(&f.id))
+            .cloned()
+            .collect();
+
+        // The grouping nodes this removal takes, BY ID: every named node, plus
+        // every other node whose descendants all lie inside this subtree. A
+        // node with a terminal elsewhere survives — that is the
+        // `Personal.Name` case, and getting it wrong would take a field in a
+        // branch nobody named.
+        //
+        // `form.groups` is already deepest-first, so this inherits that order
+        // and the named nodes are appended last, keeping the whole list
+        // deepest-first including its own roots.
         let mut nodes: Vec<String> = form
             .groups
             .iter()
-            .filter(|g| g.fully_qualified_name != fqn)
+            .filter(|g| !named_ids.contains(&g.id))
             .filter(|g| {
                 let mut d = form.descendants_of(&g.fully_qualified_name).peekable();
-                // A node with NO descendants is not swept up by this
-                // removal — it is already childless, which means an earlier
-                // deletion failed to prune it. Not this operation's to fix,
-                // and claiming it would overstate what was removed.
+                // A node with NO descendants is not swept up by this removal —
+                // it is already childless, which means an earlier deletion
+                // failed to prune it. Not this operation's to fix, and
+                // claiming it would overstate what was removed.
                 d.peek().is_some() && d.all(|t| terminals.iter().any(|already| already.id == t.id))
             })
             .map(|g| g.fully_qualified_name.clone())
             .collect();
-        nodes.push(fqn.to_owned());
+        // One entry per NODE, not per NAME. An aliased name appears once per
+        // object bearing it, so `nodes.len()` counts the same quantity the
+        // cascade counts — which is the invariant the `debug_assert` states
+        // and `form_group_deletion_shapes.rs` now asserts in release too.
+        nodes.extend(named.iter().map(|g| g.fully_qualified_name.clone()));
 
         let widgets_removed = terminals.iter().map(|f| f.widgets.len()).sum();
         let preview = FieldGroupDeletion {
@@ -23666,6 +23768,70 @@ impl EditSession {
         // constrains this verb directly. Its message names the flag,
         // because `LockedContents` (bit 10) looks identical from a menu and
         // explicitly "does not restrict deletion".
+        // ★★★ IS THIS OBJECT ACTUALLY AN ANNOTATION? (`Pass 190.1`)
+        //
+        // Nothing above this line asked. The guards test `/F` bit 8, `/TrapNet`
+        // and `/Widget` — all questions about *what kind of annotation* it is,
+        // none about whether it is one at all. `annot::page_annotations`
+        // accepts any `/Annots` entry that resolves to a dictionary, which is
+        // the right posture for a READER (§10 fail-clean: an odd entry should
+        // not cost the operator the page) and the wrong one for a DELETION.
+        //
+        // Found by `fuzz/fuzz_targets/annot_delete_sequence.rs` within seconds
+        // of that target first existing. The reduced input is 173 bytes and
+        // the shape is one line long: a page whose `/Annots` names the
+        // **document catalog**.
+        //
+        // `delete_annotation` deleted the catalog, returned `Ok`, and produced
+        // a file with no page-tree root — caught only by
+        // `debug_assert_page_tree_still_walks`, which is compiled out of the
+        // build operators run. A second signature from the same site was
+        // `BadKid`: the same bug with a page-tree node in `/Annots` instead.
+        //
+        // ★ THIS IS `Pass 185.1`/`185.2` IN A SECOND CARRIER, and the
+        // repetition is the point. There, an `/AcroForm` `/Fields` named an
+        // object that was also a `/Page`; here, a page's `/Annots` does. The
+        // general fact is that **an entry in a structural array is not
+        // necessarily the kind of object that array is for**, and every
+        // deletion verb that trusts one has this defect until it is told not
+        // to. `refuse_if_in_page_tree` was written for the form half and was
+        // never called from the annotation half — the fix existed and the
+        // second caller did not.
+        //
+        // Refused rather than repaired, for the reason `185.1` gives at
+        // length: pdfce would have to decide which of two things the object
+        // really is, and the file says both. A refusal naming the collision
+        // leaves the operator a document they can look at.
+        self.refuse_if_in_page_tree("(annotation)", &[annot_id])?;
+        if self
+            .acroform_id()
+            .into_iter()
+            .chain(self.trailer.get(b"Root").and_then(Object::as_reference))
+            .any(|structural| structural == annot_id)
+        {
+            return Err(EditError::AnnotationObjectIsStructural {
+                id: annot_id,
+                what: "the document catalog",
+            });
+        }
+        // `/Type` is OPTIONAL on an annotation dictionary in practice, so its
+        // absence proves nothing and is not tested. Its PRESENCE naming
+        // something else is decisive, and it is the cheap half of this guard —
+        // the page-tree walk above cannot see a `/Catalog` that no page tree
+        // reaches, nor a `/Pages` node orphaned from the root.
+        if let Some(Object::Dict(d)) = self.value(annot_id)
+            && let Some(Object::Name(ty)) = d.get(b"Type").map(|o| self.graph().resolve(o).clone())
+        {
+            let what = match ty.0.as_slice() {
+                b"Catalog" => Some("the document catalog"),
+                b"Pages" => Some("a page-tree node"),
+                b"Page" => Some("a page"),
+                _ => None,
+            };
+            if let Some(what) = what {
+                return Err(EditError::AnnotationObjectIsStructural { id: annot_id, what });
+            }
+        }
         if target.flags.locked() {
             return Err(EditError::AnnotationLocked {
                 id: annot_id,
@@ -28572,6 +28738,137 @@ impl EditSession {
     /// nodes the removal emptied — see the cascade below. The caller owns
     /// deleting the field dictionaries themselves and must delete these too,
     /// or an emptied node survives as an unreferenced object.
+    /// **Every field object at or beneath `roots`**, by walking `/Kids`
+    /// (`Pass 190.0`).
+    ///
+    /// # Why this is not `Form::descendants_of`
+    ///
+    /// That helper answers by **string prefix** — a field is a descendant of
+    /// `A` when its fully qualified name starts with `"A."`. That is the right
+    /// answer to a question about NAMES and the wrong answer to a question
+    /// about STRUCTURE, and §12.7.3.2 is where the two come apart: a field
+    /// with no `/T` contributes no segment, so its FQN *equals* its parent's
+    /// and never carries the prefix. Such a subtree is invisible to the name
+    /// walk while being perfectly ordinary in the file.
+    ///
+    /// `delete_field_group` used the name walk to choose what to delete, so on
+    /// `A -> (no /T)` it selected nothing, deleted nothing, and returned `Ok`.
+    /// A success that changes nothing is worse than a refusal: the operator
+    /// has no reason to look.
+    ///
+    /// # What it returns
+    ///
+    /// The roots themselves **and** every reachable descendant, so a caller
+    /// can intersect it with `form.fields` for the terminals or with
+    /// `form.groups` for the nodes. Cycle-safe and iterative, so a `/Kids`
+    /// naming its own ancestor terminates rather than overflowing the stack
+    /// (`ARCHITECTURE.md` §10).
+    fn field_subtree_ids(&self, roots: &BTreeSet<ObjId>) -> BTreeSet<ObjId> {
+        let graph = self.graph();
+        let mut out: BTreeSet<ObjId> = roots.clone();
+        let mut stack: Vec<ObjId> = roots.iter().copied().collect();
+        while let Some(id) = stack.pop() {
+            let Some(kids) = graph
+                .resolved(id)
+                .as_dict()
+                .and_then(|d| d.get(b"Kids").map(|o| graph.resolve(o)))
+                .and_then(Object::as_array)
+            else {
+                continue;
+            };
+            for child in kids.iter().filter_map(Object::as_reference) {
+                if out.insert(child) {
+                    stack.push(child);
+                }
+            }
+        }
+        out
+    }
+
+    /// **Which object's `/Kids` holds each field**, derived by walking DOWN
+    /// from `/AcroForm` `/Fields` (`Pass 190.0`).
+    ///
+    /// # ★★ Why this exists, and why `/Parent` was the wrong source
+    ///
+    /// §12.7.3.1 makes `/Parent` a required entry on every non-root field, so
+    /// reading a node's container from it looks safe and was, for a year. It is
+    /// a **back-link** the producer supplies; `/Kids` is the **structure**. A
+    /// file where the two disagree — or where `/Parent` is simply absent, which
+    /// a truncated file and a fuzzer both produce in seconds — is one where a
+    /// `/Parent`-derived map has an entry missing.
+    ///
+    /// The consequence was not a wrong number. `remove_fields_from_form` uses
+    /// that map twice: once to cascade emptied parents, and once to build the
+    /// `/Kids` patches. A field with no `/Parent` was therefore **deleted while
+    /// the array still naming it was never patched** — a dangling reference
+    /// written into the saved file, in the release build, with `Ok` returned.
+    /// Measured on `fixtures/synthetic/forms/group-delete-orphan-no-parent.pdf`:
+    /// object 5 gone, object 4 still holding `/Kids [5 0 R]`.
+    ///
+    /// `delete_field` and `delete_field_group` both route through that
+    /// function, so both had it, and no assertion anywhere guarded it.
+    ///
+    /// # `/Parent` is still consulted, as a FALLBACK
+    ///
+    /// A field that is not reachable from `/Fields` at all — an orphan the
+    /// document holds but the form does not list — has no `/Kids` owner to
+    /// find, and its `/Parent` is the only thing that names one. Falling back
+    /// there preserves every case the old map got right while adding the ones
+    /// it could not see. Where both exist and disagree, `/Kids` wins, because
+    /// `/Kids` is what a reader traverses.
+    ///
+    /// # Guards
+    ///
+    /// Cycle-safe by construction (`seen`), and depth is bounded by the number
+    /// of distinct objects rather than by recursion — a `/Kids` array naming
+    /// its own ancestor terminates instead of overflowing the stack
+    /// (`ARCHITECTURE.md` §10).
+    fn field_owner_index(&self) -> BTreeMap<ObjId, ObjId> {
+        let graph = self.graph();
+        let mut owner: BTreeMap<ObjId, ObjId> = BTreeMap::new();
+        let mut stack: Vec<ObjId> = Vec::new();
+        let mut seen: BTreeSet<ObjId> = BTreeSet::new();
+
+        if let Some(holder) = self.acroform_id()
+            && let Some(fields) = graph
+                .resolved(holder)
+                .as_dict()
+                .and_then(|d| d.get(b"AcroForm").map(|o| graph.resolve(o)))
+                .and_then(Object::as_dict)
+                .or_else(|| graph.resolved(holder).as_dict())
+                .and_then(|d| d.get(b"Fields").map(|o| graph.resolve(o)))
+                .and_then(Object::as_array)
+        {
+            for root in fields.iter().filter_map(Object::as_reference) {
+                if seen.insert(root) {
+                    stack.push(root);
+                }
+            }
+        }
+
+        while let Some(id) = stack.pop() {
+            let Some(kids) = graph
+                .resolved(id)
+                .as_dict()
+                .and_then(|d| d.get(b"Kids").map(|o| graph.resolve(o)))
+                .and_then(Object::as_array)
+            else {
+                continue;
+            };
+            for child in kids.iter().filter_map(Object::as_reference) {
+                // First writer wins. A node named by two `/Kids` arrays is
+                // malformed; taking the first keeps the walk deterministic and
+                // patches one of the two, which is strictly better than
+                // patching neither.
+                owner.entry(child).or_insert(id);
+                if seen.insert(child) {
+                    stack.push(child);
+                }
+            }
+        }
+        owner
+    }
+
     fn remove_fields_from_form(
         &self,
         field_ids: &[ObjId],
@@ -28601,19 +28898,28 @@ impl EditSession {
         // The fixed point is computed BEFORE any write, so the patches below
         // see the final removal set and no container is patched to keep a kid
         // that a later round decided to remove.
+        // ★ THE OWNER MAP IS DERIVED FROM `/Kids`, NOT FROM `/Parent`
+        // (`Pass 190.0`). Both uses below take it. See `field_owner_index`
+        // for what a `/Parent`-derived map could not see, and for the dangling
+        // reference that cost.
+        let owner = self.field_owner_index();
+        let parent_of = |id: ObjId| -> Option<ObjId> {
+            owner.get(&id).copied().or_else(|| {
+                graph
+                    .resolved(id)
+                    .as_dict()
+                    .and_then(|d| d.get(b"Parent").and_then(Object::as_reference))
+            })
+        };
+
         let mut removing: BTreeSet<ObjId> = field_ids.iter().copied().collect();
         loop {
             let mut added = false;
-            // Candidate parents: the /Parent of everything currently marked
+            // Candidate parents: the container of everything currently marked
             // for removal that is not itself already marked.
             let parents: Vec<ObjId> = removing
                 .iter()
-                .filter_map(|id| {
-                    graph
-                        .resolved(*id)
-                        .as_dict()
-                        .and_then(|d| d.get(b"Parent").and_then(Object::as_reference))
-                })
+                .filter_map(|id| parent_of(*id))
                 .filter(|p| !removing.contains(p))
                 .collect();
             for p in parents {
@@ -28657,10 +28963,10 @@ impl EditSession {
         let mut by_parent: BTreeMap<ObjId, Vec<ObjId>> = BTreeMap::new();
         let mut root_drop: Vec<ObjId> = Vec::new();
         for id in field_ids {
-            let parent = graph
-                .resolved(*id)
-                .as_dict()
-                .and_then(|d| d.get(b"Parent").and_then(Object::as_reference));
+            // The SAME derivation the cascade used. Two lookups of "who holds
+            // this node" is how a node comes to be deleted by one and left
+            // referenced by the other, which is exactly the defect this fixes.
+            let parent = parent_of(*id);
             match parent {
                 // A parent that is ITSELF being removed needs no `/Kids`
                 // patch — the whole node is going, and patching it would emit
