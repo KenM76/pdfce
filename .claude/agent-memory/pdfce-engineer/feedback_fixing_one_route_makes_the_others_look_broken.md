@@ -40,3 +40,38 @@ long before they met the measure tool.
 population** decays every time the population changes and nothing compiles it.
 `cmyk_bridged_pixels`'s description was wrong three times in two days, each
 correction written by somebody who had just read it and believed it.
+
+---
+
+## 2026-08-31 — CONFIRMED, and this time it paid off BEFORE the bug reports
+
+Applied deliberately rather than learned again, on two Passes in one session,
+and the ratio is the point: **pdfceGUI reported one defect and there were
+four.**
+
+`edit_widget` — reported: a `/Btn` appearance was never redrawn on resize.
+Enumerating the verb's other routes found three more of the identical shape:
+
+- **Text and Choice WERE redrawn — at the OLD size.** The regeneration existed
+  and was a no-op with respect to geometry. Nobody had looked because an empty
+  text field's stretched border reads as a border.
+- **A push button's caption change redrew nothing**, though the caption is
+  painted into the plate.
+- **★ On a multi-widget field the resize was silently DISCARDED**, while the
+  artwork was rebuilt at the new size. The outcome reported `resized: true`
+  and a `rect_after` that was never written.
+
+The form-geometry Pass repeated it: building the feature surfaced that
+`page_objects` returned no leaves at all, and that its memo could not see a
+form edit. Neither was the thing being built.
+
+**What made the sweep productive rather than open-ended:** enumerate the
+verb's TRIGGERS, not its callers. `edit_widget` rebuilds on three conditions;
+checking each against "does the artwork actually follow?" is a finite list and
+found all four in minutes.
+
+★ **And the reported one was the ONLY visible one.** A tick is a shape; a
+stretched border on an empty box is a border; a discarded resize returns `Ok`.
+The defect that gets reported is the one that draws something wrong, which is
+a poor proxy for the one that matters — #4 was corrupting geometry silently
+and had been since `Pass 134.0`.

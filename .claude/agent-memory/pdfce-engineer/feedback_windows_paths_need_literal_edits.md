@@ -419,3 +419,38 @@ Two things that makes concrete:
 ⇒ **`python -c` with any prose payload is the same mistake as a heredoc.**
 Write the script to a file (`Write`), run it, delete it. That path has no shell
 interpretation at all.
+
+---
+
+## 2026-08-31 — four more, one reached a commit, and a new medium
+
+Nothing new about the cause; three things new about the surroundings.
+
+**A committed GENERATOR SCRIPT.** `tools/gen-form-recursion-fixtures.py` builds
+PDF fixtures from byte-string payloads full of escapes. A heredoc turned each
+one into a real newline, and Python rejected the file outright. Loud, cheap —
+but it is a medium this note had not named: a *tool* that writes *fixtures*,
+two removes from the code being edited.
+
+**One reached a commit and the gate caught it.** A Rust line continuation lost
+its backslash inside a new `EditError` message; `check-string-gaps.sh` found it
+during the sweep. **That is the gate earning its keep and it is also the trap
+the 2026-08-25 entry warns about** — the gate only sees a run of three or more
+spaces, and it fired here only because the continuation happened to be indented.
+
+**★ THE VERIFICATION ITSELF WENT THROUGH THE SAME MANGLING.** After `Write`-ing
+a payload to a temp file, I tried to confirm the continuations survived with
+`python -c "... h.count('\\n') ..."` — a check whose own escape sequence is
+subject to the identical hazard. It returned 0 on a file that was **fine**, I
+believed it, and the `rm` in the same compound command then deleted the good
+file before I could look.
+
+⇒ **Check with `cat -A` or `sed -n 'N,Mp' | cat -A`, never with a Python
+string literal that has to travel through a shell.** And never put an `rm` in
+the same compound command as a check whose result decides whether the file was
+good.
+
+**What worked, every time, with no exceptions:** `Write` the payload to a file,
+then splice it with a script whose own text contains **no backslash at all**
+(`s.replace(anchor, open(f).read() + anchor, 1)`). The payload never meets a
+shell; the script never needs an escape.

@@ -83,3 +83,4 @@
 - [State your premises in a dispatch](feedback_state_your_premises_in_a_dispatch.md) — four agents returned corrections to the thing that sent them, every one landing on a stated premise
 - [A worked example is a claim](feedback_a_worked_example_is_a_claim.md) — a doc example shipped the defect value it was written to replace; take the number from a test or a live run, never from prose
 - [A plan's list is a snapshot, not the ruling](feedback_a_plan_list_is_a_snapshot_not_the_ruling.md) - a cited plan resolves the SAFEGUARDS; the operator's sentence defines the SCOPE, and mine omitted an action he'd asked for
+- [`Ok` + an unchanged model = check the READ path](feedback_ok_plus_an_unchanged_model_means_check_the_read_path.md) — a memo whose key omits a dependency makes every verb over it address the wrong object, silently
