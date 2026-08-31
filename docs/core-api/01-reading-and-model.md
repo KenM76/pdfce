@@ -1688,9 +1688,14 @@ object-list <pdf> --page N --line-pick X,Y [--tolerance T]
 
 `--hit` is **deep by default** since `Pass 138.0`; `--hit-scope page` restores
 the old shallow query. A form leaf is reported as `leaf=N containment=…
-paint_order=… editable=false` with `kind=leaf:…`, **never** as `index=N` — the
-editing subcommands take `index=` and write to the *page's* stream, so a leaf
+paint_order=… in_form_index=… placement=… editable=0|1` with `kind=leaf:…`,
+**never** as `index=N` — `--object` writes to the *page's* stream, so a leaf
 ordinal under that key would be in range and would corrupt the page.
+
+★ `editable=` was a hard-coded `false` until `Pass 188.0` and is now the leaf's
+real answer. `subpath-move` and `node-move` take **`--leaf N`** as the
+alternative to `--object N`; the two are mutually exclusive and passing both or
+neither is refused by name.
 
 #### `PageObjects::leaves` — and why it is a second list
 
@@ -1703,7 +1708,9 @@ inside on `PageObjects::leaves`. Each `FormLeaf` carries:
 | `containment` | enclosing forms, **outermost first**; never empty |
 | `paint_order` | index in `objects` of the **outermost** enclosing form |
 | `stream()` | `ContentStreamRef::Form { object }` — **which buffer** its token range indexes |
-| `is_editable()` | **always `false`** today |
+| `placement` | the CTM at the enclosing form's `Do`, composed with its `/Matrix` and every outer form's placement (`Pass 188.0`) |
+| `form_object_index` | this object's index in its **own form's** decomposition — what a form-scoped verb addresses (`Pass 188.0`) |
+| `is_editable()` | `true` for a **path**. It was a hard `false` until `Pass 188.0`; it now answers about the **object**, not about whether the feature exists |
 
 **★★ It is a separate list for a safety reason, not a stylistic one.** Eleven
 call sites in `edit.rs` resolve a paint-order index and apply content-stream
@@ -1713,8 +1720,22 @@ be handed to those verbs and corrupt the page silently. Keeping the lists apart
 makes them correct by construction, and means **your stored paint-order indices
 do not move**.
 
-⇒ For **selection**, use the deep test. For **editing**, use `hit_test_point`
-and you get back something you can actually edit.
+⇒ For **selection**, use the deep test. **★ For editing, use the deep test too,
+since `Pass 188.0`** — this line used to say *"use `hit_test_point` and you get
+back something you can actually edit"*, which was true while nothing inside a
+form was editable and is now advice that throws away the reach.
+
+A leaf is edited through the **form-scoped** verbs (`move_node_in_form`,
+`move_nodes_in_form`, `move_handle_in_form`, `move_subpath_in_form`,
+`move_objects_in_form`, `delete_objects_in_form`), addressed by its index in
+`leaves` and taking **page-space** coordinates exactly as the page verbs do.
+`02-editing-and-saving.md` §1.10.1 has the contract, including the one thing a
+shell must show the operator: a form has one set of bytes, so the edit reaches
+every place that form is drawn, and `FormSurgeryOutcome` says how many.
+
+The safety property above is **unchanged** — leaves are still absent from
+`objects`, and the form verbs write to the form's stream, never the page's.
+What changed is only that the second list now has verbs of its own.
 
 **★ Ordering is an interleave, not a concatenation.** Leaves and page objects
 are two lists but **one paint order**: a form's contents are painted where its
