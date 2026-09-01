@@ -543,13 +543,31 @@ pub struct DecodedImage {
     /// Table 149's inputs for a `Separation`/`DeviceN` image — its colorant
     /// names and its **authored process tints, texel for texel**.
     ///
-    /// `None` for every other space, and that is not an omission: §11.7.4.3's
-    /// Table 149 gives a *process* colour space `c_s` in all three columns,
-    /// so painting a `DeviceGray`, `DeviceRGB` or `DeviceCMYK` image normally
-    /// under `/OP true` **is** the conforming result. Row 1's scope note
-    /// excludes a sampled image by name. Only row 3 — `Separation`/`DeviceN`
-    /// — asks for a component the source did not name to be taken from the
-    /// backdrop, and only row 3 therefore needs anything carried here.
+    /// `None` for every other space. Only the `Separation`/`DeviceN` row asks
+    /// for a component the source did not name to be taken from the backdrop
+    /// in a way this structure can express, so only it needs anything carried
+    /// here.
+    ///
+    /// ★★★ THE JUSTIFICATION THAT USED TO SIT HERE WAS FALSE, and is quoted
+    /// rather than deleted because the same sentence was written in three
+    /// places and believed for many Passes:
+    ///
+    ///   "§11.7.4.3's Table 149 gives a *process* colour space `c_s` in all
+    ///    three columns, so painting a `DeviceGray`, `DeviceRGB` or
+    ///    `DeviceCMYK` image normally under `/OP true` **is** the conforming
+    ///    result."
+    ///
+    /// Table 149's "any process colour space" row has TWO sub-rows. The
+    /// *process component* one reads `c_s` throughout, as quoted. The *spot
+    /// colorant* one reads `c_b` under `OP true` — so such an image IS owed
+    /// preservation of a spot colorant in the backdrop, and painting it
+    /// normally is conforming only when there is no spot beneath it.
+    ///
+    /// `None` here is therefore a REAL SHORTFALL rather than a
+    /// correctly-empty case, and it is now disclosed as one
+    /// (`Diagnostics::overprint_process_images_unsupported`). Closing it needs
+    /// the per-spot-colorant plane; nothing in this structure can express a
+    /// component pdfce has no plane for.
     ///
     /// # ★ Why this is a SECOND set of planes rather than [`Self::ink`]
     ///
@@ -2607,9 +2625,19 @@ fn resolve_indexed(
     // different ways.
     let mut ink_incomplete = false;
     // The base's Table 149 row, resolved ONCE here rather than per entry.
-    // Only row 3 is kept: every other row paints `c_s` in all three columns,
-    // so an overprinting image in it is already rendered correctly by an
-    // ordinary paint and has nothing to carry.
+    //
+    // Only the `Separation`/`DeviceN` row is kept, because it is the only one
+    // whose shortfall this structure can express.
+    //
+    // ★ This comment used to justify that with "every other row paints `c_s`
+    // in all three columns, so an overprinting image in it is already rendered
+    // correctly by an ordinary paint and has nothing to carry". That is a
+    // correct reading of the process-component sub-row and drops the
+    // spot-colorant sub-row, which reads `c_b` under `OP true`. A process
+    // image over a spot backdrop IS rendered incorrectly by an ordinary paint;
+    // pdfce simply has no plane to fix it with, and now says so rather than
+    // claiming there was nothing owed. See
+    // `Diagnostics::overprint_process_images_unsupported`.
     let op_kind = match &base {
         Space::Special(cs) => match crate::overprint::classify(
             cs,

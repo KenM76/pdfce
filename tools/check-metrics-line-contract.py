@@ -132,7 +132,7 @@ PRINTLN_HEAD = '"rendered {} page {page_number} -> {} {}x{}; '
 # message. It was failing loudly and nobody was reading it, which is a
 # different disease from a gate that silently passes but has the same
 # outcome: the key-order contract went unchecked across several Passes.
-PRINTLN_TAIL = 'icc_unmanaged_paints={}"'
+PRINTLN_TAIL = 'overprint_process_images_unsupported={}"'
 
 
 def template_keys(src: str) -> list[str]:

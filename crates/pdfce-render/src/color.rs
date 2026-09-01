@@ -259,8 +259,18 @@ pub enum ColorSpace {
     ///
     /// # This is the standard's own path, not pdfce's invention
     ///
-    /// pdfce has no ICC colour-management engine and this module does not
-    /// contain one. §8.6.5.5 / Table 66 anticipate exactly that reader and
+    /// This module contains no ICC colour-management engine.
+    ///
+    /// ★ That sentence used to read "pdfce has no ICC colour-management
+    /// engine and this module does not contain one", and the first half
+    /// stopped being true at `Pass 199.2`, when iccce was wired in. The
+    /// SECOND half is still exactly true and is the load-bearing one: colour
+    /// management happens on the ink-compositing path, using the profile
+    /// carried on [`Self::IccBased`], and this resolution step still produces
+    /// the spec's fallback so that a page with no `/OutputIntent` — or a
+    /// profile that will not parse — renders at all.
+    ///
+    /// §8.6.5.5 / Table 66 anticipate exactly that reader and
     /// say what it shall do, in the `Alternate` row, verbatim: an alternate
     /// colour space "**shall be used in case the one specified in the
     /// stream data is not supported**"; and "**If this entry is omitted and
@@ -818,9 +828,16 @@ impl ColorSpace {
 ///
 /// Every field answers a question an operator actually asks about a page
 /// that looks wrong, and they are deliberately **not** lumped: "the colour
-/// space would not resolve", "pdfce has no ICC engine" and "the spot
-/// colour's tint transform was not evaluated" lead to three different next
-/// actions (rule R27).
+/// space would not resolve", "this ICCBased space took its /Alternate rather
+/// than being colour-managed" and "the spot colour's tint transform was not
+/// evaluated" lead to three different next actions (rule R27).
+///
+/// ★ The middle phrase used to read "pdfce has no ICC engine", which became
+/// false at `Pass 199.2`. It is corrected rather than deleted because the
+/// DISTINCTION it was drawing survives: a space taking its `/Alternate` is
+/// still a different diagnosis from a space that failed to resolve, and the
+/// counters here still separate them. Only the reason changed — from "the
+/// engine does not exist" to "the engine did not run for this space".
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ColorDiagnostics {
     /// `cs`/`CS` named a colour space pdfce could **not** resolve — a name

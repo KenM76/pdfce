@@ -335,6 +335,33 @@ pub struct Diagnostics {
     /// renders through the approximate path is entitled to know it did,
     /// off-canvas and without anything being drawn differently.
     pub icc_unmanaged_paints: usize,
+    /// Process-space sampled images painted under `/OP true` onto a
+    /// subtractive buffer, where Table 149's SPOT sub-row could not be
+    /// honoured because pdfce has no spot plane.
+    ///
+    /// ★ THE COUNTER EXISTS BECAUSE THREE SOURCE COMMENTS CLAIMED NOTHING WAS
+    /// OWED HERE, and that claim was false. §11.7.4.3 Table 149's row for
+    /// "any process colour space (including other cases of `DeviceCMYK`)" has
+    /// TWO sub-rows: the *process component* one reads `c_s` in all three
+    /// columns, and the *spot colorant* one reads `c_b` under `OP true`. The
+    /// comments quoted the first and dropped the second, concluding that
+    /// painting such an image normally "IS the conforming result, not a
+    /// shortfall". It is the conforming result only where the backdrop has no
+    /// spot colorant to preserve.
+    ///
+    /// pdfce cannot preserve it — that needs the per-spot-colorant plane —
+    /// so this is DISCLOSURE, not a fix: the number says how many times the
+    /// situation arose, where previously it arose silently and took no counter
+    /// at all. An operator comparing pdfce against another engine is entitled
+    /// to know the count is non-zero.
+    ///
+    /// ★ It counts the SITUATION, not confirmed damage, and that limit is
+    /// stated rather than implied: with no spot plane the backdrop's spot-ness
+    /// has already been flattened into process ink by the time an image paints
+    /// over it, so pdfce genuinely cannot tell whether a spot was underneath.
+    /// A non-zero value means "this page contains the shape of the problem",
+    /// which is the strongest honest claim available without the plane.
+    pub overprint_process_images_unsupported: usize,
     /// `gs` operators naming a blend mode pdfce did NOT apply. Those marks
     /// were composited as `Normal`.
     ///
@@ -458,6 +485,20 @@ pub struct Diagnostics {
     /// `Canvas::fill_image_overprint`: an overprinting `Separation`/`DeviceN`
     /// image now composites per sample, and a process image was never owed
     /// anything (Table 149 row 1 excludes a sampled image by name).
+    ///
+    /// ★★★ **AND THAT IS NOW WRONG ABOUT IMAGES A THIRD TIME**, which the
+    /// paragraph above had already warned was the pattern here without
+    /// stopping it. "A process image was never owed anything" is false: Table
+    /// 149's "any process colour space" row has a **spot-colorant sub-row**
+    /// reading `c_b` under `OP true`, so such an image IS owed preservation of
+    /// a spot colorant in the backdrop. pdfce cannot deliver it without the
+    /// per-spot-colorant plane, and as of `Pass 204.0` it counts the situation
+    /// in [`Diagnostics::overprint_process_images_unsupported`] instead of
+    /// asserting there is nothing to count.
+    ///
+    /// ⇒ Three wrong readings of one table, each correcting the last and each
+    /// confidently phrased. The common factor is that every one of them quoted
+    /// a row of Table 149 accurately and stopped before its second sub-row.
     ///
     /// ★ Note how the FIRST stale half survived a sweep, because the
     /// mechanism is general: it named `overprint_refused` in order to say
@@ -1718,6 +1759,7 @@ polarity unverifiable (decision 006 R30)",
         self.rendering_intents_set += other.rendering_intents_set;
         self.icc_managed_paints += other.icc_managed_paints;
         self.icc_unmanaged_paints += other.icc_unmanaged_paints;
+        self.overprint_process_images_unsupported += other.overprint_process_images_unsupported;
         self.blend_modes_ignored += other.blend_modes_ignored;
         self.soft_masks_ignored += other.soft_masks_ignored;
         self.soft_masks_applied += other.soft_masks_applied;
@@ -7176,15 +7218,61 @@ impl Interpreter<'_> {
                 //
                 // ★ NOT every image under `/OP true` is owed this, and
                 // reading it as if it were is what made the shortfall
-                // counter over-report for its whole life. Table 149 gives
-                // *any process colour space* `c_s` in all three columns, and
-                // its first row excludes a sampled image BY NAME — so
-                // painting a `DeviceGray`, `DeviceRGB` or `DeviceCMYK` image
-                // normally under overprint IS the conforming result, not a
-                // shortfall. Only the `Separation`/`DeviceN` row asks for a
-                // component the source did not name to be taken from the
-                // backdrop, and `DecodedImage::overprint` is `Some` for
-                // exactly that row and no other.
+                // counter over-report for its whole life. Only the
+                // `Separation`/`DeviceN` row asks for a component the source
+                // did not name to be taken from the backdrop, and
+                // `DecodedImage::overprint` is `Some` for exactly that row.
+                //
+                // ★★★ BUT THIS COMMENT USED TO GO ON TO SAY SOMETHING FALSE,
+                // and it is quoted rather than quietly deleted because it was
+                // believed for many Passes and repeated in three places:
+                //
+                //   "Table 149 gives *any process colour space* `c_s` in all
+                //    three columns, and its first row excludes a sampled image
+                //    BY NAME — so painting a `DeviceGray`, `DeviceRGB` or
+                //    `DeviceCMYK` image normally under overprint IS the
+                //    conforming result, not a shortfall."
+                //
+                // Table 149's row for "any process colour space (including
+                // other cases of `DeviceCMYK`)" has **two sub-rows**:
+                //
+                //   Process component   c_s | c_s | c_s
+                //   Spot colorant       c_s (= 0.0) | c_b | c_b
+                //
+                // The sentence above is a correct reading of the FIRST and
+                // drops the SECOND. A process image under `/OP true` is owed
+                // backdrop preservation on any SPOT colorant — and NOTE 2 of
+                // the same clause settles the classification for the case that
+                // exposed this: "in the case of an `Indexed` space, it refers
+                // to the base colour space", so `/Indexed /DeviceCMYK` is a
+                // process source and lands in this row.
+                //
+                // ⇒ THE REPOSITORY WAS CONTRADICTING ITSELF. `overprint.rs`
+                // already returns `Backdrop` for `(OtherProcess, Spot)` under
+                // `op == true` — pdfce's own Table 149 implementation always
+                // knew — and `Pass 196.1` had already corrected the CLI's
+                // operator note to say the gap "is owed". Only the renderer's
+                // comments were never swept, so the code that CAUSED the gap
+                // was the one place still asserting there was none.
+                //
+                // Measured: a `/Indexed /DeviceCMYK` drop shadow over a spot
+                // green backdrop renders a neutral grey ramp on white paper
+                // where a press shows the same ramp on green.
+                //
+                // pdfce cannot fix this without the per-spot-colorant plane.
+                // What it can do, and now does, is STOP CLAIMING THE OUTPUT IS
+                // CONFORMING and count the situation.
+                if self.gs.current.overprint_fill
+                    && decoded.overprint.is_none()
+                    && self.blend_space == crate::compositor::BlendSpace::Subtractive
+                {
+                    self.diag.overprint_process_images_unsupported += 1;
+                    self.diag.note(
+                        b"process-space image painted under /OP true on a subtractive page: \
+                          Table 149 preserves the backdrop's SPOT colorants, and pdfce has no \
+                          spot plane, so any spot beneath this image was overwritten",
+                    );
+                }
                 if self.gs.current.overprint_fill
                     && decoded.overprint.is_some()
                     && self.paint_image_overprint(&decoded, interpolate, canvas)

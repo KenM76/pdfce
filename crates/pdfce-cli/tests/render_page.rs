@@ -558,6 +558,8 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // mean "the branch was never reached". Two keys, one fact.
             "icc_managed_paints",
             "icc_unmanaged_paints",
+            // `Pass 204.0`, appended not inserted.
+            "overprint_process_images_unsupported",
         ],
         "metrics key order is part of the stable contract"
     );
