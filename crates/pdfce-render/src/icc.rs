@@ -1,0 +1,324 @@
+//! # The ICC bridge — pdfce's one and only door to colour conversion
+//!
+//! This module is a thin adapter over **iccce** (`github.com/KenM76/iccce`,
+//! MIT), the sibling project that owns *all* colour conversion by
+//! `docs/ARCHITECTURE.md` decision 064. Nothing here implements colour
+//! science. Everything here is about deciding *which* conversion to ask for,
+//! *when*, and what to do when the answer is unavailable.
+//!
+//! ## The problem this exists to fix
+//!
+//! When a page composites in ink (it has a `/Group` with a subtractive
+//! `/CS`), every additive paint that lands on it has to become CMYK at some
+//! point. Until this module existed that job was done by
+//! [`crate::overprint::rgb_to_cmyk`] — and that function is **not wrong**, it
+//! is *wrongly used*. It is a deliberately simple, deliberately
+//! **invertible** max-GCR formula, and it exists so that
+//! `snapshot_srgb_backdrop` and `composite_srgb` can make a round trip that
+//! returns where it started. Round-tripping is the whole point of it.
+//!
+//! A **terminal** conversion — the last thing that happens to a colour before
+//! it is written into the colorant buffer for good — has the opposite
+//! requirement. It should be *accurate*, and it has no obligation to be
+//! reversible. Using the round-trip transform for the terminal conversion was
+//! measured on a conformance patch at **~92 levels** of error against
+//! Acrobat's output, where a real CMM lands within **~3**.
+//!
+//! ⇒ ★ **The bug was never in the arithmetic; it was in which function was
+//! called.** Three hypotheses about pdfce's blend maths were raised and each
+//! was refuted by ablation before the real cause was found. Recorded because
+//! the shape recurs: a correct function used for the wrong job produces
+//! numbers that look like an arithmetic bug and are not one.
+//!
+//! ## What must NOT change, and why it is stated as a prohibition
+//!
+//! `overprint::rgb_to_cmyk` **stays exactly where it is** on the
+//! `snapshot_srgb_backdrop` ↔ `composite_srgb` path. This module is not a
+//! search-and-replace of that function. Substituting an accurate,
+//! non-invertible CMM into a round trip would make the return leg fail to
+//! return — the backdrop would drift a little on every composite, which is a
+//! far worse and much harder-to-see defect than the one being fixed. The two
+//! call sites want two different functions and always did.
+//!
+//! ## Where the profiles come from
+//!
+//! | end | source | fallback if absent |
+//! |---|---|---|
+//! | **source** | the `ICCBased` stream's own decoded profile, carried on [`crate::color::ColorSpace::IccBased`] | none — no bridge is built |
+//! | **destination** | the document catalog's `/OutputIntents` → `/DestOutputProfile` | none — no bridge is built |
+//!
+//! Both ends are genuinely optional in a real document, and when either is
+//! missing the honest answer is **not to colour-manage**, falling back to the
+//! previous behaviour rather than inventing a profile. That fallback is the
+//! reason [`IccBridge::build`] returns `Option` rather than `Result`: a
+//! document with no output intent is not malformed, it simply has not said
+//! what device it targets, and guessing would be exactly the "sneaky"
+//! behaviour `CLAUDE.md` rule 4 forbids.
+//!
+//! ### ★ Why there is no built-in-sRGB source fallback
+//!
+//! It would be easy to write "if the source has no profile, assume sRGB", and
+//! it would be wrong twice over. iccce deliberately exposes a built-in sRGB as
+//! a **destination** only, and pdfce is not entitled to invent a source
+//! characterisation the document never made. A `DeviceRGB` fill genuinely has
+//! no colorimetric meaning until something assigns one; pretending otherwise
+//! would replace a known-approximate conversion with a differently-approximate
+//! one while *looking* authoritative. So `DeviceRGB` keeps the old transform,
+//! and only `ICCBased` — where the document did the work of saying what its
+//! numbers mean — is colour-managed.
+//!
+//! ## Caching, and why the key is the whole dependency set
+//!
+//! Building a `Chain` parses two profiles and composes their transforms; doing
+//! that per *paint* would be absurd. [`IccBridge`] is therefore built once and
+//! shared behind an `Arc`.
+//!
+//! ★ The cache key is **(source profile bytes, destination profile bytes,
+//! rendering intent)** — all three. This project has already shipped a defect
+//! (standing rule R237) where a memo's key omitted one of its dependencies, so
+//! every verb computed over it silently addressed the wrong object. The intent
+//! is the field most likely to be dropped from a key by someone who reasons
+//! "it is just an enum" — but a perceptual and a relative-colorimetric chain
+//! between the same two profiles are **different transforms**, and sharing one
+//! entry between them would make a document's `ri` operator do nothing while
+//! the counter said it had been honoured.
+
+use pdfce_core::color::RenderingIntent;
+
+/// A built, ready-to-use source→destination colour transform.
+///
+/// Cheap to clone (it is a handle); expensive to build, which is why callers
+/// hold an `Arc<IccBridge>` for the life of a page rather than constructing
+/// one per paint.
+pub(crate) struct IccBridge {
+    chain: iccce_cmm::transform::Chain,
+    /// How many components the SOURCE takes, from the PDF's `/N`. Kept so a
+    /// caller handing over the wrong number of operands is refused rather
+    /// than silently converted from a truncated or zero-padded colour.
+    src_components: usize,
+    /// How many components the destination expects. Kept so a caller can
+    /// refuse a mismatched buffer rather than index past the end of a slice
+    /// that a malformed profile made shorter than assumed.
+    dst_components: usize,
+}
+
+impl std::fmt::Debug for IccBridge {
+    /// Hand-written because `iccce_cmm::transform::Chain` is an opaque transform with no
+    /// useful `Debug`, and a derived impl would either fail to compile or dump
+    /// megabytes of lookup table into a log.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IccBridge")
+            .field("src_components", &self.src_components)
+            .field("dst_components", &self.dst_components)
+            .finish_non_exhaustive()
+    }
+}
+
+impl IccBridge {
+    /// Build a transform from an embedded source profile to the document's
+    /// output-intent destination profile.
+    ///
+    /// Returns `None` — never an error — when the transform cannot be built.
+    /// See the module docs: an absent or unparseable profile means "do not
+    /// colour-manage", which is a legitimate document state and not a failure
+    /// pdfce should surface as one. The caller falls back to the previous
+    /// conversion, and the *disclosure* obligation (rule 4) is met by the
+    /// render diagnostics counting how many paints were bridged without a
+    /// profile, not by an error.
+    ///
+    /// # Why the intent is a parameter rather than read from the profile
+    ///
+    /// ISO 32000-1 §8.6.5.8 makes the rendering intent a property of the
+    /// *graphics state* (`ri`, or `/RI` in an `ExtGState`), not of the
+    /// profile. The profile carries a *default* intent; the content stream
+    /// overrides it. Reading the profile's would silently ignore the operator's
+    /// `ri`, which is the exact failure the cache-key note above warns about.
+    pub(crate) fn build(
+        src_profile: &[u8],
+        src_components: usize,
+        dst_profile: &[u8],
+        intent: RenderingIntent,
+    ) -> Option<Self> {
+        let src = iccce_profile::Profile::parse(src_profile).ok()?;
+        let dst = iccce_profile::Profile::parse(dst_profile).ok()?;
+        let chain = iccce_cmm::transform::Chain::new(&src, &dst, to_iccce_intent(intent)).ok()?;
+        // A destination profile that is not 4-component is a perfectly valid
+        // profile; it is just not one this bridge can feed a CMYK buffer.
+        // Probing with a mid-grey is cheaper and more honest than trusting a
+        // header field, because it exercises the transform that will actually
+        // run.
+        //
+        // The probe's WIDTH comes from the PDF's `/N`, not from the profile.
+        // Table 66 makes `/N` Required and constrains it to 1, 3 or 4, so the
+        // document has already stated the component count authoritatively --
+        // and a disagreement between `/N` and the embedded profile is a
+        // malformed file whose colour we should decline to manage rather than
+        // resolve by picking a side.
+        let probe = vec![0.5_f64; src_components];
+        let dst_components = chain.convert(&probe).ok()?.len();
+        Some(Self {
+            chain,
+            src_components,
+            dst_components,
+        })
+    }
+
+    /// Convert the source space's OWN components to CMYK tints in `0.0..=1.0`.
+    ///
+    /// # Why components rather than an sRGB triple
+    ///
+    /// Because the sRGB triple is already a lossy answer to the question being
+    /// asked. By the time a colour has been flattened to `rgba` it has been
+    /// through the alternate space and quantised to bytes; converting *that*
+    /// would colour-manage pdfce's approximation instead of the document's
+    /// actual numbers. The `ICCBased` operands are what the file wrote and what
+    /// the embedded profile describes, so they are what the chain should see.
+    ///
+    /// Returns `None` when the component count does not match what the chain
+    /// was built for, or when the destination is not four-component — in both
+    /// cases the caller falls back rather than writing a wrong-width result.
+    pub(crate) fn convert_components(&self, comps: &[f32]) -> Option<[f32; 4]> {
+        if self.dst_components != 4 || comps.len() != self.src_components {
+            return None;
+        }
+        let input: Vec<f64> = comps.iter().map(|c| f64::from(*c)).collect();
+        let out = self.chain.convert(&input).ok()?;
+        let get = |i: usize| -> f32 {
+            // Clamped because a CMM is entitled to return values slightly
+            // outside the unit interval for out-of-gamut input, and the
+            // colorant buffer stores tints as bytes.
+            out.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0) as f32
+        };
+        Some([get(0), get(1), get(2), get(3)])
+    }
+}
+
+/// Map pdfce's rendering intent onto iccce's.
+///
+/// # Why there IS a catch-all arm, when the obvious thing is to forbid one
+///
+/// This function was first written with no `_` arm, on the reasoning that if
+/// either enum gained a variant the compiler should stop the build rather than
+/// let a new intent be silently rendered as the wrong one. That reasoning is
+/// sound and the code still would not compile: `RenderingIntent` is
+/// `#[non_exhaustive]`, so a match on it from *outside* `pdfce-core` is
+/// required to have a catch-all. The exhaustiveness this wanted is
+/// unavailable here by construction.
+///
+/// So the arm is present, and it resolves to **relative colorimetric** —
+/// which is not an arbitrary pick but ISO 32000-1 §8.6.5.8 Table 70's own
+/// stated default for `/RI`. A future variant therefore degrades to the
+/// behaviour a file with no `ri` operator would already have got, rather than
+/// to whichever variant happened to be listed first.
+///
+/// ⇒ The transferable point: `#[non_exhaustive]` moves a compile-time
+/// guarantee to a runtime choice, and the choice then has to be *defended* in
+/// prose because no gate will ever check it again.
+fn to_iccce_intent(intent: RenderingIntent) -> iccce_cmm::matrix_trc::Intent {
+    use iccce_cmm::matrix_trc::Intent;
+    match intent {
+        RenderingIntent::Perceptual => Intent::Perceptual,
+        RenderingIntent::RelativeColorimetric => Intent::MediaRelative,
+        RenderingIntent::Saturation => Intent::Saturation,
+        RenderingIntent::AbsoluteColorimetric => Intent::Absolute,
+        _ => Intent::MediaRelative,
+    }
+}
+
+/// A page-lifetime cache of built [`IccBridge`]es.
+pub(crate) struct IccBridgeCache {
+    /// The destination profile for this document, decoded once from
+    /// `/OutputIntents` -> `/DestOutputProfile`. `None` means the document
+    /// named no output device, so nothing here can be colour-managed.
+    dest: Option<std::sync::Arc<[u8]>>,
+    entries: std::cell::RefCell<Vec<CacheEntry>>,
+    /// Tallies, in `Cell` because the conversion happens behind `&self`.
+    ///
+    /// They live here rather than on the renderer's `Diagnostics` for a
+    /// mechanical reason worth stating: the conversion is reached from
+    /// `authored_cmyk(&self, ..)`, and widening that to `&mut self` would
+    /// cascade through ten paint call sites to add a counter. Folding these
+    /// into the real diagnostics once, at the end of the run, costs nothing
+    /// and keeps the public `Diagnostics` free of interior mutability.
+    managed: std::cell::Cell<usize>,
+    unmanaged: std::cell::Cell<usize>,
+}
+
+struct CacheEntry {
+    /// ★ Held as an owned `Arc`, not a raw pointer, and that is a
+    /// CORRECTNESS requirement rather than convenience. Lookup compares with
+    /// `Arc::ptr_eq`, so if the cache did not keep the allocation alive a
+    /// freed profile's address could be recycled by a later one and two
+    /// different profiles would compare equal -- silently converting a page
+    /// with the wrong transform. Owning a clone makes the address stable for
+    /// as long as the key can be consulted.
+    src: std::sync::Arc<[u8]>,
+    src_components: usize,
+    intent: RenderingIntent,
+    bridge: Option<std::sync::Arc<IccBridge>>,
+}
+
+impl std::fmt::Debug for IccBridgeCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IccBridgeCache")
+            .field("has_dest", &self.dest.is_some())
+            .field("entries", &self.entries.borrow().len())
+            .finish()
+    }
+}
+
+impl IccBridgeCache {
+    pub(crate) fn new(dest: Option<std::sync::Arc<[u8]>>) -> Self {
+        Self {
+            dest,
+            entries: std::cell::RefCell::new(Vec::new()),
+            managed: std::cell::Cell::new(0),
+            unmanaged: std::cell::Cell::new(0),
+        }
+    }
+
+    /// Whether this document named an output device at all.
+    pub(crate) fn has_destination(&self) -> bool {
+        self.dest.is_some()
+    }
+
+    /// Record that a paint was converted by the engine.
+    pub(crate) fn note_managed(&self) {
+        self.managed.set(self.managed.get().saturating_add(1));
+    }
+
+    /// Record that a paint that could have been managed was not.
+    pub(crate) fn note_unmanaged(&self) {
+        self.unmanaged.set(self.unmanaged.get().saturating_add(1));
+    }
+
+    /// The two tallies, for folding into the renderer's diagnostics.
+    pub(crate) fn tallies(&self) -> (usize, usize) {
+        (self.managed.get(), self.unmanaged.get())
+    }
+
+    /// Fetch or build the bridge for one source profile at one intent.
+    pub(crate) fn get(
+        &self,
+        src: &std::sync::Arc<[u8]>,
+        src_components: usize,
+        intent: RenderingIntent,
+    ) -> Option<std::sync::Arc<IccBridge>> {
+        let dest = self.dest.as_ref()?;
+        if let Some(hit) = self.entries.borrow().iter().find(|e| {
+            std::sync::Arc::ptr_eq(&e.src, src)
+                && e.src_components == src_components
+                && e.intent == intent
+        }) {
+            return hit.bridge.clone();
+        }
+        let bridge = IccBridge::build(src, src_components, dest, intent).map(std::sync::Arc::new);
+        self.entries.borrow_mut().push(CacheEntry {
+            src: std::sync::Arc::clone(src),
+            src_components,
+            intent,
+            bridge: bridge.clone(),
+        });
+        bridge
+    }
+}

@@ -1711,6 +1711,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "iccce-cmm"
+version = "0.3.0"
+source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+dependencies = [
+ "iccce-color",
+ "iccce-profile",
+]
+
+[[package]]
+name = "iccce-color"
+version = "0.3.0"
+source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+
+[[package]]
+name = "iccce-profile"
+version = "0.3.0"
+source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+
+[[package]]
 name = "icu_collections"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2621,6 +2640,8 @@ name = "pdfce-render"
 version = "0.18.0"
 dependencies = [
  "flate2",
+ "iccce-cmm",
+ "iccce-profile",
  "pdfce-core",
  "skrifa",
  "subsetter",

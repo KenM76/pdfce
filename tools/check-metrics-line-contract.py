@@ -123,7 +123,16 @@ PRINTLN_HEAD = '"rendered {} page {page_number} -> {} {}x{}; '
 # appended. The anchor is the LAST key on the line, so every append moves it —
 # that is the intended cost: the gate's failure message names this constant so
 # the edit is a two-line follow-through rather than a hunt.
-PRINTLN_TAIL = 'cmyk_native_image_pixels={}"'
+# Updated 2026-09-01 (`Pass 199.2`) for `icc_unmanaged_paints`.
+#
+# ★ NOTE WHAT THIS CONSTANT'S HISTORY SHOWS. It was last touched for
+# `cmyk_native_image_pixels`, but `rendering_intents_set` was appended after
+# that and this was NOT updated -- so from that Pass until now the gate could
+# not find the format string at all and exited with its "substring not found"
+# message. It was failing loudly and nobody was reading it, which is a
+# different disease from a gate that silently passes but has the same
+# outcome: the key-order contract went unchecked across several Passes.
+PRINTLN_TAIL = 'icc_unmanaged_paints={}"'
 
 
 def template_keys(src: str) -> list[str]:

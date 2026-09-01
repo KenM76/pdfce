@@ -336,6 +336,23 @@ fn dicts_match_ignoring_encoding(a: &Dict, b: &Dict) -> bool {
 /// offsets — it already had.
 #[must_use]
 pub fn import(original: &Document, edited: &Document) -> (DirtySet, ImportReport) {
+    // bypass-exempt: `import` BUILDS a DirtySet, it does not APPLY one.
+    //
+    // The gate exists to stop a mutation reaching the writer without an undo
+    // entry, a rule-4 disclosure or a certification check. This function makes
+    // none: it is a pure diff of two already-parsed documents that RETURNS the
+    // set for a caller to do something with. Nothing here is saved, and the
+    // caller -- `pdfce-cli`'s `import` subcommand -- is what performs the
+    // save, under the same disclosure obligations as any other.
+    //
+    // ★ The distinction the gate cannot see, stated so a reviewer can: the
+    // three sanctioned exceptions above are all code that WRITES. This one
+    // never touches an output file. Routing it through `EditSession` would
+    // mean inventing a session for a computation whose whole output IS the
+    // description of a change, which is the thing a session already holds --
+    // it would be a session wrapping its own contents.
+    //
+    // bypass-exempt: builds a set, never applies one (reason immediately above).
     let mut dirty = DirtySet::empty();
     let mut report = ImportReport::default();
     let mut staging: Vec<u8> = Vec::new();
@@ -398,6 +415,9 @@ pub fn import(original: &Document, edited: &Document) -> (DirtySet, ImportReport
     report
         .removed
         .sort_unstable_by_key(|i| (i.num, i.generation));
+    // bypass-exempt: the staging buffer belongs to the DirtySet being BUILT
+    // and returned here; see the reason at the head of this function. No save
+    // happens in this file.
     dirty.set_staging(staging);
     (dirty, report)
 }

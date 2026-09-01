@@ -315,6 +315,26 @@ pub struct Diagnostics {
     /// before comparing pdfce against another engine, because that engine may
     /// well honour it.
     pub rendering_intents_set: usize,
+    /// How many paints were converted to ink by the ICC engine rather than by
+    /// the fallback `rgb_to_cmyk` reconstruction.
+    ///
+    /// ★ This exists to make a NULL RESULT INTERPRETABLE, which is the whole
+    /// reason it was written before the fix was measured rather than after.
+    /// A colour-management change that appears to do nothing has two
+    /// completely different explanations -- the transform ran and the output
+    /// was already right, or the branch was never reached at all -- and
+    /// without a counter those are indistinguishable. This project has already
+    /// spent a diagnostic cycle reporting an ablation as exculpatory when the
+    /// disabled code simply never executed for the file under test.
+    pub icc_managed_paints: usize,
+    /// Paints that reached a subtractive buffer from an `ICCBased` space that
+    /// COULD have been colour-managed but was not, because the document named
+    /// no `/OutputIntent` or a profile failed to parse.
+    ///
+    /// The disclosure half of `CLAUDE.md` rule 4: an operator whose file
+    /// renders through the approximate path is entitled to know it did,
+    /// off-canvas and without anything being drawn differently.
+    pub icc_unmanaged_paints: usize,
     /// `gs` operators naming a blend mode pdfce did NOT apply. Those marks
     /// were composited as `Normal`.
     ///
@@ -1696,6 +1716,8 @@ polarity unverifiable (decision 006 R30)",
         self.transparency_groups_special += other.transparency_groups_special;
         self.blend_modes_applied += other.blend_modes_applied;
         self.rendering_intents_set += other.rendering_intents_set;
+        self.icc_managed_paints += other.icc_managed_paints;
+        self.icc_unmanaged_paints += other.icc_unmanaged_paints;
         self.blend_modes_ignored += other.blend_modes_ignored;
         self.soft_masks_ignored += other.soft_masks_ignored;
         self.soft_masks_applied += other.soft_masks_applied;
@@ -1984,6 +2006,45 @@ impl BlendSpaceFrom {
 /// `PGB-A2` in the spec corpus, and deliberately NOT solved differently
 /// from the existing `SEP-A1` question of the same shape. First-wins is
 /// stated here so that the choice is visible rather than emergent.
+/// The document's destination ICC profile, decoded, from `/OutputIntents`.
+///
+/// # Why this is separate from [`output_intent_blend_space`]
+///
+/// They read the same dictionary and answer different questions, and merging
+/// them would couple a cheap, always-run structural probe to an expensive
+/// stream decode. `output_intent_blend_space` needs only `/N` to decide
+/// whether the page composites in ink -- it runs for every page and must stay
+/// cheap. This one inflates a profile that is commonly 500 kB and is only
+/// wanted when something is actually going to be colour-managed.
+///
+/// # What "first usable" means here, and why it is not "first"
+///
+/// ISO 32000-2 allows an array of output intents. pdfce takes the first entry
+/// whose `/DestOutputProfile` is a stream that DECODES, rather than the first
+/// entry outright -- a file that lists a broken intent ahead of a good one
+/// should be rendered with the good one rather than fall back to no colour
+/// management at all. This is a recovery choice, not a spec rule, and it is
+/// recorded as such.
+fn output_intent_profile(doc: &DocumentView<'_>) -> Option<std::sync::Arc<[u8]>> {
+    let catalog = doc
+        .catalog_id()
+        .and_then(|id| doc.value(id))
+        .and_then(Object::as_dict)?;
+    let entry = catalog.get(b"OutputIntents")?;
+    let items = doc.resolve(entry).as_array().map(<[Object]>::to_vec)?;
+    items.iter().find_map(|item| {
+        let intent = doc.resolve(item).as_dict()?.clone();
+        let profile = intent.get(b"DestOutputProfile")?;
+        let Object::Stream(st) = doc.resolve(profile) else {
+            return None;
+        };
+        let raw = doc.slice(st.data_span)?;
+        filters::decode_stream(&st.dict, raw)
+            .ok()
+            .map(std::sync::Arc::from)
+    })
+}
+
 fn output_intent_blend_space(doc: &DocumentView<'_>) -> Option<crate::compositor::BlendSpace> {
     let catalog = doc
         .catalog_id()
@@ -2141,6 +2202,7 @@ pub fn trace_paths(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        icc: crate::icc::IccBridgeCache::new(output_intent_profile(doc)),
         // Geometry only — `trace_paths` records paths and
         // composites nothing, so §11.3.4 cannot apply. Additive
         // is the value that changes no behaviour rather than a
@@ -2232,6 +2294,7 @@ fn run_nested(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        icc: crate::icc::IccBridgeCache::new(output_intent_profile(doc)),
         blend_space,
         path: PathBuilder::new(),
         subpixel_culling: policy.subpixel_culling,
@@ -2277,6 +2340,12 @@ fn run_nested(
         }
         interp.execute(&op, content, canvas);
     }
+    // Fold the ICC cache's tallies in before handing the diagnostics back.
+    // See `IccBridgeCache`'s field docs for why they are counted there and
+    // moved here rather than incremented in place.
+    let (managed, unmanaged) = interp.icc.tallies();
+    interp.diag.icc_managed_paints += managed;
+    interp.diag.icc_unmanaged_paints += unmanaged;
     interp.diag
 }
 
@@ -2374,6 +2443,7 @@ pub(crate) fn run_form_at_on(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        icc: crate::icc::IccBridgeCache::new(output_intent_profile(doc)),
         // §12.5.5: an appearance stream with no `/Group` is a
         // NON-ISOLATED group, and a non-isolated group INHERITS
         // its blending space (Table 147's `/CS` row). This entry
@@ -2413,6 +2483,12 @@ pub(crate) fn run_form_at_on(
         cancel,
     };
     interp.do_form(id, stream, canvas, false);
+    // Fold the ICC cache's tallies in before handing the diagnostics back.
+    // See `IccBridgeCache`'s field docs for why they are counted there and
+    // moved here rather than incremented in place.
+    let (managed, unmanaged) = interp.icc.tallies();
+    interp.diag.icc_managed_paints += managed;
+    interp.diag.icc_unmanaged_paints += unmanaged;
     interp.diag
 }
 
@@ -2465,6 +2541,15 @@ struct Interpreter<'a> {
     /// a different space is not always possible, and would be an excessive
     /// number of conversions where it is.
     blend_space: crate::compositor::BlendSpace,
+    /// Built colour transforms for this document, and the destination
+    /// profile they all share.
+    ///
+    /// Present even when the document names no output device: the cache
+    /// then answers `None` to everything, which is exactly the
+    /// do-not-colour-manage behaviour that predates it. Making the FIELD
+    /// optional as well would put two ways to say the same thing in the
+    /// type, and a caller would eventually check only one of them.
+    icc: crate::icc::IccBridgeCache,
     /// The path under construction — in USER space normally, in DEVICE
     /// space when [`Self::path_precise`] is set (module docs).
     path: PathBuilder,
@@ -5509,6 +5594,57 @@ impl Interpreter<'_> {
         let mut scratch = crate::color::ColorDiagnostics::default();
         if let Some(cmyk) = space.to_cmyk(comps, &mut scratch) {
             return Some(cmyk);
+        }
+        // ★★★ COLOUR-MANAGED CONVERSION, when the document supplied BOTH ends.
+        //
+        // Placed exactly here, and the position is the whole design:
+        //
+        //   ABOVE  `space.to_cmyk` -- the document's own DeviceCMYK answer.
+        //          Never overridden. If the file states ink directly, that ink
+        //          is what prints; running it through a CMM would be pdfce
+        //          second-guessing an explicit instruction.
+        //   BELOW  the `rgb_to_cmyk` reconstruction further down, which is the
+        //          fallback for everything with no better answer.
+        //
+        // So this branch only ever replaces a RECONSTRUCTION, never an
+        // authored value. That is what makes it safe to add late: on any file
+        // lacking an embedded source profile or an `/OutputIntent`, the cache
+        // returns `None` and every previous behaviour is bit-for-bit intact.
+        //
+        // # Why an ICCBased RGB fill was visibly wrong before this
+        //
+        // Its components were handed to the ALTERNATE space -- Table 66's
+        // fallback -- which treats them as plain `DeviceRGB`, and the colorant
+        // buffer then reconstructed ink with `overprint::rgb_to_cmyk`. That
+        // function is an INVERTIBLE round-trip transform, correct for the job
+        // it was written for (`snapshot_srgb_backdrop` <-> `composite_srgb`)
+        // and wrong for a TERMINAL conversion. Measured against Acrobat on a
+        // conformance patch: ~92 levels of error, against ~3 with a real CMM.
+        // The document had embedded the profile that says what its numbers
+        // mean, and pdfce was parsing it for `/N` and throwing it away.
+        //
+        // ★ The intent comes from the GRAPHICS STATE, not the profile
+        // (§8.6.5.8): `ri` and `/RI` override the profile's default, and
+        // reading the profile's would make the operator's `ri` a no-op.
+        if let crate::color::ColorSpace::IccBased {
+            n,
+            profile: Some(src),
+            ..
+        } = space
+            && self.icc.has_destination()
+            && let Some(bridge) = self.icc.get(src, *n, self.gs.current.rendering_intent)
+            && let Some(cmyk) = bridge.convert_components(comps)
+        {
+            self.icc.note_managed();
+            return Some(cmyk);
+        }
+        // The other half of the disclosure: an `ICCBased` space that reached
+        // here and was NOT managed. Counted whether the cause was a missing
+        // output intent, an unparseable profile, or a non-CMYK destination --
+        // the operator's question is "was my colour managed?", not "which of
+        // four internal reasons stopped it".
+        if matches!(space, crate::color::ColorSpace::IccBased { .. }) {
+            self.icc.note_unmanaged();
         }
         let kind = crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)?;
         // ★★ THE SPOT-ONLY FALL-THROUGH, AND WITHOUT IT A SPOT COLOUR PAINTS

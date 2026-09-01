@@ -278,6 +278,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "iccce-cmm"
+version = "0.3.0"
+source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+dependencies = [
+ "iccce-color",
+ "iccce-profile",
+]
+
+[[package]]
+name = "iccce-color"
+version = "0.3.0"
+source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+
+[[package]]
+name = "iccce-profile"
+version = "0.3.0"
+source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+
+[[package]]
 name = "inout"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-core"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "aes",
  "brotli",
@@ -363,8 +382,10 @@ dependencies = [
 
 [[package]]
 name = "pdfce-render"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
+ "iccce-cmm",
+ "iccce-profile",
  "pdfce-core",
  "skrifa",
  "subsetter",

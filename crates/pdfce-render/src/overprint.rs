@@ -1395,6 +1395,11 @@ mod tests {
             n: 4,
             alternate: std::sync::Arc::new(ColorSpace::DeviceCmyk),
             alternate_explicit: true,
+            // These tests are about OVERPRINT CLASSIFICATION, which reads `n`
+            // and the alternate only. No profile: a classification that
+            // changed with one would be a defect, and `None` is also the
+            // honest value for a hand-built space that never had a stream.
+            profile: None,
         }
     }
 
@@ -1485,6 +1490,7 @@ mod tests {
             n: 3,
             alternate: std::sync::Arc::new(ColorSpace::DeviceRgb),
             alternate_explicit: true,
+            profile: None,
         };
         assert_eq!(
             classify(&rgb_alt, false, scope),

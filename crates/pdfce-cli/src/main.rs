@@ -157,6 +157,7 @@
 //!               cmyk_buffer_refused=<n> cmyk_bridged_pixels=<n> \
 //!               cmyk_groups_approximated=<n> cmyk_unbridged_images=<n> \
 //!               cmyk_native_image_pixels=<n> rendering_intents_set=<n>
+//!               icc_managed_paints=<n> icc_unmanaged_paints=<n>
 //! ```
 //!
 //! ★ **`render-page` prints a SECOND line when `--probe-ink X,Y` is
@@ -345,7 +346,9 @@
 //! | `overprint_composited` | `overprint_composited` | "how many paints actually went through `CompatibleOverprint` rather than a `Normal` blend?" (§11.7.4.3 Table 149. Should equal `overprint_effective` minus `overprint_refused` — kept as its own counter rather than derived, because a derived number cannot disagree with reality and therefore cannot report a bug. A disagreement across the three is the signal worth chasing) |
 //! | `overprint_refused` | `overprint_refused` | "how many paints fell back to a normal blend when overprint applied?" (DIVERGENCE, and the one to watch in this block: non-zero means the operator is looking at KNOCKED-OUT backdrops where a press would show overprinted ink, which is not detectable by looking at the page. Distinct from `overprint_images_unsupported` — this is "the composite was offered this paint and could not run it", that one is "the composite was never offered this object at all") |
 //! | `overprint_pixels` | `overprint_pixels` | "did the overprint composites MOVE anything?" (the measurement that separates "overprint ran and mattered" from "overprint ran and was a no-op on this geometry" — two facts a paint count alone conflates. Meaningless without `overprint_composited` beside it, and vice versa) |
-//! | `rendering_intents_set` | `rendering_intents_set` | "how many times did the document DECLARE a rendering intent?" (§8.6.5.8 — the `ri` operator or an `/ExtGState` `/RI`. ★ A CENSUS OF WHAT THE FILE ASKED FOR, NOT OF WHAT pdfce DID: as of `Pass 199.0` the intent is carried in the graphics state where it was previously discarded outright, but the conversion that would consume it is not wired yet. So a non-zero value with a non-default intent means the operator is being shown a render that ignores a choice the file made — worth knowing before comparing pdfce against another engine, which may well honour it. Measured: a failing ICC-RGB conformance patch declares an intent **19 times**) |
+//! | `rendering_intents_set` | `rendering_intents_set` | "how many times did the document DECLARE a rendering intent?" (§8.6.5.8 — the `ri` operator or an `/ExtGState` `/RI`. ★ A CENSUS OF WHAT THE FILE ASKED FOR, NOT OF WHAT pdfce DID: as of `Pass 199.0` the intent is carried in the graphics state where it was previously discarded outright, and as of `Pass 199.2` it IS consumed: it selects the ICC transform for an `ICCBased` paint on a subtractive page. A non-zero value here with `icc_managed_paints=0` means the file declared an intent that still changed nothing -- normally because it named no `/OutputIntent` to convert toward. Measured: a failing ICC-RGB conformance patch declares an intent **19 times**) |
+//! | `icc_managed_paints` | `icc_managed_paints` | "how many paints became ink via the COLOUR ENGINE rather than the fallback formula?" (`Pass 199.2`. Half of a pair — read it with `icc_unmanaged_paints` below. An `ICCBased` paint on a page that composites in ink is converted by iccce using the file's OWN embedded source profile and its `/OutputIntent` destination profile, at the intent the graphics state asked for. The fallback it replaces, `overprint::rgb_to_cmyk`, is an invertible round-trip transform that is correct for round trips and wrong as a terminal conversion — measured at **92 levels** maximum divergence on a conformance patch, moving the page closer to Acrobat when enabled) |
+//! | `icc_unmanaged_paints` | `icc_unmanaged_paints` | "how many paints COULD have been colour-managed and were not?" (`Pass 199.2`. The other half, and the one that makes a zero interpretable: `icc_managed_paints=0` alone cannot distinguish "the engine ran and agreed" from "the branch was never reached". A non-zero value here means an `ICCBased` paint fell back to the approximate formula — normally because the document named no `/OutputIntent`, occasionally because a profile would not parse or the destination was not four-component. ★ This is the rule-4 disclosure for colour management: nothing on the page is drawn differently, and the fact that pdfce approximated is reported off-canvas) |
 //! | `nonseparable_composited` | `nonseparable_composited` | "how many DIRECT PAINTS went through `Hue`/`Saturation`/`Color`/`Luminosity`?" (§11.3.5.3 Table 137 — a census of a SECOND code path: pdfce computes these four per pixel rather than handing the mode to the rasteriser, whose implementations are measurably wrong (decision 066). ★★ **IT DOES NOT COUNT A TRANSPARENCY GROUP COMPOSITED WITH ONE OF THOSE MODES**, and that omission is measurable: a page carrying `/BM /Hue` and `/BM /Saturation` reports `blend_modes_applied=15` with this at **0**, because its blending happens when the group is composited rather than when a path is painted. A reader who takes 0 for "no non-separable mode ran" is reading it wrong — this is a count of PAINTS, not of composites, and the name over-promises. The group half is filed, not implemented) |
 //! | `nonseparable_pixels` | `nonseparable_pixels` | "did those composites move anything?" (the same companion relationship `overprint_pixels` has to `overprint_composited`: a composite that ran on zero pixels and one that repainted a whole swatch are both "1" on the count above, and only this distinguishes them) |
 //! | `groups_backdrop_reruns` | `transparency_groups_backdrop_reruns` | "why did this page take twice as long as its neighbour?" (§11.4.4 — a COST counter, not a shortfall, and the only one on this line that names something pdfce DID: a non-isolated group whose content stream was walked a SECOND time over a copy of its own backdrop, so the element formula and backdrop removal could be computed against it. It is the only place in the renderer where a page's content is interpreted more than once. Zero is the normal reading and does NOT mean non-isolated groups were mishandled — §11.4.4 NOTE 5 makes the single walk exact whenever the group's interior composites `Normal` throughout) |
@@ -11728,7 +11731,8 @@ groups_backdrop_reruns={} soft_masks_on_group_result={} \
 overprint_images_unsupported={} overprint_shadings_unsupported={} \
 blend_space_subtractive={} blend_space_from_output_intent={} blends_in_wrong_space={} \
 cmyk_buffer={} cmyk_buffer_refused={} cmyk_bridged_pixels={} \
-cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={} rendering_intents_set={}",
+cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={} rendering_intents_set={} \
+icc_managed_paints={} icc_unmanaged_paints={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -12083,6 +12087,13 @@ cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={}
         // rule: the complement of `cmyk_bridged_pixels`.
         d.cmyk_native_image_pixels,
         d.rendering_intents_set,
+        // `Pass 199.2`. Appended per the stable-line append-never-reorder
+        // rule. The PAIR is the measurement: `managed` alone cannot
+        // distinguish "the engine ran and agreed" from "the branch was never
+        // reached", which is precisely the ambiguity that made an earlier
+        // ablation in this area uninterpretable.
+        d.icc_managed_paints,
+        d.icc_unmanaged_paints,
     );
     // ★ A SECOND LINE, NOT MORE KEYS ON THE FIRST ONE.
     //

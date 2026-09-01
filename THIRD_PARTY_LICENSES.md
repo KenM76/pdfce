@@ -63,7 +63,7 @@ alongside the other licenses harvested from `Cargo.lock`.
 
 - **Apache License 2.0** — used by 182 crate(s)
 - **Unicode License v3** — used by 19 crate(s)
-- **MIT License** — used by 15 crate(s)
+- **MIT License** — used by 18 crate(s)
 - **BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License** — used by 7 crate(s)
 - **ISC License** — used by 4 crate(s)
 - **Boost Software License 1.0** — used by 2 crate(s)
@@ -5944,6 +5944,9 @@ SOFTWARE.
 ### MIT License
 
 Used by:
+- [iccce-cmm 0.3.0](https://github.com/KenM76/iccce)
+- [iccce-color 0.3.0](https://github.com/KenM76/iccce)
+- [iccce-profile 0.3.0](https://github.com/KenM76/iccce)
 - [dpi 0.1.2](https://github.com/rust-windowing/winit)
 - [harfrust 0.7.0](https://github.com/harfbuzz/harfrust)
 

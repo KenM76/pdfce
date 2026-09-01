@@ -297,6 +297,39 @@ pub enum ColorSpace {
         /// fallbacks have different fidelity and an operator reading the
         /// diagnostics is entitled to know which one ran.
         alternate_explicit: bool,
+        /// The **decoded ICC profile bytes** from the `ICCBased` stream
+        /// itself, when they decoded.
+        ///
+        /// # Why this is carried at all, when `/N` and `/Alternate` already
+        /// make the space paintable
+        ///
+        /// Because the alternate is a *fallback*, and a fallback is only
+        /// correct when nobody can do better. The two fields above answer
+        /// "how many operands does `sc` take" and "what do I paint if I
+        /// cannot colour-manage"; neither can answer "what colour IS this",
+        /// which needs the profile. Until this field existed the profile was
+        /// parsed for its `/N` and then **discarded**, so a document that
+        /// went to the trouble of embedding a calibrated source description
+        /// was rendered as though it had not.
+        ///
+        /// # Why `Option`, and why that is not a defect
+        ///
+        /// A stream whose filters fail to decode still yields a usable space
+        /// through `/N` — Table 66's fallback is *designed* to survive a
+        /// profile the reader cannot read. Refusing the whole colour space
+        /// because its profile was corrupt would make pdfce strictly worse
+        /// than the spec's own recovery path. `None` therefore means "render
+        /// through the alternate", which is exactly what happened before
+        /// this field was added.
+        ///
+        /// # Why `Arc<[u8]>` rather than `Vec<u8>`
+        ///
+        /// `ColorSpace` is cloned freely — it is resolved once per named
+        /// resource and then handed to every operation that paints in it.
+        /// A profile is commonly 500 B–3 kB and occasionally far larger, so
+        /// a `Vec` would be memcpy'd on every clone for no benefit; the
+        /// bytes are immutable once parsed.
+        profile: Option<Arc<[u8]>>,
     },
     /// `[/Indexed base hival lookup]` (§8.6.6.3) — "a colour map or colour
     /// table of arbitrary colours in some other space".
@@ -1548,10 +1581,25 @@ fn resolve_icc_based(
     depth: usize,
     diag: &mut ColorDiagnostics,
 ) -> Option<Arc<ColorSpace>> {
-    let dict = args
-        .first()
-        .map(|o| doc.resolve(o))
-        .and_then(Object::as_dict)?;
+    let stream_obj = args.first().map(|o| doc.resolve(o));
+    let dict = stream_obj.and_then(Object::as_dict)?;
+
+    // The profile bytes themselves. Decoded eagerly here because this is the
+    // only place the stream is in hand — `resolve_object` returns a
+    // `ColorSpace`, not the object it came from, so a later consumer that
+    // wanted the profile would have no way back to it.
+    //
+    // A decode failure is deliberately swallowed to `None` rather than
+    // propagated: see the `profile` field's own documentation for why
+    // refusing the colour space would be worse than the spec's own fallback.
+    let profile: Option<Arc<[u8]>> = match stream_obj {
+        Some(Object::Stream(s)) => doc
+            .slice(s.data_span)
+            .and_then(|raw| pdfce_core::filters::decode_stream(&s.dict, raw).ok())
+            .map(Arc::from),
+        _ => None,
+    };
+
     // `/N` is Required and constrained to 1, 3 or 4, which is exactly what
     // makes the fallback total: there is no unknown-component-count case
     // for a conformant file.
@@ -1585,13 +1633,19 @@ fn resolve_icc_based(
     match alternate {
         Some(alternate) => {
             diag.icc_alternate_used += 1;
-            diag.note(
-                "ICCBased rendered through its /Alternate (8.6.5.5; pdfce has no ICC engine)",
-            );
+            // ★ This note used to end "pdfce has no ICC engine". That stopped
+            // being true when iccce was wired in: the profile is now carried
+            // on the space and used for terminal conversions. The counter is
+            // kept — the alternate IS still what paints in the additive path —
+            // but the parenthetical was a claim about pdfce's capabilities,
+            // and a stale capability claim in an operator-visible diagnostic
+            // is worse than no parenthetical at all.
+            diag.note("ICCBased rendered through its /Alternate (8.6.5.5)");
             Some(Arc::new(ColorSpace::IccBased {
                 n,
                 alternate,
                 alternate_explicit: true,
+                profile,
             }))
         }
         None => {
@@ -1609,6 +1663,7 @@ fn resolve_icc_based(
                 n,
                 alternate: Arc::new(device),
                 alternate_explicit: false,
+                profile,
             }))
         }
     }

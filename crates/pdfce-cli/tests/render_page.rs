@@ -551,6 +551,13 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // script parses positionally, so a new counter goes on the end
             // (`Pass 199.0`).
             "rendering_intents_set",
+            // `Pass 199.2`, same append-never-insert rule. The PAIR goes on
+            // together deliberately: `icc_managed_paints` without its
+            // `icc_unmanaged_paints` twin would let a reader take a zero as
+            // "colour management agreed with the fallback" when it can equally
+            // mean "the branch was never reached". Two keys, one fact.
+            "icc_managed_paints",
+            "icc_unmanaged_paints",
         ],
         "metrics key order is part of the stable contract"
     );

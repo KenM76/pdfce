@@ -68,6 +68,7 @@ pub mod compositor;
 pub mod display_list;
 pub mod font;
 pub mod gstate;
+pub mod icc;
 pub mod image;
 pub mod interpret;
 pub mod layer_state;
