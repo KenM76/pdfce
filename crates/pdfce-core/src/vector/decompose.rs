@@ -1099,6 +1099,34 @@ pub struct DecomposeDiagnostics {
     /// to KNOW -- an operator who clicks apparently empty space and selects
     /// something has no explanation available, and this is it.
     pub paths_invisible_by_alpha: usize,
+    /// `sh` shading operators encountered, which this model produces NO
+    /// object for (`Pass 221.0`).
+    ///
+    /// ★ A MISSING OBJECT, not a wrong one — and that is why it is counted
+    /// rather than fixed. An operator who cannot select a visible gradient has
+    /// no way to tell "pdfce does not model this" from "I missed it", and the
+    /// renderer paints it, so the canvas and the object list disagree with
+    /// nothing explaining why.
+    ///
+    /// Modelling a shading as a selectable object is a real feature with its
+    /// own geometry question (a `sh` fills the current clip, which this model
+    /// does not track). Counting it is the honest interim.
+    pub shadings_unmodelled: usize,
+    /// Marked-content sections tagged `/OC` — optional content, i.e. LAYERS
+    /// (`Pass 221.0`).
+    ///
+    /// ★ The model does not resolve layer visibility, so content on a layer
+    /// the document turns OFF is listed and selectable while the renderer
+    /// correctly does not draw it. The two disagree, and before this counter
+    /// nothing said so.
+    ///
+    /// Counted rather than filtered because filtering needs the catalog's
+    /// `/OCProperties` default configuration, which this walk does not have —
+    /// and because it was MEASURED as rare: 0.6% of a 500-file corpus sample
+    /// carry optional content at all, and **none** had a layer switched off by
+    /// default. A shell that sees a non-zero count here can warn; a shell that
+    /// sees zero — which is almost every file — needs nothing.
+    pub oc_sections: usize,
 }
 
 /// One object reached by **descending into a form XObject** — the unit a hit
@@ -2523,6 +2551,18 @@ impl<'a> Decomposer<'a> {
             // text object's bounds, and not the line width the defect was
             // first reported against. Both are handled; only one of them was
             // ever going to fire on a real file.
+            // `sh` (§8.7.4.2) paints a shading directly. This model produces
+            // no object for it, so it is COUNTED -- see
+            // `DecomposeDiagnostics::shadings_unmodelled`.
+            b"sh" => self.diag.shadings_unmodelled += 1,
+            // `BDC` with an `/OC` tag opens an optional-content (layer)
+            // section. Visibility is not resolved here; counted so a shell can
+            // tell that a page HAS layers.
+            b"BDC" => {
+                if operand_names(operands).first().is_some_and(|n| n == b"OC") {
+                    self.diag.oc_sections += 1;
+                }
+            }
             b"gs" => {
                 if let Some(g) = operand_names(operands)
                     .first()

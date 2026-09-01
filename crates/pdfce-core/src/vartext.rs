@@ -177,7 +177,44 @@ pub struct DefaultAppearance {
     pub font_size: f64,
     /// The text colour, or `None` when the `/DA` sets none — in which case
     /// the text renders in the graphics-state default `0 g` black (VT2).
+    ///
+    /// ★ `None` is AMBIGUOUS ON ITS OWN and must be read with
+    /// [`Self::color_unmodelled`]. See that field.
     pub color: Option<TextColor>,
+    /// The `/DA` set a colour in a space this parser does not model —
+    /// `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed`, `/Lab` — via
+    /// `cs`/`CS` and `sc`/`scn` (`Pass 221.0`).
+    ///
+    /// # Why a flag beside `color` rather than a `TextColor::Other`
+    ///
+    /// Because [`TextColor`] is used for WRITING as well as reading, and an
+    /// authoring path is entitled to a limited palette. A variant that
+    /// `apply_fill` could not emit would push the problem into the emitter,
+    /// where the only options are inventing a colour or emitting none.
+    ///
+    /// # ★★ The defect this closes
+    ///
+    /// This parser handled `g G rg RG k K` and swallowed everything else in a
+    /// `_ => {}` arm, so a `/DA` of `/Sep1 cs 1 scn /Helv 12 Tf` yielded
+    /// `color: None`. And `None` already meant something specific — *"the
+    /// `/DA` sets none, so the text renders black"*.
+    ///
+    /// So an unmodellable colour was ALIASED ONTO "the file specified
+    /// nothing", and the generated appearance was painted BLACK. That is a
+    /// silent inference presented as a fact about the file, and unlike the
+    /// sibling defects in the vector model it writes the wrong value into a
+    /// generated `/AP` — into the document.
+    ///
+    /// With this flag the two are distinguishable, so a caller can DISCLOSE
+    /// the narrowing (rule 4) exactly as `text_edit::format` already does for
+    /// the same situation one module over.
+    ///
+    /// # Measured rarity, stated so effort is not misjudged
+    ///
+    /// **Zero** of 268 `/DA` strings across a 500-file sample of the corpus
+    /// use a non-device colour space. This is a correctness fix for a case
+    /// that is real, cheap to close, and rare — not a common one.
+    pub color_unmodelled: bool,
 }
 
 /// Why a variable-text appearance could not be generated. Every variant
@@ -246,6 +283,16 @@ pub struct VarTextAppearance {
     /// which still takes the older height-only route — reporting a bound there
     /// would name a constraint that was never evaluated.
     pub applied_autosize_bound: Option<AutoFitBound>,
+    /// The `/DA` specified a colour in a space pdfce does not model, so this
+    /// appearance was generated in the §8.6.8 default BLACK instead
+    /// (`Pass 221.0`).
+    ///
+    /// ★ The rule-4 disclosure for a colour NARROWING, and the reason the
+    /// parser now distinguishes "no colour" from "a colour I cannot model":
+    /// pdfce is substituting a colour the file did not ask for, into a
+    /// generated appearance that is written to the document. Silent would be
+    /// the sneaky half.
+    pub da_colour_unmodelled: bool,
     /// How many characters had no `WinAnsi` code and were substituted with
     /// `?` (a named Base-14-Latin limit — disclosed, never silent).
     pub unencodable_chars: usize,
@@ -576,6 +623,7 @@ pub fn parse_default_appearance(da: &[u8]) -> Result<DefaultAppearance, VarTextE
     let cs = ContentStream::parse(da.to_vec()).map_err(|_| VarTextError::MalformedDa)?;
     let mut tf: Option<(Vec<u8>, f64)> = None;
     let mut color: Option<TextColor> = None;
+    let mut color_unmodelled = false;
     let mut tm_count = 0usize;
 
     for op in cs.operations() {
@@ -618,6 +666,20 @@ pub fn parse_default_appearance(da: &[u8]) -> Result<DefaultAppearance, VarTextE
                     color = Some(TextColor::Cmyk(c, m, y, k));
                 }
             }
+            // §8.6.8's colour-space operators. Previously swallowed by the
+            // `_ => {}` arm below, which aliased "a colour pdfce cannot model"
+            // onto "the file set no colour" -- and the latter has a defined
+            // meaning here (render black), so the generated appearance came
+            // out black with no disclosure.
+            //
+            // `cs`/`CS` alone is enough to set the flag: §8.6.8 says selecting
+            // a space also sets the colour to that space's initial value, so a
+            // `/Sep1 cs` with no `scn` has still chosen a colour this parser
+            // cannot represent.
+            b"cs" | b"CS" | b"sc" | b"scn" | b"SC" | b"SCN" => {
+                color_unmodelled = true;
+                color = None;
+            }
             b"Tm" => tm_count += 1,
             _ => {}
         }
@@ -631,6 +693,7 @@ pub fn parse_default_appearance(da: &[u8]) -> Result<DefaultAppearance, VarTextE
         font_name,
         font_size,
         color,
+        color_unmodelled,
     })
 }
 
@@ -771,6 +834,7 @@ pub fn build_variable_text(
         resources: res,
         applied_autosize,
         applied_autosize_bound,
+        da_colour_unmodelled: parsed.color_unmodelled,
         unencodable_chars,
         used_font: font,
         used_size: size,
@@ -1107,6 +1171,76 @@ mod tests {
         let mut out = Vec::new();
         crate::writer::content::emit_number(&mut out, v);
         String::from_utf8(out).unwrap()
+    }
+
+    // -- a /DA colour pdfce cannot model (Pass 221.0) ------------------------
+
+    /// ★★★ A `/DA` colour in a space pdfce cannot model must be DISTINGUISHABLE
+    /// from a `/DA` that sets no colour at all.
+    ///
+    /// # The defect
+    ///
+    /// The parser handled `g G rg RG k K` and swallowed everything else in its
+    /// `_ => {}` arm, so `/Sep1 cs 1 scn` yielded `color: None`. And `None`
+    /// already had a defined meaning — *"the `/DA` sets none, so the text
+    /// renders black"*.
+    ///
+    /// So an unmodellable colour was ALIASED ONTO the file's own instruction,
+    /// and the generated appearance was painted black with nothing able to
+    /// report it. Unlike the sibling defects in the vector model, this one
+    /// writes the wrong value into a generated `/AP` — into the document.
+    #[test]
+    fn a_da_colour_in_an_unmodelled_space_is_not_confused_with_no_colour() {
+        let spot = parse_default_appearance(b"/Sep1 cs 1 scn /Helv 12 Tf").unwrap();
+        assert_eq!(spot.color, None, "pdfce still cannot represent the colour");
+        assert!(
+            spot.color_unmodelled,
+            "★ but it must record that one was SPECIFIED — that is the whole \
+             distinction, and painting black without it is a silent inference"
+        );
+
+        // The control: a `/DA` that genuinely sets no colour.
+        let bare = parse_default_appearance(b"/Helv 12 Tf").unwrap();
+        assert_eq!(bare.color, None);
+        assert!(
+            !bare.color_unmodelled,
+            "a /DA with no colour operator at all must NOT claim a narrowing"
+        );
+
+        // And a device colour is unaffected in both fields.
+        let dev = parse_default_appearance(b"1 0 0 rg /Helv 12 Tf").unwrap();
+        assert_eq!(dev.color, Some(TextColor::Rgb(1.0, 0.0, 0.0)));
+        assert!(!dev.color_unmodelled);
+    }
+
+    /// Selecting a space is enough, even with no value operator.
+    ///
+    /// §8.6.8: selecting a colour space also sets the colour to that space's
+    /// initial value — so `/Sep1 cs` with no `scn` has still chosen a colour
+    /// this parser cannot represent.
+    #[test]
+    fn selecting_a_space_alone_counts_as_a_narrowing() {
+        let a = parse_default_appearance(b"/Sep1 cs /Helv 12 Tf").unwrap();
+        assert!(a.color_unmodelled);
+    }
+
+    /// The narrowing reaches the generated appearance, where a caller can
+    /// disclose it.
+    #[test]
+    fn the_narrowing_is_reported_on_the_generated_appearance() {
+        let a = build_variable_text(
+            bbox(200.0, 20.0),
+            "hi",
+            b"/Sep1 cs 1 scn /Helv 12 Tf",
+            Quadding::Left,
+            false,
+            &helv(),
+        )
+        .unwrap();
+        assert!(
+            a.da_colour_unmodelled,
+            "the appearance must carry the narrowing so a shell can say so"
+        );
     }
 
     // -- auto-size (VT1) ------------------------------------------------

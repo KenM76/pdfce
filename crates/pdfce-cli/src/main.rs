@@ -18534,6 +18534,21 @@ which will overflow"
         };
         eprintln!("pdfce-cli: field {name:?}: auto-sized to {sz:.3} pt ({why})");
     }
+    if out.da_colour_unmodelled {
+        // ★ Rule 4: pdfce substituted a colour the FILE DID NOT ASK FOR into
+        // an appearance it wrote into the document. The `/DA` named a
+        // `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed` or `/Lab`
+        // colour, none of which this generator can emit, so the text was
+        // painted in §8.6.8's default black.
+        //
+        // Before `Pass 221.0` the parser aliased that onto "the /DA set no
+        // colour" -- which ALREADY meant "render black" -- so the narrowing
+        // was indistinguishable from the file's own instruction and nothing
+        // could report it.
+        eprintln!(
+            "pdfce-cli: field {name:?}: the field's default appearance names a colour space pdfce cannot emit (Separation/DeviceN/ICCBased/Indexed/Lab), so this appearance was generated in BLACK -- a narrowing, not the colour the file asked for"
+        );
+    }
     if out.unencodable_chars > 0 {
         eprintln!(
             "pdfce-cli: field {name:?}: {} character(s) had no WinAnsi code and were substituted \

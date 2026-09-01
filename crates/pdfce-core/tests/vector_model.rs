@@ -427,3 +427,40 @@ fn an_extgstate_width_is_undone_by_a_grestore() {
         "★ after Q the width must return to the `2 w`, not stay at 7.5: {widths:?}"
     );
 }
+
+/// A `sh` shading produces no object, and says so.
+///
+/// The renderer paints it; this model does not list it. Before the counter,
+/// an operator who could not select a visible gradient had no way to tell
+/// "pdfce does not model this" from "I missed it".
+#[test]
+fn a_shading_operator_is_counted_rather_than_silently_absent() {
+    let m = model_of(&page_with_extgstate(
+        "/Sh0 sh
+",
+    ));
+    assert!(
+        m.objects.is_empty(),
+        "no object is produced for a shading -- that is the known gap"
+    );
+    assert_eq!(
+        m.diagnostics.shadings_unmodelled, 1,
+        "★ and the gap is DISCLOSED, which is the whole change"
+    );
+}
+
+/// An optional-content section is counted, so a shell can tell a page has
+/// layers whose visibility this model does not resolve.
+#[test]
+fn an_optional_content_section_is_counted() {
+    let m = model_of(&page_with_extgstate(
+        "/OC /MC0 BDC 0 0 10 10 re f EMC
+",
+    ));
+    assert_eq!(m.diagnostics.oc_sections, 1);
+    assert_eq!(
+        m.objects.len(),
+        1,
+        "the content is still listed -- it is a disagreement with the renderer,          not a reason to hide the object"
+    );
+}

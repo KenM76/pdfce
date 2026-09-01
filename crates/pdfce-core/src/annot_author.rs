@@ -2599,6 +2599,10 @@ pub struct FieldAppearance {
     /// Which constraint decided [`Self::applied_autosize`]. See
     /// [`crate::vartext::AutoFitBound`].
     pub applied_autosize_bound: Option<crate::vartext::AutoFitBound>,
+    /// The field's `/DA` named a colour space pdfce does not model, so this
+    /// appearance was generated in black. See
+    /// [`crate::vartext::VarTextAppearance::da_colour_unmodelled`].
+    pub da_colour_unmodelled: bool,
     /// How many characters had no `WinAnsi` code and were substituted with
     /// `?` (a named Base-14-Latin limit, disclosed).
     pub unencodable_chars: usize,
@@ -3010,6 +3014,7 @@ pub fn build_push_button_appearance(
             }
         }),
         applied_autosize_bound: va.applied_autosize_bound,
+        da_colour_unmodelled: va.da_colour_unmodelled,
         unencodable_chars: va.unencodable_chars,
     })
 }
@@ -3066,6 +3071,7 @@ pub fn build_field_text_appearance(
         content: va.content,
         applied_autosize: va.applied_autosize,
         applied_autosize_bound: va.applied_autosize_bound,
+        da_colour_unmodelled: va.da_colour_unmodelled,
         unencodable_chars: va.unencodable_chars,
     })
 }
