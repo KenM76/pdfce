@@ -670,6 +670,44 @@ def main():
         eng = None
         if marks:
             verdict = "X"
+            # THE SAME HONESTY GUARD THE STRIP COMPARISON ALREADY HAS, applied
+            # to the trap detector, which had none.
+            #
+            # A trap is an X-shaped mark that a CORRECT render makes invisible.
+            # The whole verdict rests on the premise that a correct engine
+            # trips zero of them -- so if the REFERENCE engine's own render
+            # trips traps on this patch, that premise is false HERE and the
+            # detector is not discriminating between a good render and a bad
+            # one. It is reading the patch's ordinary artwork as a mark.
+            #
+            # ★ Measured, 2026-09-01, across all six patches this harness was
+            # calling FAIL:
+            #
+            #   patch      pdfce traps    reference traps
+            #   PCS 2.0        7               0
+            #   PCS 3.0        3               0
+            #   PCS 4.0        3               0
+            #   PCS 8.1        1               0
+            #   PCS 13.0       2               0
+            #   PCS 16.1       1               2      <-- reference trips MORE
+            #
+            # Five of the six are genuine: the reference is clean and pdfce is
+            # not. The sixth is this harness inventing a defect -- pdfce trips
+            # FEWER marks there than the engine being used as ground truth,
+            # and was still scored FAIL while the reference would have scored
+            # worse.
+            #
+            # ⇒ The verdict becomes TRAP?, not pass. "The instrument cannot
+            # say" is the honest answer and is deliberately NOT a pass: the
+            # patch may still be rendering wrongly for reasons this detector
+            # cannot see. Promoting it to `clean` would repeat the exact error
+            # `CRIT?` and `MARK?` were introduced to end.
+            if args.reference_dir:
+                rcand = os.path.join(args.reference_dir, f.replace(".pdf", "") + ".png")
+                if not os.path.exists(rcand):
+                    rcand = os.path.join(args.reference_dir, f + ".png")
+                if os.path.exists(rcand) and find_traps(rcand):
+                    verdict = "TRAP?"
         elif ref_style:
             verdict = "REF"          # scored, not adjudicated -- see docstring
             # With a known-good engine's render of the SAME patch, the strip
@@ -736,15 +774,20 @@ def main():
 
     clean = [r for r in results if r["verdict"] in ("clean", "REF-PASS")]
     failed = [r for r in results if r["verdict"] in ("X", "REF-FAIL")]
-    ref = [r for r in results if r["verdict"] in ("REF", "MARK?", "CRIT?")]
+    ref = [r for r in results if r["verdict"] in ("REF", "MARK?", "CRIT?", "TRAP?")]
     broke = [r for r in results if r["verdict"] == "RENDER-FAILED"]
     for r in results:
         mark = {"clean": "  ok  ", "X": " FAIL ", "REF": " ref? ",
                 "REF-PASS": "  ok  ", "REF-FAIL": " FAIL ",
-                "MARK?": " mark?", "CRIT?": " crit?",
+                "MARK?": " mark?", "CRIT?": " crit?", "TRAP?": " trap?",
                 "RENDER-FAILED": " ERR  "}[r["verdict"]]
         if r["verdict"] == "X":
             extra = f"  {r['traps']} trap(s) at {' '.join(r['where'])}"
+        elif r["verdict"] == "TRAP?":
+            extra = (f"  {r['traps']} trap(s) detected, but the REFERENCE engine's "
+                     "own render trips traps here too, so the detector is reading "
+                     "ordinary artwork as a mark on this layout and cannot "
+                     "discriminate; unjudged rather than FAIL (and NOT a pass)")
         elif r["verdict"] == "MARK?":
             extra = ("  scored by a check mark that should be PRESENT; "
                      "this harness only detects marks that should be ABSENT")
@@ -764,7 +807,7 @@ def main():
           f"{len(failed)} FAIL, "
           f"{len(clean)} pass, "
           f"{len(ref)} UNRESOLVED (reference-strip, positive-criterion, "
-          f"or no detector), "
+          f"no detector, or a trap the reference trips too), "
           f"{len(broke)} render errors")
     print()
     print("A 'clean' verdict is the SUITE's own pass criterion for an X-trap")
@@ -777,6 +820,11 @@ def main():
     print("images inline and are scored, not adjudicated, because no")
     print("known-passing patch exists yet to calibrate a threshold against.")
     print("A correlation well below 1.0 means the strips visibly differ.")
+    print("A 'trap?' row is NOT a pass and NOT a failure: this harness")
+    print("detected trap marks, but the REFERENCE engine's own render trips")
+    print("traps on the same patch, so the detector is reading ordinary")
+    print("artwork as a mark there and cannot tell a good render from a bad")
+    print("one. The patch may still be wrong for reasons nothing here sees.")
     return 0
 
 
