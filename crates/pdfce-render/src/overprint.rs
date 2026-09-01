@@ -639,8 +639,11 @@ pub fn classify(
         } else {
             SourceKind::DeviceCmykDirect
         }),
-        // ★ `Pass 143.0` — a DIVERGENCE from ISO 32000-1 toward Acrobat,
-        // offered as a SETTING. (Called "the §8.6.7 ambiguity" until
+        // ★ `Pass 143.0` — a DIVERGENCE from ISO 32000-1, offered as a
+        // SETTING. (It said "toward Acrobat" until `Pass 206.0`. It diverges
+        // toward Acrobat over a SPOT backdrop and AWAY from Acrobat over
+        // process components, so the direction is a property of the geometry
+        // rather than of the setting.) (Called "the §8.6.7 ambiguity" until
         // `Pass 174.6`: §8.6.7's next sentence excludes "conversions from
         // some other colour space" by name, and Tables 148/149 row 2
         // tabulate the case and give it OPM-0 behaviour. ISO 32000-2 deletes
@@ -649,11 +652,19 @@ pub fn classify(
         // The literal reading gives these `OtherProcess`, whose Table 149 row
         // is `[Source; 4]` in all three columns — so the paint replaces the
         // backdrop in every component and a 50 % grey KNOCKS A SPOT BACKDROP
-        // OUT. Acrobat converts grey to K-only `DeviceCMYK` first and then
-        // applies `OPM 1`, so its zero C, M and Y preserve the backdrop.
+        // OUT. This setting converts grey to K-only `DeviceCMYK` first and
+        // then applies `OPM 1`, so its zero C, M and Y preserve the backdrop.
+        // Acrobat does the same over a spot backdrop and does NOT over process
+        // components — measured 2026-09-01, and the agreement over a spot is
+        // for the wrong reason (pdfce flattens the spot into C/M/Y, which this
+        // mis-assignment then happens to preserve).
         //
-        // Both readings are defensible; see `OverprintZeroTintScope` for why,
-        // and for why the default is Acrobat's. **No conversion happens here**
+        // See `OverprintZeroTintScope` for the measurement and for why the
+        // default is nevertheless unchanged. (This said "the default is
+        // Acrobat's"; §11.7.4.5 Table 149 places a DeviceGray source in the
+        // process-space row, so the literal reading is both conforming AND the
+        // one that matches Acrobat on the geometry that can tell.)
+        // **No conversion happens here**
         // — the caller has already resolved the paint to CMYK tints, and for
         // equal RGB `rgb_to_cmyk` yields `[0, 0, 0, 1-g]` exactly. Only the
         // classification moves.

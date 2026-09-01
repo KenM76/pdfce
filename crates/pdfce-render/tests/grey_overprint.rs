@@ -235,9 +235,13 @@ fn the_default_reading_preserves_the_spot() {
     let page = render("grey_op_over_spot.pdf", OverprintZeroTintScope::GreyAsKOnly);
     assert!(
         is_greenish(mark(&page)),
-        "Acrobat's reading: grey converts to K-only CMYK, whose zero C, M and \
-         Y leave the backdrop standing. Expected the green spot to survive, \
-         got {:?}",
+        "the default reading: grey converts to K-only CMYK, whose zero C, M \
+         and Y leave the backdrop standing. Expected the green spot to \
+         survive, got {:?}. (This message said \"Acrobat's reading\" until \
+         Pass 206.0 refuted that on process geometry -- fourteen lines below \
+         the doc comment carrying the refutation, in the file that Pass \
+         edited. Renaming the test swept the NAME; the assertion message is a \
+         second copy of the same claim and survived it.)",
         mark(&page)
     );
 }

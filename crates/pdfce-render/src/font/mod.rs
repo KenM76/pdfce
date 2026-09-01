@@ -853,10 +853,11 @@ impl Default for RenderOptions {
             // intent is subtractive -- see `PageBlendSpaceSource`, whose
             // docs carry why this is a choice and not a right answer.
             page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource::default(),
-            // Acrobat's reading of §8.6.7, not the literal one. This is a
-            // print-conformance axis whose measurement instrument is authored
-            // to press behaviour, so the default follows what the instrument
-            // is FOR -- see `OverprintZeroTintScope::GreyAsKOnly`.
+            // A DIVERGENCE from §8.6.7's literal reading, kept as the default
+            // for the sequencing reason given at
+            // `OverprintZeroTintScope::GreyAsKOnly` -- NOT because it is
+            // "Acrobat's reading", which was measured false on process
+            // geometry in `Pass 206.0`.
             overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope::default(),
             // OFF. The one lossy knob in this struct, and decision 082
             // puts that choice with the operator rather than with the

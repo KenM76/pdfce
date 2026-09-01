@@ -174,16 +174,42 @@ def unpushed_message_hits(term):
 
     The two checks above scan the WORKING TREE. A commit message is neither a
     tracked file nor an untracked one, so it was invisible to this gate --
-    which reported clean, correctly and uselessly, while **forty of 1,217
-    commit messages in published history carried the term**. The repository is
-    public, so those are published.
+    which reported clean, correctly and uselessly, while **82 of 1,220 commit
+    messages in published history carry one of the terms** (6.7%). The
+    repository is public, so those are published.
+
+    ★★ THAT FIGURE WAS FIRST RECORDED HERE AS "forty of 1,217", AND IT WAS AN
+    UNDERCOUNT BY HALF. The correction is kept visible rather than silently
+    overwritten, because the mistake is the instructive part and because it is
+    partly unfixable — see below.
+
+    This gate searches **two** needles: the suite's full name and its
+    abbreviation. The census that produced "forty" derived its search term from
+    a FIXTURE FILENAME with `sed`, which yields only the abbreviation. So it
+    measured one needle and reported the total:
+
+        full name      76 commits
+        abbreviation   40 commits
+        either         82 commits   (34 carry both)
+
+    ⇒ A sweep is only as good as its spelling, and the fix is not "be more
+    careful" — it is to call [`needles`], which is this project's single source
+    of truth for what the terms ARE, instead of re-deriving one. Re-deriving a
+    search term from a sample of the data is how a partial match comes back
+    looking like a complete one.
+
+    ★ AND THE WRONG NUMBER IS NOW PUBLISHED, in the subject line and body of
+    the very commit that added this check. Those two copies cannot be corrected
+    without exactly the history rewrite the operator question below is about,
+    so this Pass is its own worked example of why that question is not
+    rhetorical. This docstring was cheap to fix; a commit message was not.
 
     ★ THIS GATE CANNOT FIX THOSE, AND DELIBERATELY DOES NOT TRY. Removing a
     string from a published commit message means rewriting published history,
     which project rule 8 reserves to the operator, and which this project has
     direct evidence is destructive: `check-cited-commits-exist.py` found
     fourteen documents whose cited hashes had already been broken by exactly
-    that. So the existing forty are an OPERATOR QUESTION recorded in
+    that. So the existing 82 are an OPERATOR QUESTION recorded in
     `ROADMAP.md`, not something a gate may decide.
 
     What a gate CAN do is stop the count growing. `origin/main..HEAD` is

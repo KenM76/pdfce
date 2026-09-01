@@ -694,8 +694,15 @@ pub enum CmykIntent {
 /// 2.0 this is much closer to a real silence. Under 1.7 it is not.
 ///
 /// ⇒ **[`Self::GreyAsKOnly`], the shipped default, is a deliberate
-/// divergence from ISO 32000-1 toward Acrobat**, and it is the right default
-/// for the reason given below — but it must be *described* as a divergence.
+/// divergence from ISO 32000-1**, and it must be *described* as a divergence.
+///
+/// ★ This sentence said "…divergence from ISO 32000-1 **toward Acrobat**, and
+/// it is the right default". Both halves are now qualified. It diverges toward
+/// Acrobat *over a spot backdrop* and **away** from Acrobat over process
+/// components, measured 2026-09-01 — so "toward Acrobat" is not a property of
+/// the setting, it is a property of the geometry you test it on. Neither value
+/// matches Acrobat everywhere, because the real difference is that Acrobat has
+/// a spot plane and pdfce does not. See [`Self::GreyAsKOnly`] for the numbers.
 /// A divergence owes the operator a disclosure that an ambiguity does not,
 /// and calling it an ambiguity was quietly discharging that obligation by
 /// misnaming it.
@@ -723,8 +730,16 @@ pub enum CmykIntent {
 /// [`Self::DeviceCmykOnly`] the grey paints all four components and **knocks
 /// the spot out**; under [`Self::GreyAsKOnly`] its zero C, M and Y preserve
 /// the backdrop and only K is laid down. Measured against Acrobat on the
-/// print-conformance suite: 84,120,34 (Acrobat, and this setting's default)
-/// versus 127,127,127 (the literal reading).
+/// print-conformance suite, **over a SPOT backdrop**: 84,120,34 (Acrobat, and
+/// this setting's default) versus 127,127,127 (the literal reading).
+///
+/// ★ The qualifier "over a spot backdrop" was added 2026-09-01 and changes
+/// what this measurement supports. It is a real measurement and it still
+/// holds — but it was being read as "the default matches Acrobat", full stop,
+/// and over PROCESS components the opposite is true (Acrobat 255,255,255,
+/// this default 142,198,63). The agreement here is also for the wrong reason:
+/// pdfce flattens the spot into C/M/Y for want of a plane, and this reading's
+/// mis-assignment then happens to preserve exactly those channels.
 ///
 /// ★ **This example is about what PDFCE does, not about what the standard
 /// requires**, and the difference is the section above. Tables 148/149 put
@@ -2595,11 +2610,16 @@ impl Settings {
              # ISO 32000-1 8.6.7 scopes that rule to a DeviceCMYK source, and its one\n\
              # escape hatch points at 8.6.5.7, which covers CIE-BASED spaces only. So a\n\
              # DeviceGray fill overprinting a spot backdrop either knocks it out (the\n\
-             # literal reading) or preserves it (Acrobat, which converts grey to K-only\n\
-             # CMYK first and then applies the rule). Both are defensible.\n\
+             # literal reading) or preserves it (converting grey to K-only CMYK first,\n\
+             # then applying the rule). That is a DIVERGENCE, not a spec ambiguity:\n\
+             # 11.7.4.5 Table 149 puts a DeviceGray source in the process-space row.\n\
              #\n\
              #   device_cmyk_only   8.6.7 to the letter; the spot is knocked out\n\
-             #   grey_as_k_only     DEFAULT. Acrobat's reading, for DeviceGray only\n\
+             #   grey_as_k_only     DEFAULT. Preserves the backdrop, DeviceGray only.\n\
+             #                      Matches Acrobat over a SPOT backdrop; does NOT match\n\
+             #                      it over process components (measured 2026-09-01).\n\
+             #                      Neither setting matches everywhere -- the real\n\
+             #                      difference is that Acrobat has a spot plane.\n\
              #   all_process_spaces also DeviceRGB and CalRGB. Principled but\n\
              #                      unmeasured -- no corpus patch exercises it\n\
              #\n\
