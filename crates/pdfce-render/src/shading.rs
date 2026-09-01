@@ -525,6 +525,52 @@ impl ColorRamp {
         !self.cmyk.is_empty()
     }
 
+    /// Which of the four process channels this ramp EVER writes
+    /// (`Pass 201.0`).
+    ///
+    /// # Why a colorant NAME is not enough to answer this
+    ///
+    /// Table 149's rules are selected on the colorant names a source space
+    /// declares. For a **spot** colorant that is not the whole story: the
+    /// spot's ink lands in whichever process channels its tint transform
+    /// writes, and its NAME maps to none of them. `Pass 195.0` fixed the
+    /// resulting loss by widening a mixed source to `[Source; 4]` -- which
+    /// writes the source's value into channels the source never claimed.
+    ///
+    /// ★★ THAT TRADE WAS DOCUMENTED AS SAFE AND WAS NOT. `Pass 195.0`'s own
+    /// comment reads *"it writes the source's M and K, which are 0 for this
+    /// shading, so it knocks out backdrop magenta and black that the spot
+    /// never claimed. No patch in the conformance corpus detects that"*. One
+    /// does, on **sixteen** marks: a `1 0 1 .5 k` check mark under an
+    /// overprinting `/DeviceN [<spot>, /Cyan]` shading lost its `K = 0.5` to
+    /// the shading's `K = 0`, and vanished.
+    ///
+    /// # Why this is answerable HERE and was not answerable there
+    ///
+    /// `Pass 195.0` could not narrow per channel because
+    /// `cmyk_group_rules` is called once per graphics state with a
+    /// PLACEHOLDER colour (`[0, 0, 0, 0]`) -- the real colour only exists
+    /// per sample. A ramp is different: it is the whole set of colours this
+    /// shading can produce, already built, so its reach is a property of the
+    /// SHADING rather than of a sample, and computing it costs one pass over
+    /// samples that already exist.
+    ///
+    /// A channel counts as written if any sample is non-zero. Zero ink in
+    /// every sample means the shading never touches that plane, and Table 149
+    /// says a backdrop component a source does not claim is kept.
+    #[must_use]
+    pub fn ink_reach(&self) -> [bool; 4] {
+        let mut reach = [false; 4];
+        for sample in self.cmyk.iter().flatten() {
+            for (i, r) in reach.iter_mut().enumerate() {
+                if sample.get(i).is_some_and(|v| *v > 0.0) {
+                    *r = true;
+                }
+            }
+        }
+        reach
+    }
+
     #[must_use]
     pub fn at(&self, t: f32) -> Option<Rgb> {
         self.samples.get(self.index_of(t)).copied().flatten()

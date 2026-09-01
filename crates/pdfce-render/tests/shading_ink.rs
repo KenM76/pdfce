@@ -178,3 +178,97 @@ fn the_two_pages_are_not_required_to_match_each_other() {
         "cross-page difference is {across:.2} — recorded deliberately, never pinned"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Pass 201.0 -- an overprinting MIXED /DeviceN shading must not write channels
+// it never claims (ISO 32000-1 SS11.7.4.3, Table 149).
+// ---------------------------------------------------------------------------
+
+/// Mean luminance over the shaded rectangle's interior.
+///
+/// A mean rather than a probe pixel: the shading is a ramp, so any single point
+/// is a statement about one `t` value and the claim is about the whole band.
+fn mean_luma(page: &RenderedPage) -> f64 {
+    let w = page.pixmap.width();
+    let h = page.pixmap.height();
+    let px = page.pixmap.pixels();
+    let (mut total, mut n) = (0.0f64, 0.0f64);
+    for y in (h / 4)..(h * 3 / 4) {
+        for x in (w / 4)..(w * 3 / 4) {
+            let p = px[(y * w + x) as usize];
+            total += 0.30 * f64::from(p.red())
+                + 0.59 * f64::from(p.green())
+                + 0.11 * f64::from(p.blue());
+            n += 1.0;
+        }
+    }
+    total / n
+}
+
+/// THE ASSERTION. Overprint ON must KEEP the backdrop's black.
+///
+/// # The trade this pins
+///
+/// `Pass 195.0` fixed a spot colorant's ink being DROPPED by widening a mixed
+/// `/DeviceN` to write all four components. That wrote channels the source
+/// never claimed, and its own comment said so while concluding it was safe:
+/// *"it writes the source's M and K, which are 0 for this shading, so it knocks
+/// out backdrop magenta and black that the spot never claimed. No patch in the
+/// conformance corpus detects that."*
+///
+/// One does. A `1 0 1 .5 k` mark under an overprinting
+/// `/DeviceN [<spot>, /Cyan]` shading lost its `K = 0.5` to the shading's
+/// `K = 0` and vanished -- sixteen times on one page.
+///
+/// K is a plane pdfce HAS, so this was not the missing per-spot-colorant plane
+/// that several other conformance patches need. It was ink being ERASED by a
+/// fix for ink being DROPPED.
+///
+/// # Why this compares against the control rather than an absolute colour
+///
+/// The absolute value depends on the CMYK-to-sRGB conversion, which is
+/// separately known-inaccurate. Pinning a number here would make this test fail
+/// for the wrong reason the day that is fixed.
+///
+/// Sabotage-verified: reverting the narrowing makes both pages render at
+/// luminance 171.5 -- IDENTICAL, because the K is knocked out either way.
+#[test]
+fn an_overprinting_mixed_devicen_shading_keeps_the_backdrops_black() {
+    let on = mean_luma(&render("shading-overprint-mixed-spot-keeps-k.pdf"));
+    let off = mean_luma(&render("shading-overprint-off-control.pdf"));
+    assert!(
+        on < off - 20.0,
+        "overprint ON must keep the backdrop's K = 0.5 and render DARKER than \
+         the overprint-OFF control, which correctly replaces it. Got on={on:.1}, \
+         off={off:.1}. A small gap means the mixed-/DeviceN case is writing the \
+         source's K = 0 over backdrop black the shading never claimed"
+    );
+}
+
+/// The CONTROL, asserted positively: the shading really does paint, and ramps.
+///
+/// Without this, the test above is satisfied by a build where the overprinting
+/// shading paints NOTHING -- which is not hypothetical, it is what the
+/// spot-only refusal does one branch away in the same function. A blank page
+/// over a `1 0 1 0.5 k` rectangle would be dark too.
+#[test]
+fn the_overprinting_shading_actually_paints_and_ramps() {
+    let page = render("shading-overprint-mixed-spot-keeps-k.pdf");
+    let w = page.pixmap.width();
+    let h = page.pixmap.height();
+    let px = page.pixmap.pixels();
+    let at = |x: u32| {
+        let p = px[((h / 2) * w + x) as usize];
+        (p.red(), p.green(), p.blue())
+    };
+    let (left, right) = (at(w / 5), at(w * 4 / 5));
+    assert_ne!(
+        left, right,
+        "the shading must RAMP across the band; identical ends mean its function \
+         was not evaluated and this fixture asserts nothing"
+    );
+    assert!(
+        right.2 > left.2 + 40,
+        "expected blue to rise across the spot-to-cyan ramp; got left={left:?} right={right:?}"
+    );
+}

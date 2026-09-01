@@ -118,11 +118,84 @@ def build(subtractive: bool) -> bytes:
     ])
 
 
+# ---------------------------------------------------------------------------
+# Pass 201.0 -- an overprinting MIXED /DeviceN shading must not write channels
+# it never claims.
+# ---------------------------------------------------------------------------
+#
+# `Pass 195.0` fixed a spot colorant's ink being DROPPED by widening a mixed
+# `/DeviceN` to write all four components. That wrote channels the source never
+# claimed, and its own comment said so while concluding it was safe: "no patch
+# in the conformance corpus detects that". One does -- a `1 0 1 .5 k` mark under
+# such a shading lost its `K = 0.5` and vanished, sixteen times on one page.
+# **K is a plane pdfce HAS**, so this was ink being ERASED by a fix for ink
+# being DROPPED, not the missing per-spot-colorant plane.
+#
+# The tint transform: stack in `spot cyan`.  exch -> cyan spot | 0 -> cyan spot
+# 0 | exch -> cyan 0 spot | 0 -> cyan 0 spot 0.  Out: C=cyan, M=0, Y=spot, K=0.
+# The simplest program that reaches two channels and NEVER K, which is what
+# makes the fixture discriminating.
+TINT = b"{ exch 0 exch 0 }"
+
+
+def overprint_mixed(overprint: bool) -> bytes:
+    """A `1 0 1 0.5 k` rectangle under a mixed-`/DeviceN` axial shading.
+
+    ★ TWO THINGS HERE ARE LOAD-BEARING AND WERE EACH GOT WRONG ONCE WHILE
+    WRITING THIS, recorded so the next author does not repeat them:
+
+    1. **The page needs a `/Group` with `/CS /DeviceCMYK`.** Without a
+       subtractive blending space pdfce opens no colorant buffer, Table 149
+       never runs, and the overprint-on and overprint-off pages render
+       IDENTICALLY -- the fixture asserts nothing while looking fine.
+       `cmyk_buffer=0` was the tell.
+    2. **The shading's `/Function` and the colour space's tint transform are
+       DIFFERENT functions.** The shading's maps the parametric `t` (ONE input)
+       to the space's two components; the tint transform maps those two to
+       DeviceCMYK. Handing the tint transform to the shading gives a two-input
+       function one input and the ramp comes out FLAT -- while still reporting
+       `shadings_painted=1`.
+    """
+    op = b"true" if overprint else b"false"
+    content = (
+        b"1 0 1 0.5 k 20 20 160 160 re f\n"
+        b"q /GS0 gs /Sh0 sh Q\n"
+    )
+    return assemble([
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        b"/Group << /S /Transparency /CS /DeviceCMYK /I false /K false >> "
+        b"/Resources << /ExtGState << /GS0 5 0 R >> /Shading << /Sh0 6 0 R >> >> "
+        b"/Contents 4 0 R >>",
+        stream(b"", content),
+        b"<< /Type /ExtGState /OP " + op + b" /op " + op + b" /OPM 1 >>",
+        b"<< /ShadingType 2 /ColorSpace 7 0 R /Coords [20 0 180 0] "
+        b"/Function 8 0 R /Extend [true true] >>",
+        b"[ /DeviceN [/Spot#20Green /Cyan] /DeviceCMYK 9 0 R ]",
+        # The SHADING's function: t -> (spot, cyan).
+        b"<< /FunctionType 2 /Domain [0 1] /C0 [1 0] /C1 [0 1] /N 1 >>",
+        # The COLOUR SPACE's tint transform: (spot, cyan) -> CMYK.
+        # NOTE the shape: this file's `stream()` supplies the surrounding
+        # `<< ... /Length N >>` itself, so the body passed in must be the
+        # ENTRIES ONLY. Passing a complete dictionary produces `<< << ... >> >>`
+        # and the object fails to parse with `DictKeyNotName`.
+        stream(b"/FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1]", TINT),
+    ])
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, data in {
         "shading-vs-fill-cmyk.pdf": build(subtractive=True),
         "shading-vs-fill-rgb.pdf": build(subtractive=False),
+        "shading-overprint-mixed-spot-keeps-k.pdf": overprint_mixed(True),
+        # ★ The control is not optional: with overprint OFF the source correctly
+        # DOES replace the backdrop, so K goes to 0. Without it, "the band is
+        # dark" is equally satisfied by a build where the shading paints nothing
+        # -- which is what the spot-only refusal produces, one branch away in
+        # the same function.
+        "shading-overprint-off-control.pdf": overprint_mixed(False),
     }.items():
         (OUT / name).write_bytes(data)
         print(f"wrote {OUT / name}  ({len(data)} bytes)")

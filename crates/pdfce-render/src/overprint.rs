@@ -832,6 +832,45 @@ fn process_channel(name: &str) -> Option<usize> {
 ///
 /// `/All` names every colorant by definition (§8.6.6.4) and therefore paints
 /// every channel.
+/// Does this source name a colorant pdfce has no plate for?
+///
+/// The condition `Pass 195.0`'s mixed-case widening turns on, exposed so the
+/// shading route can ask the same question before narrowing that widening back
+/// down. Kept beside `cmyk_group_rules` so the two cannot drift: a caller that
+/// asks this and a rule that acts on it must agree about what "unplatable"
+/// means.
+#[must_use]
+pub fn names_unplatable_spot(source: &SourceKind) -> bool {
+    match source {
+        SourceKind::SeparationOrDeviceN { names } => names.iter().any(|n| match n {
+            Colorant::Named(name) => process_channel(name).is_none(),
+            // `/All` names every colorant, so nothing is unplatable; `/None`
+            // names none.
+            Colorant::All | Colorant::None => false,
+        }),
+        _ => false,
+    }
+}
+
+/// Does this source NAME the colorant for process channel `channel`?
+///
+/// Distinct from "does it put ink there": a named process colorant is claimed
+/// by the source and Table 149 gives it `c_s` regardless of the value, which is
+/// why the shading narrowing must not withdraw it just because a particular
+/// ramp happens to be zero there. A shading that names `/Cyan` and ramps cyan
+/// from 0 to 1 still CLAIMS cyan at `t = 0`.
+#[must_use]
+pub fn names_process_channel(source: &SourceKind, channel: usize) -> bool {
+    match source {
+        SourceKind::SeparationOrDeviceN { names } => names.iter().any(|n| match n {
+            Colorant::Named(name) => process_channel(name) == Some(channel),
+            Colorant::All => true,
+            Colorant::None => false,
+        }),
+        _ => false,
+    }
+}
+
 #[must_use]
 pub fn cmyk_group_rules(
     source: &SourceKind,

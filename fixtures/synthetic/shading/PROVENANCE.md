@@ -87,3 +87,39 @@ python tools/gen-shading-ink-fixtures.py
 The generator is the source of truth; the PDFs are committed so the test suite
 does not require Python. Byte-for-byte reproducible — it takes no timestamp,
 no random seed and no environment input.
+
+## An overprinting mixed-`/DeviceN` shading (Pass 201.0) -- two files
+
+Written by `tools/gen-shading-ink-fixtures.py`; `LEGAL.md` SS5 category (a),
+byte-authored, no PDF library involved. The colorant is named `/Spot Green` --
+a generic name chosen here, not taken from any corpus.
+
+`Pass 195.0` fixed a spot colorant's ink being DROPPED by widening a mixed
+`/DeviceN` to write all four components. That wrote channels the source never
+claimed, and its own comment said so while concluding "no patch in the
+conformance corpus detects that". One does: a `1 0 1 .5 k` mark under such a
+shading lost its `K = 0.5` and vanished, sixteen times on one page. **K is a
+plane pdfce has** -- so this was ink being ERASED by a fix for ink being
+DROPPED, not the missing per-spot-colorant plane.
+
+| File | Claim it makes falsifiable |
+|---|---|
+| `shading-overprint-mixed-spot-keeps-k.pdf` | A `1 0 1 0.5 k` rectangle under an axial `/DeviceN [/Spot Green /Cyan]` shading painted with `/OP true /op true /OPM 1`, whose tint transform writes C and Y and NEVER K. Table 149 must keep the backdrop's `K = 0.5`, so the band renders dark. Under `Pass 195.0`'s widening the source's `K = 0` is written instead and the two pages below become indistinguishable. |
+| `shading-overprint-off-control.pdf` | * The control: the identical page with `/OP false`, where the source correctly DOES replace the backdrop and K goes to 0. Without it, "the band is dark" is equally satisfied by a build where the shading paints nothing at all -- which is what the spot-only refusal produces, one branch away in the same function. |
+
+★ **Two things in these files are load-bearing and were each got wrong once
+while authoring them**, recorded so the next author does not repeat them:
+
+* **The page needs a `/Group` with `/CS /DeviceCMYK`.** Without a subtractive
+  blending space pdfce opens no colorant buffer, Table 149 never runs, and both
+  pages render identically -- the fixture asserts nothing while looking fine
+  (`cmyk_buffer=0` was the tell).
+* **The shading's `/Function` and the colour space's tint transform are
+  DIFFERENT functions.** The shading's maps the parametric `t` (one input) to
+  the space's two components; the tint transform maps those two to CMYK.
+  Handing the tint transform to the shading gives a two-input function one
+  input, and the ramp comes out FLAT -- while still reporting
+  `shadings_painted=1`.
+
+Regenerate with `python tools/gen-shading-ink-fixtures.py`; the writer is
+deterministic, so regenerating must be a byte-for-byte no-op.

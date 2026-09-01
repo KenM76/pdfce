@@ -4688,12 +4688,58 @@ impl Interpreter<'_> {
                 // selects on the colorant NAMES alone. See
                 // `composite_overprint_varying` for why that is a property of
                 // the source kind and not a shortcut.
-                let rules = crate::overprint::cmyk_group_rules(
+                let mut rules = crate::overprint::cmyk_group_rules(
                     &kind,
                     [0.0; 4],
                     true,
                     u8::from(self.gs.current.overprint_mode == 1),
                 );
+
+                // ★★★ NARROW A MIXED SOURCE TO THE CHANNELS THIS SHADING
+                // ACTUALLY WRITES (`Pass 201.0`).
+                //
+                // `Pass 195.0` fixed a real loss -- a mixed `/DeviceN` had its
+                // spot's ink discarded -- by widening the whole source to
+                // `[Source; 4]`. That writes the source's value into channels
+                // the source never claimed, and its own comment said so while
+                // adding "no patch in the conformance corpus detects that".
+                //
+                // ★★ ONE DOES, ON SIXTEEN MARKS. A `1 0 1 .5 k` check mark
+                // under an overprinting `/DeviceN [<spot>, /Cyan]` shading lost
+                // its `K = 0.5` to the shading's `K = 0` and vanished. K is a
+                // plane pdfce HAS -- so this was not the missing spot plane, it
+                // was ink being erased by a fix for ink being dropped.
+                //
+                // The reach is a property of the RAMP, not of a sample, which
+                // is exactly the objection `Pass 195.0` could not answer:
+                // `cmyk_group_rules` runs once per graphics state with a
+                // placeholder colour. A ramp is the whole set of colours this
+                // shading can produce and is already built.
+                //
+                // ★ SCOPED TO THIS ROUTE DELIBERATELY. The same narrowing
+                // applied inside `cmyk_group_rules` for every caller was
+                // MEASURED to regress a duotone image badly (region mean |diff|
+                // 15.91 -> 53.95): at `[Source; 4]` that image is
+                // indistinguishable from Normal and takes the native-ink path,
+                // and narrowing pushes it into `CompatibleOverprint`, where it
+                // comes out greyscale. Image callers keep the old behaviour
+                // until the per-spot plane lands.
+                if crate::overprint::names_unplatable_spot(&kind) {
+                    let reach = shading
+                        .ramp
+                        .as_ref()
+                        .map_or([true; 4], super::shading::ColorRamp::ink_reach);
+                    for (i, rule) in rules.iter_mut().enumerate() {
+                        if *rule == crate::overprint::ComponentRule::Source
+                            && !reach[i]
+                            && !crate::overprint::names_process_channel(&kind, i)
+                        {
+                            // The shading never puts ink here and never named
+                            // this colorant: Table 149 keeps the backdrop.
+                            *rule = crate::overprint::ComponentRule::Backdrop;
+                        }
+                    }
+                }
                 // ★★ THE SPOT-ONLY REFUSAL, `Pass 130.3`. WITHOUT IT THIS
                 // ROUTE ERASES THE SHADING AND EVERY COUNTER READS GREEN.
                 //

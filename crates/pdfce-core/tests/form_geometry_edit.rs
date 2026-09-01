@@ -475,7 +475,9 @@ fn an_edit_inside_a_form_moves_the_page_generation() {
     assert_ne!(
         before,
         s.page_content_generation(0).unwrap(),
-        "an edit INSIDE a form XObject left the page generation unchanged. A shell keying its          decomposition cache on this number now serves a pre-edit model, and PageObjects          addresses content by INDEX -- so the next edit lands on the wrong object and returns Ok"
+        "an edit INSIDE a form XObject left the page generation unchanged. A shell keying its \
+         decomposition cache on this number now serves a pre-edit model, and PageObjects \
+         addresses content by INDEX -- so the next edit lands on the wrong object and returns Ok"
     );
 }
 
