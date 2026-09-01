@@ -2048,6 +2048,61 @@ impl BlendSpaceFrom {
 /// `PGB-A2` in the spec corpus, and deliberately NOT solved differently
 /// from the existing `SEP-A1` question of the same shape. First-wins is
 /// stated here so that the choice is visible rather than emergent.
+/// Does this image's `/ColorSpace` rest on an `ICCBased` space?
+///
+/// # Why this asks the DICTIONARY rather than the decoded image
+///
+/// Because the decoded image can no longer answer. `image::Space` collapses
+/// `[/ICCBased stream]` to `Gray`/`Rgb`/`Cmyk` by its `/N` and drops the
+/// profile — the variants say so in their own doc comments — so by the time a
+/// `DecodedImage` exists, the fact that its source was characterised is gone.
+/// The dictionary still has it.
+///
+/// # What counts, and why `/Indexed` is followed
+///
+/// A palette's entries are resolved through its BASE space, so
+/// `[/Indexed [/ICCBased s] hival lookup]` is an ICC source just as much as a
+/// direct one — and it is the shape a real conformance patch uses, so treating
+/// only the direct case would under-report exactly the file that exposed this.
+///
+/// A `/Separation` or `/DeviceN` over an `ICCBased` alternate is deliberately
+/// NOT followed: there the alternate is a fallback description of a colorant,
+/// not the space the samples are in, and counting it would inflate the number
+/// with paints that were never going to be managed by the source-profile path.
+///
+/// # Depth
+///
+/// Bounded at four levels. `/Indexed` may not nest per §8.6.6.3, so anything
+/// deeper is malformed input rather than a case worth supporting, and an
+/// unbounded walk over attacker-controlled structure is what
+/// `ARCHITECTURE.md` §10 forbids.
+fn image_source_is_iccbased(doc: &DocumentView<'_>, dict: &Dict, resources: &Dict) -> bool {
+    fn walk(doc: &DocumentView<'_>, obj: &Object, resources: &Dict, depth: usize) -> bool {
+        if depth >= 4 {
+            return false;
+        }
+        match doc.resolve(obj) {
+            // A named space resolves through the resource dictionary.
+            Object::Name(n) => resources
+                .get(b"ColorSpace")
+                .map(|o| doc.resolve(o))
+                .and_then(Object::as_dict)
+                .and_then(|d| d.get(n.as_bytes()))
+                .is_some_and(|o| walk(doc, o, resources, depth + 1)),
+            Object::Array(items) => match items.first().map(|o| doc.resolve(o)) {
+                Some(Object::Name(n)) if n.as_bytes() == b"ICCBased" => true,
+                Some(Object::Name(n)) if n.as_bytes() == b"Indexed" => items
+                    .get(1)
+                    .is_some_and(|base| walk(doc, base, resources, depth + 1)),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+    dict.get(b"ColorSpace")
+        .is_some_and(|cs| walk(doc, cs, resources, 0))
+}
+
 /// The document's destination ICC profile, decoded, from `/OutputIntents`.
 ///
 /// # Why this is separate from [`output_intent_blend_space`]
@@ -7262,6 +7317,38 @@ impl Interpreter<'_> {
                 // pdfce cannot fix this without the per-spot-colorant plane.
                 // What it can do, and now does, is STOP CLAIMING THE OUTPUT IS
                 // CONFORMING and count the situation.
+                // ★★★ THE DISCLOSURE COUNTER I SHIPPED THIS MORNING WAS
+                // UNDER-REPORTING, which is worse than not having shipped it.
+                //
+                // `icc_managed_paints` / `icc_unmanaged_paints` are both
+                // incremented inside `authored_cmyk`, which is the
+                // GRAPHICS-STATE paint path. An `ICCBased` IMAGE never goes
+                // through it, so neither counter could ever see one — and the
+                // metrics line therefore read `icc_unmanaged_paints=0` on a
+                // page where half the ICC content was converted without its
+                // profile. Zero meant "nothing was left unmanaged"; it
+                // actually meant "the engine never saw this page".
+                //
+                // Measured on a conformance patch that draws the SAME colour
+                // through the SAME embedded profile four ways — vector RGB,
+                // image RGB, vector CMYK, image CMYK. The two vector cells are
+                // colour-managed and land within one level of correct. The two
+                // image cells render the UNMANAGED answer bit-for-bit and show
+                // as saturated red where they should vanish. The counters
+                // reported `managed=2, unmanaged=0`.
+                //
+                // ⇒ A counter that can only see one of two producers reports a
+                // DIFFERENT QUESTION than the one its name asks. Fixing the
+                // image path itself is a larger change — `image::Space`
+                // collapses `ICCBased` to a device space by `/N` and has no
+                // variant that can carry a profile — so the render is
+                // unchanged here. What changes is that the number stops
+                // claiming otherwise.
+                if self.blend_space == crate::compositor::BlendSpace::Subtractive
+                    && image_source_is_iccbased(doc, dict, resources)
+                {
+                    self.diag.icc_unmanaged_paints += 1;
+                }
                 if self.gs.current.overprint_fill
                     && decoded.overprint.is_none()
                     && self.blend_space == crate::compositor::BlendSpace::Subtractive
