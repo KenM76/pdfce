@@ -1090,6 +1090,15 @@ pub struct DecomposeDiagnostics {
     /// best-effort for those objects and [`PathObject::fill_paint`] /
     /// `stroke_paint` are the honest answer.
     pub paths_with_undecoded_colour: usize,
+    /// Paths that cannot be seen because an `/ExtGState` set their alpha to
+    /// zero, yet are reported as ordinary painted objects (`Pass 220.0`).
+    ///
+    /// ★ A wrong CLAIM rather than a wrong number, which is why it is counted
+    /// and not corrected: the object genuinely is in the content stream and a
+    /// shell may legitimately want to select it. What was missing was any way
+    /// to KNOW -- an operator who clicks apparently empty space and selects
+    /// something has no explanation available, and this is it.
+    pub paths_invisible_by_alpha: usize,
 }
 
 /// One object reached by **descending into a form XObject** — the unit a hit
@@ -1569,6 +1578,74 @@ pub trait FontResolver {
     /// or `None` if it cannot be resolved (absent `/Font` dictionary, name
     /// not present, entry not a dictionary).
     fn resolve(&self, name: &[u8]) -> Option<Arc<ExtractFont>>;
+
+    /// Resolve the **`/ExtGState`** named `name`, for the `gs` operator
+    /// (§8.4.5, Table 58) — `Pass 220.0`.
+    ///
+    /// # Why this lives on the FONT resolver
+    ///
+    /// Because it needs exactly what that resolver already holds — the
+    /// document view and the current resource dictionary — and because the
+    /// most common thing a real `gs` sets is `/Font`. Measured over 300 files
+    /// of a 4,023-file corpus: 11% carry an `/ExtGState`, and within those
+    /// `/Font` is the most frequent entry by a wide margin (115 occurrences,
+    /// against 59 `/CA`, 27 `/BM`, and **zero** `/LW`).
+    ///
+    /// A separate trait would have meant a fourth parameter on every
+    /// `decompose*` entry point and its ~50 call sites, to carry a lookup
+    /// against a dictionary this one already has.
+    ///
+    /// ★ DEFAULTED TO `None` deliberately. Every existing implementor —
+    /// [`NoFonts`], and any a test or the fuzz target defines — keeps
+    /// compiling and keeps answering "I resolve nothing", which is the honest
+    /// answer for a resolver with no document behind it. Only
+    /// [`DocumentFonts`] overrides it, and that is the one every real page
+    /// decomposition uses, so the fix reaches production callers without a
+    /// single call site changing.
+    fn ext_gstate(&self, name: &[u8]) -> Option<ExtGStateParams> {
+        let _ = name;
+        None
+    }
+}
+
+/// The entries of an `/ExtGState` that this model can act on (§8.4.5,
+/// Table 58).
+///
+/// # Why only these four
+///
+/// Because they are the ones that change a value the model already exposes,
+/// or a claim it already makes. Table 58 has more than twenty entries; the
+/// rest set state nothing here reads, and inventing fields for them would be
+/// modelling for its own sake.
+///
+/// ★ `/D` (dash), `/BM` (blend), `/SMask`, `/LC`, `/LJ`, `/ML`, `/RI`, `/OP`,
+/// `/op`, `/OPM` are deliberately absent. An unread gap is not a defect, and
+/// this file's clipboard sibling already states the principle: *"a fabricated
+/// dash is worse than an absent one, because it looks deliberate."*
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct ExtGStateParams {
+    /// `/LW` — line width. Feeds `PathObject::line_width`, which the
+    /// stroke-proximity hit test widens by; a stale one makes an operator
+    /// click a visible line and select nothing.
+    ///
+    /// ★ Measured at ZERO occurrences in a 300-file sample. Handled anyway
+    /// because it is free once `gs` is parsed at all, and because "rare" is
+    /// not "never" for a format this old — but the effort was spent on it
+    /// only after measuring that `/Font` is where the exposure actually is.
+    pub line_width: Option<f64>,
+    /// `/Font` — `[font size]`. The resource NAME and the size, exactly as
+    /// `Tf` would have set them. THE COMMON CASE (115 of the corpus sample's
+    /// ExtGState entries), and the one that matters: a stale size gives a
+    /// text object the wrong bounding box, which is the same
+    /// click-selects-nothing symptom one object kind over.
+    pub font: Option<(Vec<u8>, f64)>,
+    /// `/ca` — non-stroking alpha. Not a value this model exposes; carried so
+    /// a fully transparent path can be COUNTED rather than reported as an
+    /// ordinary painted object.
+    pub fill_alpha: Option<f64>,
+    /// `/CA` — stroking alpha. Same.
+    pub stroke_alpha: Option<f64>,
 }
 
 /// A resolver that resolves nothing — the default, and what plain
@@ -1653,6 +1730,63 @@ impl FontResolver for DocumentFonts<'_> {
             .borrow_mut()
             .insert(name.to_vec(), resolved.clone());
         resolved
+    }
+
+    /// Read the four entries this model can act on out of `/ExtGState /name`.
+    ///
+    /// Deliberately NOT cached. The font cache exists because decoding a font
+    /// program is expensive; this is four dictionary lookups, and a `gs`
+    /// operator is rare enough (11% of files carry an `/ExtGState` at all)
+    /// that a second cache would cost more in code than it saves in work.
+    fn ext_gstate(&self, name: &[u8]) -> Option<ExtGStateParams> {
+        let dict = self
+            .resources
+            .get(b"ExtGState")
+            .map(|o| self.view.resolve(o))
+            .and_then(Object::as_dict)?
+            .get(name)
+            .map(|o| self.view.resolve(o))
+            .and_then(Object::as_dict)?
+            .clone();
+
+        let num = |k: &[u8]| {
+            dict.get(k)
+                .map(|o| self.view.resolve(o))
+                .and_then(Object::as_number)
+        };
+
+        // Table 58 `/Font` is `[font size]` — an INDIRECT REFERENCE to a font
+        // dictionary and a size, not a resource name. The model keys fonts by
+        // resource name, so what is recoverable here is the SIZE; the name is
+        // taken only when the array's first element happens to be a name,
+        // which is not conformant but occurs.
+        //
+        // ★ The size alone is the half that matters: a text object's bounds
+        // come from font metrics scaled by it, so a stale size is a wrong
+        // bounding box whether or not the face changed.
+        let font = dict
+            .get(b"Font")
+            .map(|o| self.view.resolve(o))
+            .and_then(Object::as_array)
+            .and_then(|a| {
+                let size = a.get(1).map(|o| self.view.resolve(o))?.as_number()?;
+                let face = a
+                    .first()
+                    .map(|o| self.view.resolve(o))
+                    .and_then(|o| match o {
+                        Object::Name(n) => Some(n.as_bytes().to_vec()),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                Some((face, size))
+            });
+
+        Some(ExtGStateParams {
+            line_width: num(b"LW"),
+            font,
+            fill_alpha: num(b"ca"),
+            stroke_alpha: num(b"CA"),
+        })
     }
 }
 
@@ -1978,6 +2112,11 @@ struct GState {
     /// which `sc`/`scn` then take their operands in.
     fill_space: Option<Vec<u8>>,
     stroke_space: Option<Vec<u8>>,
+    /// `/ca` and `/CA` from an `/ExtGState` (§8.4.5). Not a value this model
+    /// exposes — carried on the graphics state so `q`/`Q` save and restore it
+    /// like any other, and read only to COUNT a path that cannot be seen.
+    alpha_fill: f64,
+    alpha_stroke: f64,
     /// The `Tf` size operand (§9.3.1 `Tfs`), text space, unscaled.
     font_size: f64,
     /// The `Tf` resource name, verbatim from the content stream.
@@ -2011,6 +2150,8 @@ impl GState {
             stroke_paint: PathPaint::Default,
             fill_space: None,
             stroke_space: None,
+            alpha_fill: 1.0,
+            alpha_stroke: 1.0,
             font_size: 0.0,
             font_resource: None,
             font: None,
@@ -2365,6 +2506,50 @@ impl<'a> Decomposer<'a> {
                 self.gs.stroke_paint =
                     device_paint(DevicePaintSpace::Cmyk, &nums, self.gs.stroke_color);
                 self.gs.stroke_space = None;
+            }
+
+            // ---- the graphics-state operator (§8.4.5) -- previously ABSENT.
+            //
+            // ★★ `gs` had NO ARM AT ALL, so every entry it sets was ignored.
+            // The consequence is the same shape as the missing colour-space
+            // arms below: a value the model already exposes kept whatever an
+            // unrelated earlier operator had set, with nothing recording that
+            // pdfce had not looked.
+            //
+            // MEASURED before choosing what to handle, over 300 files of a
+            // 4,023-file corpus: 11% carry an `/ExtGState`, and within those
+            // `/Font` appears 115 times, `/CA` 59, `/BM` 27, `/ca` 18 -- and
+            // `/LW` **zero**. So the exposure is the FONT SIZE, which scales a
+            // text object's bounds, and not the line width the defect was
+            // first reported against. Both are handled; only one of them was
+            // ever going to fire on a real file.
+            b"gs" => {
+                if let Some(g) = operand_names(operands)
+                    .first()
+                    .and_then(|n| self.fonts.ext_gstate(n))
+                {
+                    if let Some(w) = g.line_width {
+                        self.gs.line_width = w;
+                    }
+                    if let Some((face, size)) = g.font {
+                        self.gs.font_size = size;
+                        if !face.is_empty() {
+                            self.gs.font = self.fonts.resolve(&face);
+                            self.gs.font_resource = Some(face);
+                        }
+                    }
+                    // Alpha is not a value this model exposes, so it is
+                    // COUNTED rather than stored: a fully transparent path is
+                    // reported as an ordinary painted object today, and an
+                    // operator selecting something invisible is a wrong CLAIM
+                    // rather than a wrong number.
+                    if let Some(a) = g.fill_alpha {
+                        self.gs.alpha_fill = a;
+                    }
+                    if let Some(a) = g.stroke_alpha {
+                        self.gs.alpha_stroke = a;
+                    }
+                }
             }
 
             // ---- colour SPACES (§8.6.8, Table 74) -- previously ABSENT.
@@ -2866,6 +3051,13 @@ impl<'a> Decomposer<'a> {
         self.diag.paths += 1;
         if self.gs.fill_paint.is_other() || self.gs.stroke_paint.is_other() {
             self.diag.paths_with_undecoded_colour += 1;
+        }
+        // Zero exactly, not an epsilon: `/ca 0` is a deliberate "do not show
+        // this", where 0.004 is a faint mark somebody meant to be faint.
+        let invisible = (style.fill.is_some() && self.gs.alpha_fill == 0.0)
+            || (style.stroke && self.gs.alpha_stroke == 0.0);
+        if invisible {
+            self.diag.paths_invisible_by_alpha += 1;
         }
         self.objects.push(VectorObject::Path(obj));
     }

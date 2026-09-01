@@ -288,3 +288,142 @@ fn decomposition_is_read_only_over_the_document() {
         "the document bytes are untouched"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Pass 220.0 -- `gs` (ExtGState). The operator had NO arm at all.
+// ---------------------------------------------------------------------------
+
+/// A page whose `/ExtGState` sets `/LW`, `/Font` and `/ca`, applied by `gs`.
+fn page_with_extgstate(content: &str) -> Vec<u8> {
+    let mut objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources \
+         << /ExtGState << /GSw 5 0 R /GSinvis 6 0 R >> >> /Contents 4 0 R >>"
+            .to_owned(),
+        format!(
+            "<< /Length {} >>\nstream\n{content}endstream",
+            content.len()
+        ),
+        "<< /Type /ExtGState /LW 7.5 /Font [/F1 22] >>".to_owned(),
+        "<< /Type /ExtGState /ca 0 >>".to_owned(),
+    ];
+    let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objs.drain(..).enumerate() {
+        offsets.push(buf.len());
+        buf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref_at = buf.len();
+    let size = offsets.len() + 1;
+    buf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+    for off in &offsets {
+        buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    buf.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+            .as_bytes(),
+    );
+    buf
+}
+
+fn model_of(bytes: &[u8]) -> PageObjects {
+    let doc = Document::from_bytes(bytes.to_vec()).unwrap();
+    model(&doc).0
+}
+
+/// ★★★ A line width set by `gs` must reach the model.
+///
+/// # The defect
+///
+/// `decompose.rs` had no `gs` arm, so `/LW` was ignored and `line_width` kept
+/// whatever the last `w` operator had set. That value feeds
+/// `vector::hit::stroke_half_width`, which widens the stroke-proximity band —
+/// so a wrong width means **the operator clicks a visible line and nothing
+/// selects**, a symptom this project has had reported before from a different
+/// cause.
+///
+/// # The `2 w` is in the fixture on purpose
+///
+/// Without it the stale value would be the §8.4.3.2 initial 1.0, which is also
+/// what a plausible-but-wrong implementation reports — so the test would pass
+/// on the bug. `2 w` makes the stale answer distinctive.
+#[test]
+fn a_line_width_set_by_an_extgstate_reaches_the_model() {
+    let m = model_of(&page_with_extgstate("2 w /GSw gs 10 10 m 50 50 l S\n"));
+    let VectorObject::Path(p) = &m.objects[0] else {
+        panic!("expected a path")
+    };
+    assert!(
+        (p.line_width - 7.5).abs() < 1e-9,
+        "★ /LW 7.5 must win over the earlier `2 w`; got {} — the stale 2.0 is \
+         the defect and 1.0 would mean the fixture never applied either",
+        p.line_width
+    );
+}
+
+/// The same operator's `/Font` size must reach the model too — and this is the
+/// half that actually occurs.
+///
+/// Measured over 300 files of a 4,023-file corpus: `/Font` is the most common
+/// `/ExtGState` entry (115 occurrences) and `/LW` appears **zero** times. A
+/// stale font size gives a text object the wrong bounding box, which is the
+/// same click-selects-nothing symptom one object kind over.
+#[test]
+fn a_font_size_set_by_an_extgstate_reaches_the_model() {
+    let tall = model_of(&page_with_extgstate("BT /GSw gs 10 50 Td (Hi) Tj ET\n"));
+    let short = model_of(&page_with_extgstate("BT /F1 8 Tf 10 50 Td (Hi) Tj ET\n"));
+    let th = tall
+        .objects
+        .first()
+        .map(|o| o.page_bbox().max.y - o.page_bbox().min.y);
+    let sh = short
+        .objects
+        .first()
+        .map(|o| o.page_bbox().max.y - o.page_bbox().min.y);
+    match (th, sh) {
+        (Some(a), Some(b)) => assert!(
+            a > b,
+            "/Font [.. 22] must produce a TALLER text box than `8 Tf`; got {a} vs {b}"
+        ),
+        _ => panic!("both fixtures must produce a text object"),
+    }
+}
+
+/// A path made invisible by `/ca 0` is still listed — and is now COUNTED.
+///
+/// Not corrected: the object genuinely is in the content stream and a shell
+/// may legitimately want to select it. What was missing was any way to know,
+/// so an operator who clicks apparently empty space and selects something has
+/// an explanation available.
+#[test]
+fn a_fully_transparent_path_is_disclosed_rather_than_hidden() {
+    let m = model_of(&page_with_extgstate("/GSinvis gs 0 0 20 20 re f\n"));
+    assert_eq!(m.objects.len(), 1, "still selectable");
+    assert_eq!(
+        m.diagnostics.paths_invisible_by_alpha, 1,
+        "and disclosed as invisible"
+    );
+}
+
+/// `q`/`Q` must restore an ExtGState-set width like any other state.
+#[test]
+fn an_extgstate_width_is_undone_by_a_grestore() {
+    let m = model_of(&page_with_extgstate(
+        "2 w q /GSw gs 0 0 m 5 5 l S Q 10 10 m 20 20 l S\n",
+    ));
+    let widths: Vec<f64> = m
+        .objects
+        .iter()
+        .filter_map(|o| match o {
+            VectorObject::Path(p) => Some(p.line_width),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(widths.len(), 2);
+    assert!((widths[0] - 7.5).abs() < 1e-9, "inside q/Q: {widths:?}");
+    assert!(
+        (widths[1] - 2.0).abs() < 1e-9,
+        "★ after Q the width must return to the `2 w`, not stay at 7.5: {widths:?}"
+    );
+}
