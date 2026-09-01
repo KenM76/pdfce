@@ -242,16 +242,106 @@ fn the_default_reading_preserves_the_spot() {
     );
 }
 
-/// The default must BE Acrobat's reading, not merely reachable. Asserted
+/// The shipped default must BE `GreyAsKOnly`, not merely reachable. Asserted
 /// against `Default::default()` rather than against the named variant, so
 /// flipping the `#[default]` attribute fails here rather than silently
 /// changing what every consumer renders.
+///
+/// # ★★ THIS TEST WAS CALLED `the_shipped_default_is_the_acrobat_reading`,
+/// AND IT COULD NOT CHECK THAT
+///
+/// The body is unchanged. Only the name and this comment are, because the
+/// name asserted something the assertions do not reach — and which has since
+/// been measured to be **false**.
+///
+/// Over a SPOT backdrop, which is the only geometry this file had, the two
+/// readings of `OverprintZeroTintScope` produce different pictures — so the
+/// test looked discriminating — but neither picture says which reading
+/// *Acrobat* uses. The project's own note `OP-N3` had already said so: "the
+/// discriminating case is grey over PROCESS components". That case was named
+/// as missing and then not built, and in the gap a test name became a claim
+/// nobody could check.
+///
+/// It is now built (`grey_op_over_cmyk.pdf`, the test below), and the claim
+/// is refuted: on a conformance patch of exactly that shape Acrobat renders
+/// the backdrop REPLACED (255,255,255) where this default renders it
+/// PRESERVED (142,198,63). The literal reading matches Acrobat; the default
+/// does not.
+///
+/// ⇒ The default is deliberately **left unchanged** for now, and that is a
+/// sequencing decision rather than an endorsement: flipping it alone is
+/// trap-neutral on the conformance corpus, because it corrects one cell and
+/// breaks another that currently passes only through a compensating error
+/// (pdfce flattens the spot into C/M/Y, and the wrong row assignment then
+/// happens to preserve exactly those planes). The honest fix is the literal
+/// row assignment **together with** the per-spot-colorant plane. Until then
+/// this test pins what actually ships.
 #[test]
-fn the_shipped_default_is_the_acrobat_reading() {
+fn the_shipped_default_is_grey_as_k_only() {
     let explicit = render("grey_op_over_spot.pdf", OverprintZeroTintScope::GreyAsKOnly);
     let defaulted = render("grey_op_over_spot.pdf", OverprintZeroTintScope::default());
     assert_eq!(mark(&explicit), mark(&defaulted));
     assert!(is_greenish(mark(&defaulted)));
+}
+
+/// ★★★ THE DISCRIMINATING CASE: grey over a PROCESS backdrop.
+///
+/// This is the geometry `OP-N3` named as the one that can tell the two
+/// readings apart *against a reference*, and which did not exist until now.
+/// Every other fixture in this file paints over a spot, where both readings
+/// are defensible.
+///
+/// # What each reading does, and why the values are not arbitrary
+///
+/// The backdrop is `0.5 0 1 0 k`; the mark is `1 g` — white — under
+/// `/OP true /OPM 1`.
+///
+/// | reading | Table 149 row | result |
+/// |---|---|---|
+/// | `GreyAsKOnly` | row 1, whose OPM-1 cell is value-dependent (`c_b` where `c_s = 0`) | backdrop SURVIVES, `142,198,63` |
+/// | `DeviceCmykOnly` | row 2, "any process colour space" — `c_s` in all three columns | backdrop REPLACED, `255,255,255` |
+///
+/// **`1 g` is chosen deliberately over `0.5 g`.** White converts to
+/// `0 0 0 0` under every CMYK profile, so no "it converted differently"
+/// explanation can survive this comparison — the only thing that can produce
+/// two different pictures here is the row assignment.
+///
+/// # The ground truth, which this test records but cannot assert
+///
+/// Acrobat renders this shape `255,255,255`. That was measured on a licensed
+/// conformance patch which cannot be checked into this repository, so the
+/// number lives in this comment rather than in an assertion, and the test
+/// asserts only what pdfce does. Both synthetic values above match that
+/// patch's cells exactly, which is what makes this fixture a faithful stand-in
+/// rather than an approximation of one.
+#[test]
+fn grey_over_a_process_backdrop_separates_the_two_readings() {
+    let k_only = mark(&render(
+        "grey_op_over_cmyk.pdf",
+        OverprintZeroTintScope::GreyAsKOnly,
+    ));
+    let literal = mark(&render(
+        "grey_op_over_cmyk.pdf",
+        OverprintZeroTintScope::DeviceCmykOnly,
+    ));
+    assert!(
+        is_greenish(k_only),
+        "GreyAsKOnly routes a DeviceGray source through Table 149 row 1, whose \
+         OPM-1 cell hands back the backdrop where the source component is zero, \
+         so the process backdrop must SURVIVE. Got {k_only:?}"
+    );
+    assert!(
+        is_neutral(literal),
+        "DeviceCmykOnly puts a DeviceGray source in row 2, which is c_s in all \
+         three columns, so a white mark must REPLACE the backdrop. Got \
+         {literal:?}"
+    );
+    assert_ne!(
+        k_only, literal,
+        "★ if these ever agree, this fixture has stopped discriminating and \
+         every claim about which reading matches the reference is unchecked \
+         again — which is the exact state this file was in before it existed"
+    );
 }
 
 // ---------------------------------------------------------------------------

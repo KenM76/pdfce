@@ -766,7 +766,51 @@ pub enum OverprintZeroTintScope {
     /// **The shipped default**, and this is a print-conformance axis whose
     /// measurement instrument is authored to press behaviour — so the
     /// default is determined by what the instrument is for, not by a
-    /// preference. Acrobat does this; the suite is scored against Acrobat.
+    /// preference.
+    ///
+    /// # ★★ THE SENTENCE THAT USED TO END THAT PARAGRAPH IS FALSE
+    ///
+    /// It read: *"Acrobat does this; the suite is scored against Acrobat."*
+    /// It is quoted rather than deleted because it is the entire stated
+    /// justification for this being the default, and it was never checked
+    /// against the one geometry that can check it.
+    ///
+    /// Over a **spot** backdrop — the only shape pdfce had a fixture for —
+    /// both readings produce a defensible picture and neither identifies what
+    /// the reference engine does. The discriminating case is grey over
+    /// **process** components, which this project's own note `OP-N3` had
+    /// already named as the missing measurement.
+    ///
+    /// Measured 2026-09-01 on a conformance patch of exactly that shape (a
+    /// `1 g` mark under `/OP true /OPM 1` over a `0.5 0 1 0 k` backdrop):
+    ///
+    /// | | result |
+    /// |---|---|
+    /// | this default | `142,198,63` — backdrop preserved |
+    /// | [`Self::DeviceCmykOnly`] | `255,255,255` — backdrop replaced |
+    /// | **Acrobat** | **`255,255,255`** |
+    ///
+    /// So the **literal** reading is the one that matches Acrobat, and this
+    /// default does not. `1 g` converts to `0 0 0 0` under any profile, so
+    /// "convert then apply OPM 1" cannot account for the difference — the row
+    /// assignment can, and ISO 32000-1 §11.7.4.5 Table 149 places a
+    /// `DeviceGray` source in row 2 (*"any process colour space"*, `c_s` in
+    /// all three columns), not in row 1, whose scope note says `DeviceCMYK`.
+    ///
+    /// # Why the default is nevertheless UNCHANGED for now
+    ///
+    /// A sequencing decision, not an endorsement. Flipping it alone is
+    /// trap-neutral across the conformance corpus: it corrects one cell and
+    /// breaks another that passes today only through a **compensating
+    /// error** — pdfce flattens a spot colorant into C/M/Y for want of a spot
+    /// plane, and this wrong row assignment then happens to preserve exactly
+    /// those planes. Two cells swap between near-zero and ~50 mean error
+    /// while the page aggregate barely moves, which is precisely the shape a
+    /// whole-page metric cannot see.
+    ///
+    /// The honest fix is the literal row assignment **together with** the
+    /// per-spot-colorant plane. Changing this default before that plane
+    /// exists would trade one wrong cell for another and call it progress.
     ///
     /// Scoped to `DeviceGray` and no wider **because that is the extent of
     /// what was measured**: of the suite's 16 `Separation`-plus-`/OP true`

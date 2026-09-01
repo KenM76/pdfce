@@ -119,10 +119,43 @@ def stream(dict_body: str, data: bytes) -> bytes:
     return head + data + b"\nendstream"
 
 
-def build(*, source: str, overprint: bool) -> bytes:
-    """One page: a spot backdrop, then a mark of `source` over it.
+def build(*, source: str, overprint: bool, backdrop: str = "spot") -> bytes:
+    """One page: a backdrop, then a mark of `source` over it.
 
-    `source` is one of `"grey"` (a `0.5 g` fill), `"cmyk"` (a `0 0 0 0.5 k`
+    `backdrop` is `"spot"` (a full-tint `/Separation` fill, the original and
+    still the default) or `"cmyk"` (a plain `0.5 0 1 0 k` process fill).
+
+    ★★ THE `"cmyk"` BACKDROP IS THE ONLY GEOMETRY THAT CAN CHECK THE CLAIM THE
+    DEFAULT IS NAMED AFTER, and its absence is why a false claim survived.
+
+    Every fixture in this file was `_over_spot`, and over a spot BOTH readings
+    of `OverprintZeroTintScope` produce a defensible picture -- they differ
+    from each other, so the tests looked discriminating, but neither picture
+    tells you which reading Acrobat uses. The project's own note `OP-N3` says
+    exactly this: "the discriminating case is grey over PROCESS components".
+    That case was named as missing and then not built, so a test called
+    `the_shipped_default_is_the_acrobat_reading` asserted on spot geometry --
+    a claim about Acrobat checked against a picture that cannot see it.
+
+    Over a PROCESS backdrop the two readings separate with a known ground
+    truth:
+
+      GreyAsKOnly     grey converts to K-only CMYK, whose zero C/M/Y take the
+                      backdrop under Table 149 row 1's value-dependent OPM-1
+                      cell -- the backdrop SURVIVES.
+      DeviceCmykOnly  Table 149 row 2 puts a DeviceGray source in "any process
+                      colour space", which is `c_s` in all three columns -- the
+                      backdrop is REPLACED.
+
+    Measured against Acrobat on a print-conformance patch of this exact shape:
+    Acrobat renders it REPLACED (255,255,255 where pdfce's shipped default
+    renders 142,198,63). So the literal reading matches and the default does
+    not, which falsifies the default's stated justification.
+
+    `source` is one of `"grey"` (a `0.5 g` fill), `"grey_white"` (a `1 g`
+    fill -- the case that makes the comparison airtight, because `1 g`
+    converts to `0 0 0 0` under ANY profile, so "convert then apply OPM 1"
+    cannot explain Acrobat's result), `"cmyk"` (a `0 0 0 0.5 k`
     fill -- the same ink stated the other way) or `"grey_image"` (a one-sample
     `DeviceGray` image at the same value).
 
@@ -136,6 +169,11 @@ def build(*, source: str, overprint: bool) -> bytes:
 
     if source == "grey":
         mark = b"0.5 g\n60 60 80 80 re f\n"
+    elif source == "grey_white":
+        # `1 g` -- white. Converts to `0 0 0 0` under every CMYK profile, so
+        # no "it converted differently" explanation can survive a comparison
+        # built on it.
+        mark = b"1 g\n60 60 80 80 re f\n"
     elif source == "cmyk":
         mark = b"0 0 0 0.5 k\n60 60 80 80 re f\n"
     elif source == "rgb":
@@ -171,8 +209,8 @@ def build(*, source: str, overprint: bool) -> bytes:
         b"/GSnorm gs\n"
         # Full-tint spot, painted FIRST and larger than the mark so the mark's
         # edge sits on ink rather than on paper.
-        b"/CS0 cs 1 scn\n"
-        b"40 40 120 120 re f\n"
+        + (b"/CS0 cs 1 scn\n" if backdrop == "spot" else b"0.5 0 1 0 k\n")
+        + b"40 40 120 120 re f\n"
         b"/GSop gs\n" + mark + b"Q\n"
     )
 
@@ -211,6 +249,13 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     files = {
         "grey_op_over_spot.pdf": build(source="grey", overprint=True),
+        # ★ THE DISCRIMINATING CASE, absent until now. Grey over a PROCESS
+        # backdrop is the only geometry that can check which reading matches
+        # Acrobat; every other fixture here is over a spot, where both
+        # readings look defensible and neither identifies the reference.
+        "grey_op_over_cmyk.pdf": build(
+            source="grey_white", overprint=True, backdrop="cmyk"
+        ),
         "grey_noop_over_spot.pdf": build(source="grey", overprint=False),
         "cmyk_k_op_over_spot.pdf": build(source="cmyk", overprint=True),
         "grey_image_op_over_spot.pdf": build(source="grey_image", overprint=True),
