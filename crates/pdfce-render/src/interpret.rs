@@ -6868,6 +6868,41 @@ impl Interpreter<'_> {
         let doc = self.doc;
         let resources = self.resources;
         let fill = self.gs.current.fill_color;
+
+        // ★ D3 -- Table 89's `/Intent` overrides the graphics state FOR THIS
+        // IMAGE ONLY (`Pass 199.1`). Resolved through the shared rule rather
+        // than re-derived here, so the "absent means INHERIT, not default"
+        // trap is answered in one place: three of this module's four defaults
+        // are `RelativeColorimetric` and D3 is not, so an `unwrap_or_default`
+        // would be wrong on every page that sets an intent and then draws.
+        //
+        // ISO 32000-2 suppresses it for an image mask, which follows from
+        // §8.9.6.2 anyway -- a stencil carries no colour for an intent to
+        // govern.
+        //
+        // Counted, not yet consumed: nothing converts colour by intent yet, so
+        // this contributes to the census that says WHAT THE FILE ASKED FOR.
+        // The resolution itself is tested, so the rule is pinned before the
+        // consumer exists rather than written at the same time as it.
+        let image_intent_name = match dict.get(b"Intent").map(|o| doc.resolve(o)) {
+            Some(Object::Name(n)) => Some(n.as_bytes().to_vec()),
+            _ => None,
+        };
+        if image_intent_name.is_some() {
+            let is_mask = matches!(
+                dict.get(b"ImageMask").map(|o| doc.resolve(o)),
+                Some(Object::Boolean(true))
+            );
+            if pdfce_core::color::image_intent(
+                self.gs.current.rendering_intent,
+                image_intent_name.as_deref(),
+                is_mask,
+            ) != self.gs.current.rendering_intent
+            {
+                self.diag.rendering_intents_set += 1;
+            }
+        }
+
         match image::decode(doc, dict, raw, resources, fill, origin, self.policy) {
             Ok(decoded) => {
                 // Cloned rather than moved: `ImageNotes` stopped being `Copy`

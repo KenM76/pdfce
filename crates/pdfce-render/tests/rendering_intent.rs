@@ -194,3 +194,47 @@ fn the_four_names_resolve_and_an_unknown_one_falls_back() {
     assert!(R::RelativeColorimetric.output_is_constrained());
     assert!(!R::Saturation.output_is_constrained());
 }
+
+/// ★★ D3 — an image's own `/Intent` overrides the graphics state, FOR THAT
+/// IMAGE ONLY (ISO 32000-1 Table 89) (`Pass 199.1`).
+///
+/// # The trap this pins
+///
+/// Table 89's default is *"the current rendering intent in the graphics
+/// state"* — **not a constant**. Three of this area's four defaults are
+/// `RelativeColorimetric` and this one is not, so a single
+/// `unwrap_or_default()` would be wrong on every page that sets an intent at
+/// the top and then draws an image.
+///
+/// ★ It was DOCUMENTED before it was implemented. `Pass 199.0` wrote D3 into
+/// the module docs as a rule and wired only `ri` and `/RI`; an outbound reply
+/// to a sibling project noticed that the two `b"Intent"` hits in the tree were
+/// the annotation and optional-content keys — different keys with the same
+/// name. A documented rule with no implementation is a claim, and this test is
+/// what turns it back into a fact.
+#[test]
+fn an_image_intent_overrides_the_graphics_state() {
+    use pdfce_core::color::{RenderingIntent as R, image_intent};
+
+    let gs = R::Saturation;
+    // Absent: the graphics state survives. NOT the type default.
+    assert_eq!(
+        image_intent(gs, None, false),
+        R::Saturation,
+        "an image with no /Intent must INHERIT, not fall to RelativeColorimetric"
+    );
+    // Present: it wins.
+    assert_eq!(image_intent(gs, Some(b"Perceptual"), false), R::Perceptual);
+    // Unrecognised: §8.6.5.8's fallback still applies inside D3.
+    assert_eq!(
+        image_intent(gs, Some(b"Nonsense"), false),
+        R::RelativeColorimetric
+    );
+    // ★ An image MASK has no colour, so the entry is ignored (ISO 32000-2's
+    // Table 87 says so outright, and §8.9.6.2 implies it).
+    assert_eq!(
+        image_intent(gs, Some(b"Perceptual"), true),
+        R::Saturation,
+        "/Intent must be ignored when ImageMask is true"
+    );
+}

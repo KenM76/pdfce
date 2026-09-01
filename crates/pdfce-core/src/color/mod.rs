@@ -182,7 +182,7 @@
 mod cmyk_table;
 mod intent;
 
-pub use intent::RenderingIntent;
+pub use intent::{RenderingIntent, image_intent};
 
 use cmyk_table::{GRID_L, NODES};
 

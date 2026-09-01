@@ -191,6 +191,67 @@ impl RenderingIntent {
     }
 }
 
+/// Resolve **D3** — the intent in force for one image XObject
+/// (ISO 32000-1 Table 89's `/Intent` row).
+///
+/// # The rule, and the two ways it is got wrong
+///
+/// Table 89 gives `/Intent` the default *"the current rendering intent in the
+/// graphics state"*. That is the present-overrides / absent-inherits idiom, so:
+///
+/// - **present** → it wins, **for this image only**. ISO 32000-2 strengthens
+///   the verb to *"shall be used"*.
+/// - **absent** → the graphics-state intent, unchanged. Not a constant — this
+///   is the trap. Three of the four defaults in this module are
+///   `RelativeColorimetric` and this one is **not**, so a single
+///   `unwrap_or_default()` here would be wrong on every page that sets an
+///   intent at the top and then draws an image.
+///
+/// ★ **`is_image_mask` suppresses it.** ISO 32000-2 adds *"ignored if
+/// `ImageMask` is `true`"* to Table 87's `/Intent` row, and it follows from
+/// §8.9.6.2 anyway: a stencil mask carries no colour at all, so there is
+/// nothing for an intent to govern. Passed in rather than re-read here because
+/// the caller has already resolved it — and because re-reading a key the caller
+/// has decided about is how two answers to one question appear.
+///
+/// # ★★ A soft-mask image's `/Intent` is IGNORED, and that is not this
+/// # function's job
+///
+/// ISO 32000-1 Table 145 / ISO 32000-2 Table 143 give the `/SMask` image
+/// dictionary's `Intent` row the single word **`Ignored.`** — verbatim, and
+/// unamended in both editions. A caller decoding a soft-mask image must not
+/// call this at all. Stated here because the entry point looks identical: it is
+/// an image dictionary that may carry `/Intent`, and the difference is what the
+/// image is being used FOR.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::color::{RenderingIntent, image_intent};
+///
+/// let gs = RenderingIntent::Saturation;
+/// // Absent: the graphics state's intent survives.
+/// assert_eq!(image_intent(gs, None, false), RenderingIntent::Saturation);
+/// // Present: it wins, for this image only.
+/// assert_eq!(
+///     image_intent(gs, Some(b"Perceptual"), false),
+///     RenderingIntent::Perceptual
+/// );
+/// // An image mask has no colour, so the entry is ignored.
+/// assert_eq!(image_intent(gs, Some(b"Perceptual"), true), RenderingIntent::Saturation);
+/// ```
+#[must_use]
+pub fn image_intent(
+    graphics_state: RenderingIntent,
+    image_intent_name: Option<&[u8]>,
+    is_image_mask: bool,
+) -> RenderingIntent {
+    match image_intent_name {
+        Some(name) if !is_image_mask => RenderingIntent::from_name(name),
+        _ => graphics_state,
+    }
+}
+
 impl std::fmt::Display for RenderingIntent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name())
