@@ -167,27 +167,95 @@ def tracked_names(term):
     return [p for p in proc.stdout.splitlines() if term in p.lower()]
 
 
+def unpushed_message_hits(term):
+    """`hash` for every UNPUSHED commit whose MESSAGE contains `term`.
+
+    # Why this exists, and why it is scoped to UNPUSHED commits
+
+    The two checks above scan the WORKING TREE. A commit message is neither a
+    tracked file nor an untracked one, so it was invisible to this gate --
+    which reported clean, correctly and uselessly, while **forty of 1,217
+    commit messages in published history carried the term**. The repository is
+    public, so those are published.
+
+    ★ THIS GATE CANNOT FIX THOSE, AND DELIBERATELY DOES NOT TRY. Removing a
+    string from a published commit message means rewriting published history,
+    which project rule 8 reserves to the operator, and which this project has
+    direct evidence is destructive: `check-cited-commits-exist.py` found
+    fourteen documents whose cited hashes had already been broken by exactly
+    that. So the existing forty are an OPERATOR QUESTION recorded in
+    `ROADMAP.md`, not something a gate may decide.
+
+    What a gate CAN do is stop the count growing. `origin/main..HEAD` is
+    precisely the set of commits that are still amendable -- not yet visible to
+    anyone, still rewritable with `git commit --amend` or an interactive
+    rebase, and therefore the only window in which a leak is cheap to remove.
+    Once pushed, the cost changes category.
+
+    ⇒ The scope is not a compromise; it matches the set of commits where
+    action is still possible. Returns an empty list when there is no upstream
+    (a fresh clone with no `origin/main`), because "everything is unpushed" is
+    not a useful reading and would flag the whole history on day one.
+    """
+    upstream = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "origin/main"],
+        capture_output=True, text=True, check=False,
+    )
+    if upstream.returncode != 0:
+        return []
+    listing = subprocess.run(
+        ["git", "log", "--format=%H", "origin/main..HEAD"],
+        capture_output=True, text=True, errors="replace", check=False,
+    )
+    if listing.returncode != 0:
+        return []
+    hits = []
+    # One commit at a time, deliberately. A single `git log` with a delimiter
+    # in its format string is fewer processes, but the delimiter has to be a
+    # byte that cannot occur in a commit message -- and the obvious choice,
+    # NUL, cannot appear in Python source at all (it is a SyntaxError, which
+    # is how the first cut of this function failed). Unpushed commits number
+    # in the tens at most, so the unambiguous form wins over the cheap one.
+    for sha in listing.stdout.split():
+        body = subprocess.run(
+            ["git", "log", "-1", "--format=%B", sha],
+            capture_output=True, text=True, errors="replace", check=False,
+        )
+        if body.returncode == 0 and term.lower() in body.stdout.lower():
+            hits.append(sha[:12])
+    return hits
+
+
 def main():
-    bad_content, bad_names = [], []
+    bad_content, bad_names, bad_msgs = [], [], []
     for term in needles():
         bad_content.extend(tracked_hits(term))
         bad_names.extend(tracked_names(term))
+        bad_msgs.extend(unpushed_message_hits(term))
 
-    if not bad_content and not bad_names:
+    if not bad_content and not bad_names and not bad_msgs:
         print(
             "suite-name-absent: clean -- nothing in the work tree, staged or not, "
-            "names it or mentions it"
+            "and no unpushed commit message, names it or mentions it"
         )
         return 0
 
+    for sha in sorted(set(bad_msgs)):
+        # The SHA is safe to print; the message body is not, so it is never
+        # echoed -- the same masking discipline the path branches use.
+        print(
+            "COMMITMSG %s  (unpushed -- amend or rebase it out BEFORE pushing; "
+            "once published this becomes an operator decision, not a fix)" % sha
+        )
     for path in sorted(set(bad_names)):
         print("FILENAME  %s" % mask(path))
     for where in sorted(set(bad_content)):
         print("CONTENT   %s" % mask(where))
     print(
-        "suite-name-absent: %d file name(s) and %d line(s) still carry it "
+        "suite-name-absent: %d file name(s), %d line(s) and %d unpushed commit "
+        "message(s) still carry it "
         "(operator ruling 2026-08-25; see the private map directory)"
-        % (len(set(bad_names)), len(set(bad_content)))
+        % (len(set(bad_names)), len(set(bad_content)), len(set(bad_msgs)))
     )
     return 1
 
