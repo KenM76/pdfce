@@ -96,6 +96,571 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 196.0` + `Pass 196.1` (`4299174`, 2026-08-31) — **TWO FALSE GREENS IN THE PRINT-CONFORMANCE HARNESS AND ITS OWN DISCLOSURE TEXT, NEITHER A RENDERER CHANGE** — ★★★ **A THIRD false-PASS CLASS IN `tools/suite-check.py`: A PATCH SCORED BY BAKED CORRECT/WRONG ARTWORK OR AN EXPECTED-RESULT ROW HAD NO DETECTOR AT ALL AND DEFAULTED TO `clean`** — ★★ **THE CLI'S OWN OVERPRINT NOTE ASSERTED "NOTHING IS OWED THERE" AND TABLE 149'S ROW 2 IS TWO ROWS, NOT ONE** — filed 2026-08-31 (357th filing)
+
+**One commit, two Pass IDs**, same precedent as `Pass 190.0`/`Pass 190.1`
+(`77631a6`) — two different subsystems (a Python test harness; the CLI's
+`eprintln!` disclosure text) fixed by one commit whose own message names
+both. `Pass 196.0` is `tools/suite-check.py`'s new `CRIT?` verdict;
+`Pass 196.1` is the CLI overprint note's corrected claim. **No renderer
+code changed in either** — both are measurement-honesty and disclosure-
+honesty fixes, not pixel fixes.
+
+#### `Pass 196.0` — the harness had no detector for a THIRD verdict shape, and defaulted the ungraded case to a pass
+
+`tools/suite-check.py` already knew two ways a patch's own criterion could
+be unanswerable by its detector — `REF` (a reference strip with no
+calibrated threshold) and `MARK?` (a check mark that should be PRESENT,
+where the harness only detects marks that should be ABSENT). A third shape
+existed and had no name: a patch whose criterion is baked **correct/wrong**
+artwork, or an expected-result row, that no `find_traps` call can see at
+all. Lacking a detector, such a patch fell through every branch to the
+`else: verdict = "clean"` default — **the detector answering a question
+the patch never asked, exactly the shape `MARK?` was introduced to end,
+one criterion over.**
+
+**`PCS 3.1` is the patch that surfaced it, and it is a REAL rendering
+failure, not a false alarm.** The control that settles it:
+`find_traps` run on **Acrobat's own render** of `PCS 3.1` **also returns
+0** — a detector that gives a correct renderer and an incorrect one the
+same answer is not scoring either of them. New verdict `CRIT?`, gated on a
+mention-grep requiring BOTH words (`"correct"` and `"wrong"`) in the
+patch's own text, deliberately narrow: a mention wrongly promoted to
+`UNRESOLVED` costs a line of output; a mention wrongly promoted to `FAIL`
+would be the harness inventing defects that were never measured.
+
+**Measured over the corpus: the grep selects exactly three patches, moves
+exactly three verdicts, and changes nothing else** — `PCS 3.1`, `PCS 5.1`,
+`PCS 5.2`, all three checked **by eye**, not merely trusted from the grep,
+after selection: one genuinely uses labelled correct/wrong artwork, two use
+a different expected-result design — they do not share one layout, which is
+why the verdict is the neutral `CRIT?` rather than a name claiming they do.
+
+**Two figures move, and they measure different things — filed as both, per
+hard rule 10, so neither is read as the other:**
+
+| measure | before | after | of 51 |
+|---|---|---|---|
+| literal `clean` verdict count (excludes `REF-PASS`) | 29 | 26 | — |
+| harness's own printed **"pass"** total (`clean` + `REF-PASS`) | 34 | 31 | 51 |
+
+⇒ **The honest pass count is 31, not 34** — the figure this project's own
+documents should cite going forward is the second row, because that is the
+one the harness's summary line actually prints as `N pass`.
+
+**This is the THIRD false-pass class this harness has had**, after the
+`REF` reference-strip gap (`Pass 94.0`) and the `MARK?` present-mark gap
+(named in the same docstring `CRIT?` now sits beside). Each was found the
+same way: a human reading the harness's own claimed criterion against what
+its code actually tests, not by running it harder.
+
+**`PCS 3.1` is not a new bug, and no new work is owed by finding it.** It
+is `PCS2_031` under this project's dual naming convention, and it joins
+`PCS2_020` / `PCS2_030` / `PCS2_040` / `PCS2_081` in the already-scoped
+n-channel-buffer bucket (the missing per-spot-colorant plane) — same
+precedent as `Pass 174.2`'s `PCS2_030` finding: **one fewer open mystery,
+no new Pass, no new Backlog entry** for the underlying cause. What IS new
+is that the suite's own scoring now says so, instead of hiding it behind a
+`clean` tick — see the hard-rule-11 sweep at the bottom of this filing's
+`Pass 193.0` entry, below, for the five documents that were still
+repeating the OLD, wrong verdict for this same patch.
+
+#### `Pass 196.1` — the CLI's own overprint note asserted "nothing is owed there," and that was false
+
+`crates/pdfce-cli/src/main.rs`'s per-page overprint disclosure (the
+`cmyk_buffer_engaged` branch of the note) used to end its description of
+the image-overprint gap with *"so nothing is owed there."* **ISO 32000-1
+§11.7.4.3 Table 149's row 2 is TWO rows, not one**: a process-space source
+takes `c_s` for the group's PROCESS components and `c_b` — **preserve the
+backdrop** — for its SPOT ones, in BOTH overprint modes. pdfce's colorant
+buffer has four process planes and no spot plane, so wherever a spot
+colorant has already been flattened into those four planes, a
+process-space image painting `c_s` over them **overwrites ink the table
+says to keep** — it knocks the spot out exactly where a press would show
+it. That is a real, still-open gap, and the note's own closing sentence
+was denying it.
+
+**Proved on this project's own synthetic fixtures, not argued from the
+table alone:** a grey **PATH** painted over a spot backdrop under
+overprint survives; the identical grey painted as an **IMAGE** over the
+same backdrop **erases it**, and the erased result differs from the
+overprint-**OFF** control by **at most one level** — turning overprint on
+for the image changes almost nothing, because the image path does not
+honour `c_b` at all. The note (read directly from `main.rs`, current at
+`HEAD`) now says so: *"an overprinting image in a PROCESS space … is
+conforming ONLY where the backdrop carries no flattened spot ink …
+THIS SENTENCE USED TO END 'so nothing is owed there', AND THAT WAS FALSE
+… That is the missing per-spot-colorant plane, not a reading, and it is
+owed."*
+
+**No renderer behaviour changed** — the fix is entirely to the disclosure
+text; the underlying gap (a process-space image over a flattened spot) is
+filed to *Backlog* (see the list at the bottom of this filing's
+`Pass 193.0` entry, below), because the text fix does not close it.
+
+**`FEATURES.md`: NO ROW CHANGES.** Both fixes correct measurement/
+disclosure honesty about an already-shipped, already-disclosed limitation.
+No capability was added, removed, or changed reach for core/cli/gui.
+`FEATURES.md` row 274 IS corrected in this filing, but for a *different*,
+stale figure — see the hard-rule-11 sweep, below.
+
+#### Gates
+
+| gate | result | source |
+|---|---|---|
+| `python tools/suite-check.py` | 3 verdicts move (`clean`→`CRIT?`); 51 patches unchanged in count | engineer-reported |
+| `find_traps` on Acrobat's own render of `PCS 3.1` | 0 (control) | engineer-reported |
+| `cargo test --workspace` | unaffected — no Rust rendering code changed | engineer-reported |
+
+★ **Not independently re-run by this filing — no shell available to this
+role this session.** `tools/suite-check.py`'s `CRIT?` branch and
+`main.rs`'s corrected note text WERE read directly from source by this
+filing (both quoted above verbatim) and match the dispatch's account; the
+51-patch corpus run itself was not re-executed here.
+
+**Invariant check.** No `Cargo.toml` touched; `cargo tree` neither run nor
+asserted (hard rule 8) — GUI-core separation unaffected by construction (a
+Python tool and an `eprintln!` string carry no crate dependency).
+
+**No decision-log entry** — measurement/disclosure honesty fixes, not a
+crate boundary, library choice, or invariant redefinition.
+
+**Pass ceiling: `196.0` and `196.1` minted this filing — the final ceiling
+after all five of this filing's Shipped entries. See the comprehensive
+ledger at the bottom of this filing's `Pass 193.0` entry, below.**
+
+---
+
+### `Pass 192.0` + `Pass 195.0` (`185500d`, 2026-08-31) — **TWO INDEPENDENT SOFT-MASK/COLORANT DEFECTS, ONE COMMIT: A BEVEL'S SHADOW HALF NEVER PAINTED, AND A MIXED SPOT/PROCESS `/DeviceN` THREW THE SPOT'S INK AWAY** — ★★★★ **ROOT CAUSE OF `Pass 192.0`: A SECOND `gs /SMask` REPLACES THE MASK IN FORCE, PER TABLE 58 — pdfce WAS MULTIPLYING ONTO IT INSTEAD** — ★★★ **`cmyk_group_rules` CLASSIFIES BY COLORANT NAME AND APPLIES THE RESULT TO AN ALREADY-FLATTENED COLOUR, SO A MIXED SOURCE'S SPOT INK LANDS IN NO CHANNEL AT ALL AND IS DISCARDED** — ★★ **A PRIOR "REFUTED BY ABLATION" VERDICT FOR THE BEVEL IS CORRECTED: THE ABLATION FORCED A FUNCTION THIS CONTENT'S ROUTE NEVER CALLS, SO ITS NULL RESULT WAS INEFFECTIVE, NOT EXCULPATORY** — closes `Pass 192.0` (filed under *Next up* by the 356th filing, root cause then unidentified) — filed 2026-08-31 (357th filing)
+
+**One commit, two Pass IDs**, same precedent as `Pass 190.0`/`190.1` — two
+independent defects in two different rendering subsystems (soft-mask
+group semantics; `/DeviceN` colorant classification), fixed together.
+
+#### `Pass 192.0` — the green Bevel-and-Emboss cell's shadow half
+
+**Root cause, now identified** (`docs/NEXT_SESSION.md`'s own §0 entry for
+this Pass recorded it as unknown; it is not any more). A bevel is
+authored as two layers under two successive `ExtGState /SMask`
+applications, whose masks are **complementary** (one for the highlight
+half, one for the shadow half). ISO 32000-1 Table 58, verbatim: setting
+`/SMask` with `gs` *"completely replaces the old value with the new one,
+rather than intersecting the two as is done with the current clipping
+path."* **pdfce was doing the clip's thing to the mask** — multiplying
+the second mask onto the first instead of replacing it — so the shadow
+layer's mask ended up as (highlight mask) × (shadow mask) ≈ 0 almost
+everywhere the shadow should have painted, and the shadow vanished.
+
+**Measured, same fixture and same method as `docs/NEXT_SESSION.md`'s own
+pre-fix figures, so the two are directly comparable:**
+
+| measure | pre-fix | post-fix | reference |
+|---|---|---|---|
+| shadow-half pixels covered (of the cell's 3 non-lit quadrants, 13,872 px) | 0 | 2,425 | — |
+| cell mean abs diff (of 18,496 px — the full 136×136 cell at scale 6) | 29.70 | 2.95 | 0 |
+| pixels differing by >30 (of 18,496) | 6,466 | 155 | 0 |
+| wrong quadrant's luminance | 101.3 | 58.5 | 58.8 |
+
+**Sabotage-verified with a control**: reverting the fix reproduces the
+pre-fix figures; a non-bevel soft-mask patch is unaffected by either
+state.
+
+**★★ CORRECTION TO A PRIOR FILING — an "refuted by ablation" verdict for
+this defect was ineffective, not exculpatory, and the shape is worth
+carrying forward on its own.** An earlier session ran an ablation forcing
+`overprint::classify` to fire unconditionally, observed no change in the
+bevel's rendering, and recorded overprint classification as **refuted**
+as a cause. **The content this patch's shadow layer takes never calls
+`classify` at all** — its route bypasses that function entirely, for
+reasons unrelated to overprint. Forcing a function that is not on the
+execution path for the input under test cannot produce a different
+result **regardless of whether the function's logic matters**, so the "no
+change" observation was **guaranteed by the ablation's own placement**,
+not evidence about the hypothesis it was aimed at. ⇒ **A null result from
+an ablation that cannot reach the code is indistinguishable, from the
+outside, from one that genuinely exonerates it** — the ablation must be
+paired with a check that the modified function was actually called on
+this input (a hit counter, a `debug_assert!` inside the function, or a
+call-graph trace), or its silence proves nothing. See the standing-rule
+disposition at the bottom of this filing's `Pass 193.0` entry, below.
+
+#### `Pass 195.0` — a mixed `/DeviceN` discarded its own spot ink
+
+`cmyk_group_rules` computes Table 149's per-colorant overprint rule set
+from the colorant **names** declared in a `/DeviceN` space, then applies
+that rule set to a colour that has **already been flattened** into the
+four process planes — so a rule computed for a colorant that doesn't map
+onto one of the four process channels has nowhere to land, and that
+colorant's ink is silently thrown away. The existing spot-only refusal
+(routes a source with **no** process colorant at all to the ordinary
+sRGB fallback, preserving its ink) never fired for a **mixed** source,
+because `/Cyan` genuinely **is** a process colorant — so a `/DeviceN
+[/Cyan /<spot>]` space is neither pure-spot (caught by the refusal) nor
+pure-process (nothing to lose): it falls through the middle, where the
+classify-by-name / apply-to-flattened mismatch discards the spot half.
+
+**Measured against Acrobat:**
+
+| patch | page mean vs Acrobat, pre-fix | post-fix | pixels >30, pre-fix | post-fix | verdict |
+|---|---|---|---|---|---|
+| `PCS 8.1` (mixed spot+process) | 40.91 | 28.41 | 38.5% | 16.8% | improved, not yet closed |
+| `PCS 8.0` (mixed, different pairing) | 44.42 | 39.95 | — | — | improved |
+| `PCS 8.2` (all-process, control) | — | — | — | — | **correctly UNCHANGED** |
+
+The affected band ran pure cyan before the fix and now runs
+green→teal→cyan — visibly the spot's own hue reappearing rather than
+being erased. `PCS 8.2` staying unchanged is the control showing the fix
+is scoped to the mixed case and does not perturb the all-process case
+Table 149 already handled correctly.
+
+#### `FEATURES.md`: NO ROW CHANGES
+
+Both are correctness fixes to already-shipped rendering paths — soft-mask
+group application (row 276) and the subtractive colorant buffer's
+`/DeviceN` handling (row 266) — not new capability. Neither row's
+existing sentence makes a claim these fixes falsify.
+
+#### Gates
+
+| gate | result | source |
+|---|---|---|
+| `Pass 192.0` sabotage (revert fix, re-measure) | reproduces pre-fix figures | engineer-reported |
+| `Pass 195.0` three-patch measurement vs Acrobat | table above | engineer-reported |
+| `cargo test --workspace` | green | engineer-reported |
+| `cargo fmt --check` / `cargo clippy -D warnings` | clean | engineer-reported |
+
+★ **Not independently re-run by this filing — no shell available to this
+role this session.**
+
+**Invariant check.** No `Cargo.toml` touched; GUI-core separation
+unaffected by construction (both fixes are internal to `pdfce-render`'s
+existing compositor/colour modules).
+
+**No decision-log entry** — internal rendering-arithmetic corrections, not
+a crate boundary, library choice, or invariant redefinition.
+
+**Pass ceiling: `195.0` minted this filing (`192.0` was already minted by
+the 356th filing). See the comprehensive ledger at the bottom of this
+filing's `Pass 193.0` entry, below.**
+
+---
+
+### `Pass 192.1` (`7360696`, 2026-08-31) — **A LUMINOSITY SOFT-MASK GROUP IS NOW ISOLATED, SO `/BC` IS THE GROUP'S OWN BACKDROP AND NOT EACH OBJECT'S INSIDE IT — SPEC-CORRECT, AND OBSERVABLY CHANGES NOTHING** — filed 2026-08-31 (357th filing)
+
+**What changed.** A luminosity soft-mask group (§11.6.5.2) is now
+constructed as an **isolated** transparency group for the purpose of
+computing its own backdrop: `/BC` sets the colour the group's
+compositing starts from, once, for the group as a whole — not a value
+each interior object individually composites against. Before this fix
+the group's interior objects could see each other's accumulated result
+as their own "backdrop" rather than `/BC`, which is correct for an
+ordinary **non-isolated** group but not for a mask group, whose entire
+purpose is to produce one luminosity value per pixel measured against
+one stated backdrop.
+
+**Spec-correct, and it changes NOTHING OBSERVABLE on any fixture this
+project holds — stated plainly, because that is the honest result, not a
+disappointing one.** This is banked because it is right, not because it
+was measured to matter: every mask group in pdfce's own corpus and the
+print-conformance suite happens to have interior content that does not
+depend on the distinction (a single paint, or non-overlapping paints).
+The fix closes a latent defect a more elaborate mask group would have
+exposed, before one exists to expose it.
+
+**Sourced by `pdfce-spec-librarian`, which also corrected the project's
+own spec corpus while researching this Pass**: §11.7.4.3's EXAMPLE 1 was
+**missing** from `iso32000__s__11.7.md` — the exact example that settles
+a related, easily-confused question: the partition Table 149 draws is
+**process-vs-spot**, not an arity test (i.e. not "one colorant vs
+several"). New spec-RAG reference file
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000__ref__overprint_in_softmask_group.md`
+— `pdfce-spec-librarian`'s territory (hard rule 6), recorded here only as
+a pointer, not authored by this role.
+
+**No FEATURES.md row change** — the soft-mask row (276) makes no claim
+this fix falsifies, and no capability changed.
+
+**Gates:** `cargo test --workspace` green (engineer-reported, not
+independently re-run — no shell this session). No `Cargo.toml` touched;
+GUI-core separation unaffected.
+
+**No decision-log entry** — a spec-fidelity correction, not a crate
+boundary, library, or invariant decision.
+
+**Pass ceiling: `192.1` minted this filing. See the comprehensive ledger
+at the bottom of this filing's `Pass 193.0` entry, below.**
+
+---
+
+### `Pass 194.0` (`bd2df96`, 2026-08-31) — **EDITABLE STRUCTURE ROUND TRIP: EXPORT A DOCUMENT'S COS GRAPH TO AN EDITABLE FORM AND COMPILE IT BACK, APPENDING ONLY WHAT A HAND EDIT ACTUALLY CHANGED** — ★★★★ **THE CAPABILITY qpdf ITSELF DOES NOT HAVE, BY qpdf'S OWN TODO LIST: NEITHER INCREMENTAL UPDATES NOR DIGITAL SIGNATURES SURVIVE A qpdf ROUND TRIP** — ★★★ **THE HARD PART IS COMPARING A DECODED STREAM AGAINST A COMPRESSED ONE, NOT WALKING THE GRAPH** — filed 2026-08-31 (357th filing)
+
+**What shipped.** `pdfce-core::editable` plus `pdfce-cli export-structure`
+/ `import-structure`: a document's COS object graph is exported to an
+editable, human-readable text form (the shape qpdf calls **QDF** — a
+*format*, not a tool this project depends on or reads code from),
+hand-edited, and **compiled back** to PDF bytes as an incremental save —
+only the objects the edit actually touched are rewritten; every object
+the edit did not touch is re-emitted byte-identical or simply carried
+forward untouched, per this project's own round-trip/minimal-diff
+invariant (`CLAUDE.md` rule 3, `ARCHITECTURE.md` §5).
+
+**★★★★ The capability qpdf itself does not have, sourced from qpdf's own
+`TODO.md`:** *"Support incremental updates"* and *"Support digital
+signatures. This probably requires support for incremental updates"* are
+both listed there as **unimplemented**. Consequently every qpdf structure
+round trip **rewrites the whole file** and **invalidates every existing
+digital signature** in it — worth stating plainly because QDF's own
+reputation is as the reference implementation of exactly this idea.
+pdfce's compile-back is incremental by construction, so a structure edit
+made through this Pass's tooling does not carry that cost.
+
+**★★★ The hard part, and it is not the graph walk.** Two objects can be
+semantically identical and byte-different (a stream re-compressed with a
+different Flate level, or the same dictionary with keys in a different
+order) — so comparing the **compiled-back** bytes against the
+**original** bytes to decide "did this object change" would compare the
+wrong pair. The comparison that decides what to rewrite is made on the
+**decoded** stream content against the **decoded** content that was
+exported, never on the raw compressed bytes — a naive byte comparison
+would mark every touched stream's re-encoding as "changed," and the
+"incremental" update would silently contain the **whole file**, while
+every openability/round-trip test that only checks the document still
+opens would keep passing throughout. (The same shape `Pass 193.0`, below,
+had to guard against with its own vacuous-test near-miss — a check that
+always says "fine" for a reason unrelated to the property it claims to
+test.)
+
+**Measured end to end, on a 533-object file:**
+
+- **Unedited round trip: byte-identical to the original**, over all 533
+  objects.
+- **A one-object hand edit** (changing a single dictionary value in the
+  exported text) **appends 409 bytes**, with **all 49,639 bytes of the
+  original file preserved as an untouched prefix** — 49,639 original
+  bytes kept + 409 appended = the full edited file; no bytes rewritten
+  that the edit did not touch.
+
+**`FEATURES.md`: NEW ROW.** *Implemented* — export a document's internal
+structure to an editable form and compile a hand edit back, incrementally
+— `[x]` core, `[x]` cli, `[ ]` gui (no GUI surface exists or is planned
+for this capability at this time).
+
+**Gates:** `cargo test --workspace` green; the 533-object measurement
+above (engineer-reported, not independently re-run — no shell this
+session).
+
+**Invariant check.** No `Cargo.toml` touched; GUI-core separation
+unaffected by construction — `pdfce-core::editable` and the two new
+`pdfce-cli` subcommands add no GUI dependency.
+
+**No decision-log entry** — a new capability inside the existing
+`pdfce-core`/`pdfce-cli` crate boundary, not a boundary redraw.
+
+**Pass ceiling: `194.0` minted this filing. See the comprehensive ledger
+at the bottom of this filing's `Pass 193.0` entry, below.**
+
+---
+
+### `Pass 193.0` (`4ee56bb`, 2026-08-31) — **PDF INTERNAL-STRUCTURE INSPECTION AND DUMP SHIPS: A BOUNDED, CYCLE-GUARDED WALK OF THE COS OBJECT GRAPH AND THE PHYSICAL FILE LAYOUT, IN `pdfce-core` AND `pdfce-cli`** — ★★★ **ACROBAT HAS NO MACHINE-READABLE EQUIVALENT AT ALL, AND ITS OWN VIEW IS RE-SERIALISED RATHER THAN BYTE-ACCURATE, GATED BEHIND A PREFLIGHT CHECK THAT CAN ITSELF MUTATE THE DOCUMENT — pdfce's IS READ-ONLY AND PARITY-PLUS** — ★★ **ONE TEST WAS SILENTLY VACUOUS AND CAUGHT BEFORE SHIPPING: IT POINTED AT A CORPUS FILE WITH NO OBJECT STREAMS, TOOK ITS SKIP BRANCH, AND REPORTED `ok` WHILE ASSERTING NOTHING** — closes `Pass 193.0` (filed *IN PROGRESS* under *Next up* by the 356th filing) — filed 2026-08-31 (357th filing)
+
+**What shipped**, against the provisional scope the 356th filing recorded:
+`pdfce-core::structure` plus `pdfce-cli dump-object` / `dump-structure` /
+`list-objects` — a public API and CLI surface for bounded, cycle-guarded
+traversal and pretty-printing of a document's COS object graph
+(dictionaries, arrays, streams, indirect references, resolved vs.
+unresolved), stream contents both raw and decoded with an output-size
+ceiling (`ARCHITECTURE.md` §10), and beyond the original scope bullet
+list: the **physical** layout distinct from the logical graph — xref
+table vs. xref stream, which objects live compressed inside which
+`/ObjStm`s, incremental-update revision boundaries and the trailer chain
+across them, linearization, and recovery state — plus a **reverse-
+reference map** (given an object id, which other objects point at it),
+neither of which the original scope bullet list had named.
+
+**★★★ Parity finding, from `pdfce-acrobat-librarian`.** Acrobat Pro has
+**no machine-readable export of its own internal-structure/Preflight
+object browser at all** — its interactive view is a **re-serialisation**
+of what it read, not a byte-accurate report of the file's actual COS
+graph, and reaching it at all is gated behind a preflight check that
+**can itself mutate the document** before showing it to the operator.
+pdfce's dump is **read-only** and reports what is actually on disk,
+unmodified — this is Acrobat-parity **plus**, in the same sense project
+rule 11 already establishes for `pdfce-cli` generally (a scriptable
+capability the reference tool does not offer at all, not merely a faster
+path to one it does).
+
+**★★ A vacuous test, caught before shipping, not after.** One of the new
+test file's cases pointed at a corpus fixture that turned out to carry
+**no object streams at all** — the code under test took its
+early-return/skip branch for "nothing to walk here," and the test's own
+assertions never ran, so it reported `ok` while checking nothing. Found
+and fixed **before** this Pass shipped, by the same discipline `R236`'s
+own audits apply after the fact: a green test over a code path is not
+evidence the path was exercised unless the input was checked to actually
+reach it. The fixture was swapped for one that genuinely contains
+`/ObjStm`s.
+
+**`FEATURES.md`: NEW ROW.** *Implemented* — inspect and dump the
+document's own internal COS object graph (dictionaries, arrays, streams,
+resolved/unresolved references, raw and decoded stream contents with a
+size ceiling) and its physical layout (xref table vs. stream, object-
+stream membership, incremental-revision boundaries, trailer chain,
+linearization) plus a reverse-reference map — `[x]` core, `[x]` cli,
+`[ ]` gui (no GUI surface exists or is planned for this capability at
+this time; per `FEATURES.md`'s own maintenance contract, `[ ]` here is a
+genuinely valuable signal — a diagnostic capability with a real caller
+already, `Pass 192.0`'s own root-cause diagnosis, above — not an
+embarrassment to round up).
+
+**Gates:** `cargo test --workspace` green (post vacuous-test fix);
+`cargo fmt --check` / `cargo clippy -- -D warnings` clean (all
+engineer-reported, not independently re-run by this filing — no shell
+available to this role this session).
+
+**Invariant check.** No `Cargo.toml` touched; GUI-core separation
+unaffected by construction — `pdfce-core::structure` and the three new
+`pdfce-cli` subcommands add no GUI dependency.
+
+**No decision-log entry** — a new read-only diagnostic surface inside the
+existing crate boundary, not a boundary redraw.
+
+#### ★ Standing-rule disposition — the ineffective-ablation finding from `Pass 192.0` (above), assessed here because this filing files both
+
+`Pass 192.0`'s correction (an ablation forcing `overprint::classify` was
+read as exculpatory when the content's route never calls that function)
+was proposed by the engineer as a candidate standing rule, named at
+`n = 1` in the dispatch. **This role's assessment: DECLINE a new numbered
+rule, on the same warrant `Pass 189.0`'s "linking is not reaching" was
+declined on one filing ago (352nd filing) — not because the finding is
+weak, but because it is the FOURTH phrasing of an idea this project has
+already written down three times rather than a genuinely new one:**
+
+1. `R236`'s own caveat — a target's **compilation** is not its
+   **execution**.
+2. `R209` — a CI job with no local runner is **unobserved**, not
+   **passing**.
+3. *"Linking is not reaching"* (`Pass 189.0`, `baf0c29`) — a fuzz target
+   that links a crate produces a plausible grep hit for every symbol in
+   it; a target that **reaches** a module is a claim about the call
+   graph, which no grep answers. Declined as a rule at `n = 1` and folded
+   into `R236`'s own text instead, on the argument *"three phrasings of
+   one idea in three rules is how a standing-rules list becomes
+   unreadable."*
+
+**This finding is the same shape a fourth time, in a fourth domain**: an
+**ablation** (a deliberate code modification, not a fuzz target or a CI
+job) whose *existence in the binary* was mistaken for its *exercise on
+the input under test*. `classify` was genuinely modified; it was not
+genuinely called by this content's route; the "no observed effect"
+result therefore proves nothing about whether `classify`'s logic matters
+here, the same way a fuzz target linking a crate proves nothing about
+whether it reaches that crate's code. **Minting a fourth numbered rule
+for a fourth restatement is precisely the failure the third decline's
+own argument warns against.**
+
+**What IS recorded, because the finding is real and the engineer is
+right that this project has now had three "plausible fix that changed
+nothing" episodes in one week** (this one; the `Pass 191.0` fuzz-refusal
+masking, declined the same way at `n = 1`, 355th filing; and the
+`PCS2_031` false-pass class this same filing files as `Pass 196.0`,
+above — a detector giving the same answer for a correct and an incorrect
+renderer is the identical shape one layer up, at measurement rather than
+ablation): a new cross-project RAG finding,
+`D:/dev/rag/rust/an_ablation_of_code_off_the_execution_path_proves_nothing.md`
+(forward slashes deliberately, per hard rule 11's path note), so a second
+instance of THIS specific spelling (ablation, not fuzz target or CI job)
+is recognised rather than re-derived — same discipline `Pass 191.0`'s own
+declined candidate used.
+
+**Standing rules ceiling: `R239` — UNCHANGED, next free `R240`.** No
+mint. **Decision ceiling: `112` — UNCHANGED, next free `113`.** No
+architectural decision — the fix is a private-helper mask-application
+order, not a crate boundary, library choice, or invariant redefinition.
+
+#### ★★ HARD-RULE-11 SWEEP — a claim that changed meaning, and five documents that repeated the stale form
+
+`overprint_images_unsupported`'s first measurement (`Pass 97.1b`, filed
+217th filing) recorded `PCS2_031 = 1` **and called it "a patch that
+PASSES the suite."** Both halves are now known wrong, for two independent
+reasons, and the claim survived, unrevised, in **five** places:
+`docs/compositor-plan.md:1115`, `docs/ROADMAP.md:39210` and `:109957`,
+`docs/FEATURES.md:274`, `docs/SESSION_LOG.md:53710`.
+
+1. **It does not pass.** `Pass 196.0` (above, this filing) gives
+   `PCS 3.1`/`PCS2_031` its correct verdict for the first time: `CRIT?`
+   (a criterion the harness has no detector for), not `clean` — and the
+   underlying cause is the already-known n-channel-buffer gap
+   (`PCS2_020`/`030`/`040`/`081`'s bucket), so the suite was never
+   actually judging this patch as passing; it was reporting the absence
+   of a detector as a pass.
+2. **Its counter value is stale.** `overprint_images_unsupported`'s
+   **meaning changed at `Pass 130.2`** (`fafc0c2`, 2026-08-26) — that
+   entry's own text: *"the counter now counts a **strictly smaller** set
+   … `PCS1_010` contributed 4 to it for the counter's entire prior life
+   with nothing wrong with the render; it contributes 0 now."*
+   `PCS2_031`'s value under the current, narrowed counter is **0**, not
+   the **1** all five documents still quote from before the narrowing.
+
+**Corrected in this filing:** `docs/FEATURES.md:274` (sentence replaced,
+per that file's own "replace, never append" rule) and
+`docs/compositor-plan.md:1115` (corrected in place, bracketed). **Given
+dated correction footers, not rewritten** (both are append-only by this
+project's own discipline): `docs/ROADMAP.md:39210`, `docs/ROADMAP.md
+:109957`, `docs/SESSION_LOG.md:53710`.
+
+**Backlog additions this filing** (four, all named by the correction
+above and by the harness/CLI fixes above — see *Backlog*, top of that
+section, for the full entries):
+
+- A committed test pins a known-wrong value —
+  `crates/pdfce-render/tests/grey_overprint.rs`'s
+  `a_grey_image_is_never_upgraded_whatever_the_scope`'s third assertion
+  expects a neutral where Table 149 row 2's spot column says `c_b`.
+- A disclosure counter for "a process-space image over a flattened spot"
+  — `overprint_images_unsupported` should fire here and currently reads
+  0. The renderer half of `Pass 196.1`'s correction.
+- `tools/overprint_image.rs`'s signature table is missing the row that
+  would catch this on CI.
+- Larger, unscoped: invert `tools/suite-check.py`'s default so a `clean`
+  verdict requires the patch's own text to **state** the criterion the
+  suite claims to check.
+
+#### Ledger (comprehensive, for this filing's five Shipped entries — `Pass 196.0`/`196.1`, `Pass 192.0`/`195.0`, `Pass 192.1`, `Pass 194.0`, `Pass 193.0` above)
+
+**Pass ceiling before this filing: `193.0`.** New Pass IDs minted this
+filing, in the order their underlying commits were made: `194.0`
+(`bd2df96`), `192.1` (`7360696`), `195.0` (`185500d`, alongside the
+already-minted `192.0`), `196.0` + `196.1` (`4299174`). **Final Pass
+ceiling: `196.1`. Next free `196.2` / new major `197.0`.**
+
+**Standing rules ceiling `R239` — UNCHANGED, next free `R240`.** One
+candidate assessed and declined above (the ineffective-ablation finding),
+on the same warrant `Pass 189.0`'s "linking is not reaching" was declined
+one filing ago.
+
+**Decision ceiling `112` — UNCHANGED, next free `113`.** No architectural
+decision this filing — five correctness/tooling fixes and two new
+read-only/round-trip capabilities inside existing crate boundaries.
+
+**Filings `356` → `357`.**
+
+All four figures **not independently re-derived by `tools/
+check-ledger-numbers.py` in this filing — no shell available to this role
+this session.** The engineer should run it before the next push, per hard
+rule 8.
+
+**Documents edited by this filing:** `ROADMAP.md` (this session's five
+Shipped entries, two dated correction footers, four Backlog entries, the
+two removed *Next up* entries), `FEATURES.md` (two new rows, one row's
+sentence replaced), `SESSION_LOG.md` (new entry, one dated correction
+footer), `docs/compositor-plan.md` (one correction in place),
+`docs/NEXT_SESSION.md` (rewritten per its own no-edit-history contract).
+**Nothing under `crates/`, `fuzz/`, `fixtures/` or `tools/`** — all code
+changes described above are the engineer's, across the five commits this
+filing records; this filing itself touches `docs/` only.
+
+---
+
 ### `Pass 191.1` (`ee7866d`, 2026-08-31) — **★★★★ EIGHT MORE DELETION VERBS BELIEVED WHAT A KEY NAMED, AND ONE COULD DESTROY THE PAGE TREE WITH A LABEL EDIT ALONE** — ★★★★ **ALL TWELVE HOSTILE CASES MEASURED AGAINST THE PRE-FIX BINARY, PINNED AT `e4b3481`: EVERY ONE IS `R238` RUNG 3 — `Ok` RETURNED, BYTES WRITTEN THAT RELOAD WITH NO WALKABLE PAGE TREE** — ★★★ **A SECOND DEFECT FOUND BY READING A GUARD'S OUTPUT, NOT BY ASSERTING ON IT: ITS ERROR MESSAGE STILL NAMED ONE CARRIER AFTER GAINING SEVEN MORE CALLERS** — closes `Pass 191.1` (audited by `Pass 191.0` and filed under *Next up* by the 355th filing) — filed 2026-08-31 (356th filing)
 
 **What it was.** `Pass 191.0`'s audit — run because `R219` requires
@@ -39214,6 +39779,19 @@ object class the renderer never offered the feature to.* That is the
 whole argument for a separate counter stated as a measurement rather than
 as a principle — the suite's verdict and the renderer's coverage are
 different facts, and only one of them was being reported.
+
+> **★★ CORRECTED 2026-08-31 (357th filing) — BOTH HALVES OF THIS ROW ARE
+> NOW KNOWN WRONG; KEPT ABOVE, UNCHANGED, AS THE MEASUREMENT MADE AT THIS
+> FILING'S OWN DATE (append-only discipline).** `PCS2_031` does **not**
+> pass the suite — `Pass 196.0` gives it its first correct verdict,
+> `CRIT?` (a criterion this harness has no detector for), and the
+> underlying cause is the already-known n-channel-buffer gap
+> (`PCS2_020`/`030`/`040`/`081`'s bucket). And `overprint_images_unsupported`'s
+> **meaning changed at `Pass 130.2`** — under the current, narrowed
+> counter, `PCS2_031` reads **0**, not the **1** measured here before that
+> narrowing. See `Pass 196.0`'s *Shipped* entry, top of *Shipped*, for the
+> full correction and the hard-rule-11 sweep that found this row as one of
+> five surviving copies of the same stale claim.
 
 #### Verification at `0d5fc29` (engineer-relayed)
 
@@ -96059,118 +96637,6 @@ never a second file).
 > 2026-08-12 list did not contain**. Still one file, still footers: writing a new
 > RAG file about the inertness of a written RAG file would refute itself.
 
-### `Pass 193.0` — **PDF INTERNAL-STRUCTURE INSPECTION AND DUMP: A BOUNDED, CYCLE-GUARDED WALK OF THE COS OBJECT GRAPH AND THE PHYSICAL FILE LAYOUT, IN `pdfce-core` AND `pdfce-cli`** — ★★★ OPERATOR INSTRUCTION, VERBATIM (relayed by the engineer): *"make the structure inspection and structure dump part of the core and CLI, then use it to diagnose"* — filed 2026-08-31 (356th filing), **IN PROGRESS this session per the engineer's own dispatch**
-
-**Motivation, and it is the good kind.** Diagnosing `Pass 192.0`'s
-Bevel-and-Emboss rendering defect (filed immediately below) required seeing
-the `/ExtGState`/`/SMask` structure of the page that produces it, and pdfce
-currently has **no way to inspect its own object graph** — the objects in
-question live inside object streams, so the only route available during
-diagnosis was a throwaway hand-rolled decompressor built for that one
-investigation. A renderer that cannot show its own operator what it read is
-one whose defects can only be diagnosed by whoever wrote the parser.
-
-**Scope, PROVISIONAL.** A parity read from `pdfce-acrobat-librarian` on
-Acrobat Pro's internal-structure/Preflight browser has been requested and is
-**not yet in hand** — treat every line below as subject to revision once it
-lands, per project rule 12 (scope from actual Acrobat behavior, not from
-guessing what a "structure browser" should contain):
-
-- A public `pdfce-core` API for bounded, cycle-guarded traversal and
-  pretty-printing of the COS object graph — dictionaries, arrays, streams,
-  indirect references, resolved vs. unresolved.
-- Stream contents, both raw (as stored) and decoded (filters applied), with
-  an output-size ceiling per `ARCHITECTURE.md` §10 — no unbounded dump of an
-  attacker- or accident-sized stream.
-- The **physical** layout, distinct from the **logical** graph: xref table
-  vs. xref stream, which objects live compressed inside which object
-  streams, incremental-update revision boundaries, the trailer chain across
-  those revisions, and linearization.
-- `pdfce-cli` subcommands over all of the above.
-
-**Why this is Acrobat-parity plus, not merely parity.** Acrobat has no
-scriptable equivalent to a CLI structure dump (project rule 11) — this is
-the kind of capability the CLI exists to deliver beyond what the GUI
-reference tool can do.
-
-**Acceptance criteria: not yet written.** This Pass is being scoped and
-built in the same working session as this filing; a full criteria ledger
-belongs in this entry's next amendment, once the acrobat-parity read is in
-and the API shape is settled. Do not treat the bullet list above as
-acceptance criteria — it is scope-under-construction, stated as such.
-
-**★ Numbering is not an ordering, same precedent as `Pass 179.0`/`179.1`/
-`179.3` above.** This Pass is `193.0` and is the one **actively being
-built**; `Pass 192.0`, immediately below, is lower-numbered, **not started**,
-and queued behind it — the numbers reflect filing order in this dispatch,
-not work priority.
-
-**Pass ceiling `191.1` → `193.0`** (`192.0`, immediately below, is minted in
-the same filing). **Next free `193.1` / new major `194.0`.**
-
----
-
-### `Pass 192.0` — **`PCS 16.8` (VECTOR SOFT-MASKS PART 1): THE GREEN BEVEL-AND-EMBOSS CELL RENDERS ITS HIGHLIGHT AND OMITS ITS SHADOW** — ★★ REPORTED BY THE OPERATOR; MEASURED AGAINST THE PATCH'S OWN BAKED REFERENCE CELL ON THE SAME PAGE; ROOT CAUSE NOT YET IDENTIFIED — filed 2026-08-31 (356th filing), **NOT STARTED, queued behind `Pass 193.0` above**
-
-**What is wrong, measured today.** Reported by the operator. Measured by
-rendering `PCS1_168` and comparing the live "actual test object" cell
-against the file's own baked reference cell on the same page — both
-located **programmatically by content, not cropped by eye**, both 136×136 at
-scale 6:
-
-| quadrant | mean abs diff | pixels > 30 (of 4,624 per quadrant) |
-|---|---|---|
-| top-left | 1.9 | 0 |
-| top-right | 20.0 | 1,184 |
-| bottom-left | 33.5 | 1,868 |
-| bottom-right | 63.4 | 3,414 |
-
-**Total: 6,466 of 18,496 pixels (35.0%) differ by more than 30; max
-per-channel difference 141.** (18,496 = 4 × 4,624, the whole 136×136 cell at
-scale 6 split into four quadrants; the per-quadrant counts sum to the
-total.)
-
-**Reading, stated plainly.** The top-left quadrant — the bevel's lit side —
-is essentially exact (mean diff 1.9, zero pixels over threshold). The three
-quadrants the operator named are wrong, and the visual reading is
-unambiguous: the reference darkens to near-black along the right and bottom
-edges, and pdfce leaves flat mid-green there. **The highlight half of the
-bevel renders; the shadow half does not.**
-
-**Render counters for this page** (from the existing metrics-line
-disclosure, not newly added for this investigation): `soft_masks_applied=9`,
-`soft_masks_on_group_result=5`, `groups_composited=5`,
-`blend_modes_applied=5`, `groups_backdrop_reruns=4`,
-`blend_space_subtractive=6`, `blends_in_wrong_space=0`, `cmyk_buffer=1`.
-
-**Root cause: NOT YET IDENTIFIED — stated plainly rather than implied.**
-Untested hypotheses to try first, in no particular order and none
-preferred: the shadow layer's own blend mode; its luminosity soft-mask's
-backdrop (`/BC`); a transfer function (`/TR`) on that mask. `Pass 193.0`'s
-structure dump (filed immediately above, in progress) exists partly to make
-this diagnosable without a throwaway decompressor.
-
-**★ A separate, smaller, SUSPECTED-not-confirmed defect found alongside
-this one — recorded so it is not lost, not claimed as diagnosed.** The
-`blend_modes_applied` CLI disclosure text still reads *"pdfce blends in
-device sRGB"* on the same run that reports `blends_in_wrong_space=0` and
-`blend_space_subtractive=6` — the note's prose appears stale relative to its
-own counters. Not verified beyond reading the two together.
-
-**Acceptance criteria: not yet written** — root cause is unknown, and
-criteria should follow diagnosis rather than precede it. At minimum: the
-shadow half of the bevel must render, measured the same way as above
-(quadrant mean-abs-diff and pixel-count-over-threshold against the file's
-own baked reference), on this fixture, and re-checked against the full
-print-conformance harness (`tools/suite-check.py`) for regressions on
-neighbouring soft-mask/blend-mode patches.
-
-**Pass ceiling `191.1` → `192.0` → `193.0` (see `Pass 193.0`, above, minted
-in the same filing). Final ceiling after this filing: `193.0`; next free
-`193.1` / new major `194.0`.**
-
----
-
 ### `Pass 179.0` — **BOLD BECOMES AUTOMATIC: A FALLBACK LADDER THAT BINDS A REAL FACE WHEN ONE EXISTS AND SYNTHESISES WHEN ONE DOES NOT, WITH NO OPERATOR INTERVENTION** — ★★★ **OPERATOR RULING, 2026-08-30; DECISION `106`. REVERSES THREE CLAUSES OF pdfce's OWN DOCUMENTED POSTURE AND AMENDS `R90`** — filed 2026-08-30 (340th filing), **NOT STARTED**
 
 **The ruling, verbatim (Ken, 2026-08-30):**
@@ -107430,6 +107896,61 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### Unscoped — **a committed test pins a KNOWN-WRONG value, deliberately, pending the n-channel buffer** — filed 2026-08-31 (357th filing, `Pass 196.1`'s renderer-side residual)
+
+`crates/pdfce-render/tests/grey_overprint.rs`'s
+`a_grey_image_is_never_upgraded_whatever_the_scope`'s third assertion
+expects a **neutral** result where ISO 32000-1 §11.7.4.3 Table 149 row
+2's spot column actually says `c_b` (preserve the backdrop). The test's
+own header already anticipates this — it is pinning today's known-wrong
+behaviour so a future change is a deliberate, reviewed decision rather
+than a silent regression. **Re-derive this assertion when the
+per-spot-colorant (n-channel) buffer lands**, not before — until then the
+renderer has no plane to preserve a spot's ink on, so `c_b` cannot be
+honoured for an image regardless of what this test expects.
+
+### Unscoped — **a disclosure counter for "a process-space image over an already-flattened spot" does not fire where it should** — filed 2026-08-31 (357th filing, `Pass 196.1`'s renderer-side residual)
+
+`overprint_images_unsupported` is meant to fire whenever the composite
+was never offered a paint's object class at all (see `Pass 97.1b`'s
+original design and `Pass 130.2`'s narrowing of its meaning). A
+process-space **image** painting over a backdrop with an already-
+flattened spot colorant is exactly this shape — Table 149 row 2's `c_b`
+column is owed and not delivered — and the counter currently reads **0**
+on this case rather than counting it. `Pass 196.1` (this filing) fixed
+the CLI's disclosure *text* claiming "nothing is owed there"; this entry
+is the counter fix that text correction did not make. Needs a predicate
+alongside `overprint::names_a_process_colorant` that can tell "this
+source is process-space AND the backdrop it is painting over already
+carries flattened spot ink" — the second half is the part nothing today
+computes.
+
+### Unscoped — **`tools/overprint_image.rs`'s signature table has no row that would catch this on CI** — filed 2026-08-31 (357th filing, `Pass 196.1`'s renderer-side residual)
+
+A grey image under `/OP true` vs. the same image under `/OP false` MUST
+differ (per Table 149 row 2's `c_b` column, once honoured) and today
+differs by **at most one level** with nothing asserting that they should.
+Add the row once the counter fix above exists; asserting it now would
+pin the current near-zero difference as correct, which is the exact
+mistake the *grey_overprint.rs* entry above is careful not to make.
+
+### Unscoped — **invert `tools/suite-check.py`'s DEFAULT so `clean` requires the patch's own text to STATE the criterion, rather than falling to `clean` whenever no detector fires** — filed 2026-08-31 (357th filing, named by `Pass 196.0`'s `CRIT?` fix)
+
+`Pass 196.0` (above, *Shipped*) is the harness's **third** false-pass
+class fixed by patching around a specific discovered shape (`REF`,
+`MARK?`, now `CRIT?`) — each time, a `clean` default caught a patch whose
+criterion the harness genuinely cannot judge. **Inverting the default**
+so a patch scores `clean` only when its own text is recognised as stating
+a criterion this harness DOES implement — and anything else defaults to
+an honest `UNRESOLVED`/`?` rather than to a pass — stops the *next*
+undiscovered shape rather than patching the third one found. **Needs an
+X-language detector first**: a way to distinguish "this patch's own text
+states a criterion nothing here checks" from "this patch's criterion-text
+just hasn't been catalogued by this harness yet," which is a real
+classification problem, not a one-line default flip. Scope with the
+operator before starting — this touches every one of the suite's 51
+patches' scoring, not one.
+
 ### Unscoped — **`resize_annotation`'s `/AP` `/N` overwrite guards against structural DICTIONARIES only as a side effect, not against a page's `/Contents` STREAM** — reported, not fixed, by `Pass 191.1` — filed 2026-08-31 (356th filing)
 
 `appearance_slot`'s `Reuse` path (called from `resize_annotation`) rejects a
@@ -109959,6 +110480,16 @@ added. See that section below.
   > colour space (the leading deliverable), the colorant planes, and the
   > image overprint path itself — `97.1b` counts that gap, it does not
   > close it.
+  >
+  > **★★ CORRECTED 2026-08-31 (357th filing) — the quoted `PCS2_031 = 1,
+  > a patch that PASSES` is now known wrong on both counts, and kept
+  > above unchanged (append-only) as this filing's own measurement at its
+  > own date.** `PCS2_031` does not pass — `Pass 196.0` gives it its
+  > first correct verdict, `CRIT?`, the already-known n-channel-buffer
+  > gap. And the counter's **meaning changed at `Pass 130.2`**; under the
+  > current, narrowed definition `PCS2_031` reads **0**, not the quoted
+  > **1**. See `Pass 196.0`'s *Shipped* entry, top of *Shipped*, for the
+  > full correction.
   1. **`/Indexed` defeats overprint colorant classification.**
      `overprint::classify` has no `/Indexed` arm, so an `/Indexed` space
      falls to `SourceKind::OtherProcess` and its base's colorant list is

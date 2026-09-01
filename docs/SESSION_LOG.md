@@ -53712,6 +53712,14 @@ untouched. Its Backlog entry stays, amended.
   an object class the renderer never offered the feature to.* That is the
   argument for a separate counter stated as a measurement rather than as
   a principle.
+  > **★★ CORRECTED 2026-08-31 (357th filing) — both halves of the
+  > `PCS2_031` figure above are now known wrong; kept above unchanged as
+  > this entry's own dated measurement.** It does not pass the suite
+  > (`Pass 196.0` gives it its first correct verdict, `CRIT?` — the
+  > already-known n-channel-buffer gap). And the counter's meaning
+  > **changed at `Pass 130.2`**; under the current, narrowed definition
+  > `PCS2_031` reads **0**, not the **1** measured here. See
+  > `ROADMAP.md`'s `Pass 196.0` *Shipped* entry for the full correction.
 
 **★★ THE BROTLI BACKLOG ENTRY NOW HAS REAL SOURCING — AND THE OPERATOR'S
 PREMISE NEEDS CORRECTING, GENTLY:**
@@ -83514,5 +83522,195 @@ role this session — per hard rule 8, the honest statement is that commit
 currency (including `dc8cde7`'s exact position relative to `e4b3481`/
 `ee7866d`), unpushed-commit count and backup-bundle staleness are **not
 verifiable from here**. The engineer should check `git log --oneline -10`,
+`git rev-list --count origin/main..main` and `ls -lt D:/Dev/pdfce-backups/`
+directly rather than take anything in this entry as a measured git claim.
+
+## 2026-08-31 (357th filing) — five commits filed: `Pass 193.0`/`194.0`/`192.1`/`192.0`/`195.0` SHIPPED, plus `Pass 196.0`/`196.1` (two false greens); a five-document stale-figure sweep; ineffective-ablation finding assessed and DECLINED as a standing rule at `n = 1`
+
+**Shipped:**
+
+- **`Pass 193.0`** (`4ee56bb`) — PDF internal-structure inspection/dump ships:
+  `pdfce-core::structure` + `pdfce-cli dump-object`/`dump-structure`/
+  `list-objects`. Acrobat has no machine-readable equivalent at all
+  (`pdfce-acrobat-librarian`: its own object browser is re-serialised, not
+  byte-accurate, and gated behind a preflight step that can mutate the
+  document) — parity-plus. Beyond the provisional scope: physical layout
+  (xref style, `/ObjStm` membership, incremental-revision/trailer chain,
+  linearization) and a reverse-reference map. One test caught **silently
+  vacuous before shipping** — pointed at a corpus file with no object
+  streams, took its skip branch, reported `ok` asserting nothing; fixed.
+- **`Pass 194.0`** (`bd2df96`) — editable structure round trip:
+  `pdfce-core::editable` + `export-structure`/`import-structure`, the shape
+  qpdf calls QDF. **A capability qpdf itself lacks**, per qpdf's own
+  `TODO.md`: neither incremental updates nor digital-signature preservation
+  are implemented there, so every qpdf round trip rewrites the whole file
+  and invalidates every signature. The hard part is comparing a **decoded**
+  stream against the exported decoded content, never the raw compressed
+  bytes, or a naive comparison would mark every re-encoded stream "changed"
+  and silently write a whole-file "incremental" update. Measured on a
+  533-object file: unedited round trip byte-identical; a one-object hand
+  edit appends 409 bytes with all 49,639 original bytes preserved untouched.
+- **`Pass 192.1`** (`7360696`) — a luminosity soft-mask group is now
+  ISOLATED, so `/BC` is the group's own backdrop, not each interior
+  object's. Spec-correct; changes NOTHING OBSERVABLE on any fixture this
+  project holds, banked because it is right. `pdfce-spec-librarian`
+  corrected the project's own spec corpus while sourcing this: §11.7.4.3's
+  EXAMPLE 1 was missing from `iso32000__s__11.7.md` — it settles that
+  Table 149's partition is process-vs-spot, not an arity test.
+- **`Pass 192.0`** (`185500d`) — the green Bevel-and-Emboss cell's shadow
+  half. Root cause: a second `gs /SMask` REPLACES the mask in force
+  (ISO 32000-1 Table 58) — pdfce was multiplying onto it instead, so a
+  bevel's two complementary masks multiplied to ≈0 and the shadow layer
+  vanished. Measured, same fixture/method as `docs/NEXT_SESSION.md`'s own
+  pre-fix figures: cell mean-abs-diff 29.70 → 2.95 (of 18,496 px); pixels
+  >30, 6,466 → 155 (of 18,496); wrong quadrant's luminance 101.3 → 58.5
+  against a reference of 58.8. Sabotage-verified with a control.
+- **`Pass 195.0`** (`185500d`, same commit) — a mixed `/DeviceN` (a spot
+  colorant alongside a process one) discarded the spot's own ink.
+  `cmyk_group_rules` classifies Table 149's rule set by colorant NAME and
+  applies it to an already-FLATTENED colour, so a colorant whose rule
+  doesn't map onto one of the four process planes has nowhere to land. The
+  existing spot-only refusal never fired because `/Cyan` genuinely is a
+  process colorant, so the mixed shape fell through the middle. Measured
+  vs. Acrobat: `PCS 8.1` page mean 40.91 → 28.41 (pixels >30, 38.5% →
+  16.8%), `PCS 8.0` 44.42 → 39.95, `PCS 8.2` (all-process control)
+  correctly UNCHANGED.
+- **`Pass 196.0`** (`4299174`) — `tools/suite-check.py`'s THIRD false-pass
+  class: a patch scored by baked correct/wrong artwork or an expected-
+  result row had no detector at all and defaulted to `clean`. New `CRIT?`
+  verdict, gated on a two-word mention-grep, moves exactly three verdicts:
+  `PCS 3.1`, `PCS 5.1`, `PCS 5.2`. Control that settles `PCS 3.1` is a
+  real failure, not a harness quirk: `find_traps` on Acrobat's OWN render
+  of it also returns 0. Two figures, filed separately per hard rule 10:
+  literal `clean` count 29 → 26; the harness's own printed "pass" total
+  (`clean` + `REF-PASS`) 34 → 31, of 51. **`PCS 3.1` is `PCS2_031`** and is
+  not a new bug — it joins the already-scoped n-channel-buffer bucket
+  (`PCS2_020`/`030`/`040`/`081`); no new Pass, no new Backlog entry for the
+  underlying cause.
+- **`Pass 196.1`** (`4299174`, same commit) — the CLI's overprint note used
+  to end "so nothing is owed there," and that was false: Table 149 row 2 is
+  TWO rows, and the spot column is `c_b` (preserve the backdrop). Proved on
+  this project's own synthetic fixtures: a grey PATH over a spot survives;
+  the same grey as an IMAGE erases it, differing from the overprint-OFF
+  control by at most one level. No renderer change — text-only fix; the
+  renderer gap is filed to *Backlog*.
+
+**Decisions made this session:** none. Every fix above is internal to an
+existing crate boundary (mask-application order, colorant classification,
+a Python harness's verdict logic, a disclosure string) or a new capability
+inside the existing `pdfce-core`/`pdfce-cli` split — no crate boundary
+redrawn, no library picked, no invariant redefined. No `ARCHITECTURE.md`
+§12 entry filed.
+
+**Findings + decisions:**
+
+- **★★★ An "refuted by ablation" verdict, corrected.** A prior session's
+  ablation forced `overprint::classify` unconditionally and observed no
+  change in the bevel's rendering, recording overprint classification as
+  refuted. The bevel's shadow-layer content never calls `classify` at
+  all — the ablation modified a function not on this input's execution
+  path, so its null result was **guaranteed by the ablation's own
+  placement**, not evidence about the hypothesis. Assessed as a standing-
+  rule candidate at the engineer's own `n = 1` naming, and **DECLINED** by
+  this role — not because it is weak, but because it is a **fourth
+  phrasing** of an idea this project has written down three times already
+  (`R236`'s compilation-is-not-execution caveat; `R209`'s CI-job-with-no-
+  runner caveat; `Pass 189.0`'s "linking is not reaching," itself declined
+  one filing ago on exactly this "three phrasings" argument). Recorded as
+  a new cross-project RAG finding instead —
+  `D:/dev/rag/rust/an_ablation_of_code_off_the_execution_path_proves_nothing.md`
+  — so a second instance of THIS spelling is recognised without a fourth
+  numbered rule.
+- **★★★ Hard-rule-11 sweep: a claim that changed meaning, in FIVE
+  documents.** `PCS2_031`'s first measurement (`Pass 97.1b`, 217th filing)
+  said `= 1, a patch that PASSES the suite`. Both halves are wrong: it does
+  not pass (`Pass 196.0` gives its first correct verdict, `CRIT?`), and the
+  counter's meaning **changed at `Pass 130.2`**, under which `PCS2_031`
+  reads `0`, not `1`. Survived, unrevised, in `docs/compositor-plan.md:1115`,
+  `docs/ROADMAP.md:39210` and `:109957`, `docs/FEATURES.md:274`, and this
+  file's own 2026-08-25 entry (see the dated footer added there this
+  filing). Corrected directly in `FEATURES.md` (sentence replaced) and
+  `compositor-plan.md` (inline); given dated footers in `ROADMAP.md` and
+  this file (both append-only).
+- **A vacuous test caught before shipping is a positive process finding,
+  not a footnote** — `Pass 193.0`'s own test suite had exactly this shape
+  (a skip branch silently passing on a fixture with no object streams) and
+  it was found and fixed pre-ship, the outcome `R236`'s post-hoc audits
+  exist to catch when a session does not catch it first.
+
+**Verification performed by this role (hard rule 8) — LIMITED THIS FILING:**
+No shell available to this role this session. `tools/suite-check.py`'s
+`CRIT?` branch (lines 255–278, 523–528) and `crates/pdfce-cli/src/main.rs`'s
+corrected overprint note (line 12282) WERE read directly from source and
+match the dispatch's account verbatim — quoted in the `ROADMAP.md` entries.
+All numeric gate/test results (workspace green, fmt/clippy clean, the
+533-object round-trip measurement, the pixel/luminance tables) are
+engineer-reported and attributed as such in each *Shipped* entry.
+
+**`FEATURES.md`: two new rows, one row corrected, no other changes.**
+- **NEW** — "Inspect and dump a document's own internal COS object graph"
+  (`Pass 193.0`), `core [x] cli [x] gui [ ] Acrobat [ ]`.
+- **NEW** — "Export a document's structure to an editable form and compile
+  a hand edit back" (`Pass 194.0`), `core [x] cli [x] gui [ ] Acrobat [ ]`.
+- **Row 274 corrected** — the stale `PCS2_031 = 1, a patch that passes`
+  clause replaced per the hard-rule-11 sweep above.
+- **NO ROW CHANGES for `Pass 192.0`/`192.1`/`195.0`/`196.0`/`196.1`** —
+  all five are correctness/measurement/disclosure fixes to already-shipped
+  capabilities; none changes reach for core/cli/gui on any row.
+
+**Still in flight:**
+
+- Four new *Backlog* entries filed this session (all named by the
+  `Pass 196.1` renderer-side residual and the `Pass 196.0` harness fix):
+  the `grey_overprint.rs` pinned-known-wrong-value test; the missing
+  `overprint_images_unsupported` disclosure for a process-space image over
+  a flattened spot; `tools/overprint_image.rs`'s missing CI signature-table
+  row; and the larger, unscoped `suite-check.py` default-inversion item.
+- The pre-existing carried-forward items in `docs/NEXT_SESSION.md` §A
+  (FeatureRequests channels, `Pass 142.0`, the `text_edit` resolver
+  residual, `/AP` `/D` + `/MK` layout, the n-channel buffer,
+  `CmykIntent::Calibrated`) are unchanged by this filing.
+- `resize_annotation`'s `/AP` `/N` overwrite gap (filed 356th filing) is
+  unchanged, still unscoped.
+
+**For next session:**
+
+- `docs/NEXT_SESSION.md` rewritten: no active/queued Pass remains from
+  §0 (both `Pass 193.0` and `Pass 192.0` shipped this filing) — see its own
+  rewritten §0 for what replaces them.
+- The n-channel-buffer bucket now has five members
+  (`PCS2_020`/`030`/`031`/`040`/`081`) rather than four — worth citing the
+  updated count wherever that bucket is next discussed.
+- Confirm `tools/check-ledger-numbers.py` and `bash tools/run-gates.sh`
+  before the next push — neither was run by this role this session.
+
+**Documents edited this filing:**
+
+- `docs/ROADMAP.md` — five new *Shipped* entries (topmost of *Shipped*);
+  the two `Pass 193.0`/`Pass 192.0` *Next up* entries removed (fully
+  discharged into the *Shipped* entries, no remnant pointer); four new
+  *Backlog* entries; two dated correction footers (`PCS2_031`, at the
+  `Pass 97.1a`/`97.1b` and `Pass 97.0` retrospective entries).
+- `docs/FEATURES.md` — two new rows, one row's sentence replaced.
+- `docs/SESSION_LOG.md` — this entry; one dated correction footer on the
+  2026-08-25 entry's `PCS2_031` measurement.
+- `docs/compositor-plan.md` — one inline correction (not append-only; this
+  is a plan/reference document, not the roadmap or session log).
+- `docs/NEXT_SESSION.md` — rewritten (see below).
+
+**Ceilings after this filing** (stated from the edits made; **not
+independently re-run through `tools/check-ledger-numbers.py`, no shell
+available to this role this session — the engineer should confirm**):
+Pass ceiling `193.0` → **`196.1`** (new mints this filing, in commit order:
+`194.0`, `192.1`, `195.0`, `196.0`, `196.1`; `192.0` and `193.0` were
+already minted by the 356th filing and are shipped, not minted, here);
+next free `196.2`/new major `197.0`. Standing rules `R239` — **UNCHANGED**,
+next free `R240` (one candidate assessed and declined, see above). Decisions
+`112` — **UNCHANGED**, next free `113`. Filings `356` → **`357`**.
+
+**Git/backup state: NOT ASSERTED.** No shell tool was available to this
+role this session — per hard rule 8, commit currency, unpushed-commit
+count and backup-bundle staleness are **not verifiable from here**. The
+engineer should check `git log --oneline -10`,
 `git rev-list --count origin/main..main` and `ls -lt D:/Dev/pdfce-backups/`
 directly rather than take anything in this entry as a measured git claim.

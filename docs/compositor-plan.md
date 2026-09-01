@@ -1117,6 +1117,18 @@ Carried forward from `NEXT_SESSION.md` §2, unchanged and still unclaimed:
    That last row is the one to keep: a patch can pass its own trap and still
    have an object class the renderer never offered the feature to.
 
+   **[★★ CORRECTED 2026-08-31 (pdfce-librarian, 357th filing) — both halves
+   of the `PCS2_031` row above are now known wrong.** It does not pass the
+   suite (`Pass 196.0` gives it its first correct verdict, `CRIT?` — the
+   already-known n-channel-buffer/missing-spot-plane gap). And the counter's
+   meaning **changed at `Pass 130.2`**, narrowing it to a strictly smaller
+   set; under the current definition `PCS2_031` reads **0**, not the **1**
+   quoted above from before the narrowing. See `ROADMAP.md`'s `Pass 196.0`
+   *Shipped* entry for the full correction. Row kept above as the original,
+   dated measurement rather than rewritten — this is a plan/reference
+   document, not the append-only roadmap, so the correction is made inline
+   rather than as a dated footer.]**
+
 And one new one, produced while writing this document:
 
 4. **`tools/suite-cell-probe.py`** — the diagnostic §1 is built on. For each
