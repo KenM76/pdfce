@@ -114,13 +114,16 @@ an 8.4 Mpx page with four spots is 33.6 M function evaluations at collapse time.
 - Version **0.19.0**, tag `v0.19.0` at `d19d4e4`, pushed.
 - Portable build at `D:\builds\pdfce-20260901-1146-d19d4e4`; CLI published to
   OneDrive slot `pdfce2` (slot `pdfce1` holds 0.17.0 as the previous version).
-- **★ EIGHT code commits are unfiled** (`1f1ef21` … `407336e`, plus `faf699a`).
-  `python tools/check-commits-filed.py` lists them. **Dispatch
-  `pdfce-librarian` with each commit's full message early** — they carry the
-  measurements, and a one-line subject cannot supply them.
-- **Backups are stale**: newest bundle is at `0f379b6`. Run
+- **★ NINE code commits are unfiled** — `1f1ef21`, `edd521e`, `d5d012e`,
+  `de3469c`, `643e270`, `4b4af37`, `f7eb4a1`, `407336e`, `faf699a` (the same
+  nine that hold Passes 213.0–221.0 above). `python tools/check-commits-filed.py`
+  lists them. **Dispatch `pdfce-librarian` with each commit's full message
+  early** — they carry the measurements, and a one-line subject cannot supply
+  them. Filing them also retires the Pass-number warning at the top.
+- **Backups are current**: `pdfce-20260901-1855-faf699a-full.bundle`, verified.
+  Refresh after the next batch with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
-  and `git bundle verify` it.
+  and `git bundle verify`.
 - Conformance standing: **7 FAIL / 37 pass / 7 UNRESOLVED of 51**
   (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir
   D:/Dev/temp/acro-refs`).
