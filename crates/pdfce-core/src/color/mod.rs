@@ -180,6 +180,9 @@
 //! table becomes its default entry rather than being replaced.
 
 mod cmyk_table;
+mod intent;
+
+pub use intent::RenderingIntent;
 
 use cmyk_table::{GRID_L, NODES};
 

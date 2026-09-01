@@ -301,6 +301,20 @@ pub struct Diagnostics {
     /// redefining the counter would have left an operator diffing two runs
     /// unable to tell which number moved or why.
     pub blend_modes_applied: usize,
+    /// How many times the document SET a rendering intent — the `ri` operator
+    /// or an `/ExtGState` `/RI` (§8.6.5.8) (`Pass 199.0`).
+    ///
+    /// A census, and a deliberately honest one: pdfce now **carries** the
+    /// intent in the graphics state where it previously discarded it, but
+    /// carrying is not yet acting. The conversion that would consume it is
+    /// `Pass 199.x`, so this counter says "the document asked for something"
+    /// and NOT "pdfce did it".
+    ///
+    /// ★ Non-zero with a non-default intent means the operator is being shown a
+    /// render that ignores a choice the file made — which is worth knowing
+    /// before comparing pdfce against another engine, because that engine may
+    /// well honour it.
+    pub rendering_intents_set: usize,
     /// `gs` operators naming a blend mode pdfce did NOT apply. Those marks
     /// were composited as `Normal`.
     ///
@@ -1681,6 +1695,7 @@ polarity unverifiable (decision 006 R30)",
         self.transparency_groups_flattened += other.transparency_groups_flattened;
         self.transparency_groups_special += other.transparency_groups_special;
         self.blend_modes_applied += other.blend_modes_applied;
+        self.rendering_intents_set += other.rendering_intents_set;
         self.blend_modes_ignored += other.blend_modes_ignored;
         self.soft_masks_ignored += other.soft_masks_ignored;
         self.soft_masks_applied += other.soft_masks_applied;
@@ -2780,7 +2795,29 @@ impl Interpreter<'_> {
                 }
             }
             b"d" => self.set_dash(op),
-            b"i" | b"ri" => {} // flatness / rendering intent: recognized no-ops in Pass 1
+            // Flatness tolerance (§10.6.2) is a rendering hint with no effect
+            // on pdfce's output; still a recognised no-op.
+            b"i" => {}
+            // ★ `ri` -- the rendering intent (§8.6.5.8). NO LONGER A NO-OP
+            // (`Pass 199.0`). §8.6.5.8 says the four names "shall be
+            // recognized" and that an unrecognised one "shall use the
+            // RelativeColorimetric intent by default"; §11.7.5.3 says the
+            // intent used "shall be the current rendering intent in effect in
+            // the graphics state at the time of the painting operation". So
+            // discarding it was a conformance defect, not a quality gap.
+            //
+            // The NOTE that reads as permission -- "a particular device does
+            // not have to support all PDF rendering intents" -- was STRUCK by
+            // ISO-approved erratum `pdf-issues` #63, whose resolution states
+            // that "the existing normative requirements to support all 4
+            // rendering intents remains".
+            b"ri" => {
+                if let Some(n) = last_name(op) {
+                    self.gs.current.rendering_intent =
+                        pdfce_core::color::RenderingIntent::from_name(&n);
+                    self.diag.rendering_intents_set += 1;
+                }
+            }
 
             // ---- Type 3 glyph metrics (Table 113, §9.6.5) ----
             //
@@ -4298,6 +4335,24 @@ impl Interpreter<'_> {
             })
         {
             self.gs.current.overprint_mode = v;
+        }
+        // `/RI` -- ISO 32000-1 Table 58, PDF 1.3 (`Pass 199.0`).
+        //
+        // ★★ THE ABSENCE OF `/RI` MUST NOT RESET THE INTENT, which is why this
+        // is an `if let` over the key rather than an unconditional assignment
+        // with a default. §8.4.5: "The results of `gs` shall be cumulative …
+        // parameter values … persist until explicitly overridden."
+        //
+        // ISO 32000-2's Table 57 uniquely printed "The default value is:
+        // Default" for this one entry, and ISO-approved erratum `pdf-issues`
+        // #360 DELETED it precisely because no other entry claims one. It was
+        // re-raised as #746 in 2026 and closed as a duplicate -- so a reader
+        // working from the printed 2.0 page would reset the intent on every
+        // `gs`, and would be wrong on a document that sets it once at the top.
+        if let Some(Object::Name(n)) = ext.get(b"RI").map(|o| self.doc.resolve(o)) {
+            self.gs.current.rendering_intent =
+                pdfce_core::color::RenderingIntent::from_name(n.as_bytes());
+            self.diag.rendering_intents_set += 1;
         }
         if self.gs.current.overprint_stroke || self.gs.current.overprint_fill {
             self.diag.overprint_requested += 1;

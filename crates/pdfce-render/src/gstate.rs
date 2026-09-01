@@ -460,6 +460,25 @@ pub struct GraphicsState {
     /// records that values other than 0 and 1 have no specified behaviour,
     /// and pdfce keeps what it read instead of normalising it away.
     pub overprint_mode: i64,
+    /// The current **rendering intent** — `/RI` and the `ri` operator
+    /// (§8.6.5.8, ISO 32000-1 Table 70) (`Pass 199.0`).
+    ///
+    /// Initial value `RelativeColorimetric` (ISO 32000-1 Table 52's *Initial
+    /// value*, made binding by §8.4.1, `shall`).
+    ///
+    /// ★ **`gs` does not reset it.** An `/ExtGState` with no `/RI` leaves this
+    /// alone: §8.4.5 makes `gs` cumulative, and ISO 32000-2's uniquely-printed
+    /// "The default value is: Default" for that entry was DELETED by
+    /// ISO-approved erratum `pdf-issues` #360 for exactly that reason. It was
+    /// re-raised in 2026 and closed as a duplicate, so it is a live trap.
+    ///
+    /// ★★ **This governs PAINTING, not the page group's conversion to the
+    /// device.** §11.7.5.3 (`shall`) ties a painting operation to the intent in
+    /// force at that moment; the page-group-to-device hop is a separate step
+    /// with its own answer (`RelativeColorimetric` per ISO 32000-2 §11.4.7).
+    /// Reusing this field for that conversion would apply a source-side choice
+    /// to a destination-side one.
+    pub rendering_intent: pdfce_core::color::RenderingIntent,
     /// Current clipping path as a device-space mask, `None` = the
     /// initial clip = the entire page (§8.5.4). Stored rasterized
     /// (tiny-skia `Mask`) because PDF only ever intersects clips —
@@ -638,6 +657,8 @@ impl GraphicsState {
             overprint_stroke: false,
             overprint_fill: false,
             overprint_mode: 0,
+            // Table 52's *Initial value* for the rendering intent.
+            rendering_intent: pdfce_core::color::RenderingIntent::RelativeColorimetric,
             clip: None,
             clip_before_smask: None,
             soft_mask: None,

@@ -156,7 +156,7 @@
 //!               blends_in_wrong_space=<n> cmyk_buffer=<n> \
 //!               cmyk_buffer_refused=<n> cmyk_bridged_pixels=<n> \
 //!               cmyk_groups_approximated=<n> cmyk_unbridged_images=<n> \
-//!               cmyk_native_image_pixels=<n>
+//!               cmyk_native_image_pixels=<n> rendering_intents_set=<n>
 //! ```
 //!
 //! ★ **`render-page` prints a SECOND line when `--probe-ink X,Y` is
@@ -345,6 +345,7 @@
 //! | `overprint_composited` | `overprint_composited` | "how many paints actually went through `CompatibleOverprint` rather than a `Normal` blend?" (§11.7.4.3 Table 149. Should equal `overprint_effective` minus `overprint_refused` — kept as its own counter rather than derived, because a derived number cannot disagree with reality and therefore cannot report a bug. A disagreement across the three is the signal worth chasing) |
 //! | `overprint_refused` | `overprint_refused` | "how many paints fell back to a normal blend when overprint applied?" (DIVERGENCE, and the one to watch in this block: non-zero means the operator is looking at KNOCKED-OUT backdrops where a press would show overprinted ink, which is not detectable by looking at the page. Distinct from `overprint_images_unsupported` — this is "the composite was offered this paint and could not run it", that one is "the composite was never offered this object at all") |
 //! | `overprint_pixels` | `overprint_pixels` | "did the overprint composites MOVE anything?" (the measurement that separates "overprint ran and mattered" from "overprint ran and was a no-op on this geometry" — two facts a paint count alone conflates. Meaningless without `overprint_composited` beside it, and vice versa) |
+//! | `rendering_intents_set` | `rendering_intents_set` | "how many times did the document DECLARE a rendering intent?" (§8.6.5.8 — the `ri` operator or an `/ExtGState` `/RI`. ★ A CENSUS OF WHAT THE FILE ASKED FOR, NOT OF WHAT pdfce DID: as of `Pass 199.0` the intent is carried in the graphics state where it was previously discarded outright, but the conversion that would consume it is not wired yet. So a non-zero value with a non-default intent means the operator is being shown a render that ignores a choice the file made — worth knowing before comparing pdfce against another engine, which may well honour it. Measured: a failing ICC-RGB conformance patch declares an intent **19 times**) |
 //! | `nonseparable_composited` | `nonseparable_composited` | "how many DIRECT PAINTS went through `Hue`/`Saturation`/`Color`/`Luminosity`?" (§11.3.5.3 Table 137 — a census of a SECOND code path: pdfce computes these four per pixel rather than handing the mode to the rasteriser, whose implementations are measurably wrong (decision 066). ★★ **IT DOES NOT COUNT A TRANSPARENCY GROUP COMPOSITED WITH ONE OF THOSE MODES**, and that omission is measurable: a page carrying `/BM /Hue` and `/BM /Saturation` reports `blend_modes_applied=15` with this at **0**, because its blending happens when the group is composited rather than when a path is painted. A reader who takes 0 for "no non-separable mode ran" is reading it wrong — this is a count of PAINTS, not of composites, and the name over-promises. The group half is filed, not implemented) |
 //! | `nonseparable_pixels` | `nonseparable_pixels` | "did those composites move anything?" (the same companion relationship `overprint_pixels` has to `overprint_composited`: a composite that ran on zero pixels and one that repainted a whole swatch are both "1" on the count above, and only this distinguishes them) |
 //! | `groups_backdrop_reruns` | `transparency_groups_backdrop_reruns` | "why did this page take twice as long as its neighbour?" (§11.4.4 — a COST counter, not a shortfall, and the only one on this line that names something pdfce DID: a non-isolated group whose content stream was walked a SECOND time over a copy of its own backdrop, so the element formula and backdrop removal could be computed against it. It is the only place in the renderer where a page's content is interpreted more than once. Zero is the normal reading and does NOT mean non-isolated groups were mishandled — §11.4.4 NOTE 5 makes the single walk exact whenever the group's interior composites `Normal` throughout) |
@@ -11727,7 +11728,7 @@ groups_backdrop_reruns={} soft_masks_on_group_result={} \
 overprint_images_unsupported={} overprint_shadings_unsupported={} \
 blend_space_subtractive={} blend_space_from_output_intent={} blends_in_wrong_space={} \
 cmyk_buffer={} cmyk_buffer_refused={} cmyk_bridged_pixels={} \
-cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={}",
+cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={} rendering_intents_set={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -12081,6 +12082,7 @@ cmyk_groups_approximated={} cmyk_unbridged_images={} cmyk_native_image_pixels={}
         // `Pass 130.1`. Appended per the stable-line append-never-reorder
         // rule: the complement of `cmyk_bridged_pixels`.
         d.cmyk_native_image_pixels,
+        d.rendering_intents_set,
     );
     // ★ A SECOND LINE, NOT MORE KEYS ON THE FIRST ONE.
     //

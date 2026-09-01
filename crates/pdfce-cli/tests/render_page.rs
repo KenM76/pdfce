@@ -547,6 +547,10 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // pixels a DeviceCMYK image contributed as authored ink,
             // with no conversion in either direction.
             "cmyk_native_image_pixels",
+            // Appended, never inserted: the key ORDER is the contract a
+            // script parses positionally, so a new counter goes on the end
+            // (`Pass 199.0`).
+            "rendering_intents_set",
         ],
         "metrics key order is part of the stable contract"
     );
