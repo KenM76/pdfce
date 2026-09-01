@@ -48,3 +48,27 @@ landed on a sentence I wrote down. The ones I left implicit went unexamined.
   the corpus before rewriting a doc comment on their word — see
   [[feedback_external_llm_research_gets_assessed]] for the same discipline
   applied to research the operator pastes in.
+
+★★★ **AN OUTBOUND-REPLY DISPATCH IS A REVIEW STEP, AND IT IS THE CHEAPEST ONE
+THIS PROJECT HAS** (2026-09-01, fourth instance). An agent sent purely to
+*explain a just-shipped fix to the consuming project* came back having found
+**three defects in that fix that no gate caught**:
+
+1. a **Pass-number collision** — the number was already minted the same day by
+   the filing that ran in parallel;
+2. the doc fix landed on the **prose box** and left the **verb table row**
+   saying the old signature — the row being the index a consumer reads first;
+3. a rustdoc sentence, *"it is literally the cache key"*, that was **the defect
+   stated as a reassurance** and read as an argument that no further check was
+   needed.
+
+**Why it works:** writing the explanation forces a re-read *from the consumer's
+position*, which is the one position the author never occupies. Gates check
+what someone thought to check; a reader hits whatever the document actually
+says first.
+
+⇒ **When a change is worth announcing, dispatch the announcement BEFORE
+considering the change done** — and read its findings as review, not as
+courtesy. Note the shape: the defect being fixed was "a repair applied to one
+route and not the other", and the fix itself repeated it. That is not irony, it
+is the base rate.
