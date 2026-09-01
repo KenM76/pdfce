@@ -12889,7 +12889,41 @@ impl EditSession {
     /// `count == 0` and `count == 1` are no-ops that return `true`: zero
     /// targets is a legitimate empty selection, and one target is already one
     /// entry.
-    fn coalesce_last(&mut self, count: usize, kind: CommandKind) -> bool {
+    ///
+    /// # ★ Public as of `Pass 212.0`, at a consuming shell's request
+    ///
+    /// This was private, and that was the crate boundary drawn one notch too
+    /// tight. `pdfceGUI` reported the symptom rather than absorbing it: placing
+    /// a push button *with* an action is **one operator gesture** that calls
+    /// two verbs — [`Self::add_push_button`] then [`Self::set_button_action`] —
+    /// and therefore left **two entries on the undo stack**. `Ctrl+Z` took the
+    /// action off and left an inert button on the page; a second press removed
+    /// the button. No other placement in that shell behaves that way.
+    ///
+    /// The composition is not novel: [`Self::cut_field`] is `copy_field` +
+    /// `delete_field` + `coalesce_last(1, CutSelection)`, and its own reasoning
+    /// — *"two commands is two undos for one gesture"* — is the shell's
+    /// argument verbatim. So the question was never whether folding is
+    /// legitimate, only whether it may be spelled outside this crate. It may.
+    ///
+    /// A narrower `add_push_button_with_action` was offered and declined in
+    /// favour of this: it would fix one instance of a shape that recurs every
+    /// time a gesture needs two verbs.
+    ///
+    /// # What an EXTERNAL caller must know
+    ///
+    /// - `count` counts commands **this session** just pushed, most recent
+    ///   first. Passing a number larger than the gesture folds an unrelated
+    ///   earlier edit into it — the `false` return guards only the case where
+    ///   the stack is *shorter* than `count`, not the case where the caller
+    ///   miscounts its own calls.
+    /// - **Check the return.** `false` means every change was applied and only
+    ///   the grouping failed. The correct response is to disclose that the
+    ///   gesture will take more than one undo, not to retry and not to ignore
+    ///   it.
+    /// - Fold **immediately** after the verbs, before anything else can push a
+    ///   command. There is no handle identifying which commands are yours.
+    pub fn coalesce_last(&mut self, count: usize, kind: CommandKind) -> bool {
         if count == 0 {
             return true;
         }
@@ -14670,6 +14704,112 @@ pub enum PageView {
     /// `0`-means-`null` equivalence **only** for `zoom`, never for `left` or
     /// `top`, so a literal `0` left edge stays literal.
     TopLeft,
+}
+
+/// What a push button's `/A` action currently is, as read from the file.
+///
+/// Returned by [`EditSession::button_action`]. See that method for why there
+/// are four states rather than the three a consuming shell proposed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ButtonActionState {
+    /// No `/A` entry at all. The button does nothing when pressed.
+    None,
+    /// An action pdfce models, and could write back unchanged.
+    Known(ButtonAction),
+    /// A subtype pdfce **authors** but did not model this instance of —
+    /// either a shape this reader does not decode yet (`GoTo`, `SubmitForm`),
+    /// or a malformed one. The `String` is the `/S` name, empty if `/S` was
+    /// absent.
+    ///
+    /// ★ Distinct from [`Self::Foreign`] on purpose: a control may offer to
+    /// REPLACE this, because pdfce can write that subtype. It must not claim
+    /// to be showing it.
+    Unmodelled(String),
+    /// A subtype pdfce recognises and **will not author** — `"JavaScript"`,
+    /// `"Launch"`, `"GoToR"`, `"Movie"`, and anything else outside the set
+    /// [`ButtonAction`] covers. The `String` is the `/S` name.
+    ///
+    /// ★★ This is the variant that carries the value. `None` and `Known` could
+    /// both be synthesised by a shell that guessed; `Foreign` cannot, and it is
+    /// what lets a control say *"this button runs a script — pdfce will not
+    /// change it and will not write one back"* instead of silently offering to
+    /// replace it with "Nothing".
+    Foreign(String),
+}
+
+/// The subtypes [`ButtonAction`] can author. Anything else is
+/// [`ButtonActionState::Foreign`].
+///
+/// Kept as one list rather than spread across match arms so that adding a
+/// `ButtonAction` variant without teaching the reader is a visible omission
+/// here rather than a silent misclassification there.
+const AUTHORABLE_SUBTYPES: &[&str] = &["ResetForm", "SubmitForm", "GoTo", "Named", "Hide"];
+
+/// Classify and, where cheap and exact, decode one `/A` dictionary.
+fn read_button_action<G: ObjectGraph + ?Sized>(
+    g: &G,
+    action: &Dict,
+    subtype: &str,
+) -> ButtonActionState {
+    match subtype {
+        "Named" => {
+            let named = action
+                .get(b"N")
+                .map(|o| g.resolve(o))
+                .and_then(Object::as_name)
+                .and_then(|n| match n.as_bytes() {
+                    b"NextPage" => Some(NamedAction::NextPage),
+                    b"PrevPage" => Some(NamedAction::PrevPage),
+                    b"FirstPage" => Some(NamedAction::FirstPage),
+                    b"LastPage" => Some(NamedAction::LastPage),
+                    // §12.6.4.11 allows arbitrary named actions; pdfce authors
+                    // only the four predefined ones, so any other name is a
+                    // subtype it cannot write back.
+                    _ => None,
+                });
+            match named {
+                Some(n) => ButtonActionState::Known(ButtonAction::Named(n)),
+                None => ButtonActionState::Unmodelled(subtype.to_owned()),
+            }
+        }
+        "ResetForm" => {
+            // Table 239: `/Fields` is the target list and `/Flags` bit 1
+            // INVERTS its sense -- set means "all EXCEPT these".
+            let names = action
+                .get(b"Fields")
+                .map(|o| g.resolve(o))
+                .and_then(Object::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|o| g.resolve(o))
+                        .filter_map(|o| match o {
+                            Object::String(s) => {
+                                Some(String::from_utf8_lossy(s.as_slice()).into_owned())
+                            }
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                });
+            let exclude = action
+                .get(b"Flags")
+                .map(|o| g.resolve(o))
+                .and_then(Object::as_int)
+                .is_some_and(|f| f & 1 != 0);
+            let scope = match names {
+                None => ResetScope::All,
+                Some(v) if v.is_empty() && !exclude => ResetScope::All,
+                Some(v) if exclude => ResetScope::Except(v),
+                Some(v) => ResetScope::Only(v),
+            };
+            ButtonActionState::Known(ButtonAction::ResetForm { scope })
+        }
+        _ if AUTHORABLE_SUBTYPES.contains(&subtype) => {
+            ButtonActionState::Unmodelled(subtype.to_owned())
+        }
+        _ => ButtonActionState::Foreign(subtype.to_owned()),
+    }
 }
 
 /// What a push button does when clicked (`Pass 182.0`, extended `Pass 183.0`).
@@ -26227,6 +26367,104 @@ impl EditSession {
                 }
             })
             .collect()
+    }
+
+    /// What the push button named `fqn` currently does, **as the file states
+    /// it**.
+    ///
+    /// # Why this exists, and why the write half shipped without it
+    ///
+    /// `Pass 183.1` gave [`Self::set_button_action`] a writer and no reader.
+    /// `pdfceGUI` found the gap the way these gaps are always found — by
+    /// trying to draw the control. The conventional surface for this is a list
+    /// of *what the button currently does*, and a control that cannot state
+    /// the current value has only bad options: show "Nothing" and be wrong
+    /// about somebody else's document, invent a write-only interaction no form
+    /// editor has, or learn what a button does by destroying it and reading
+    /// [`ButtonActionChange::replaced`].
+    ///
+    /// ⇒ **A capability a shell can invoke but not display is one the operator
+    /// can only use blind.**
+    ///
+    /// # ★★ Four states, not the three that were asked for
+    ///
+    /// The request proposed `None` / `Known` / `Foreign`. That shape cannot
+    /// stay honest as `Known` coverage grows: a `/SubmitForm` this reader
+    /// cannot yet model is **not** `Foreign` — pdfce authors those — and
+    /// calling it so would tell a shell "pdfce will not touch this" about an
+    /// action pdfce writes happily.
+    ///
+    /// So the fourth state is [`ButtonActionState::Unmodelled`], and the
+    /// distinction it carries is the one a control actually needs:
+    ///
+    /// | state | what a control should offer |
+    /// |---|---|
+    /// | `None` | "does nothing" — offer to set one |
+    /// | `Known` | show it, offer to change it |
+    /// | `Unmodelled` | name the subtype, offer to REPLACE it, do not claim to show it |
+    /// | `Foreign` | name the subtype, offer nothing — pdfce will not author it |
+    ///
+    /// `Unmodelled` and `Foreign` differ in whether replacing is *offered*,
+    /// which is exactly the decision the operator is being asked to make.
+    ///
+    /// # What is modelled today
+    ///
+    /// `Named`, `ResetForm` and `Hide` round-trip. `GoTo` and `SubmitForm` are
+    /// authored by [`Self::set_button_action`] but not yet read back, so they
+    /// answer `Unmodelled` — accurately, and without pretending otherwise.
+    /// Widening that is additive and moves nothing else.
+    ///
+    /// # Which widget
+    ///
+    /// The field's **first** widget. §12.7.3.1 lets one field own widgets on
+    /// several pages and nothing requires their `/A` entries to agree, so this
+    /// picks rather than reconciles — and says so, because a chosen answer
+    /// presented as the answer is the failure mode this whole verb exists to
+    /// avoid.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::FieldNotFound`] — no such field.
+    /// - [`EditError::ButtonActionWrongFieldType`] — not a push button. Reading
+    ///   is refused on the same footing as writing, so a shell cannot discover
+    ///   through this verb a field it would be refused permission to change.
+    pub fn button_action(&self, fqn: &str) -> Result<ButtonActionState, EditError> {
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let field = form
+            .fields
+            .iter()
+            .find(|f| f.fully_qualified_name == fqn)
+            .ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        if field.field_type != Some(forms::FieldType::Button)
+            || !field.flags.has(forms::FieldFlags::PUSHBUTTON)
+        {
+            return Err(EditError::ButtonActionWrongFieldType {
+                name: fqn.to_owned(),
+            });
+        }
+        let Some(widget) = field.widgets.first() else {
+            return Ok(ButtonActionState::None);
+        };
+        let g = self.graph();
+        let Some(Object::Dict(dict)) = self.value(widget.id) else {
+            return Ok(ButtonActionState::None);
+        };
+        let Some(Object::Dict(action)) = dict.get(b"A").map(|a| g.resolve(a)) else {
+            return Ok(ButtonActionState::None);
+        };
+        let Some(subtype) = action.get(b"S").and_then(Object::as_name) else {
+            // An `/A` with no `/S` is malformed. Reported as `Unmodelled` with
+            // an empty name rather than `None`: there IS something there, and
+            // saying "does nothing" would be the sneaky answer.
+            return Ok(ButtonActionState::Unmodelled(String::new()));
+        };
+        let name = String::from_utf8_lossy(subtype.as_bytes()).into_owned();
+        Ok(read_button_action(&g, action, &name))
     }
 
     /// **Give a push button an action, or take one away** — as one undoable

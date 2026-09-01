@@ -23,7 +23,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use pdfce_core::document::Document;
-use pdfce_core::edit::{ButtonAction, EditError, EditSession, ResetScope};
+use pdfce_core::edit::{ButtonAction, ButtonActionState, EditError, EditSession, ResetScope};
 use pdfce_core::writer::SaveOptions;
 
 /// A form with a text field carrying `/V` and `/DV`, and a push button with
@@ -292,4 +292,139 @@ fn a_written_reset_button_reads_back_as_an_action() {
         !text.contains("/JavaScript"),
         "★ and pdfce authored a ResetForm and nothing else"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Pass 212.0 -- the READER, at pdfceGUI's request.
+//
+// `Pass 183.1` shipped `set_button_action` with no way to ask what a button
+// currently does, so the control that sets it could not show what it was set
+// to. The shell declined to ship the workaround -- display "Nothing" and be
+// wrong about other people's documents -- and reported it instead.
+// ---------------------------------------------------------------------------
+
+/// The same fixture, with a JavaScript action pdfce would refuse to write.
+///
+/// Authored by hand rather than through `set_button_action`, because the whole
+/// point of `Foreign` is actions pdfce CANNOT author -- a fixture built with
+/// the writer could never contain one.
+fn form_with_javascript_button() -> Vec<u8> {
+    let original = String::from_utf8_lossy(&form_with_inert_button()).into_owned();
+    // Splice an `/A` into the button widget only. Offsets shift, so the xref
+    // is rebuilt by reparsing rather than patched -- `Document::from_bytes`
+    // tolerates a stale xref by scanning, which is exactly the recovery path
+    // `Pass B` shipped, and this fixture leans on it deliberately.
+    original
+        .replace(
+            "/MK << /CA (Reset) >> >>",
+            // Balanced parentheses need no escaping inside a PDF literal
+            // string (§7.3.4.2), which keeps this readable as Rust too.
+            "/MK << /CA (Reset) >> /A << /Type /Action /S /JavaScript /JS (app.alert(1);) >> >>",
+        )
+        .into_bytes()
+}
+
+/// ★ A button with no `/A` reads as `None` — and that is a MEASUREMENT, not a
+/// default.
+#[test]
+fn a_button_with_no_action_reads_as_none() {
+    let s = session();
+    assert_eq!(s.button_action("DoReset").unwrap(), ButtonActionState::None);
+}
+
+/// ★★★ THE ROUND TRIP. What the writer wrote, the reader reads back.
+///
+/// Without this the two halves could drift silently: the writer's own
+/// `ButtonActionChange::replaced` would keep reporting correctly while the
+/// reader answered something else, and nothing would notice until a shell
+/// displayed the wrong thing.
+#[test]
+fn what_set_button_action_writes_the_reader_reads_back() {
+    let mut s = session();
+    s.set_button_action(
+        "DoReset",
+        Some(ButtonAction::ResetForm {
+            scope: ResetScope::All,
+        }),
+    )
+    .expect("writes");
+    assert_eq!(
+        s.button_action("DoReset").unwrap(),
+        ButtonActionState::Known(ButtonAction::ResetForm {
+            scope: ResetScope::All
+        }),
+        "the reader must return what the writer just wrote"
+    );
+
+    // ...and a named target list survives with its sense intact. Table 239's
+    // `/Flags` bit 1 INVERTS `/Fields`, so `Only` and `Except` are the same
+    // array with one bit between them -- the one thing a reader can most
+    // easily get backwards.
+    s.set_button_action(
+        "DoReset",
+        Some(ButtonAction::ResetForm {
+            scope: ResetScope::Only(vec!["Name".to_owned()]),
+        }),
+    )
+    .expect("writes");
+    assert_eq!(
+        s.button_action("DoReset").unwrap(),
+        ButtonActionState::Known(ButtonAction::ResetForm {
+            scope: ResetScope::Only(vec!["Name".to_owned()])
+        }),
+        "★ Only must not come back as Except -- one flag bit separates them"
+    );
+}
+
+/// Removing the action returns the button to `None`, rather than to a stale
+/// reading of what used to be there.
+#[test]
+fn clearing_the_action_reads_as_none_again() {
+    let mut s = session();
+    s.set_button_action(
+        "DoReset",
+        Some(ButtonAction::ResetForm {
+            scope: ResetScope::All,
+        }),
+    )
+    .expect("writes");
+    s.set_button_action("DoReset", None).expect("clears");
+    assert_eq!(s.button_action("DoReset").unwrap(), ButtonActionState::None);
+}
+
+/// ★★ THE VARIANT THAT CARRIES THE VALUE. A JavaScript action must read as
+/// `Foreign`, naming its subtype.
+///
+/// `None` and `Known` could both be synthesised by a shell that guessed;
+/// `Foreign` cannot. It is what lets a control say "this button runs a script,
+/// pdfce will not change it" instead of silently offering to replace it with
+/// "Nothing" -- which is rule 4's sneaky half in its purest form, pdfce
+/// asserting a fact about somebody else's document that it never checked.
+#[test]
+fn a_javascript_action_reads_as_foreign_and_names_itself() {
+    let s = EditSession::new(Document::from_bytes(form_with_javascript_button()).unwrap());
+    assert_eq!(
+        s.button_action("DoReset").unwrap(),
+        ButtonActionState::Foreign("JavaScript".to_owned()),
+        "a script action must be named, not reported as absent"
+    );
+}
+
+/// Reading is refused on the same footing as writing.
+///
+/// A shell must not be able to learn through the reader about a field it would
+/// be refused permission to change -- the two verbs answer for the same set or
+/// they disagree, and a disagreement is a surface for exactly the confusion
+/// this reader exists to remove.
+#[test]
+fn reading_a_non_button_is_refused_the_same_way_writing_is() {
+    let s = session();
+    assert!(matches!(
+        s.button_action("Name"),
+        Err(EditError::ButtonActionWrongFieldType { .. })
+    ));
+    assert!(matches!(
+        s.button_action("NoSuchField"),
+        Err(EditError::FieldNotFound { .. })
+    ));
 }
