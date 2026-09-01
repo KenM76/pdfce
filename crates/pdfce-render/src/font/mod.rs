@@ -1074,11 +1074,24 @@ impl RenderOptions {
     /// # What it changes
     ///
     /// Whether a `DeviceGray` fill overprinting a spot backdrop **preserves
-    /// it or knocks it out**. §8.6.7 scopes `OPM 1` to `DeviceCMYK`, and
-    /// grey is not that — but Acrobat converts grey to K-only CMYK first and
-    /// then applies the rule, so its zero C, M and Y leave the backdrop
-    /// alone. Both readings are defensible; see
+    /// it or knocks it out**. §8.6.7 scopes `OPM 1` to `DeviceCMYK` and grey
+    /// is not that, so the LITERAL reading knocks the backdrop out. The
+    /// shipped default converts grey to K-only CMYK first and then applies
+    /// the rule, so its zero C, M and Y leave the backdrop alone — a
+    /// deliberate **divergence** from ISO 32000-1, not an ambiguity.
+    ///
+    /// ★ This said *"Acrobat converts grey… Both readings are defensible"*.
+    /// Wrong twice. `Pass 174.5` had already ruled it a divergence rather
+    /// than a defensible pair, and `Pass 206.0` measured that the default
+    /// matches Acrobat only over a SPOT backdrop — over process components
+    /// the literal reading is the one that matches. Which value "is Acrobat"
+    /// depends on the geometry you test on. See
     /// [`pdfce_core::settings::OverprintZeroTintScope`].
+    ///
+    /// ⇒ Recorded because of HOW it survived: `Pass 209.0` swept eight copies
+    /// of this claim and edited THIS FILE, one function away. **A file is not
+    /// a site** — a sweep that greps for the claim finds every copy, and a
+    /// sweep that checks off files finds one per file.
     ///
     /// A sampled image is **never** upgraded, under any value, because Table
     /// 149 already excludes a CMYK image from the direct-CMYK row.

@@ -305,7 +305,24 @@ def main() -> int:
             continue
         dst = target / name
         if src.is_dir():
-            shutil.copytree(src, dst)
+            # `dirs_exist_ok` is REQUIRED, not defensive. `_empty_slot`
+            # deliberately leaves empty subdirectories behind and documents
+            # them as harmless "because the payload copy recreates or
+            # overwrites them" -- and that sentence was never true of
+            # `copytree`, which refuses an existing destination outright.
+            #
+            # Measured cutting v0.19.0: the deploy died with
+            # `FileExistsError: ... \pdfce2\models`, AFTER `_empty_slot` had
+            # already run. That is precisely the half-emptied slot the helper's
+            # own docs call "untrustworthy" -- reached through the copy step
+            # rather than the removal step, so its raise-rather-than-continue
+            # guard never fired.
+            #
+            # ⇒ A comment asserting what a later line does is a claim about
+            # that line, and nothing checks it. The payload gained `models/`
+            # after this code was written, so the first directory entry in
+            # PAYLOAD is what exposed it.
+            shutil.copytree(src, dst, dirs_exist_ok=True)
         else:
             shutil.copy2(src, dst)
         copied.append(name)
