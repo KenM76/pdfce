@@ -2552,7 +2552,7 @@ check. Comparing object *counts* means decomposing twice; comparing this means
 comparing two integers. Bump your own edit epoch, re-read this, assert they
 moved together.
 
-> ⚠️ **BREAKING, and it is the fix you asked for** (`Pass 196.0`). It took
+> ⚠️ **BREAKING, and it is the fix you asked for** (`Pass 197.0`). It took
 > `&self` and now takes `&mut self`, because it must run the (memoised)
 > decomposition to know which form XObjects the page descends into. Which forms
 > a page reaches is an **output** of that walk, so there is no way to fold them
@@ -2637,7 +2637,7 @@ constructed, then committed, under one `&mut`.
 | Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** ⚠️ **Refuses an unknown `group` since `Pass 178.2`** — it used to return `Ok` and change nothing. ⚠️ **Can also return `CarrierIsNotAStream` (`Pass 191.1`)** — it regenerates through the shared path that overwrites each member's attacker-supplied sidecar `/Ap` wholesale. §6.8. |
 | Toggle a group's layer | `toggle_dimension_layer(&mut self, group, visible) -> Result<bool, EditError>` | 15600 | Resulting visibility. The default group is un-hideable. |
 | **The page's vector objects, memoised** | `page_objects(&mut self, page_index) -> Result<Arc<PageObjects>, EditError>` | 11400 | ⚡ **Use this instead of `vector::decompose_page`** (`Pass 181.0`). The editing verbs share the same cache, so a shell that decomposes to get object indices does not pay for the identical parse again inside `move_objects` — measured **385 ms → 0 ms** on a 130k-object CAD page. `&mut self` because populating a cache is a mutation; see below. |
-| **Has this page's model changed?** | `page_content_generation(&self, page_index) -> Result<u64, EditError>` | 11700 | ⚡ A cheap `u64` that moves whenever the page's drawable content does — the FNV-1a digest of the same key `page_objects` memoises on (page id + every `/Contents` entry with its staged span + the effective `/Resources`). Compare two of these instead of decomposing twice. **Session-local and not a content digest** — see the box below. `Pass 186.0`. |
+| **Has this page's model changed?** | `page_content_generation(&mut self, page_index) -> Result<u64, EditError>` | 11700 | ⚡ A cheap `u64` that moves whenever the page's drawable content does — the FNV-1a digest of the key `page_objects` memoises on (page id + every `/Contents` entry with its staged span + the effective `/Resources`) **plus the descended-form set**. Compare two of these instead of decomposing twice. **Session-local and not a content digest** — see the box below. ⚠️ **`&self` → `&mut self` at `Pass 197.0`**: it must run the memoised walk, because which forms a page reaches is an *output* of that walk. Before that it published the key alone and an edit INSIDE a form left it unchanged. `Pass 186.0`, amended `Pass 197.0`. |
 | Hit-test ce dimensions on a page | `dimension_rects(&self, page_index) -> Vec<(DimensionId, [f64;4])>` | 15645 | `[llx, lly, urx, ury]` page space. |
 | List groups present on a page | `dimension_groups_on_page(&self, page_index) -> Vec<GroupId>` | 15725 | Model order. |
 | **Drag** a ce dimension | `place_dimension(&mut self, dimension, offset: f64, text_along: f64) -> Result<(), EditError>` | 15804 | ✅ **This, not `move_dimension`, is what dragging does.** Value-preserving by construction. |

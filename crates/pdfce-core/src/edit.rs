@@ -12453,11 +12453,18 @@ impl EditSession {
     ///
     /// # What it is, exactly
     ///
-    /// A 64-bit FNV-1a hash of the same [`PageModelKey`] the internal
-    /// decomposition cache is keyed on — the page's identity, every
-    /// `/Contents` entry with its staged span, and the page's effective
-    /// `/Resources`. Equal inputs give equal outputs by construction, because
-    /// it is literally the cache key.
+    /// A 64-bit FNV-1a hash of the [`PageModelKey`] the internal decomposition
+    /// cache is keyed on — the page's identity, every `/Contents` entry with
+    /// its staged span, and the page's effective `/Resources` — **plus the
+    /// descended-form set that key cannot contain**.
+    ///
+    /// ★ This paragraph used to end *"because it is literally the cache key"*,
+    /// and that sentence was the defect stated as a reassurance. The cache
+    /// compares the key AND then re-reads the form spans separately, because
+    /// which forms a page reaches is an output of the walk rather than an input
+    /// to it. Publishing the key alone therefore made this number STRICTLY
+    /// WEAKER than the crate's own staleness test, and an edit inside a form
+    /// XObject left it unchanged (`Pass 197.0`).
     ///
     /// # ★ What it does NOT promise, and this matters to a caller
     ///
@@ -14257,7 +14264,7 @@ impl PageModelKey {
     /// change of meaning. It is **not** a cryptographic digest and is not
     /// used as one.
     /// The digest, folding in the DESCENDED-FORM set the walk found
-    /// (`Pass 196.0`).
+    /// (`Pass 197.0`).
     ///
     /// # Why the forms cannot simply live in the key
     ///

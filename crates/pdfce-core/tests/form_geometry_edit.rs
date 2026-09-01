@@ -424,7 +424,7 @@ fn deleting_inside_a_shared_form_empties_every_invocation() {
 }
 
 /// ★★★ AN EDIT INSIDE A FORM MUST MOVE `page_content_generation`
-/// (`Pass 196.0`).
+/// (`Pass 197.0`).
 ///
 /// # Reported, measured, by the consuming shell
 ///
