@@ -96,6 +96,671 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ SIX PASSES FILED TOGETHER, 361st filing, 2026-09-01 — AND ONE OF
+THEM IS A REVERT THAT SHIPPED NOTHING BUT A COMMENT.** `Pass 208.0`
+(`094b31a`), `Pass 207.0` (`0653a50`), `Pass 206.0` (`a6510b2`),
+`Pass 205.0` (`34032d2`), `Pass 204.0` (`97b4c9d`) and `Pass 203.0`
+(`1a13640`), in that reverse-chronological order.
+
+**★★★ THE DISPATCH NAMED FIVE; `Pass 208.0` ARRIVED WHILE THE FILING WAS
+BEING WRITTEN AND IS FILED ANYWAY.** It was committed and pushed between
+this role's first `git log` and its last, and it is a shipped Pass with a
+minted ID — leaving it out because the dispatch predated it is precisely the
+drift rule 5 exists to prevent. **It also collides with this filing's
+content**: its subject line and body carry the `forty of 1,217` figure that
+this filing's own measurement corrects to **82 of 1,219**, and it discharges
+option 3 of the operator question `(ca)` that this filing opened. See both. **`Pass 203.0`'s commit is OLDER than the four
+above it and NEWER than every entry below it** — it landed between the 360th
+filing's librarian commit (`bca5cf6`) and `Pass 202.0` (`b796bc0`), so its
+position here is correct and is not a numbering slip.
+
+**★ Sourcing (hard rule 8).** A shell WAS available to this role this filing,
+and it was used rather than inferred from. Commit order and hashes:
+`git log --oneline`. Publication state: `git rev-list --count origin/main..HEAD`
+returned **0**, so **all six are already published** — `main`, `HEAD` and
+`origin/main` are the same object (`git rev-parse HEAD main origin/main`
+returns `094b31a` three times). Working tree at the start of this filing:
+**one modified file, `tools/check-suite-name-absent.py`, UNCOMMITTED** —
+**it has since been committed and pushed as `Pass 208.0`, mid-filing**, and
+both states are recorded rather than the later one overwriting the earlier,
+because operator question `(ca)` turns on exactly that transition. Backups,
+checked with `ls -lt D:/Dev/pdfce-backups/`: newest is
+`pdfce-20260901-0830-97b4c9d-full.bundle` (2026-09-01 08:30), and
+`git log --oneline 97b4c9d..main | wc -l` = **4 commits since** — the bundle
+predates `Pass 205.0` through `208.0`, so **the engineer should cut a fresh
+one.** Live-source cross-checks are named
+inline where they were made: `crates/pdfce-render/src/shading.rs`,
+`crates/pdfce-render/src/interpret.rs`, `crates/pdfce-render/src/image.rs`,
+`crates/pdfce-render/src/overprint.rs`,
+`crates/pdfce-render/src/color.rs`,
+`crates/pdfce-render/tests/grey_overprint.rs`,
+`crates/pdfce-core/src/settings/mod.rs`, `crates/pdfce-cli/src/main.rs`,
+`tools/suite-check.py`, `fixtures/synthetic/overprint/`. Every figure below is
+the engineer's own measurement as stated in the commit message it belongs to;
+where a denominator is absent from the commit it is **said to be absent**
+rather than supplied.
+
+---
+
+### `Pass 208.0` (`094b31a`, 2026-09-01) — **THE SCRUB GATE COULD NOT SEE THE ONE SURFACE THE PROJECT MOST NEEDED IT TO: COMMIT MESSAGES. IT NOW CHECKS UNPUSHED ONES, AND DELIBERATELY REFUSES TO TOUCH THE PUBLISHED ONES** — ★★★★ **ITS SCOPE IS NOT A COMPROMISE: `origin/main..HEAD` IS EXACTLY THE SET OF COMMITS WHERE ACTION IS STILL CHEAP** — ★★★ **AND ITS OWN HEADLINE FIGURE IS AN UNDERCOUNT, MEASURED THIS FILING AT MORE THAN DOUBLE — NOW IN A PUBLISHED COMMIT SUBJECT LINE** — filed 2026-09-01 (361st filing, **arrived mid-filing**)
+
+#### What was missing
+
+`tools/check-suite-name-absent.py` scanned **file contents** and **file
+names**, over tracked files and untracked non-ignored ones. **A commit message
+is none of those.** So the gate *"reported clean, correctly and uselessly"* —
+its own docstring's phrase, and the right one: it was answering a question
+about a different surface from the one carrying the exposure.
+
+#### What shipped
+
+`unpushed_message_hits()` — verified live at
+`tools/check-suite-name-absent.py:168`, and confirmed committed
+(`git show HEAD:… | grep -c unpushed_message_hits` returns **2**, against
+**0** at `0653a50`). Diff: **+73 / −5** over one file. The success line now
+reads *"clean — nothing in the work tree, staged or not, **and no unpushed
+commit message**, names it or mentions it"*; exit `0`, run this filing.
+
+#### ★★★★ The scope argument, which is the entry's reusable half
+
+The gate checks **`origin/main..HEAD` only** — commits not yet visible to
+anyone, still rewritable with `--amend` or an interactive rebase. It returns
+an empty list when there is no upstream, so a fresh clone does not flag its
+whole history on day one.
+
+⇒ **That is not a weakened version of "check everything"; it is the exact set
+where action is still possible.** Once a commit is pushed, removing a string
+from its message means rewriting **published** history, which project rule 8
+reserves to the operator and which this project has **measured** to be
+destructive (`tools/check-cited-commits-exist.py`, `0d9f4df`: **fourteen
+documents whose cited hashes had already been broken by exactly that cause**).
+**A gate that cannot act should not fire** — a permanent red on something
+nobody is permitted to fix trains readers to ignore it, which is the failure
+`D:/dev/rag/rust/ci_gate_red_at_baseline_enforces_nothing.md` records.
+
+#### ★★★ The figure in its own subject line is wrong, and this filing measured it
+
+`Pass 208.0` states **"40 of 1,217 commit messages"** in its body and
+**"forty of them"** in its **subject line**, and the same number sits in the
+committed docstring at line 177.
+
+**Measured independently by this role at `0653a50`:** the gate searches for
+**TWO** needles; the census counted **ONE**.
+
+| needle | matching commit messages |
+|---|---|
+| the suite's **full name** | **76** |
+| the suite's **three-letter abbreviation** | **40** |
+| **either — the real exposure** | **82** |
+| overlap (76 + 40 − 82) | 34 |
+| **denominator** (`git rev-list --count HEAD`) | **1,219** |
+
+⇒ **82 of 1,219 = 6.7 %**, not 40 of 1,217 = 3.3 %. **The relayed figure is
+less than half the real one**, and the cause is mechanical rather than
+careless: **the abbreviation is the shorter, more memorable needle, and it is
+the one a human reaches for when counting by hand.** A figure derived from a
+multi-needle instrument by hand **silently inherits whichever needle the
+estimator had in mind.** The correction required **no new instrument, only
+running the gate's own second needle** — hard rule 10's exact subject.
+
+★★ **The docstring is cheap to correct; the commit subject line is not.** It
+is published, and correcting it is the history rewrite that operator question
+`(ca)` exists to decide. **`Pass 208.0` is therefore its own worked example**:
+a commit whose purpose is to stop wrong text entering published commit
+messages entered a wrong number into one in the act of shipping.
+
+#### What this Pass correctly does NOT claim
+
+- **It does not fix the published messages, and says so by name.** Recorded as
+  operator question **`(ca)`** (*Open operator questions*, this filing), with
+  the three options stated neutrally.
+- **File CONTENTS in history are unaffected.** A `git grep` hit on
+  `fixtures/synthetic/ocr/scan.pdf` is a **three-byte coincidence in
+  compressed data**; the gate's `git grep -I` binary exclusion is documented
+  as deliberate (*"a model's weights are not a mention"*) and is correct here.
+  ★ The commit **checked** this rather than assuming it — *"a false alarm
+  about a public repository is expensive in its own way"* — which is the same
+  discipline rule 8's corrected-remote incident cost this project a day to
+  learn.
+
+**No `FEATURES.md` box moves.** A repository-hygiene gate is not a pdfce
+capability and has no core/cli/gui surface.
+
+---
+
+### `Pass 207.0` (`0653a50`, 2026-09-01) — **A DISCLOSURE COUNTER SHIPPED THAT MORNING COULD ONLY SEE HALF ITS SUBJECT: `icc_managed_paints`/`icc_unmanaged_paints` LIVE IN THE GRAPHICS-STATE PAINT PATH, AND AN `ICCBased` **IMAGE** NEVER GOES THROUGH IT** — ★★★★ **A COUNTER THAT CAN ONLY SEE ONE OF TWO PRODUCERS ANSWERS A DIFFERENT QUESTION FROM THE ONE ITS NAME ASKS — AND THE WRONG ANSWER WAS `0`, WHICH READS AS "NOTHING TO MANAGE"** — ★★★ **RULE 4 IS NOT DISCHARGED BY A COUNTER EXISTING; IT IS DISCHARGED BY THE COUNTER BEING ABLE TO SEE ITS SUBJECT** — filed 2026-09-01 (361st filing)
+
+#### The defect
+
+`icc_managed_paints` and `icc_unmanaged_paints` shipped six hours earlier in
+`Pass 199.2` (`3194f1b`, 360th filing) as the rule-4 disclosure for colour
+management. **Both are incremented inside `Interpreter::authored_cmyk` — the
+GRAPHICS-STATE paint path.** An `ICCBased` **image XObject** never enters that
+function, so **neither counter could ever see one.**
+
+Worse than an undercount, and this is the part that makes it a rule-4 failure
+rather than a cosmetic one: `crates/pdfce-render/src/image.rs`'s
+`image::Space` collapses `[/ICCBased <stream>]` to `Gray`/`Rgb`/`Cmyk` **by
+its `/N` alone and discards the profile** — verified live this filing at
+`image.rs:2043`, where the variant docs say exactly that (*"`DeviceRGB` /
+`CalRGB` / `ICCBased` with `N 3`"*). So image samples get **no colour
+management at all**, and were **reported as though there had been nothing to
+manage.**
+
+⇒ **A page could be half colour-managed and read `unmanaged=0`.** The number
+did not merely fail to count; it asserted the absence of the thing it could
+not see.
+
+#### Measured — and the fixture is the entry, because it makes the invisible visible
+
+A patch drawing **the same colour through the same embedded profile four
+ways** — vector RGB, image RGB, vector CMYK, image CMYK — built with
+**deliberate trick profiles over pre-swapped artwork**, so that a managed
+render and an unmanaged render are *different pictures* rather than two
+plausible ones.
+
+| | result |
+|---|---|
+| the two **vector** cells | managed, and correct |
+| the two **IMAGE** cells | the **UNMANAGED answer, BIT-FOR-BIT** — within **1 and 3 levels** of what the *vector* cells render with the engine **ablated** — and visibly saturated red |
+| counters, BEFORE | `managed=2`, `unmanaged=0` |
+| counters, AFTER | `managed=2`, `unmanaged=2` |
+
+Four further populations, so the change is shown to **discriminate** rather
+than to fire everywhere:
+
+| page | before | after |
+|---|---|---|
+| the four-way patch | `2 / 0` | **`2 / 2`** |
+| an all-image **ICC-V4** patch | `0 / 0` | **`0 / 1`** |
+| the transparency ICC patch | — | **`30 / 2`** |
+| two synthetic **non-ICC** pages (control) | `0 / 0` | `0 / 0` |
+
+★ **The all-image ICC-V4 row is the sharpest of the five.** It read `0 / 0`
+before — and **`0 / 0` on a page with ICC content is indistinguishable from
+`0 / 0` on a page with none.** Three zeros in a row is not a measurement; it
+is the absence of one.
+
+#### What this Pass deliberately does NOT do
+
+**It does not colour-manage images.** That needs `image::Space` to **carry a
+profile**, which it structurally cannot in its present shape — there is no
+variant that holds one. **Scoped, not started**; filed as *Backlog* item 1 of
+this filing. Expected gain, stated by the engineer as a prediction and not as
+a result: **whole-image mean error 14.24 → ~11.3** on the four-way patch.
+
+#### ★★★★ The shape, and it is the reusable half
+
+**A counter that can only see one of two producers reports a DIFFERENT
+QUESTION than its name asks.** `icc_unmanaged_paints` asks *"how many paints
+could have been colour-managed and were not?"* and answered *"…among
+graphics-state paints"*, silently. Rule 4's obligation is **non-silence**, and
+a counter structurally blind to half its population **is** silence — dressed
+as a measurement, which is worse, because a zero invites the reader to stop
+looking.
+
+⇒ **Rule 4's disclosure obligation is not discharged by a counter existing.
+It is discharged by the counter being able to see its subject.** The general
+form is the same one `Pass 198.0` (`nonseparable_composited`, blind to the
+group-composite path) and `Pass 140.2` (tint counters, blind to an image's own
+texel conversions) each paid for separately: **every counter has a call site,
+and a call site is a population claim nobody writes down.**
+
+**Standing-rule disposition: NO new number.** This is the **third** recorded
+instance of *"a counter's population is its call-site set, and the call-site
+set is undocumented"* (`Pass 140.2`, `Pass 198.0`, this Pass), and each was
+found the same way — by measuring a page whose answer was known independently.
+That is already what hard rule 11 obliges of this role and what `R151` obliges
+of the engineer; a fourth number restating it would add a citation, not a
+control. **Reported instead as the concrete owed sweep below** (the CLI
+metrics-table doc rows for both counters were **not** touched by this commit —
+`git show 0653a50 -- crates/pdfce-cli/src/main.rs` returns **0 changed
+lines**).
+
+---
+
+### `Pass 206.0` (`a6510b2`, 2026-09-01) — **THE SHIPPED DEFAULT WAS NAMED AFTER ACROBAT AND JUSTIFIED BY A CLAIM NO FIXTURE IN THE REPOSITORY COULD CHECK — AND IT IS FALSE: ON THE DISCRIMINATING GEOMETRY, ACROBAT RENDERS THE *LITERAL* READING** — ★★★★★ **A TEST NAMED `the_shipped_default_is_the_acrobat_reading` ASSERTED ON SPOT GEOMETRY, WHICH CANNOT SEE ACROBAT'S CHOICE — A CLAIM CHECKED AGAINST A PICTURE THAT CANNOT CONTAIN IT** — ★★★★ **THE PROJECT'S OWN NOTE `OP-N3` HAD ALREADY NAMED THE MISSING FIXTURE, AND THE GAP IT NAMED IS WHERE THE FALSE CLAIM GREW** — ★★★ **THE DEFAULT IS DELIBERATELY *NOT* FLIPPED, AND THE REASON IS A COMPENSATING ERROR, NOT TIMIDITY** — filed 2026-09-01 (361st filing)
+
+#### The falsified claim, quoted rather than deleted
+
+`OverprintZeroTintScope::GreyAsKOnly` is the shipped default. Its **entire
+stated justification** was:
+
+> *"Acrobat does this; the suite is scored against Acrobat."*
+
+**FALSE.** And the mechanism of the error is a spec mis-assignment, not a
+measurement slip: `GreyAsKOnly` routes a `DeviceGray` source into ISO 32000-1
+§11.7.4.3 **Table 149 ROW 1** — *`DeviceCMYK` specified directly*, the
+value-dependent `OPM 1` cell. **§11.7.4.5 puts `DeviceGray` in ROW 2** —
+*"any process colour space"*, `c_s` in all three columns.
+
+#### ★★★★ Why no existing fixture could catch it — and the note that said so first
+
+**Every fixture in `tools/gen-grey-overprint-fixtures.py` painted over a SPOT
+backdrop.** Over a spot, **both** readings are defensible and **neither
+picture identifies which reading the reference engine used** — the two
+readings produce different pictures, so the test *looked* discriminating,
+while being unable to reach the claim in its own name.
+
+★ **The project had already written down that this was the gap.** Spec
+register note **`OP-N3`** says, in as many words, *"the discriminating case is
+grey over PROCESS components."* **It was named as missing and then not
+built** — and in that gap a **test name became a claim nobody could check.**
+
+⇒ **A missing fixture is not a neutral absence. It is the space a false claim
+grows into**, because the claim is then only ever checked against evidence
+selected for being available.
+
+#### Measured on a patch of the missing shape
+
+A `1 g` mark under `/OP true /OPM 1` over a `0.5 0 1 0 k` backdrop:
+
+| reading | Table 149 row | RGB |
+|---|---|---|
+| **the shipped default** (`grey_as_k_only`) | row 1, value-dependent | **142,198,63** — backdrop **preserved** |
+| the **literal** reading (`device_cmyk_only`) | row 2, `c_s` throughout | **255,255,255** — backdrop **replaced** |
+| **ACROBAT** | — | **255,255,255** |
+
+★ **The one escape hatch is closed by arithmetic, not by argument:** `1 g`
+converts to `0 0 0 0` **under every profile**, so *"it converted
+differently"* cannot explain the divergence. The result is a row-assignment
+difference or nothing.
+
+#### What shipped
+
+- **`fixtures/synthetic/overprint/grey_op_over_cmyk.pdf`** — confirmed present
+  on disk this filing by `find`. The **generator was EXTENDED, not
+  rewritten**: it already held five fixtures other tests depend on, and
+  rewriting a generator that other tests read is how `Pass 201.0` lost a
+  committed test file six hours earlier. Its two values **reproduce the real
+  conformance patch's cells exactly**, so the synthetic fixture is a
+  *reproduction*, not an analogy.
+- **A sabotage-verified test.** Disabling the special case fails it **plus
+  three existing tests**, while **four controls stay green** — so the test is
+  shown to be *load-bearing and bounded*, not merely green.
+- **The misnamed test renamed** `the_shipped_default_is_grey_as_k_only`, with
+  its **BODY unchanged**. Only the name and its doc comment moved, because the
+  body asserts something true (*what actually ships*) under a name that
+  asserted something false (*whose reading it is*). Verified live at
+  `crates/pdfce-render/tests/grey_overprint.rs:280`.
+- **The falsified sentence QUOTED and corrected in place, not deleted** —
+  `crates/pdfce-core/src/settings/mod.rs:773` still carries the original
+  wording under a `It read:` banner, with the measured table beneath it.
+
+#### ★★★ THE DEFAULT IS DELIBERATELY NOT FLIPPED — and the reason is measurable
+
+Flipping it **alone** is **trap-neutral**: **17 traps before and 17 after.**
+It corrects one cell and **breaks another that passes only through a
+COMPENSATING ERROR** — pdfce flattens the spot into C/M/Y, and the *wrong*
+row assignment then preserves **exactly those planes**. Two cells swap between
+**~0 and ~50 mean error** while the **page aggregate barely moves: 25.233 →
+25.384** (a rise of **0.151**, i.e. the aggregate is *slightly worse* while
+one cell is *much better* — which is precisely why an aggregate could not have
+adjudicated this).
+
+⇒ **The honest fix is the literal row assignment TOGETHER WITH the
+per-spot-colorant plane.** Flipping the setting first would trade a visible
+defect for an invisible one and move the score by nothing. **Added as a tenth
+dependent of the n-channel plane** (*Backlog*, and the enumeration in the
+360th filing's `Table 149 SPOT-row` entry).
+
+#### ★★ The generalisable half
+
+**A default named after an external reference is a CLAIM ABOUT THAT
+REFERENCE**, and it earns the same sourcing bar as any other claim
+(`CLAUDE.md`'s claim-bearing-copy rule, and hard rule 10's corollary *a
+correction is a claim*). This one was carried for **13 days** — `Pass 143.0`
+(`4094e49`, 2026-08-26) through `Pass 206.0` — asserted in a **test name**, a
+**settings-file comment the operator can read on disk**, three **rustdoc
+blocks**, a **CLI source comment** and a **`FEATURES.md` row**, and checked
+**nowhere**. See the hard-rule-11 sweep below: **the sweep this filing ran
+found NINE surviving copies of it, of which only ONE is this role's to fix.**
+
+---
+
+### `Pass 205.0` (`34032d2`, 2026-09-01) — **THE TRAP DETECTOR HAD NO REFERENCE CONTROL, AND WAS INVENTING ONE FAILURE OF SIX** — ★★★★ **`if marks: verdict = "X"` IS AN UNCONDITIONAL FAIL, SOUND ONLY WHILE A CORRECT ENGINE TRIPS ZERO — AND NOTHING HAD EVER VERIFIED THAT PER PATCH** — ★★★ **THE PRINCIPLE WAS ALREADY IN THE FILE, FOR THE *OTHER* COMPARATOR, AND HAD NEVER BEEN APPLIED TO THE HARNESS'S *PRIMARY* VERDICT** — ★★ **THE FOURTH MEASUREMENT DEFECT FOUND IN THIS ONE HARNESS IN A SINGLE SESSION** — filed 2026-09-01 (361st filing)
+
+#### The defect
+
+A **"trap"** is an X-shaped mark the patch's own artwork places where a
+*correct* render makes it invisible. `tools/suite-check.py`'s detector scored
+it unconditionally: **`if marks: verdict = "X"`**. That inference is sound
+**only while a correct engine trips ZERO traps on that patch** — and
+**nothing in the harness had ever verified that, for any patch.**
+
+#### Measured — by running the harness's OWN detector against the REFERENCE engine's renders
+
+The control that had never been run. **pdfce traps / reference traps**, per
+patch:
+
+| patch | pdfce | reference |
+|---|---|---|
+| `PCS 2.0` | 7 | **0** |
+| `PCS 3.0` | 3 | **0** |
+| `PCS 4.0` | 3 | **0** |
+| `PCS 8.1` | 1 | **0** |
+| `PCS 13.0` | 2 | **0** |
+| `PCS 16.1` | **1** | **2** |
+
+**Five of the six failures are genuine.** The sixth is **the harness
+inventing a defect**: on `PCS 16.1` pdfce trips **FEWER** marks than the
+engine being used as ground truth, **and was still scored FAIL.**
+
+#### The fix is GENERAL — no patch is named and none is excepted
+
+With `--reference-dir`, if the **reference render trips traps too**, the
+verdict becomes **`TRAP?`** and lands in **UNRESOLVED**. Verified live this
+filing at `tools/suite-check.py:700–710` and in the verdict-rendering table at
+`:777–786`.
+
+★ **`TRAP?` is deliberately NOT a pass**, and that restraint is the entry's
+real content: the patch **may still render wrongly for reasons the detector
+cannot see**, and the only thing the control establishes is that *this
+instrument cannot adjudicate this patch*. Converting an unadjudicable patch
+into a pass would be the same class of error one level up.
+
+#### Score
+
+| | FAIL | pass | UNRESOLVED | total |
+|---|---|---|---|---|
+| before | 6 | 39 | 6 | **51** |
+| after | **5** | 39 | **7** | **51** |
+
+**No patch moved into `pass`.** One moved out of `FAIL` and into
+`UNRESOLVED`, which is the entire delta. **A harness fix that improves the
+apparent score is the one to distrust; this one does not.**
+
+#### ★★★ The principle was ALREADY IN THE FILE
+
+`tools/suite-check.py` already said, for the **strip comparison**: *"if the
+reference engine does not match its OWN embedded strip … say so instead of
+scoring it."* **That reasoning had never been applied to the trap detector —
+which is the harness's PRIMARY verdict**, the one that decides most patches.
+
+⇒ **A principle written for a secondary comparator does not migrate to the
+primary one on its own.** The secondary path was the one somebody had recently
+had a reason to think about; the primary path was old, trusted and unread.
+**This is the same shape as `Pass 202.0`'s comment-without-a-guard** — a
+correct statement sitting a few hundred lines from the code that most needed
+it — and it is the **fourth** measurement defect found in this harness in one
+session (`Pass 196.0`, `Pass 200.0`, `Pass 200.1`, this Pass).
+
+**Standing-rule disposition: NO new number — recorded as a further instance of
+`R93`'s 2026-09-01 amendment** (the `Pass 202.0` family: *a Pass that gets a
+principle right on one route owes the sibling route a check that fails when
+the principle is absent there*). The population is now **measurement
+instruments as well as render routes**, which is a widening of `R93`'s
+worked examples, not a new obligation.
+
+---
+
+### `Pass 204.0` (`97b4c9d`, 2026-09-01) — **THREE SOURCE COMMENTS SAID NOTHING WAS OWED, WHILE THE CODE BESIDE THEM DISAGREED — AND THE ONE CAUSING THE GAP WAS THE LAST PLACE STILL ASSERTING THERE WAS NONE** — ★★★★★ **TABLE 149's *"any process colour space"* ROW IS TWO SUB-ROWS; ALL THREE COMMENTS QUOTED THE FIRST AND STOPPED** — ★★★★ **THE REPOSITORY HAD ALREADY CONTRADICTED ITSELF FOR MONTHS: `overprint.rs` HAS *ALWAYS* RETURNED `Backdrop` FOR `(OtherProcess, Spot)` UNDER `op == true`** — ★★★ **ONE OF THE THREE COMMENTS SAID OF ITSELF *"this paragraph has now been wrong about images TWICE, in opposite directions"* — AND WAS WRONG A THIRD TIME IN THE SAME SENTENCE THAT WARNED ABOUT THE PATTERN** — filed 2026-09-01 (361st filing)
+
+#### The claim that was wrong in three places
+
+Three comments in `crates/pdfce-render/` asserted, in substance:
+
+> *"ISO 32000-1 Table 149 gives any process colour space `c_s` in all three
+> columns … so painting a `DeviceGray`/`DeviceRGB`/`DeviceCMYK` image
+> normally under overprint **IS the conforming result, not a shortfall**."*
+
+**Table 149's *"any process colour space"* row has TWO sub-rows:**
+
+| sub-row | under `OP true` |
+|---|---|
+| **process component** | `c_s` in all three columns — *the half all three comments quoted* |
+| **SPOT colorant** | **`c_b` — the backdrop** — *the half all three dropped* |
+
+And **NOTE 2 makes `/Indexed /DeviceCMYK` a process source**, so it lands
+squarely in that row and inherits both sub-rows.
+
+#### ★★★★ THE REPOSITORY HAD ALREADY CONTRADICTED ITSELF
+
+- **`crates/pdfce-render/src/overprint.rs` has ALWAYS returned `Backdrop` for
+  `(OtherProcess, Spot)` under `op == true`.** The table implementation was
+  right the whole time.
+- **`Pass 196.1` had already corrected the CLI's operator-facing note** to say
+  the gap *"is owed"*.
+- **Only the RENDERER's comments were never swept** — so **the code CAUSING
+  the gap was the one place still asserting there was none.**
+
+⇒ This is hard rule 11's exact failure mode, observed from the inside: a claim
+was corrected where it was *read* (the CLI note) and left standing where it was
+*enacted* (the renderer). **A sweep that follows the operator-visible surface
+finds the copy that talks; it does not find the copy that acts.**
+
+★★★ **And the sharpest detail: one of the three comments already contained the
+sentence *"this paragraph has now been wrong about images TWICE, in opposite
+directions"* — and was wrong a THIRD time in the same sentence that warned
+about the pattern.** Naming a failure mode does not perform the check
+(hard rule 10's corollary, in a new subsystem).
+
+**Common factor across all three: each quoted a row ACCURATELY and stopped
+before its second sub-row.** Not one was a misquotation. **Truncation, not
+error** — which is why three separate readings walked past all three.
+
+#### What shipped — and what deliberately did not
+
+**This Pass does NOT change rendering.** Fixing the pixels needs the
+**per-spot-colorant plane**. What it fixes is the **silence**: a process-space
+sampled image under `/OP true` incremented **no counter at all** — not
+`overprint_composited`, not `overprint_refused`, not
+`overprint_images_unsupported` — which is a rule-4 violation *independent of
+what the correct pixel answer turns out to be*.
+
+Shipped: **`overprint_process_images_unsupported`** on `render-page`'s stable
+metrics line (verified live at `crates/pdfce-cli/src/main.rs:11738`), plus an
+**stderr note**.
+
+**Measured — discriminating, not blanket:**
+
+| patch | `overprint_process_images_unsupported` |
+|---|---|
+| `PCS 3.1` | **1** |
+| `PCS 8.1` | **0** |
+
+#### ★★ The counter counts the SITUATION, not confirmed damage — and it says so
+
+Stated in the counter's own documentation rather than left for a reader to
+discover: **with no spot plane, the backdrop's spot ink is already flattened
+into the process channels before the image paints, so pdfce CANNOT TELL
+whether a spot was underneath.** A non-zero value therefore means *"this page
+contains the SHAPE of the problem"*, not *"this page is damaged"*.
+
+★ That is the honest form for a counter whose subject is invisible to it, and
+it is the same discipline `overprint_images_unsupported` already carries
+(deliberately over-inclusive, and documented as such). **A counter that cannot
+distinguish its two cases must name which one it is reporting** — otherwise a
+reader converts a situation count into a damage count for free.
+
+#### Four stale claims swept in the same commit — all four found by the 360th filing's own hard-rule-11 sweep
+
+| survivor | why it was false |
+|---|---|
+| a **SHIPPED `eprintln!`** telling operators *"pdfce has no colour-management engine"* | **false since `Pass 199.2`** (`3194f1b`), six hours earlier — and **operator-visible**, which makes it the worst of the four |
+| two **rustdoc claims** in `crates/pdfce-render/src/color.rs` | same cause |
+| **`overprint_shadings_unsupported`'s doc row** | enumerated its populations **EXHAUSTIVELY** and missed the **third**, which `Pass 202.0` had added **one commit earlier** |
+
+★★ **The fourth is the instructive one and it is a shape, not an incident: an
+EXHAUSTIVE enumeration goes stale the moment the population grows, and unlike
+a wrong sentence it goes stale SILENTLY** — every item listed is still
+correct, so the row reads as verified. **A list that says "these are the
+cases" is a claim with an expiry date and no alarm.** This filing's own sweep
+found the **same shape twice more** (see below): `FEATURES.md`'s *"four
+simulation counters"* (now six) and `icc_unmanaged_paints`'s *"normally …
+occasionally …"* cause list (now missing its most common cause).
+
+---
+
+### `Pass 203.0` (`1a13640`, 2026-09-01) — **REVERTED. THE OBVIOUS REFINEMENT WAS BUILT, MEASURED, AND IS A REGRESSION — THE COMMIT SHIPS ONLY THE COMMENT THAT RECORDS IT, AT THE EXACT SPOT THE NEXT READER WOULD TRY IT** — ★★★★★ **"THE SAME DEFECT IN A DIFFERENT OBJECT TYPE" WAS A FALSE PREMISE: THE ASYMMETRY IS NOT IN HOW INK IS COMPUTED BUT IN WHAT IS BEHIND THE OBJECT** — ★★★★ **THE FIRST METRIC MADE THE REGRESSION LOOK LIKE AN IMPROVEMENT, BECAUSE THE DETECTOR WAS COUNTING PHOTO AREA RATHER THAN MARKS** — filed 2026-09-01 (361st filing)
+
+#### What was tried
+
+`Pass 201.0` (`f773683`, 360th filing) narrowed a **mixed `/DeviceN`**
+overprint for **SHADINGS**, using the colour ramp's `ColorRamp::ink_reach`,
+and **explicitly scoped itself away from images** because narrowing them had
+been measured to regress a duotone (region MAD **15.91 → 53.95**).
+
+**The obvious refinement** — do the same for images using
+`DecodedImage::ink`, **the authored CMYK texel-for-texel, the exact analogue
+of a ramp** — was implemented as **`CmykTexels::ink_reach`** plus a mirrored
+narrowing.
+
+#### Measured, on the patch whose check marks it was meant to restore
+
+**The ablation proved the change was EFFECTIVE before it was judged**
+(25,600 pixels changed, max change 207) — so a null result could not be
+mistaken for a working fix:
+
+| | mean error vs Acrobat |
+|---|---|
+| **WITHOUT** the narrowing | **23.90** |
+| **WITH** the narrowing | **28.68** |
+
+**A regression of 4.78 mean levels, and the marks did not come back.**
+**Reverted**; baseline **re-measured at exactly 23.90** after the revert, so
+the revert is verified rather than assumed. Confirmed live this filing:
+**`CmykTexels::ink_reach` does not exist in the tree** (`grep` over `crates/`
+returns `ColorRamp::ink_reach` at `shading.rs:562` and its single caller at
+`interpret.rs:4950`, and nothing else).
+
+#### ★★★★★ WHY IT FAILS — and this is the whole entry
+
+**The asymmetry is not in how the ink is computed. It is in WHAT IS BEHIND
+THE OBJECT.**
+
+- A **shading sits OVER a thin mark**. Handing an untouched channel back to
+  the backdrop **restores the mark** — the backdrop is the thing you wanted.
+- A **photograph COVERS an area**. Handing back its untouched channels makes
+  it **partly transparent to whatever is beneath** — **a far larger error than
+  the one being fixed.**
+
+⇒ **"The same defect in a different object type" was a FALSE PREMISE.** The
+two objects have the same *colour-space* shape and **opposite** *occlusion*
+shapes, and the narrowing is a statement about occlusion wearing a colour
+space's clothes. **A refinement justified by structural analogy needs the
+analogy checked on the axis the change actually operates on** — which is
+rarely the axis that made the analogy obvious.
+
+#### ★★★★ The metric that lied, and how it was caught
+
+A **first metric — a dark-green pixel count — made the regression look like an
+IMPROVEMENT**, because the detector was **counting photo area rather than
+marks**. The change made more of the photograph dark-green; the detector could
+not tell that from more marks surviving.
+
+**Distance-to-oracle settled it.** A proxy metric that correlates with the
+goal on the cases you have looked at will *anti-correlate* on the case you
+built the change for — which is exactly what `Pass 200.1` had found six hours
+earlier when it deleted `reference_similarity` for being **anti-correlated
+with correctness**. **Two independent instances in one day, in two different
+instruments.**
+
+#### Why a comment-only commit is the right artifact
+
+The commit changes **no behaviour**. It records the **negative result at the
+exact spot the next reader would try it** — beside the shading narrowing that
+makes the image version look obvious and cheap. **A negative result filed only
+in `ROADMAP.md` is a negative result the next engineer will not read**, because
+they will be reading `interpret.rs`, not the roadmap, at the moment the idea
+occurs to them.
+
+★ **Precedent, deliberately noted rather than assumed away:** `Pass 202.0`
+(one commit below this one) is this project's own proof that **a comment is
+not a guard**. This entry is the complementary case and does **not** weaken
+that finding: a comment is a poor substitute for *code that must run*, and a
+good carrier for *a measurement that must not be repeated*. **The failure mode
+of `Pass 202.0` was a comment standing in for behaviour; the failure mode this
+commit prevents is a measurement having to be re-derived.** Those are different
+jobs.
+
+**No `FEATURES.md` box moves in either direction.** A reverted refinement is
+not a capability, and the capability it would have refined was already ticked.
+
+---
+
+## ★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string (361st filing)
+
+Two claims changed meaning this filing, so both owe a sweep. Per hard rule 11
+clause (e) the file set was **narrowed** and the pattern **widened**:
+case-insensitive bare keyword (`acrobat`, `icc_managed`, `simulation
+counters`) over the handful of files each feature touches, every hit read.
+
+### Claim A — *"`grey_as_k_only` is Acrobat's reading"* (falsified by `Pass 206.0`)
+
+**NINE surviving copies.** One is this role's to fix and is fixed in this
+filing; **eight are in `crates/` and are REPORTED, not edited** — hard rule 11
+scopes this role to reporting there.
+
+| # | site | the surviving claim |
+|---|---|---|
+| 1 | `docs/FEATURES.md` row *Choose whether a grey fill knocks a spot backdrop out or preserves it* | *"**`grey_as_k_only` — DEFAULT**, Acrobat's reading"* — **FIXED THIS FILING** |
+| 2 | `crates/pdfce-core/src/settings/mod.rs:2598` — **the settings-file comment WRITTEN TO THE OPERATOR'S DISK** | *"or preserves it (Acrobat, which converts grey to K-only CMYK first…). Both are defensible."* — **wrong twice**: the Acrobat attribution, and *"Both are defensible"*, which `Pass 174.5` had already ruled a **divergence**, not an ambiguity |
+| 3 | `crates/pdfce-core/src/settings/mod.rs:2602` — same emitted file | *"`grey_as_k_only`  DEFAULT. Acrobat's reading, for DeviceGray only"* |
+| 4 | `crates/pdfce-core/src/settings/mod.rs:697` | *"a deliberate divergence from ISO 32000-1 **toward Acrobat**"* — it diverges from ISO 32000-1 **and** from Acrobat |
+| 5 | `crates/pdfce-core/src/settings/mod.rs:725` | *"Measured against Acrobat on the print-conformance suite: 84,120,34 (Acrobat, and this setting's default)"* — **spot geometry**, i.e. exactly the measurement `Pass 206.0` establishes cannot identify the reference |
+| 6 | `crates/pdfce-core/src/settings/mod.rs:1675` | *"a **divergence from ISO 32000-1** toward Acrobat"* |
+| 7 | `crates/pdfce-render/src/overprint.rs:642 / :652 / :656` | *"a DIVERGENCE from ISO 32000-1 toward Acrobat"*; *"Acrobat converts grey to K-only `DeviceCMYK` first"*; *"and for why the default is Acrobat's"* |
+| 8 | `crates/pdfce-render/tests/grey_overprint.rs:238` | the **assertion message** of `the_default_reading_preserves_the_spot`: *"Acrobat's reading: grey converts to K-only CMYK…"* — **fourteen lines above the doc comment that refutes it, in the file the Pass edited** |
+| 9 | `crates/pdfce-cli/src/main.rs:11566` | *"The default preserves a spot backdrop under a `DeviceGray` fill, which is **Acrobat's reading** and a DIVERGENCE from ISO 32000-1"* |
+
+★★★ **Survivor 8 is the one worth the entry.** `Pass 206.0` renamed the test,
+rewrote its doc comment, and **left the same claim standing as an assertion
+MESSAGE in the sibling test fourteen lines up.** A sweep that starts from *the
+thing I renamed* finds names; **a claim also lives in failure messages, table
+labels and emitted config comments**, which is precisely what hard rule 11's
+2026-08-23 amendment and clause (e) were minted for. **Two of those three
+carriers are on this list** (an assertion message, an emitted settings-file
+comment).
+
+★★ **Survivor 9 is a repeat offender**: that exact line carries an inline
+banner reading *"★ SURVIVOR 7 … missed by the 330th filing's own sweep, which
+grepped `§8.6.7 ambiguity` — with the section sign."* **It was corrected once
+for its spelling and has now gone stale again for its content.** A line that
+has been swept is not a line that is true.
+
+★ **Hits that SURVIVE and are CORRECT — do not "fix" these on the next
+sweep**, per clause (e)'s reporting obligation:
+`crates/pdfce-core/src/settings/mod.rs:773–793` (the `It read:` correction
+block `Pass 206.0` shipped, which quotes the false sentence deliberately);
+`crates/pdfce-render/tests/grey_overprint.rs:250–278` (the renamed test's
+doc comment, which states the refutation); `docs/suite-patch-reference.md:252`
+(enumerates the three enum values, makes no attribution).
+
+### Claim B — *"`icc_managed_paints`/`icc_unmanaged_paints` count graphics-state paints"* (population widened by `Pass 207.0`)
+
+**`git show 0653a50 -- crates/pdfce-cli/src/main.rs` returns 0 changed
+lines**, so the operator-facing description of these two counters was **not**
+swept when their population changed.
+
+| # | site | the surviving claim |
+|---|---|---|
+| 1 | `crates/pdfce-cli/src/main.rs:351` | *"An `ICCBased` **paint** on a page that composites in ink is converted by iccce…"* — now describes only **half** the population the counter reports |
+| 2 | `crates/pdfce-cli/src/main.rs:353` | the cause list — *"normally because the document named no `/OutputIntent`, occasionally because a profile would not parse or the destination was not four-component"* — is **EXHAUSTIVE-shaped and now omits the most common cause on any image-bearing page**: the source is an **IMAGE**, and `image::Space` discards its profile, so it is **structurally unmanageable**, not a parse failure |
+| 3 | `docs/FEATURES.md`, `/ICCBased` and `/OutputIntents` rows | implied that ICC management reaches the page generally — **FIXED THIS FILING**, both now say **graphics-state paints only; images are NOT colour-managed** |
+
+★★ **Survivor 2 is `Pass 204.0`'s own lesson, one commit later.** That Pass
+swept `overprint_shadings_unsupported`'s doc row for enumerating its
+populations exhaustively and missing the third — and **the very next commit
+widened a counter whose doc row enumerates its causes exhaustively, and did
+not sweep it.** **An exhaustive list is a claim with an expiry date and no
+alarm**, and this project has now paid for that shape **three times in
+twenty-four hours** (`overprint_shadings_unsupported`'s populations,
+`FEATURES.md`'s *"four simulation counters"* — see below — and this).
+
+### Claim C — found by the sweep, not reported by the dispatch
+
+`docs/FEATURES.md`'s overprint-disclosure row enumerated **"four simulation
+counters"** by name. The metrics line, read live at
+`crates/pdfce-cli/src/main.rs:11730–11738`, now carries **six**:
+`overprint_composited`, `overprint_refused`, `overprint_pixels`,
+`overprint_images_unsupported`, `overprint_shadings_unsupported` and
+`overprint_process_images_unsupported`. **FIXED THIS FILING.** The row had been
+stale since `Pass 202.0` added the fifth (360th filing) and went **two**
+counters stale with `Pass 204.0`.
+
+---
+
 **★ THREE PASSES FILED TOGETHER, 360th filing, 2026-09-01 — ORDERED BY
 COMMIT, NOT BY PASS NUMBER.** `Pass 202.0` (`b796bc0`), `Pass 199.2`
 (`3194f1b`) and `Pass 201.0` (`f773683`) landed in that reverse order on one
@@ -108804,6 +109469,295 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+> ★★★★★ **FIVE ITEMS ADDED 2026-09-01 (361st filing), ALL FROM THE
+> `Pass 203.0`–`207.0` CLUSTER.** Item 3 is **not a new proposal** — it is
+> the **scoping study for the per-spot-colorant plane**, the blocker this
+> roadmap has carried unenumerated for weeks and enumerated at nine
+> dependents in the 360th filing. **It is now ten** (`Pass 206.0`'s row
+> assignment joins the list). Item 4 is a **live defect found while doing
+> that scoping** and is harmless *today* for a reason that expires the
+> moment item 3 lands. **No `FEATURES.md` box moves for any of the five.**
+
+### Unscoped — ★★★★★ **COLOUR-MANAGE `ICCBased` IMAGES: `image::Space` DISCARDS THE PROFILE BY CONSTRUCTION, SO EVERY `ICCBased` IMAGE IN EVERY DOCUMENT IS CONVERTED WITH NO COLOUR MANAGEMENT AT ALL** — filed 2026-09-01 (361st filing, `Pass 207.0`'s scoped-not-started remainder)
+
+**Status: SCOPED, NOT STARTED.** `Pass 207.0` (*Shipped*, this filing) made
+the **disclosure** true; it did **not** make the **rendering** true, and the
+two must not be conflated on a later read.
+
+**The mechanism, verified live this filing.**
+`crates/pdfce-render/src/image.rs:2043`'s `image::Space` collapses
+`[/ICCBased <stream>]` to `Gray` / `Rgb` / `Cmyk` **by its `/N` alone**. The
+enum **has no variant that can carry a profile**, so the profile is not
+"ignored" by a policy that could be changed — it is **structurally
+unrepresentable past that point**. The ICC bridge added by `Pass 199.2` is
+reachable **only** from `Interpreter::authored_cmyk` (the graphics-state
+path); **there is no image call site at all.**
+
+**★ THIS IS A CLASS, NOT A PATCH.** It affects **every** `ICCBased` image in
+**every** document, including:
+
+- `/Indexed` spaces whose **BASE** is `ICCBased` — the palette is resolved at
+  construction, so the profile is gone before a texel is looked up (the same
+  structural reason `Space::Indexed` had to grow a second authored-ink table
+  for `DeviceCMYK` bases);
+- **JPX-embedded profiles** — `codestream_space` (`image.rs:2326`) performs
+  the identical `/N`-based discard on the codec's own declared colour model.
+
+**Expected gain**, on `Pass 207.0`'s four-way patch, stated as the engineer's
+**prediction and not as a result**: **whole-image mean error 14.24 → ~11.3**
+(a predicted improvement of **~2.94 levels**, ~20.6 % of the current error).
+
+**★★ The remaining ~11.3 is NOT this item's to close** — see the next entry,
+filed immediately below precisely so that it is not chased as an ICC-source
+defect.
+
+**Prerequisite, and it is a type-level change rather than a wiring change:**
+`image::Space` must gain a variant that **carries** the profile (or a handle
+to one) from parse through to the texel conversion, without collapsing to a
+device space on the way. That is the work. Everything after it is a call site.
+
+---
+
+### Unscoped — ★★★★ **A SEPARATE, UNIFORM `CMYK`→sRGB DISPLAY OFFSET: pdfce's FLAT `DeviceCMYK` GREEN RENDERS 16,150,66 WHERE ACROBAT GIVES 10,142,49 — EVERYWHERE ON THE PAGE, INCLUDING THE SURROUND** — ★★★ **FILED SO IT IS NOT CHASED AS AN ICC-SOURCE DEFECT** — filed 2026-09-01 (361st filing)
+
+**Status: DIAGNOSED, NOT SCOPED.** No Pass ID minted.
+
+| | R | G | B |
+|---|---|---|---|
+| pdfce, flat `DeviceCMYK` green | 16 | 150 | 66 |
+| Acrobat, same colour | 10 | 142 | 49 |
+| **difference** | **+6** | **+8** | **+17** |
+
+**Mean ≈ 11.3 levels** over the three channels — **(6 + 8 + 17) / 3 = 10.33
+per channel**; the ~11.3 figure is the whole-image mean the engineer measured,
+filed here beside its per-channel form per hard rule 10(a) so the two can be
+told apart rather than conflated.
+
+**★★★ WHY THIS ENTRY EXISTS AT ALL.** The offset appears **everywhere on the
+page, including the surround** — regions with **no ICC content whatsoever**.
+**It is therefore NOT an ICC-source defect**, and it is **not** what the
+previous entry's remaining error is made of. It is pdfce's **terminal
+`CMYK` → sRGB display transform** disagreeing with Acrobat's by a roughly
+uniform amount.
+
+⇒ **Recorded before anyone measures a page and attributes the residue to the
+ICC work.** This is the same failure `Pass 199.2` narrowly avoided when three
+blend-arithmetic hypotheses were raised and ablated away before the real cause
+(a correct function used for the wrong job) was found: **a residual error
+sitting next to a freshly-changed subsystem gets attributed to it for free.**
+Naming the second cause in advance is what makes the first one falsifiable.
+
+**Not yet established, and deliberately not asserted:** whether the offset is
+constant across the gamut or only near this green; whether it is the fallback
+table, the display transform, or a gamma/encoding difference; and whether
+Acrobat's number is itself profile-dependent on the measuring machine. **One
+colour, one page.** Anyone scoping this owes a sweep before treating "uniform"
+as measured.
+
+---
+
+### Unscoped — ★★★★★ **THE PER-SPOT-COLORANT PLANE — THE FULL SCOPING STUDY, PRODUCED 2026-09-01. THE DECISION IS THE OPERATOR'S; THE ENGINEERING IS NO LONGER THE UNKNOWN PART** — ★★★★ **INVASIVENESS IS IDENTICAL FOR A CAPPED AND AN UNCAPPED DESIGN, SO THE CAP IS A POLICY DIAL, NOT AN ARCHITECTURE** — ★★★ **A 300 DPI LETTER PAGE WITH 4 SPOTS IS *REFUSED* UNDER TODAY'S DEFAULT CEILING** — filed 2026-09-01 (361st filing)
+
+**Status: SCOPED IN FULL, NOT STARTED.** This entry supplies what the 360th
+filing's ten-dependent enumeration said was missing — *"the next step is a
+decision, not another experiment"* — by making the decision cheap to take.
+**It does not take it.**
+
+#### Recommendation
+
+**`spots: Vec<SpotPlane>` from day one, with an operator-raisable cap
+defaulting to 4.**
+
+★★★★ **The load-bearing finding, and the one that collapses the design
+space: the invasiveness of a capped design and of a fully general n-channel
+buffer is IDENTICAL.** Every call site must handle a variable-length plane
+list either way. **The cap is ONE COMPARISON**, at roster construction. So the
+usual argument — *"start fixed-size, generalise later"* — buys **nothing** and
+costs a second migration. **Build the general shape; dial the policy.**
+
+#### Change surface
+
+**18 composite call sites across 7 files.** (Filed as both forms per hard
+rule 10(a): **18 sites / 7 files ≈ 2.6 sites per file** — i.e. the change is
+*broad and shallow*, not concentrated, which is what makes a partial migration
+dangerous and an all-at-once one tractable.)
+
+#### Memory — and today's ceiling REFUSES the recommended default
+
+| configuration | bytes/pixel |
+|---|---|
+| today (4 process planes + alpha) | **20 B/px** |
+| at the recommended cap of **4 spots** | **36 B/px** |
+
+**A 300 DPI US-Letter page** is 8.5 × 11 in × 300 dpi = **2,550 × 3,300 =
+8,415,000 px**. Therefore:
+
+| configuration | total | vs today's default 256 MiB ceiling |
+|---|---|---|
+| today | 8,415,000 × 20 B = 168,300,000 B = **160.5 MiB** | fits |
+| **4 spots** | 8,415,000 × 36 B = **302,940,000 B = 288.9 MiB** | **REFUSED** |
+
+⇒ **The recommended default does not fit the shipped default ceiling**, and
+that is a design constraint rather than a reason to lower the cap:
+**planes must be allocated ON DEMAND from a PER-PAGE ROSTER**, never
+pre-allocated to the cap. A page naming one spot pays for one plane
+(8,415,000 × 24 B = **192.6 MiB**, which fits); the cap bounds the worst case,
+it does not describe the common one. The interaction with
+`max_cmyk_buffer_bytes` (`Pass 122.3`, already an open ceiling entry) is
+**part of this item, not a follow-on** — a refusal here is a *blank page*, and
+`cmyk_buffer_refused` is the counter that must fire.
+
+#### ★★★ THE IDENTITY RULE — the decoded name BYTE STRING, and only that
+
+**Two colorants are the same plane iff their decoded `/Separation` /
+`/DeviceN` name bytes are equal.** Not a normalised string, not a
+case-folded one, not a lossy-decoded one.
+
+- **ISO 32000-1 §8.6.6.4's device test consults ONLY THE NAME.**
+- **§7.3.5 NOTE 4 makes byte-differing names DISTINCT** — a name is a byte
+  string, and `#`-escapes decode before comparison but nothing else does.
+
+**Three exceptions, each with its own rule:**
+
+| name | treatment |
+|---|---|
+| **`/None`** | **never gets a plane.** §8.6.6.4: paints nothing. It already has a counter (`separation_none_suppressed`) and a disclosure note. |
+| **`/All`** | **a BROADCAST, not a plane.** It marks *every* colorant simultaneously; giving it a plane would make it one more ink instead of an operation on all of them. |
+| **NChannel `/Process`** | **overrides the name test.** A `/DeviceN` with an NChannel attributes dictionary declaring a component as `/Process` is a process component regardless of what it is named, and belongs in a process plane. |
+
+#### ★★★★ TWO HAZARDS, both of which bite BEFORE the first plane paints
+
+**(a) ADDING ONE SPOT PLANE CAN TURN OVERPRINT MODE INERT — and the two
+editions of the standard disagree about whether it does.**
+
+| edition | the test §8.6.7 applies | consequence for a CMYK + spot buffer |
+|---|---|---|
+| **ISO 32000-1** | overprint mode is disabled if the device colour space **"is not `DeviceCMYK`"** — an **IDENTITY** test | a CMYK + spot buffer **is not `DeviceCMYK`** ⇒ **`OPM` goes INERT on that page** |
+| **ISO 32000-2** | disabled if it **"does not include CMYK device colourants"** — an **INCLUSION** test | a CMYK + spot buffer **does include them** ⇒ `OPM` stays live |
+
+⇒ **Under a 1.7 reading, allocating a spot plane silently disables `OPM 1`
+for the whole page** — a change to *unrelated* content, caused by an
+*addition*. **Needs a setting, defaulting to the 2.0 (inclusion) reading**,
+under the same `R169`/`R206` discipline every other edition-gated divergence
+in this renderer already uses, and **described as a divergence** per `R234`.
+**This must be decided before the first plane is allocated, not after**,
+because the failure is invisible: `OPM` going inert does not error, it just
+renders a different page.
+
+**(b) §11.7.4.2 IS A `shall`: ONLY SEPARABLE, WHITE-PRESERVING BLEND MODES
+MAY BE APPLIED TO SPOT COLOURS.** So **the `NonSeparable` arm MUST NOT extend
+over spot planes.** `Pass 85.4b` implemented the four non-separable modes from
+Table 137 inside pdfce and `Pass 198.0` gave them a counter; **naively
+iterating the new plane list in the compositor would carry them straight into
+territory the spec forbids.** The correct shape is that the non-separable path
+composites process planes only and the spot planes take the separable
+treatment, **disclosed** — a `shall` is not a preference and this is not a
+setting.
+
+#### ★★ SMALLEST FIRST INCREMENT — and it has a PREDICTED, FALSIFIABLE result
+
+**Roster + ONE plane, PATH FILLS ONLY.** No images, no shadings, no text.
+
+`docs/suite-patch-reference.md` §3 predicts this fixes **`PCS 3.0`'s two traps
+at `(27, 68)` and `(28, 135)`** — read live this filing at that file's lines
+240–241 and 273, where both are recorded as `0 0 0 0.500` source over
+`0.443 0 0.885 0.500` backdrop, *"whole cell green — X invisible"*, and named
+as `0 0 0 .5 k` and `.5 g` **FILLS over the named spot green.**
+
+★ **That is the point of choosing this increment: it is the smallest slice
+with a WRITTEN-DOWN PREDICTION attached, made before the work, by a document
+that did not know it would be used this way.** If the roster and one plane
+land and those two traps do not clear, the model is wrong and the next
+increment must not be built on it. **Compare the two rejected cheap
+approximations, which were each measured only AFTER being built** — the
+page-sized spot-ink multiplier plate (**−1 trap of 17, 0 of 51 patches
+flipped, one patch REGRESSED**) and, at `Pass 130.3`, ink union
+`max(c_b, c_s)` (**broke 6 of 51**) and painting the flattened tint normally
+(**broke 8 of 51**), against **4 of 51** for the shipped preserve-backdrop
+behaviour. **Do not re-attempt either.**
+
+#### Dependents
+
+**TEN**, not nine — the 360th filing's enumeration (in the *Table 149
+SPOT-component row* entry, above) plus **`Pass 206.0`'s
+`OverprintZeroTintScope` row assignment**, which is trap-neutral to flip alone
+because a compensating error currently cancels it, and which the plane is what
+makes safe to correct.
+
+---
+
+### Unscoped — ★★★ **A LIVE DEFECT, FOUND WHILE SCOPING THE PLANE: `Colorant::parse` KEYS COLORANTS ON A LOSSY-DECODED `String`, SO TWO DIFFERENT COLORANTS CAN COLLIDE INTO ONE — HARMLESS TODAY, NOT HARMLESS THE MOMENT A PLANE IS KEYED ON IT** — filed 2026-09-01 (361st filing)
+
+**Status: LIVE, UNFIXED.** Verified live this filing at
+`crates/pdfce-render/src/color.rs:190`:
+
+```rust
+other => Self::Named(String::from_utf8_lossy(other).into_owned()),
+```
+
+**`String::from_utf8_lossy` maps EVERY distinct invalid byte sequence to the
+SAME `String`** — every one becomes `U+FFFD`. So two colorants whose names
+differ **only** in invalid bytes decode to the same key and become **one
+colorant**.
+
+**★ NOT HYPOTHETICAL — found in the wild:** the corpus census turned up **two
+files with `U+FFFD` in a colorant name.** (Denominator not stated in the
+source measurement and deliberately not invented here; two is the count of
+files, not a rate.)
+
+**★★★ WHY IT IS HARMLESS TODAY, AND WHY THAT EXPIRES.** Today **nothing is
+keyed on the colorant name** — it is compared, counted and displayed, and a
+collision changes no pixel. **A spot plane is a MAP FROM NAME TO PLANE.** The
+moment item 3 lands, this becomes *two inks painting into one plate*, which is
+a wrong render with no error, no counter and no visible symptom — the worst
+combination this project has a name for.
+
+**Fix: key on `Arc<[u8]>`** — the decoded name bytes, per §8.6.6.4's device
+test and §7.3.5 NOTE 4's byte-distinctness (the identity rule in item 3
+above). `Arc` rather than `Vec` because the key is cloned per paint and never
+mutated.
+
+★★ **This is a `R151`-shaped entry in reverse.** `R151` warns about a core
+capability with no caller; this is a **latent correctness bug with no
+consumer**, which is the same structure with the same property: **it cannot be
+detected by any test until the consumer exists, and by then it is a
+regression rather than a known debt.** **Fix it BEFORE the plane, not with
+it** — it is a two-line change now and a debugging session later. This is
+also `CLAUDE.md`'s *fix bugs on discovery* directive, applied to a bug whose
+symptom has not been born yet.
+
+---
+
+### Unscoped — ★★ **`PCS 3.0` AND `PCS 4.0` ARE TWO DEFECTS SHARING A PAGE TEMPLATE, NOT ONE DEFECT APPEARING TWICE — AND ONLY TWO OF EACH PATCH'S THREE TRAPS BELONG TO THE PLANE** — filed 2026-09-01 (361st filing)
+
+**Status: CLASSIFICATION, no work owed by this entry itself.**
+
+Both patches score **3 traps** (`Pass 205.0`'s reference-control table,
+*Shipped* this filing: `PCS 3.0` **3 pdfce / 0 reference**, `PCS 4.0` **3
+pdfce / 0 reference** — both genuine, neither instrument noise). The trap
+counts are equal and the page templates are shared, which is exactly what
+makes them look like one defect.
+
+| traps | cause | closed by |
+|---|---|---|
+| **2 of 3**, on each patch | no spot plane to preserve | the **per-spot-colorant plane** (item 3 above) |
+| **1 of 3**, on each patch | the **`OverprintZeroTintScope` row assignment** — `DeviceGray` routed into Table 149 row 1 instead of row 2 | `Pass 206.0`'s finding (*Shipped*, this filing) — **and it needs the plane too**, because flipping it alone is trap-neutral through a compensating error |
+
+⇒ **4 of the 6 traps across the two patches need the plane; 2 need the row
+assignment; and the row assignment cannot be safely applied without the
+plane.** So the plane is the prerequisite for all six — **but the two causes
+must stay separately named**, because a session that lands the plane and sees
+**two** traps remain per patch will otherwise conclude the plane did not work.
+
+★ **This is the same bookkeeping hazard the 360th filing named for `PCS 3.1`**
+(*"needs the plane AND a second, independent fix in front of it — do not let
+the plane's absence hide it"*). **Two patches now have that shape, which makes
+it a pattern rather than a special case:** a shared page template produces
+patches whose failures look identical and whose causes are not. **Attribute
+per trap, never per patch.**
+
+---
+
 > ★★★ **`Pass 199.2` HAS SHIPPED AND LEFT THIS SECTION — 360th filing,
 > 2026-09-01, `3194f1b`.** The entry below is kept struck rather than
 > deleted (*Shipped* and this section's history are append-only, hard rule 1).
@@ -109674,8 +110628,9 @@ against anything.** Everything below is waiting on **one** thing — an
 | `crates/pdfce-render/tests/grey_overprint.rs`'s third assertion | pins a **known-wrong** value deliberately, to be re-derived when the plane lands (own entry, above) |
 | `tools/overprint_image.rs`'s signature table | owes a row that cannot be written until the plane exists (own entry, above) |
 | Table 149's SPOT-component row family (**this entry**) | the rules are written, tested and unreachable; the plane is the missing caller |
+| **`OverprintZeroTintScope`'s row assignment** — **ADDED 2026-09-01 (361st filing), `Pass 206.0`** | the shipped default routes `DeviceGray` into Table 149 **row 1**; §11.7.4.5 puts it in **row 2**. Flipping it **alone** is trap-neutral (**17 traps before and after**) because a **compensating error** currently cancels it — pdfce flattens the spot into C/M/Y and the wrong row then preserves exactly those planes. **The plane is what makes the correct row assignment safe to apply.** |
 
-**⇒ Nine dependents, one decision.** The decision is **the operator's**
+**⇒ TEN dependents, one decision — was nine when this table was written on 2026-09-01 (360th filing); `Pass 206.0` added the tenth the same day.** The decision is **the operator's**
 because it is an architecture change with a memory cost, not a bug fix: a
 page-sized `f32` plate **per spot colorant** on a document that may name many,
 against a colorant buffer whose byte ceiling is already an open entry
@@ -116060,6 +117015,142 @@ name and say NOT BUILT YET) must be updated in the same Pass —
 shape, not the schedule.** No Pass ID assigned.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**★★★★★ NEW 2026-09-01 (361st filing) — ONE QUESTION, AND IT IS ABOUT
+PUBLISHED HISTORY, SO IT IS NOT THE ENGINEER'S AND NOT THIS ROLE'S.
+Operator-question ceiling moves `(bz)` → `(ca)`, next free `(cb)`:**
+
+- **(ca) EIGHTY-TWO OF 1,219 COMMIT MESSAGES IN PUBLISHED HISTORY CONTAIN
+  THE LICENSED PRINT-CONFORMANCE SUITE'S NAME IN PLAINTEXT. The
+  repository is PUBLIC. Leave them, rewrite published history to remove
+  them, or neither?** *Default if unanswered:* **leave them exactly as
+  they are.** Doing nothing is the only option that is certainly not
+  destructive, and rule 8 reserves history rewriting to the operator
+  regardless.
+
+  **★★★ THE FIGURE, AND ITS CORRECTION — AND THE WRONG NUMBER IS NOW
+  PUBLISHED.** The dispatch that opened this question stated **forty of
+  1,217**. So does the docstring of `tools/check-suite-name-absent.py`
+  (line 177), **so does `Pass 208.0`'s commit BODY** (*"40 of 1,217
+  commit messages"*), **and so does its SUBJECT LINE** (*"…and forty of
+  them carry the term"*) — and `Pass 208.0` (`094b31a`) **was committed
+  and pushed while this filing was being written**, so all three are now
+  in published history. **Measured independently by this role with a
+  shell, at `HEAD` = `094b31a`, and the commands are named so the
+  arithmetic can be redone:**
+
+  | needle | matching commit messages |
+  |---|---|
+  | the suite's **full name** | **76** |
+  | the suite's **three-letter abbreviation** | **40** |
+  | **either** (the real exposure) | **82** |
+  | both (the overlap, by 76 + 40 − 82) | 34 |
+  | **denominator** — `git rev-list --count HEAD` | **1,219** at `0653a50`; **1,220** at `094b31a` |
+
+  ⇒ **82 of 1,219 = 6.7 % of published commit messages** (measured at
+  `0653a50`; `Pass 208.0` adds one more commit and one more matching
+  message — its own subject line names the term — so the standing at
+  `094b31a` is **83 of 1,220**, and this entry files the `0653a50`
+  figure because that is the one whose commands are written out below). The commands
+  were `git log --regexp-ignore-case --grep=<needle> --format=%H | wc -l`
+  per needle and with both `--grep` flags together, with the needles
+  decoded at run time from the two base64 constants in
+  `tools/check-suite-name-absent.py` (`NEEDLES_B64`, line 81) so that
+  neither this entry nor the shell history spells the term. Ten sampled
+  hits per needle were read with the term masked; **all are genuine
+  mentions, not coincidental substrings.**
+
+  ★★ **The undercount has a single, generalisable cause: the gate
+  searches for TWO needles and the census counted ONE.** The
+  abbreviation is the shorter, more memorable form, and it is the one a
+  human reaches for when estimating. **A figure derived from a
+  multi-needle instrument by hand will silently inherit whichever needle
+  the estimator had in mind** — hard rule 10's whole subject, arriving
+  here as an undercount of **more than half** (40 reported, 82 actual).
+  **The correction required no new instrument, only running the gate's
+  own second needle.**
+
+  **What is TRUE about the gate — corrected against the repository
+  rather than against the dispatch, TWICE in one filing.** The dispatch
+  stated that `tools/check-suite-name-absent.py` *"scans the WORKING
+  TREE … and cannot see commit messages, so it reports clean and always
+  has"*, and that extending it to cover future commit messages *"is the
+  engineer's next step regardless."* When this entry was first drafted,
+  **that extension was already written and UNCOMMITTED** (`git status
+  --short` showed the file modified; `git diff --stat` **+73 / −5**;
+  `git show HEAD:… | grep -c unpushed_message_hits` returned **0** while
+  the working copy returned **2**). **By the time the filing closed it
+  had SHIPPED as `Pass 208.0` (`094b31a`) and been pushed.** Running the
+  script now prints *"clean — nothing in the work tree, staged or not,
+  **and no unpushed commit message**, names it or mentions it"* and
+  exits `0`.
+
+  ⇒ **Option 3 below is DONE, not proposed.** What remains from it is a
+  **correction, not a feature**: the `forty of 1,217` figure is now in a
+  committed docstring, a published commit body and a published commit
+  subject line. **The docstring is the engineer's to fix and is cheap;
+  the two commit-message copies are not fixable without exactly the
+  history rewrite this question is about**, which is a small, exact
+  illustration of why the question is the operator's.
+
+  ★★ **And note what the undercount did to the gate's own reasoning.**
+  The docstring argues that the existing exposure is an operator
+  question and that the gate's job is only *"to stop the count
+  growing"*. That argument is unaffected by the figure being wrong. But
+  **the figure is the only quantity anyone will quote when weighing
+  option 1 against option 2**, and it is **less than half** the real
+  one. **A correct argument carrying an undercounted number is the
+  hardest kind of stale claim to catch, because nothing in it reads as
+  wrong.**
+
+  **The three options, stated neutrally and without a recommendation**,
+  because this is a legal-exposure-versus-destructiveness judgement and
+  therefore the operator's:
+
+  1. **Leave as-is.** The 82 (83 at `094b31a`) stay published. Nothing breaks. The
+     exposure is unchanged from what it has been for the life of the
+     repository, and the operator has previously reviewed and
+     **accepted** confidential material already in history
+     (`LEGAL.md` §1.1) — that acceptance is precedent for how this class
+     of question has been answered before, and is **not** an answer to
+     this one.
+  2. **Rewrite published history** to remove them. **Forbidden without
+     an explicit operator decision by project rule 8**, which gates
+     *"`git push --force`, or any push that rewrites published
+     history"*. This project has **direct, measured evidence** that the
+     failure mode is real rather than theoretical:
+     `tools/check-cited-commits-exist.py` (`0d9f4df`) found **fourteen
+     pre-existing documents whose cited hashes had already been broken
+     by exactly this cause**. A rewrite invalidates **every** hash cited
+     in `ROADMAP.md`, `SESSION_LOG.md`, `ARCHITECTURE.md` and the
+     decision records — which, at 361 filings, is most of the project's
+     cross-references — and it is unrecoverable for anyone who has
+     already cloned.
+  3. **Extend the gate to block FUTURE commit messages only**, leaving
+     the existing 82 untouched. **Purely additive**; changes nothing
+     already published; stops the count growing. **DONE — shipped as
+     `Pass 208.0` (`094b31a`, 2026-09-01) and pushed**, scoped to
+     `origin/main..HEAD`, which is exactly the set of commits still
+     amendable. **This option required no operator decision and did not
+     wait for one**, correctly: it touches nothing already published.
+     Options 1 and 2 remain open and remain the operator's.
+
+  **★ TWO THINGS THIS ENTRY DELIBERATELY DOES NOT CLAIM, because both
+  are easy to over-read into it.**
+
+  - **File CONTENTS in history are NOT affected.** A `git grep` hit on
+    `fixtures/synthetic/ocr/scan.pdf` is a **3-byte coincidence in
+    compressed stream data**, not a mention. The gate's exclusion of
+    binaries via `git grep -I` is **documented as deliberate and
+    correct** in its own docstring (*"a model's weights are not a
+    mention"*), and this entry does not reopen it.
+  - **This is not a report that the gate is broken.** The gate does
+    exactly what it says over the surface it names, and it has never
+    claimed to see published commit messages. **The gap was in what
+    anyone had ever measured, not in what the gate does** — which is
+    the same shape as rule 8's own corrected-remote incident: *a
+    document asserted a fact about the environment that nobody had run
+    a command to check.* `git log --grep` costs nothing.
 
 **NEW 2026-08-28 (314th filing) — five licence questions, filed alongside
 the conformance-validator Backlog scope above, all deferring to a stated
