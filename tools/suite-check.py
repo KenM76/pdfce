@@ -246,6 +246,37 @@ CONTRAST_MIN = 6.0    # 8-bit levels; below this the X is not "clear".
 # has produced.
 MARK_CRITERION = ("check mark", "checkmark", "check marks", "checkmarks")
 
+# ★★★ A THIRD CRITERION WITH NO DETECTOR, and the third false-green this
+# harness has had to end.
+#
+# Some patches are scored neither by an absent cross nor by a present mark, but
+# by comparing the live object against BAKED artwork printed beside it and
+# labelled "correct" and "wrong". Others print an "expected result" row under
+# the actual one. Neither draws a trap, so `find_traps` returns 0 and the patch
+# scored `clean` BY DEFAULT -- the detector answering a question the patch never
+# asked.
+#
+# ★ THIS WAS NOT A THEORY. The operator reported that some patches "show check
+# boxes" while their numbers are wrong, and one of them -- PCS 3.1 -- is a real
+# rendering failure that this harness has been reporting as `clean`. The
+# CONTROL that settles it: `find_traps` on ACROBAT's own render of that patch
+# also returns 0. A detector that gives a correct renderer and an incorrect one
+# the same answer is not scoring them.
+#
+# ★★ THIS IS A MENTION-GREP, which is exactly what `MARK_CRITERION`'s note
+# above warns against -- so it is used ONLY to say "cannot judge", NEVER to say
+# "fail". A mention wrongly promoted to UNRESOLVED costs a line of output; a
+# mention wrongly promoted to FAIL would be this harness inventing defects.
+#
+# Requiring BOTH words rather than either is what keeps it narrow. Measured
+# over the corpus: it selects exactly three patches, moves exactly three
+# verdicts, and changes nothing else. All three were then checked BY EYE rather
+# than trusted from the grep -- one genuinely uses labelled correct/wrong
+# artwork, two use a different expected-result design. They do not share one
+# layout, which is why the verdict is the neutral `CRIT?` rather than a name
+# that would claim they do.
+CRITERION_UNKNOWN = (("correct", "wrong"),)
+
 
 def cli_path():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -455,6 +486,8 @@ def main():
         ref_style = ("reference image" in txt) or ("match the reference" in txt)
         # Read from the patch's own face, like `ref_style` above.
         mark_style = any(k in txt for k in MARK_CRITERION)
+        # All words in any one group must appear -- see CRITERION_UNKNOWN.
+        crit_style = any(all(k in txt for k in g) for g in CRITERION_UNKNOWN)
         sim = reference_similarity(png) if ref_style else None
         ref_sim = None
         if marks:
@@ -487,6 +520,12 @@ def main():
             # asked -- the same error `REF` was introduced to end, one
             # criterion over.
             verdict = "MARK?"
+        elif crit_style:
+            # ★ NOT `clean`. This patch states a criterion nothing here
+            # detects, so the honest answer is "cannot judge". Reporting a
+            # pass because the detector found nothing is how PCS 3.1 -- a
+            # real rendering failure -- sat behind a green tick.
+            verdict = "CRIT?"
         else:
             verdict = "clean"
         results.append({
@@ -505,17 +544,22 @@ def main():
 
     clean = [r for r in results if r["verdict"] in ("clean", "REF-PASS")]
     failed = [r for r in results if r["verdict"] in ("X", "REF-FAIL")]
-    ref = [r for r in results if r["verdict"] in ("REF", "MARK?")]
+    ref = [r for r in results if r["verdict"] in ("REF", "MARK?", "CRIT?")]
     broke = [r for r in results if r["verdict"] == "RENDER-FAILED"]
     for r in results:
         mark = {"clean": "  ok  ", "X": " FAIL ", "REF": " ref? ",
                 "REF-PASS": "  ok  ", "REF-FAIL": " FAIL ",
-                "MARK?": " mark?", "RENDER-FAILED": " ERR  "}[r["verdict"]]
+                "MARK?": " mark?", "CRIT?": " crit?",
+                "RENDER-FAILED": " ERR  "}[r["verdict"]]
         if r["verdict"] == "X":
             extra = f"  {r['traps']} trap(s) at {' '.join(r['where'])}"
         elif r["verdict"] == "MARK?":
             extra = ("  scored by a check mark that should be PRESENT; "
                      "this harness only detects marks that should be ABSENT")
+        elif r["verdict"] == "CRIT?":
+            extra = ("  states a criterion this harness has NO detector for "
+                     "(baked correct/wrong artwork, or an expected-result row); "
+                     "reported unjudged rather than clean")
         elif r["verdict"].startswith("REF"):
             extra = (f"  strip corr={r['ref_corr']}"
                      + (f" vs reference-engine {r['ref_engine_corr']}"
@@ -527,7 +571,8 @@ def main():
     print(f"suite-check: {len(results)} patches -- "
           f"{len(failed)} FAIL, "
           f"{len(clean)} pass, "
-          f"{len(ref)} UNRESOLVED (reference-strip or positive-criterion), "
+          f"{len(ref)} UNRESOLVED (reference-strip, positive-criterion, "
+          f"or no detector), "
           f"{len(broke)} render errors")
     print()
     print("A 'clean' verdict is the SUITE's own pass criterion for an X-trap")
