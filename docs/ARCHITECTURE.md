@@ -7588,6 +7588,22 @@ at the verb and in `docs/core-api/`:** it is **not** a content digest, **not**
 stable across sessions or saves, and **not** minimal (it may change when the
 model did not).
 
+**★ AMENDED — `Pass 197.0` (`6e2b69e` + `28b982c`, decision 113).** The verb
+was `&self` and could only report whatever key value the memo already held
+cached from a previous mutating call; `Pass 188.0` widened the KEY (above)
+but nothing on the read path forced a fresh walk before hashing it. A
+session whose only mutation rewrote a form XObject's own content — without
+otherwise triggering a redecomposition — could see the digest report
+**unchanged** across the edit: `pdfce-core`'s own internal staleness
+handling had become strictly stronger than the signal it published
+externally. **BREAKING: the verb is now `&mut self`** and forces a fresh
+decomposition walk, forms included, before hashing — so the digest always
+reflects the key as of the call, never a stale cached one. `PageObjects`
+addresses content by INDEX, so a consumer trusting an unmoved generation
+after a real form edit was the silent-corruption shape — reported and
+diagnosed by the consuming shell, sabotage-verified against its own
+reported numbers with a nothing-changed control.
+
 **★★ THE TESTING PROPERTY THIS SECTION EXISTS TO PIN.** Base and overlay
 **agree by construction** on a session whose page set has not been structurally
 edited and whose content has not been appended this session. **Every** test in
@@ -28936,3 +28952,74 @@ reports `cargo tree -p pdfce-core` / `-p pdfce-render` free of GUI deps at
 **Decision ceiling moves `111` → `112`; next free `113`.** **Standing rule
 ceiling moves `R236` → `R237`** — minted in the same filing from `Pass 186.0` +
 `Pass 188.0`, text in `ROADMAP.md`'s *Standing rules*.
+
+### 2026-09-01 (358th filing, `6e2b69e` + `28b982c`) — decision 113: **A MODEL-AGREEMENT DIGEST MUST FORCE THE WALK IT REPORTS ON, NOT READ WHATEVER THE MEMO HAPPENED TO HOLD — `page_content_generation` IS NOW `&mut self`, BREAKING**
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8);
+relayed from the engineer's dispatch, cross-checked against this
+document's own `Pass 186.0`/`Pass 188.0` entries and §11.7 (which the
+mechanism below is consistent with). Commit messages not independently
+read via `git log`.
+
+**Context.** `Pass 186.0` (decision 111) shipped `page_content_generation`
+as a **read-only** digest of the decomposition memo's key so a consuming
+shell could assert model agreement without decomposing twice. `Pass 188.0`
+widened the KEY the memo tracks to include every form a page's walk
+reaches (§11.7, `R237`) — but the accessor stayed `&self`, so it could
+only hash whatever key value the memo already held from the last call
+that happened to force a walk. A session that mutated a form XObject's
+content **without otherwise triggering a redecomposition** left the
+memo — and therefore the published digest — pointed at the pre-edit key.
+**`pdfce-core`'s own internal staleness handling (the memo itself,
+corrected by `Pass 188.0`) had become strictly stronger than the signal
+it handed to a consumer.**
+
+**Reported and diagnosed by the consuming shell**, not found internally —
+it keys its own decomposition cache on this digest, so a stale digest
+served it a stale `PageObjects` model. `PageObjects` addresses content by
+**index**, so this is the silent-corruption shape: no error, no panic,
+just an index resolved against the wrong generation of content.
+
+**The fix.** `EditSession::page_content_generation` is now `&mut self`
+and forces a fresh decomposition walk — computing the current key,
+including any form the walk now reaches — before hashing it. **Breaking
+signature change**, sabotage-verified against the consuming shell's own
+reported before/after numbers, with a nothing-changed control run
+alongside (an unrelated mutation on an unrelated page leaves the digest
+unchanged, confirming the fix does not over-fire).
+
+**Two documentation misses in the first commit, corrected by `28b982c`:**
+the doc-comment PROSE was updated to the new signature, but
+`docs/core-api/02-editing-and-saving.md`'s own VERB TABLE ROW — the index
+a consumer reads first — still stated the old `&self` form; and a rustdoc
+sentence reading *"it is literally the cache key"* was itself the defect
+restated as a reassurance — accurate about the accessor, inaccurate about
+the cache's freshness, and read as an argument that no further check was
+needed. Both are `R93`'s shape (a cross-module doc claim, unverified
+against the module it describes) — recorded as a further `R93` instance,
+not a new rule (this project does not keep a formal instance count on
+`R93`, per the ninety-fourth filing's ruling).
+
+**★ Pass-ID collision, disclosed rather than silently fixed.** `6e2b69e`'s
+own commit subject and doc comments name this **`Pass 196.0`** — a
+collision with the ALREADY-FILED `Pass 196.0`/`Pass 196.1` (`4299174`,
+357th filing, *Shipped*, this same day). Renumbered to **`Pass 197.0`**
+in code, tests and docs by `28b982c`; **the pushed commit message cannot
+be corrected** (project rule 8 forbids rewriting published history), so
+`6e2b69e` is cited here **by hash**, never by the Pass number its own
+subject line claims. `tools/check-passes-filed.py`'s collision detector
+(keyed on the claimed ID text, not the hash) will report `Pass 196.0`
+claimed by two commits as a `note` — informational by the tool's own
+design, not a failure — and this entry is the reason a future reader
+should not be surprised by that note.
+
+**GUI-core separation:** not independently re-verified by this role — no
+shell available this filing (hard rule 8); relayed as the engineer's
+measurement.
+
+**Body-section counterpart:** §11.7, "The model-agreement query"
+paragraph, amended in place in this filing.
+
+**Decision ceiling moves `112` → `113`; next free `114`.** No standing
+rule minted; `R93` gains a further cited instance (text in `ROADMAP.md`'s
+*Shipped*, `Pass 197.0` entry).

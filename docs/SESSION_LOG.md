@@ -83698,6 +83698,150 @@ engineer-reported and attributed as such in each *Shipped* entry.
   is a plan/reference document, not the roadmap or session log).
 - `docs/NEXT_SESSION.md` — rewritten (see below).
 
+## 2026-09-01 (358th filing) — `Pass 197.0` (breaking `&mut self` fix, form-XObject digest staleness) + `Pass 198.0` (non-separable group-blend counter disclosure) SHIPPED; `Pass 199.0` (ICCBasedRGB blend-mode CMYK conversion, `PCS 16.1`) filed *Next up*, NOT STARTED, and now UNBLOCKED
+
+**★ Sourcing (hard rule 8).** No shell available to this role this
+filing. Every fact below is relayed from the engineer's dispatch; where
+this role could corroborate against live document text or live source
+(via `Read`/`Grep`, no `git`), that is stated inline in each `ROADMAP.md`
+entry. Commit messages for `6e2b69e`, `28b982c` and `ffd0921` were **not**
+independently read via `git log` this filing — no shell.
+
+**Shipped:**
+
+- **`Pass 197.0`** (`6e2b69e` + `28b982c`) — `EditSession::
+  page_content_generation` could publish an unmoved digest after a
+  session edited a form XObject's own content, because the accessor was
+  `&self` and could only hash whatever key the decomposition memo
+  already held cached; `Pass 188.0` widened the memo's key but not the
+  accessor's read path. **BREAKING: now `&mut self`**, forces a fresh
+  walk before hashing. `PageObjects` addresses content by index, so this
+  was the silent-corruption shape — reported and diagnosed by the
+  consuming shell, sabotage-verified against its own reported numbers
+  with a nothing-changed control. `28b982c` additionally corrected a
+  verb-table row `docs/core-api/02-editing-and-saving.md` had left
+  stating the old signature, and a rustdoc sentence (*"it is literally
+  the cache key"*) that was itself the defect stated as a reassurance —
+  both `R93`'s shape.
+- **`Pass 198.0`** (`ffd0921`) — `nonseparable_composited` read `0` on a
+  page that genuinely applied two non-separable blend modes
+  (`/BM /Hue`, `/BM /Saturation`) through a transparency GROUP, because
+  the counter is only wired to the direct-paint path; `canvas.rs`'s
+  `layer_blend` (the group-blend resolution site) has no diagnostics
+  handle. `pdfce-cli`'s counter table asserted the opposite. Disclosure
+  corrected this filing; the counting fix (a diagnostics channel into
+  `layer_blend`) is filed to *Backlog*, not implemented.
+
+**Decisions made this session:**
+
+- **Decision 113** (`ARCHITECTURE.md` §12) — a model-agreement digest
+  must force the walk it reports on, not read whatever the memo happens
+  to hold; `page_content_generation` is `&mut self` from `Pass 197.0`
+  forward. §11.7's body paragraph amended in place to match, per this
+  role's standing contract that the decision log and the body section
+  change together.
+- **A Pass-number collision was disclosed, not silently corrected.**
+  `6e2b69e`'s own commit subject and doc comments claim `Pass 196.0`,
+  colliding with the already-filed `Pass 196.0`/`Pass 196.1` (`4299174`,
+  357th filing, filed the same day). The work is filed under the correct
+  free ID, `Pass 197.0`; the collision is recorded rather than erased,
+  because **the pushed commit message itself cannot be corrected**
+  (project rule 8) — `6e2b69e` must be cited by hash going forward, never
+  as "Pass 196.0." `tools/check-passes-filed.py`'s collision detector
+  will report this as a `note` (informational, by the tool's own
+  documented design) — recorded here so a future reader is not surprised
+  by that note or reads it as a fresh defect.
+
+**Findings + decisions:**
+
+- ★★★ **`PCS 16.1` (ICCBasedRGB blend modes, 15 of 16 cells failing) is
+  diagnosed, not fixed, and the fix is now unblocked.** The blend
+  arithmetic is correct; the sRGB→CMYK conversion feeding it is not.
+  `crates/pdfce-render/src/cmyk_paint.rs::paint_solid_into_cmyk` uses the
+  round-trip/exactly-invertible max-GCR transform
+  (`overprint::rgb_to_cmyk`) at a conversion site that is **terminal**
+  (reaches a screen), not merely intermediate — a category error. Ablation
+  (relayed, not personally re-run by this role): pdfce's transform gives
+  92 levels of error; the file's own embedded profiles at SATURATION
+  intent give 3. Three alternative hypotheses (wrong blending space,
+  group/isolation/knockout handling, the blend formulas themselves) were
+  each refuted by a separate ablation. Filed as `Pass 199.0`, *Next up*,
+  NOT STARTED.
+- ★★★ **The ownership question this finding raised is already answered.**
+  A read-only survey of `D:\dev\iccce` (v0.2.0, `HEAD` `3af2d87`) found it
+  already exposes `Chain::new(&src, &dst, Intent::Saturation).convert(...)`
+  at all four rendering intents, with 1.55e-4 device agreement against
+  lcms2. An outbound request that would have asked `iccce` to build this
+  was reframed before filing into four narrower asks (`/RI` intent
+  parameter, `/DestOutputProfile` byte hand-off, an sRGB source profile,
+  and per-paint routing) — filed at
+  `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\
+  request_srgb_to_cmyk_with_an_intent_and_why_saturation_is_load_bearing.md`.
+  **The remaining work is entirely pdfce's own integration.**
+- **A provenance gap in the ablation, recorded rather than silently
+  trusted:** the diagnostic's 3-level SATURATION arm did not name which
+  CMM produced it — lcms2 forces black-point compensation for v4
+  perceptual/saturation intents where `iccce` deliberately does not, so
+  the 3-level figure may not reproduce verbatim through `iccce`. Flagged
+  in `Pass 199.0`'s own entry as a "verify before citing" item.
+  Consistent with hard rule 8's discipline extended to a measurement's
+  own instrument, not only to git/backup state.
+- **A further `R93` instance**, not a new rule (`Pass 197.0`'s doc-comment
+  finding above) — this project does not keep a formal instance count on
+  `R93` (ruled at the ninety-fourth filing), so this is recorded as "a
+  further instance," not numbered.
+- **Courtesy finding, relayed to `iccce`, not a pdfce action item:**
+  `iccce`'s own `README.md:143` states its Pass 4 (saturation intent) is
+  *in progress* while its own `ROADMAP.md:3556` records it as *met*. This
+  is a documentation-drift finding about `iccce`'s repo, already relayed
+  to that project as a courtesy; nothing owed on pdfce's side beyond the
+  relay.
+
+**Still in flight:**
+
+- `Pass 199.0` is filed and unblocked but **NOT STARTED** — the five-item
+  integration list (read `/RI`; treat intent as load-bearing, not
+  cosmetic; read `/DestOutputProfile` bytes; supply an sRGB source
+  profile; route only the terminal conversion sites, not a global
+  search-and-replace) is in its `ROADMAP.md` entry.
+- **`PCS 13.0` secondary lead is unmeasured.** Reports
+  `blend_modes_applied=0` with `cmyk_bridged_pixels=6396` on the same
+  conversion path; plausibly resolved by the same fix, but not checked
+  this filing — do not treat as confirmed until re-measured.
+- The `Pass 198.0` counting half (a diagnostics handle in `canvas.rs`'s
+  `layer_blend`) is filed to *Backlog*, unimplemented.
+- The pre-existing carried-forward items in `docs/NEXT_SESSION.md` §A are
+  unchanged by this filing (not reviewed this session).
+
+**For next session:**
+
+- **pdfce owes `iccce` a reply.** `iccce`'s own
+  `request_can_you_hand_me_the_output_intent_and_an_intent.md`
+  (2026-08-25) has no reply in their `open/` folder as of this filing. It
+  asks exactly the `/DestOutputProfile` hand-off and per-paint `/RI`
+  questions `Pass 199.0` needs settled — answering it is pdfce-side work,
+  independent of whether `Pass 199.0`'s code starts first.
+- Confirm `tools/check-ledger-numbers.py` and `tools/check-passes-filed.py`
+  before the next push — neither was run by this role this session (no
+  shell). Expect `check-passes-filed.py` to print exactly one collision
+  `note` for `Pass 196.0` (`4299174` + `6e2b69e`) — informational, not a
+  failure; see this filing's `Pass 197.0` entry for why.
+- Re-measure `PCS 13.0` once `Pass 199.0` lands, rather than assuming the
+  secondary-lead figure above.
+
+**Documents edited this filing:**
+
+- `docs/ROADMAP.md` — two new *Shipped* entries (`Pass 197.0`, `Pass
+  198.0`, topmost of *Shipped*); one new *Next up* entry (`Pass 199.0`);
+  one new *Backlog* entry (the `Pass 198.0` group-blend counting gap).
+- `docs/ARCHITECTURE.md` — §11.7's "model-agreement query" paragraph
+  amended in place; one new §12 decision (`113`).
+- `docs/FEATURES.md` — three rows reworded (367–369, the `/OutputIntents`/
+  `/ICCBased`/`/RI` trio) from "gated on `iccce`'s capability" to "gated
+  on pdfce's own integration, `Pass 199.0`" — no boxes ticked, nothing
+  shipped.
+- `docs/SESSION_LOG.md` — this entry.
+
 **Ceilings after this filing** (stated from the edits made; **not
 independently re-run through `tools/check-ledger-numbers.py`, no shell
 available to this role this session — the engineer should confirm**):

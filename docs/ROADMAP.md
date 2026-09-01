@@ -96,6 +96,121 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 198.0` (`ffd0921`, 2026-09-01) — **`nonseparable_composited` READ 0 ON A PAGE THAT DID APPLY TWO NON-SEPARABLE BLEND MODES — THE COUNTER'S BLIND SPOT IS THE GROUP-COMPOSITE PATH, NOT AN UNDERCOUNT** — filed 2026-09-01 (358th filing)
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8).
+This entry is relayed from the engineer's dispatch, not independently
+re-run; the commit message itself was not read via `git log`.
+
+**What was wrong.** A page carrying `/BM /Hue` and `/BM /Saturation`
+(`blend_modes_applied=15`, `groups_composited=17`) reported
+`nonseparable_composited = 0`. The increment lives in the **direct-paint**
+path only; a group's own blend is resolved in `canvas.rs`'s `layer_blend`,
+which has **no diagnostics handle** at all — a non-separable blend applied
+through a transparency group was never in a position to be counted, whatever
+ran. ★ **The wrong reading is not "an undercount" — it is "no non-separable
+mode ran on this page," which is false.** Same shape as this project's
+earlier census-counter lesson: a `0` that reads as *absence* when the truth
+is *uncounted-but-present*.
+
+**`pdfce-cli`'s counter table asserted the opposite in as many words** —
+corrected this filing.
+
+**The fix ships the disclosure correction only.** The counting half —
+threading a diagnostics handle into `canvas.rs`'s `layer_blend` so a
+group-composited non-separable blend increments the same counter the
+direct-paint path already does — is **filed, not implemented**. See
+*Backlog*.
+
+**`FEATURES.md`: no row changes.** Disclosure-honesty fix on an
+already-shipped counter; no capability's reach changed.
+
+---
+
+### `Pass 197.0` (`6e2b69e` + `28b982c`, 2026-09-01) — **`page_content_generation` COULD PUBLISH A STALE DIGEST AFTER A FORM-XOBJECT EDIT — BREAKING: THE VERB IS NOW `&mut self`** — ★★ **A PASS-NUMBER COLLISION IN THE COMMIT'S OWN SUBJECT LINE, DISCLOSED RATHER THAN SILENTLY RENUMBERED — CITE `6e2b69e` BY HASH, NEVER AS "Pass 196.0"** — filed 2026-09-01 (358th filing)
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8).
+The mechanism below is relayed from the engineer's dispatch and
+cross-checked by this role against live `ROADMAP.md`/`ARCHITECTURE.md`
+text (`Pass 186.0`'s and `Pass 188.0`'s own entries, §11.7), which
+corroborate the described key/memo shape. The commit messages themselves
+were not independently read via `git log` — no shell this filing.
+
+#### What was wrong
+
+`EditSession::page_content_generation(page_index) -> u64` (`Pass 186.0`,
+decision 111) is a digest a consuming shell polls to decide whether its
+own cached decomposition is still current. `Pass 188.0` widened the
+underlying memo's **key** to include every form XObject a page's walk
+reaches — but left the accessor `&self`, so it could only hash whatever
+key value the memo already happened to hold cached, and nothing on the
+read path forced a fresh walk. A session whose only mutation rewrote a
+form XObject's own content **without otherwise triggering a
+redecomposition** could see the digest report **unchanged** across the
+edit. `pdfce-core`'s own internal staleness handling — corrected by
+`Pass 188.0` — had become strictly stronger than the signal it published
+externally.
+
+**Reported and correctly diagnosed by the consuming shell** (the shell
+this digest was built for), which keys its own decomposition cache on it.
+`PageObjects` addresses content by **index** — so a shell trusting an
+unmoved generation after a real form edit is the silent-corruption shape:
+no panic, no error, just an index resolved against a stale model.
+
+#### The fix
+
+`page_content_generation` is now **`&mut self`** and forces a fresh
+decomposition walk — computing the current key, forms included — before
+hashing. **BREAKING** signature change on a public `pdfce-core` verb.
+Sabotage-verified against the consuming shell's own reported before/after
+numbers, with a nothing-changed control (an unrelated mutation on an
+unrelated page leaves the digest unchanged, confirming the fix does not
+over-fire).
+
+#### ★★ The Pass-number collision — filed as found, not silently corrected
+
+`6e2b69e`'s own commit subject and in-tree doc comments name this
+**`Pass 196.0`** — colliding with the **already-filed** `Pass 196.0` /
+`Pass 196.1` (`4299174`, 357th filing, immediately below in this section,
+filed the same day). Renumbered to **`Pass 197.0`** in code, tests and
+docs by the follow-up commit `28b982c`. **The pushed commit message
+itself cannot be corrected** (project rule 8 forbids rewriting published
+history), so **`6e2b69e` is cited here by hash — never as "Pass 196.0."**
+`tools/check-passes-filed.py` joins on hash, not on the claimed ID, so
+this filing satisfies it; its separate collision detector (keyed on the
+claimed ID text) will report `Pass 196.0` claimed by two commits as a
+**`note`**, not a failure, by the tool's own documented design — recorded
+here so that note is not mistaken for a new defect by a later reader.
+
+#### ★ `28b982c` — two documentation misses in the first commit, both `R93`'s shape
+
+- **The verb table row, not just the prose box.** `docs/core-api/
+  02-editing-and-saving.md`'s prose was updated to the `&mut self` form;
+  the same document's own **verb table row** — the index a consumer reads
+  first — still stated the old `&self` signature. ⇒ a document that
+  states a fact twice needs the sweep a code change needs, even within
+  one file.
+- **A rustdoc sentence that WAS the defect, stated as a reassurance.**
+  *"it is literally the cache key"* described the accessor accurately and
+  the cache's freshness inaccurately, and read as an argument that no
+  further check was needed — precisely because it was true of the
+  accessor and false of the guarantee a reader would infer from it.
+
+Both are **`R93`'s shape** (a cross-module doc claim standing unverified
+against the module it describes) — recorded as **a further R93 instance**
+(this project does not keep a formal count on that rule, see the
+ninety-fourth filing's ruling), not a new standing rule.
+
+**Decision log.** `ARCHITECTURE.md` §12 decision **113** minted this
+filing; §11.7's "model-agreement query" paragraph amended in place to
+match.
+
+**`FEATURES.md`: no row changes.** `page_content_generation`'s reach is
+unchanged (core `[x]` · cli `[ ]` · gui `[ ]`, since `Pass 186.0`) — this
+Pass corrects its behaviour, not its reach.
+
+---
+
 ### `Pass 196.0` + `Pass 196.1` (`4299174`, 2026-08-31) — **TWO FALSE GREENS IN THE PRINT-CONFORMANCE HARNESS AND ITS OWN DISCLOSURE TEXT, NEITHER A RENDERER CHANGE** — ★★★ **A THIRD false-PASS CLASS IN `tools/suite-check.py`: A PATCH SCORED BY BAKED CORRECT/WRONG ARTWORK OR AN EXPECTED-RESULT ROW HAD NO DETECTOR AT ALL AND DEFAULTED TO `clean`** — ★★ **THE CLI'S OWN OVERPRINT NOTE ASSERTED "NOTHING IS OWED THERE" AND TABLE 149'S ROW 2 IS TWO ROWS, NOT ONE** — filed 2026-08-31 (357th filing)
 
 **One commit, two Pass IDs**, same precedent as `Pass 190.0`/`Pass 190.1`
@@ -96524,6 +96639,124 @@ in the "still open" list. Full build record: this file's own
 > (`/StructParent` / `/OBJR`) — different graph, different carrier, no
 > name-string component.
 
+### `Pass 199.0` — **`PCS 16.1` FAILS 15 OF 16 CELLS, AND THE BLEND ARITHMETIC IS CORRECT — THE sRGB→CMYK CONVERSION FEEDING IT IS NOT, AND THE FIX IS NOW UNBLOCKED: `iccce` ALREADY HAS THE CAPABILITY** — filed 2026-09-01 (358th filing), **NOT STARTED**
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8).
+The diagnosis below is **relayed from an ablation run this role did not
+personally execute** — recorded as such throughout, per the dispatch's
+own instruction, not independently re-run.
+
+**★ ID assignment.** `CLAUDE.md` rule 5 makes the ID the engineer's act;
+this filing's dispatch did not name one for this finding. Highest Pass ID
+before this filing was `198.0` (above, *Shipped*). ⇒ **`199.0` is minted
+here; ceiling `199.0`, next free `199.1` / new major `200.0`.**
+
+#### The diagnosis
+
+`PCS 16.1` (ICCBasedRGB blend modes) fails 15 of 16 cells. Ablation
+(numbers relayed, not personally re-run by this role):
+
+- **Control:** `find_traps` on Acrobat's own render of the same patch
+  returns 2 traps — so 11 of pdfce's 12 own failures are real, 1 is
+  instrument noise.
+- **The backdrop is right everywhere** (≤15 levels of error); only the
+  blend RESULT is wrong (up to 94 levels).
+- **The failing cells share one property:** both blend operands are
+  ICCBasedRGB and both cross pdfce's sRGB→CMYK bridge.
+  `cmyk_bridged_pixels = 28,673` on this patch versus **0** on the
+  passing DeviceCMYK sibling `PCS 16.4`, which applies the same 15 blend
+  modes. That asymmetry is the diagnosis.
+- **Root cause:** `crates/pdfce-render/src/cmyk_paint.rs::paint_solid_into_cmyk`
+  converts authored sRGB into the group's blending space with
+  `overprint::rgb_to_cmyk` — the round-trip / exactly-invertible max-GCR
+  transform `cmyk_buffer.rs::snapshot_srgb_backdrop` names and documents,
+  whose own doc states invertibility is the only criterion **because the
+  value never reaches a screen in that form**. §11.6.6's conversion into
+  the group's blending space is **terminal** — it DOES reach a screen. A
+  category error, not a tuning problem: the wrong transform for the
+  site, not a wrong constant inside the right one.
+- **Ablation:** same binary, same synthetic page, only the transform
+  varied. pdfce's transform: 92 levels of error. The file's own embedded
+  profiles, at SATURATION intent: 3 levels. The naive (embedded-profile)
+  arm reproduced the real patch cell-for-cell within ≤2 levels across ten
+  modes, so the ablation measured the real thing, not an artefact of the
+  ablation itself.
+- **Three hypotheses REFUTED, each with its own ablation:** wrong
+  blending space (`blends_in_wrong_space=0`; a probe confirmed native
+  four-colorant blending); group/isolation/knockout handling (a
+  24-combination synthetic matrix, identical output); the blend formulas
+  themselves (same formulas + correct operands = 3 levels of error).
+
+#### ★★ The ownership question is already answered — `iccce` already has the capability
+
+An outbound feature request was drafted asking the sibling `iccce`
+project to BUILD `sRGB→CMYK` conversion at a chosen rendering intent —
+and reframed before filing, because a read-only survey of `D:\dev\iccce`
+(v0.2.0, `HEAD` `3af2d87`) found `Chain::new(&src, &dst,
+Intent::Saturation).convert(&[r, g, b])` returning four floats **today**,
+at all four rendering intents, with a genuinely distinct `B2A2` table and
+1.55e-4 device agreement against lcms2. Filed instead with four narrow
+asks:
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\request_srgb_to_cmyk_with_an_intent_and_why_saturation_is_load_bearing.md`.
+
+⇒ **The remaining work is pdfce's own integration, not a capability
+`iccce` lacks.**
+
+#### What pdfce owes, unblocked as of this filing
+
+1. **Read `/RI`.** Verified by this role directly (live grep,
+   `interpret.rs:2783`): `b"i" | b"ri" => {}` — a recognised no-op. pdfce
+   parses the rendering-intent operator and discards it.
+2. ★ **The intent is load-bearing, not a refinement.** Saturation gives
+   ≤0.014 ink error; relative and perceptual give 0.02–0.68 — still
+   failing. Picking the wrong intent does not merely lose precision, it
+   still fails the suite.
+3. **Read the PDF/X `/OutputIntent`'s `/DestOutputProfile` BYTES.**
+   `iccce` has no identifier registry, by design — decision `064`'s
+   boundary: pdfce owns compositing and what a colour component means,
+   `iccce` owns conversion.
+4. **Supply an sRGB SOURCE profile as bytes.** `iccce` has no built-in
+   sRGB source.
+5. ★★ **Route only the TERMINAL conversion sites — NOT a global
+   search-and-replace.** `overprint::rgb_to_cmyk` MUST remain the return
+   leg of `snapshot_srgb_backdrop` ↔ `composite_srgb`: mixing the
+   calibrated and the invertible transforms across those legs previously
+   cost a different patch **10 trap markers against a baseline of 2**
+   (a regression precedent, not a hypothetical one).
+
+#### Secondary lead — unmeasured, recorded as such
+
+`PCS 13.0` (currently FAIL, 4 traps) reports `blend_modes_applied=0` with
+`cmyk_bridged_pixels=6396` — same conversion path, no blending applied.
+Plausibly free with the same fix. **Not measured this filing** — do not
+treat as confirmed until re-checked after the fix lands.
+
+#### A provenance gap, recorded honestly
+
+The diagnostic run did **not** name the CMM behind its 3-level arm, which
+matters: lcms2 forces black-point compensation for v4 perceptual/
+saturation intents and `iccce` deliberately does not. The 3-level figure
+may not be reproducible verbatim through `iccce` for that reason — verify
+against `iccce`'s own output, not against the diagnostic's arm, before
+citing 3 levels as pdfce's expected post-fix result.
+
+#### Owed dependency — a reply pdfce owes `iccce`, not the reverse
+
+`iccce`'s own
+`request_can_you_hand_me_the_output_intent_and_an_intent.md`
+(2026-08-25) has **no reply** in their `open/` folder as of this filing.
+It asks exactly the `/DestOutputProfile` hand-off and per-paint `/RI`
+questions items 3–4 above need settled. Outstanding pdfce-side work,
+independent of whether this Pass starts first — see this filing's
+`SESSION_LOG.md` entry, "For next session."
+
+**`FEATURES.md`.** Rows for `/OutputIntents`-aware CMYK conversion,
+`/ICCBased` real-profile resolution and rendering intent (`/RI`) amended
+this filing — reworded from "gated on `iccce`" (a capability gap on
+their side) to "gated on pdfce's own integration, `Pass 199.0`, filed
+*Next up*" (the gap is now here). **No boxes ticked; nothing in this
+Pass has shipped.**
+
 > ★★★★ **`Pass 185.0` SHIPPED AND HAS LEFT THIS SECTION — `cec4069`,
 > 2026-08-30 (348th filing). IT IS CLOSED AT 4 OF 4 CRITERIA DISCHARGED.**
 > The entry below is kept **struck** rather than deleted, because it is the
@@ -107895,6 +108128,17 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### Unscoped — **`nonseparable_composited` has no path from GROUP composites, only direct paint** — filed 2026-09-01 (358th filing, `Pass 198.0`'s deliberately-unimplemented half)
+
+`canvas.rs`'s `layer_blend` (the group-compositing blend-resolution site)
+has no diagnostics handle, so a non-separable blend applied via a
+transparency group never increments `nonseparable_composited` even though
+it ran — only the direct-paint path is wired to the counter. `Pass 198.0`
+corrected the disclosure TEXT that was asserting the counter's accuracy;
+this entry is the counting fix that correction did not make. Needs a
+diagnostics channel threaded into `layer_blend`, mirroring the one the
+direct-paint path already has.
 
 ### Unscoped — **a committed test pins a KNOWN-WRONG value, deliberately, pending the n-channel buffer** — filed 2026-08-31 (357th filing, `Pass 196.1`'s renderer-side residual)
 
