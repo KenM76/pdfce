@@ -233,6 +233,19 @@ pub struct VarTextAppearance {
     /// (fuzzy-never-sneaky, VT1). `None` when the `/DA` gave an explicit
     /// size.
     pub applied_autosize: Option<f64>,
+    /// WHICH CONSTRAINT decided [`Self::applied_autosize`], when one did.
+    ///
+    /// Requested by name by a consuming shell: *"if it becomes a fit rather
+    /// than a guess, the wording should change from 'a reviewable heuristic'
+    /// to naming the constraint that bound, because that is the thing an
+    /// operator would query."* An operator who thinks the text is too small
+    /// wants to know whether to widen the box or heighten it, and those are
+    /// different answers.
+    ///
+    /// `None` when the `/DA` stated a size, and also for a MULTILINE field,
+    /// which still takes the older height-only route — reporting a bound there
+    /// would name a constraint that was never evaluated.
+    pub applied_autosize_bound: Option<AutoFitBound>,
     /// How many characters had no `WinAnsi` code and were substituted with
     /// `?` (a named Base-14-Latin limit — disclosed, never silent).
     pub unencodable_chars: usize,
@@ -271,6 +284,126 @@ const AUTOSIZE_MAX: f64 = 12.0;
 #[must_use]
 pub fn auto_size(rect_h: f64) -> f64 {
     ((rect_h - 2.0 * TEXT_PAD) / LINE_FACTOR).clamp(AUTOSIZE_MIN, AUTOSIZE_MAX)
+}
+
+/// Which constraint decided an auto-size, for disclosure.
+///
+/// pdfceGUI asked for this by name: *"the wording should probably change from
+/// 'a reviewable heuristic' to naming the constraint that bound, because that
+/// is the thing an operator would query."*
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AutoFitBound {
+    /// The box height set it — the ordinary case.
+    Height,
+    /// The text was too wide at the height-derived size and was shrunk.
+    Width,
+    /// Both would have gone below the legibility floor.
+    Floor,
+}
+
+/// A chosen auto-size and the reason it was chosen.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct AutoFit {
+    /// Points.
+    pub size: f64,
+    /// What bound it.
+    pub bound: AutoFitBound,
+}
+
+/// Padding either side of the text inside the field rectangle, in points.
+///
+/// ONE point, not [`TEXT_PAD`]'s two. Measured off an Acrobat-filled field in
+/// a real operator document: a 26.40 pt box yields a 21.0975 pt candidate, and
+/// `21.0975 x 1.156 = 24.389`, which is `26.40 - 2.011`. A second field gives
+/// `13.08 - 2.052`. Both land on one point per side.
+const AUTOFIT_PAD: f64 = 1.0;
+
+/// Fit an auto-sized (`0 Tf`) field's text to its rectangle.
+///
+/// # What was wrong before
+///
+/// [`auto_size`] divided by a **leading** constant and then clamped to 12 pt,
+/// so every auto-sized field in a document came out at 12 pt regardless of its
+/// box. An operator filling a shipping form saw pdfce's rows at two-thirds the
+/// size of the row Acrobat had filled on the same sheet, and header fields that
+/// would have overflowed a 13 pt box.
+///
+/// Two distinct errors: the clamp (which made every answer identical) and the
+/// divisor (leading is not the quantity that decides whether glyphs fit a box).
+///
+/// # The formula, and what is measured versus assumed
+///
+/// **MEASURED**, off Acrobat-authored appearances in a real operator file:
+///
+/// ```text
+/// candidate = (rect_height - 2 x 1pt) / font_bbox_height_em
+/// ```
+///
+/// Helvetica's `/FontBBox` is `[-166 -225 1000 931]`, so its height is
+/// `1156/1000 = 1.156 em`. Two Acrobat fields whose boxes differ by a factor of
+/// two both land on that ratio to three figures — 1.1565 and 1.1615 — which is
+/// what makes it a measurement rather than a fitted constant.
+///
+/// **ASSUMED**, and stated as such: the width step below. It is required for
+/// correctness — a long string must shrink rather than overflow — but it is
+/// *not* what Acrobat did in the file that motivated this. See the note.
+///
+/// # ★★ WHAT ACROBAT DOES THAT THIS DOES NOT, MEASURED AND UNEXPLAINED
+///
+/// Acrobat writes **two** `Tf` operators per appearance, and the second is
+/// always about **1.165x smaller** than the first:
+///
+/// | candidate | final | ratio |
+/// |---|---|---|
+/// | 21.0975 | 18.082 | 1.1668 |
+/// |  9.5396 |  8.207 | 1.1624 |
+/// | 10.0867 |  8.654 | 1.1656 |
+///
+/// The obvious reading — and the one the request proposed — is that the second
+/// step is a width fit. **It is not, in this document.** Measured: *"TC-10
+/// Wheel Chocks"* at the 21.0975 candidate needs 200.5 pt in a 253.4 pt usable
+/// width, and `TR4177` needs 34 pt in 177 pt. Neither is close to binding, yet
+/// both shrank. A width fit would also vary with string length, and this ratio
+/// varies by 0.4% across three very different strings.
+///
+/// ⇒ So pdfce lands about 16% larger than Acrobat, from a formula whose first
+/// step is measured and whose second step is honest. That is a large
+/// improvement on a flat 12 pt and it is **not a match**, and pretending
+/// otherwise by dividing by an unexplained 1.165 would bake a number nobody can
+/// defend into the appearance of every form pdfce fills.
+#[must_use]
+pub fn auto_fit(font: Std14, rect_w: f64, rect_h: f64, text: &[u8]) -> AutoFit {
+    let bbox = fontdata::std14_descriptor(font).font_bbox;
+    // Height extent of the font's bounding box, in ems. Guarded because a
+    // malformed descriptor would otherwise divide by zero or invert the size.
+    let bbox_em = f64::from(i32::from(bbox[3]) - i32::from(bbox[1])) / 1000.0;
+    let candidate = if bbox_em > 0.0 {
+        (rect_h - 2.0 * AUTOFIT_PAD) / bbox_em
+    } else {
+        AUTOSIZE_MIN
+    };
+
+    let usable_w = rect_w - 2.0 * AUTOFIT_PAD;
+    let at_candidate = measure(font, candidate, text);
+    let (size, bound) = if at_candidate > usable_w && at_candidate > 0.0 && usable_w > 0.0 {
+        (candidate * usable_w / at_candidate, AutoFitBound::Width)
+    } else {
+        (candidate, AutoFitBound::Height)
+    };
+
+    if size < AUTOSIZE_MIN {
+        // The floor is a legibility choice, not a spec rule, and it is the one
+        // case where the returned size does NOT fit the constraint that
+        // produced it -- so it is named separately rather than folded into
+        // Height, which would report a fit that did not happen.
+        return AutoFit {
+            size: AUTOSIZE_MIN,
+            bound: AutoFitBound::Floor,
+        };
+    }
+    AutoFit { size, bound }
 }
 
 /// The height (points) of a band that exactly contains one line of text
@@ -553,16 +686,36 @@ pub fn build_variable_text(
     let w = bbox.width();
     let h = bbox.height();
 
-    // VT1: size 0 ⇒ auto-size, disclosed.
-    let (size, applied_autosize) = if parsed.font_size == 0.0 {
-        let s = auto_size(h);
-        (s, Some(s))
-    } else {
-        (parsed.font_size, None)
-    };
-
-    // Encode to WinAnsi; unencodable chars become `?` and are counted.
+    // Encode to WinAnsi FIRST — the auto-fit below needs the actual bytes to
+    // measure, and encoding is what decides how wide they are. (`?` for an
+    // unencodable char is a different width from the char it replaces, so
+    // measuring before encoding would fit the wrong string.)
     let (bytes, unencodable_chars) = encode_winansi(text);
+
+    // VT1: size 0 ⇒ auto-size, disclosed.
+    let (size, applied_autosize, applied_autosize_bound) = if parsed.font_size == 0.0 {
+        // ★ SINGLE-LINE ONLY, and the split is a correctness requirement
+        // rather than caution.
+        //
+        // `auto_fit` derives its candidate from the WHOLE box height, which is
+        // the right quantity for one line and badly wrong for many: a 200 pt
+        // multiline box would ask for ~170 pt text. It also applies a width
+        // shrink, and on a multiline field `wrap_lines` already absorbs width
+        // by breaking the text — shrinking as well would be the constraint
+        // applied twice.
+        //
+        // A line-count-aware auto-size for multiline fields is a separate
+        // question with its own measurement, and is not answered here. Those
+        // fields keep the previous behaviour exactly.
+        if multiline {
+            (auto_size(h), Some(auto_size(h)), None)
+        } else {
+            let fit = auto_fit(font, w, h, &bytes);
+            (fit.size, Some(fit.size), Some(fit.bound))
+        }
+    } else {
+        (parsed.font_size, None, None)
+    };
     let max_width = (w - 2.0 * TEXT_PAD).max(0.0);
     let lines = wrap_lines(font, size, &bytes, max_width, multiline);
 
@@ -617,6 +770,7 @@ pub fn build_variable_text(
         content: b.into_bytes(),
         resources: res,
         applied_autosize,
+        applied_autosize_bound,
         unencodable_chars,
         used_font: font,
         used_size: size,
@@ -957,26 +1111,111 @@ mod tests {
 
     // -- auto-size (VT1) ------------------------------------------------
 
+    /// ★★ THIS TEST USED TO PIN THE DEFECT, and is rewritten rather than
+    /// deleted so the change is visible.
+    ///
+    /// It asserted that every auto-size lands in `[4, 12]` and that a huge box
+    /// "clamps to the cap, not an absurd size". The cap was the bug: with
+    /// `AUTOSIZE_MAX = 12` every auto-sized field in a document came out at
+    /// 12 pt regardless of its box, which is what an operator saw as pdfce's
+    /// rows being two-thirds the size of the row Acrobat filled on the same
+    /// sheet.
+    ///
+    /// A test that pins a constant cannot notice that the constant is wrong.
+    /// What is pinned now is the PROPERTY the operator actually cares about:
+    /// different boxes get different answers, and the answer tracks the box.
     #[test]
-    fn auto_size_is_disclosed_and_bounded() {
+    fn auto_size_tracks_the_box_rather_than_a_constant() {
         let da = default_appearance_string(b"Helv", 0.0, TextColor::Gray(0.0));
-        let a = build_variable_text(bbox(200.0, 18.0), "hi", &da, Quadding::Left, false, &helv())
-            .unwrap();
-        assert!(a.applied_autosize.is_some(), "auto-size disclosed");
-        let s = a.applied_autosize.unwrap();
-        assert!((AUTOSIZE_MIN..=AUTOSIZE_MAX).contains(&s), "{s}");
-        assert_eq!(a.used_size, s);
-        // A huge box clamps to the cap, not an absurd size.
-        let big = build_variable_text(
-            bbox(200.0, 800.0),
-            "hi",
+        let short =
+            build_variable_text(bbox(200.0, 13.0), "hi", &da, Quadding::Left, false, &helv())
+                .unwrap();
+        let tall =
+            build_variable_text(bbox(200.0, 26.0), "hi", &da, Quadding::Left, false, &helv())
+                .unwrap();
+        let s_short = short.applied_autosize.expect("auto-size disclosed");
+        let s_tall = tall.applied_autosize.expect("auto-size disclosed");
+        assert!(
+            s_tall > s_short * 1.5,
+            "★ a box twice as tall must get a substantially larger size, not the              same capped constant: {s_short} vs {s_tall}"
+        );
+        assert_eq!(short.used_size, s_short);
+        // Height-derived, from Helvetica's own /FontBBox height of 1.156 em,
+        // with one point of padding per side. Asserted as the RATIO so the
+        // test states the formula rather than a magic number.
+        assert!(
+            ((13.0 - 2.0) / s_short - 1.156).abs() < 0.01,
+            "the candidate must be usable height over the font bbox height; got {s_short}"
+        );
+        assert_eq!(
+            short.applied_autosize_bound,
+            Some(AutoFitBound::Height),
+            "a short string in a wide box is bound by HEIGHT"
+        );
+    }
+
+    /// The width step, and the bound it reports.
+    ///
+    /// Without this the height formula alone would happily return a size whose
+    /// text runs straight out of the box.
+    #[test]
+    fn a_string_too_long_for_the_box_is_shrunk_and_says_so() {
+        let da = default_appearance_string(b"Helv", 0.0, TextColor::Gray(0.0));
+        let a = build_variable_text(
+            bbox(120.0, 26.0),
+            "a very long line of text indeed",
             &da,
             Quadding::Left,
             false,
             &helv(),
         )
         .unwrap();
-        assert_eq!(big.applied_autosize, Some(AUTOSIZE_MAX));
+        let size = a.applied_autosize.expect("auto-size disclosed");
+        let height_only = (26.0 - 2.0) / 1.156;
+        assert!(
+            size < height_only,
+            "the text does not fit 40 pt at the height-derived {height_only}, so it              must shrink; got {size}"
+        );
+        assert_eq!(a.applied_autosize_bound, Some(AutoFitBound::Width));
+    }
+
+    /// ★ The floor is a THIRD outcome and is named separately, because it is
+    /// the one case where the returned size does not satisfy the constraint
+    /// that produced it — the text WILL overflow, and an operator is entitled
+    /// to be told that rather than shown a fit that did not happen.
+    ///
+    /// Found by writing the test above with too narrow a box: it reported
+    /// `Floor` where `Width` was expected, which is the branch behaving
+    /// correctly and the fixture being extreme.
+    #[test]
+    fn a_box_too_small_for_any_legible_size_reports_the_floor() {
+        let da = default_appearance_string(b"Helv", 0.0, TextColor::Gray(0.0));
+        let a = build_variable_text(
+            bbox(40.0, 26.0),
+            "a very long line of text indeed",
+            &da,
+            Quadding::Left,
+            false,
+            &helv(),
+        )
+        .unwrap();
+        assert_eq!(a.applied_autosize, Some(AUTOSIZE_MIN));
+        assert_eq!(a.applied_autosize_bound, Some(AutoFitBound::Floor));
+    }
+
+    /// A multiline field keeps the OLD route, and reports no bound.
+    ///
+    /// Deliberate: `auto_fit` derives from the whole box height, which is right
+    /// for one line and badly wrong for many, and its width step would double
+    /// up on the wrapping that multiline already does. Naming a bound here
+    /// would report a constraint that was never evaluated.
+    #[test]
+    fn a_multiline_field_is_not_auto_fitted_and_names_no_bound() {
+        let da = default_appearance_string(b"Helv", 0.0, TextColor::Gray(0.0));
+        let a = build_variable_text(bbox(200.0, 60.0), "hi", &da, Quadding::Left, true, &helv())
+            .unwrap();
+        assert!(a.applied_autosize.is_some(), "still disclosed");
+        assert_eq!(a.applied_autosize_bound, None, "and no bound is claimed");
     }
 
     #[test]

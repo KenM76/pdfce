@@ -13589,6 +13589,10 @@ pub struct FillOutcome {
     /// size was chosen — surfaced for disclosure (VT1), never presented as
     /// spec-mandated.
     pub applied_autosize: Option<f64>,
+    /// Which constraint decided [`Self::applied_autosize`] — see
+    /// [`crate::vartext::AutoFitBound`]. `None` for a multiline field, which
+    /// still takes the older height-only route.
+    pub applied_autosize_bound: Option<crate::vartext::AutoFitBound>,
     /// How many characters of the filled text had no `WinAnsi` code and were
     /// substituted with `?` (the named Base-14-Latin limit, disclosed).
     pub unencodable_chars: usize,
@@ -13639,6 +13643,10 @@ pub struct RegenOutcome {
     pub need_appearances_cleared: bool,
     /// An applied auto-size, if any (disclosure; VT1).
     pub applied_autosize: Option<f64>,
+    /// Which constraint decided [`Self::applied_autosize`] — see
+    /// [`crate::vartext::AutoFitBound`]. `None` for a multiline field, which
+    /// still takes the older height-only route.
+    pub applied_autosize_bound: Option<crate::vartext::AutoFitBound>,
     /// Characters that had no `WinAnsi` code (disclosure).
     pub unencodable_chars: usize,
 }
@@ -19370,6 +19378,7 @@ impl EditSession {
             font: crate::fontdata::Std14::Helvetica,
         }];
         let mut applied_autosize = None;
+        let mut applied_autosize_bound = None;
         let mut unencodable = 0usize;
         let merged_ap = self.regen_field_appearance(
             field,
@@ -19379,6 +19388,7 @@ impl EditSession {
             &fonts,
             objects,
             &mut applied_autosize,
+            &mut applied_autosize_bound,
             &mut unencodable,
             pending,
         )?;
@@ -26010,6 +26020,7 @@ impl EditSession {
         let mut objects: Vec<ObjectWrite> = Vec::new();
         let mut widgets_updated = 0usize;
         let mut applied_autosize = None;
+        let mut applied_autosize_bound = None;
         let mut unencodable_chars = 0usize;
         // The new /V string, shared across every same-FQN representation.
         let v_string = Object::String(encode_text_string(text));
@@ -26039,6 +26050,7 @@ impl EditSession {
                 &fonts,
                 &mut objects,
                 &mut applied_autosize,
+                &mut applied_autosize_bound,
                 &mut unencodable_chars,
                 // Not a rotation call: each widget's own `/MK /R` is read
                 // inside the loop, so a rotated field stays rotated.
@@ -26105,6 +26117,7 @@ impl EditSession {
             field_id: primary_id,
             widgets_updated,
             applied_autosize,
+            applied_autosize_bound,
             unencodable_chars,
             // Read from the form modelled at the top of this function, so it
             // reflects the session rather than the file on disk.
@@ -27625,6 +27638,7 @@ impl EditSession {
                         &fonts,
                         &mut objects,
                         &mut None,
+                        &mut None,
                         &mut 0,
                         // Not a rotation call -- see the sibling above.
                         &PendingWidgetEdit::default(),
@@ -27697,6 +27711,7 @@ impl EditSession {
         fonts: &[FontResource],
         objects: &mut Vec<ObjectWrite>,
         applied_autosize: &mut Option<f64>,
+        applied_autosize_bound: &mut Option<crate::vartext::AutoFitBound>,
         unencodable: &mut usize,
         pending: &PendingWidgetEdit,
     ) -> Result<Option<ObjId>, EditError> {
@@ -27781,6 +27796,7 @@ impl EditSession {
                 annot_author::build_field_text_appearance(w, h, text, &da, quad, multiline, fonts)?;
             if appearance.applied_autosize.is_some() {
                 *applied_autosize = appearance.applied_autosize;
+                *applied_autosize_bound = appearance.applied_autosize_bound;
             }
             *unencodable += appearance.unencodable_chars;
 
@@ -28487,6 +28503,7 @@ impl EditSession {
         let mut objects: Vec<ObjectWrite> = Vec::new();
         let mut widgets_updated = 0usize;
         let mut applied_autosize = None;
+        let mut applied_autosize_bound = None;
         let mut unencodable_chars = 0usize;
 
         for field in &targets {
@@ -28499,6 +28516,7 @@ impl EditSession {
                 &fonts,
                 &mut objects,
                 &mut applied_autosize,
+                &mut applied_autosize_bound,
                 &mut unencodable_chars,
                 // Not a rotation call: each widget's own `/MK /R` is read
                 // inside the loop, so a rotated field stays rotated.
@@ -28578,6 +28596,7 @@ impl EditSession {
             field_id: primary_id,
             widgets_updated,
             applied_autosize,
+            applied_autosize_bound,
             unencodable_chars,
             // Read from the form modelled at the top of this function, so it
             // reflects the session rather than the file on disk.
@@ -28807,6 +28826,7 @@ impl EditSession {
         let mut objects: Vec<ObjectWrite> = Vec::new();
         let mut regenerated = 0usize;
         let mut applied_autosize = None;
+        let mut applied_autosize_bound = None;
         let mut unencodable = 0usize;
 
         for field in &form.fields {
@@ -28840,6 +28860,7 @@ impl EditSession {
                 &fonts,
                 &mut objects,
                 &mut applied_autosize,
+                &mut applied_autosize_bound,
                 &mut unencodable,
                 // Not a rotation call -- see the sibling above.
                 &PendingWidgetEdit::default(),
@@ -28871,6 +28892,7 @@ impl EditSession {
                 regenerated: 0,
                 need_appearances_cleared: false,
                 applied_autosize,
+                applied_autosize_bound,
                 unencodable_chars: unencodable,
             });
         }
@@ -28884,6 +28906,7 @@ impl EditSession {
             regenerated,
             need_appearances_cleared: cleared,
             applied_autosize,
+            applied_autosize_bound,
             unencodable_chars: unencodable,
         })
     }

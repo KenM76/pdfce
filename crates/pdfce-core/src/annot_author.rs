@@ -2596,6 +2596,9 @@ pub struct FieldAppearance {
     /// `Some(size)` when the `/DA` requested auto-size (`0 Tf`) and a size was
     /// chosen — surfaced for disclosure (VT1).
     pub applied_autosize: Option<f64>,
+    /// Which constraint decided [`Self::applied_autosize`]. See
+    /// [`crate::vartext::AutoFitBound`].
+    pub applied_autosize_bound: Option<crate::vartext::AutoFitBound>,
     /// How many characters had no `WinAnsi` code and were substituted with
     /// `?` (a named Base-14-Latin limit, disclosed).
     pub unencodable_chars: usize,
@@ -3006,6 +3009,7 @@ pub fn build_push_button_appearance(
                 Some(size)
             }
         }),
+        applied_autosize_bound: va.applied_autosize_bound,
         unencodable_chars: va.unencodable_chars,
     })
 }
@@ -3061,6 +3065,7 @@ pub fn build_field_text_appearance(
         ap_dict: text_form_dict(bbox, va.resources),
         content: va.content,
         applied_autosize: va.applied_autosize,
+        applied_autosize_bound: va.applied_autosize_bound,
         unencodable_chars: va.unencodable_chars,
     })
 }

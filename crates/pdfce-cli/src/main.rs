@@ -18501,10 +18501,38 @@ may still show the OLD value."
         );
     }
     if let Some(sz) = out.applied_autosize {
-        eprintln!(
-            "pdfce-cli: field {name:?}: auto-sized to {sz} pt (a reviewable pdfce heuristic; \
-§12.7.3.3 mandates no formula)"
-        );
+        // ★ NAMES THE CONSTRAINT THAT BOUND, at a consuming shell's request:
+        // an operator who thinks the text is too small wants to know whether
+        // to widen the box or heighten it, and those are different answers.
+        // The old wording — "a reviewable pdfce heuristic" — was accurate when
+        // the answer was a flat 12 pt and stopped being the useful thing to
+        // say once it became a fit.
+        let why = match out.applied_autosize_bound {
+            Some(pdfce_core::vartext::AutoFitBound::Height) => {
+                "fitted to the field's HEIGHT; make the box taller to change it"
+            }
+            Some(pdfce_core::vartext::AutoFitBound::Width) => {
+                "shrunk to fit the field's WIDTH — the text was too long at the \
+height-derived size"
+            }
+            Some(pdfce_core::vartext::AutoFitBound::Floor) => {
+                "held at pdfce's legibility FLOOR — the box is too small for the text, \
+which will overflow"
+            }
+            // A multiline field still takes the older height-only route, so
+            // there is no bound to name and claiming one would be a fact pdfce
+            // did not establish.
+            None => "a reviewable pdfce heuristic; §12.7.3.3 mandates no formula",
+            // `AutoFitBound` is `#[non_exhaustive]`, so a catch-all is forced
+            // from outside `pdfce-core` and the compile-time guarantee this
+            // match wanted is unavailable. It resolves to the SAME wording as
+            // the no-bound case rather than inventing a description of a
+            // constraint this binary has never heard of — saying nothing is
+            // the honest failure here, and saying "height" would be a guess
+            // presented as a measurement.
+            Some(_) => "a reviewable pdfce heuristic; §12.7.3.3 mandates no formula",
+        };
+        eprintln!("pdfce-cli: field {name:?}: auto-sized to {sz:.3} pt ({why})");
     }
     if out.unencodable_chars > 0 {
         eprintln!(
