@@ -478,7 +478,13 @@ pub fn compatible_overprint_cmyk(
             let named = names.iter().any(|n| match n {
                 Colorant::All => true,
                 Colorant::None => false,
-                Colorant::Named(n) => n == name,
+                // Bytes on both sides. `Component::Spot` still carries a
+                // `String` because it is constructed only in this file's
+                // tests -- production code never builds one, since the
+                // spot plane it describes does not exist yet. When that
+                // lands, this comparison is where the identity rule has to
+                // be enforced, so it is written byte-wise now.
+                Colorant::Named(n) => n.as_ref() == name.as_bytes(),
             });
             if named {
                 // Named in the source space: painted normally in every
@@ -556,14 +562,13 @@ pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
                     crate::color::Colorant::All => t = [*v; 4],
                     crate::color::Colorant::None => {}
                     crate::color::Colorant::Named(name) => {
-                        let ch = match name.to_ascii_lowercase().as_str() {
-                            "cyan" => Some(0),
-                            "magenta" => Some(1),
-                            "yellow" => Some(2),
-                            "black" => Some(3),
-                            _ => None,
-                        };
-                        if let Some(ch) = ch {
+                        // ★ This was a VERBATIM INLINE COPY of
+                        // `process_channel`, four arms and all. Two copies of
+                        // one mapping are two things that can drift, and this
+                        // one had already drifted in type -- it took a `&str`
+                        // while the other took bytes. Consolidated rather than
+                        // patched twice.
+                        if let Some(ch) = process_channel(name) {
                             t[ch] = *v;
                         }
                     }
@@ -807,12 +812,21 @@ pub fn cmyk_to_rgb(cmyk: [f32; 4]) -> (f32, f32, f32) {
 /// surprising behaviour and is what a press operator would expect; anything
 /// more aggressive would start silently merging real spot inks.
 #[must_use]
-fn process_channel(name: &str) -> Option<usize> {
-    match name.to_ascii_lowercase().as_str() {
-        "cyan" => Some(0),
-        "magenta" => Some(1),
-        "yellow" => Some(2),
-        "black" => Some(3),
+fn process_channel(name: &[u8]) -> Option<usize> {
+    // Takes BYTES because `Colorant::Named` carries bytes: a colorant name is
+    // an identity and a lossy decode makes distinct names compare equal. See
+    // that variant's documentation.
+    //
+    // ★ The ASCII case-insensitivity is a pdfce CHOICE, not a spec rule --
+    // ISO 32000 defines no case-folding for colorant names, and the corpus
+    // note `SEP-A1` records that explicitly. It is kept because real files
+    // spell these names inconsistently, and it is ASCII-only so it cannot
+    // fold two distinct non-ASCII names together.
+    match name.to_ascii_lowercase().as_slice() {
+        b"cyan" => Some(0),
+        b"magenta" => Some(1),
+        b"yellow" => Some(2),
+        b"black" => Some(3),
         _ => None,
     }
 }
@@ -1381,7 +1395,7 @@ mod tests {
     fn indexed_classifies_as_its_base_space() {
         let base = ColorSpace::DeviceN {
             names: std::sync::Arc::from(
-                vec![crate::color::Colorant::Named("Cyan".into())].into_boxed_slice(),
+                vec![crate::color::Colorant::Named(b"Cyan".as_slice().into())].into_boxed_slice(),
             ),
             alternate: std::sync::Arc::new(ColorSpace::DeviceCmyk),
             tint: None,
@@ -1553,7 +1567,7 @@ mod tests {
         SourceKind::SeparationOrDeviceN {
             names: names
                 .iter()
-                .map(|n| Colorant::Named((*n).to_owned()))
+                .map(|n| Colorant::Named(n.as_bytes().into()))
                 .collect(),
         }
     }
@@ -1873,7 +1887,7 @@ mod tests {
     #[test]
     fn a_devicen_naming_black_paints_black_and_preserves_the_rest() {
         let src = SourceKind::SeparationOrDeviceN {
-            names: vec![Colorant::Named("Black".to_owned())],
+            names: vec![Colorant::Named(b"Black".as_slice().into())],
         };
         let rules = cmyk_group_rules(&src, [0.0, 0.0, 0.0, 1.0], true, 0);
         assert_eq!(
@@ -1890,7 +1904,7 @@ mod tests {
         // Case-insensitively, because SEP-A1 says the standard defines no
         // matching rule at all and this is the least surprising one.
         let lower = SourceKind::SeparationOrDeviceN {
-            names: vec![Colorant::Named("black".to_owned())],
+            names: vec![Colorant::Named(b"black".as_slice().into())],
         };
         assert_eq!(
             cmyk_group_rules(&lower, [0.0, 0.0, 0.0, 1.0], true, 0),
@@ -1902,7 +1916,7 @@ mod tests {
     #[test]
     fn a_real_spot_colorant_claims_no_process_channel() {
         let src = SourceKind::SeparationOrDeviceN {
-            names: vec![Colorant::Named("PANTONE 185 C".to_owned())],
+            names: vec![Colorant::Named(b"PANTONE 185 C".as_slice().into())],
         };
         assert_eq!(
             cmyk_group_rules(&src, [0.0, 0.0, 0.0, 0.0], true, 0),

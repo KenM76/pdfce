@@ -178,16 +178,48 @@ pub enum Colorant {
     None,
     /// Any other colorant name. "Such colorant names are arbitrary, and
     /// there may be any number of them" (§8.6.6.4).
-    Named(String),
+    ///
+    /// # ★★ Why BYTES and not `String`
+    ///
+    /// This was `Named(String)`, built with `String::from_utf8_lossy`, and
+    /// that is **not an identity-preserving conversion**: every distinct
+    /// invalid byte sequence maps to the same `U+FFFD`, so two different
+    /// colorants compare EQUAL. Found in the real corpus — a census of 4,023
+    /// files turned up colorant names carrying `U+FFFD`, in more than one
+    /// file.
+    ///
+    /// A colorant name is an **identity**, and the standard says so in a way
+    /// that leaves no room: §8.6.6.4's device test consults *only* the name
+    /// ("shall determine whether the device has an available colorant
+    /// corresponding to the name"), and §7.3.5 NOTE 4 states that names
+    /// differing in bytes are distinct names **even if they render
+    /// identically**. No case folding and no Unicode normalisation is
+    /// specified. UTF-8 is a *should* for DISPLAY, not a rule for equality.
+    ///
+    /// ⇒ **Lossy is fine for showing a name to an operator; it is never fine
+    /// for deciding whether two names are the same.** The diagnostic paths in
+    /// this module still use `from_utf8_lossy` deliberately, and that is the
+    /// correct split rather than an oversight.
+    ///
+    /// ★ This was HARMLESS when it was found, because nothing was keyed on a
+    /// colorant name — and it stops being harmless the moment the
+    /// per-spot-colorant plane lands, since two colliding names would then
+    /// share one ink plane and silently composite as one colour. Fixed
+    /// *before* that work rather than during it, so the plane is not
+    /// debugging this at the same time.
+    Named(Box<[u8]>),
 }
 
 impl Colorant {
     /// Classify a raw `/Name` from a colour-space array.
+    ///
+    /// The bytes arrive already `#xx`-decoded by the lexer, which is the
+    /// comparison form §7.3.5 specifies, so they are stored verbatim.
     fn parse(bytes: &[u8]) -> Self {
         match bytes {
             b"All" => Self::All,
             b"None" => Self::None,
-            other => Self::Named(String::from_utf8_lossy(other).into_owned()),
+            other => Self::Named(other.into()),
         }
     }
 }
@@ -2390,6 +2422,52 @@ mod tests {
 
     use crate::{RenderOptions, RenderedPage, render_page_with};
 
+    /// ★★★ Two colorant names that differ only in INVALID UTF-8 bytes must not
+    /// compare equal.
+    ///
+    /// # The defect this pins
+    ///
+    /// `Colorant::parse` built a `String` with `String::from_utf8_lossy`, which
+    /// maps **every** invalid byte sequence to `U+FFFD`. Two documents naming
+    /// two different colorants therefore produced the *same* `Colorant`.
+    ///
+    /// §7.3.5 NOTE 4 is explicit that names differing in bytes are distinct
+    /// names even if they render identically, and §8.6.6.4's device test
+    /// consults only the name — so this is an identity, not a label.
+    ///
+    /// # Why it is worth a test when nothing currently keys on it
+    ///
+    /// Because the per-spot-colorant plane will, and at that point a collision
+    /// stops being invisible and starts meaning **two inks share one plate**.
+    /// The corpus census that found this turned up `U+FFFD` in real colorant
+    /// names in more than one file, so the input is not hypothetical.
+    ///
+    /// Verified to fail before the fix: both sides became `"Spot\u{FFFD}"` and
+    /// the assertion below compared equal.
+    #[test]
+    fn colorant_names_differing_only_in_invalid_bytes_stay_distinct() {
+        // Two different invalid continuation bytes after the same prefix.
+        let a = Colorant::parse(b"Spot\xC0");
+        let b = Colorant::parse(b"Spot\xC1");
+        assert_ne!(
+            a, b,
+            "★ two DIFFERENT colorant names compared equal. A lossy decode \
+             folds every invalid byte sequence onto U+FFFD, and a colorant \
+             name is an identity (7.3.5 NOTE 4, 8.6.6.4) — so this would give \
+             two inks one plane once the spot buffer exists"
+        );
+        // And the valid-UTF-8 path is unchanged, so the fix did not buy
+        // distinctness by mangling ordinary names.
+        assert_eq!(
+            Colorant::parse(b"PANTONE 185 C"),
+            Colorant::parse(b"PANTONE 185 C")
+        );
+        assert_ne!(Colorant::parse(b"Cyan"), Colorant::parse(b"cyan"));
+        // `/All` and `/None` are still classified, not treated as names.
+        assert_eq!(Colorant::parse(b"All"), Colorant::All);
+        assert_eq!(Colorant::parse(b"None"), Colorant::None);
+    }
+
     /// Build an offset-consistent classic PDF from `(number, body)` pairs.
     fn build(objects: &[(u32, String)]) -> Vec<u8> {
         let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
@@ -3376,7 +3454,7 @@ mod tests {
         );
         assert_eq!(
             ColorSpace::Separation {
-                colorant: Colorant::Named("LogoGreen".into()),
+                colorant: Colorant::Named(b"LogoGreen".as_slice().into()),
                 tint: None,
                 alternate: Arc::new(ColorSpace::DeviceCmyk),
             }
