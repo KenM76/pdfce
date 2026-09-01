@@ -422,3 +422,76 @@ fn deleting_inside_a_shared_form_empties_every_invocation() {
         "one delete, both invocations emptied"
     );
 }
+
+/// ★★★ AN EDIT INSIDE A FORM MUST MOVE `page_content_generation`
+/// (`Pass 196.0`).
+///
+/// # Reported, measured, by the consuming shell
+///
+/// `page_content_generation` exists so a front end can assert continuously
+/// that its object model still agrees with the crate's, by comparing two
+/// `u64`s instead of decomposing twice. The shell tested it one dependency
+/// class at a time -- page content, annotations, in-form content -- and found
+/// the third silent: `move_node_in_form` rewrote an invocation, the verb
+/// returned `Ok` with `invocations > 0`, and the number did not move.
+///
+/// # Why that is corruption and not a cache miss
+///
+/// `PageObjects` addresses content **by index**. A shell that keys its
+/// decomposition cache on this number serves the pre-edit model after every
+/// in-form edit, and the next drag is applied to whatever object now sits at
+/// that index. Both sides return `Ok`; the index is in range on both. Nothing
+/// can notice.
+///
+/// # The shape of the defect, which is the reusable part
+///
+/// `Pass 188.0` found exactly this against the INTERNAL memo and fixed it
+/// there, by keeping the descended-form spans beside the cache key -- they
+/// cannot go inside it, because which forms a page reaches is an OUTPUT of the
+/// walk. `page_content_generation` publishes the key ALONE, so it was left
+/// behind: the crate's own staleness test became strictly stronger than the
+/// one it hands to callers.
+///
+/// **A fix applied to one route is not a fix to the other**, and the second
+/// route here was the one with a consumer on the end of it.
+#[test]
+fn an_edit_inside_a_form_moves_the_page_generation() {
+    let mut s = session("forms-xobject/scaled-form-placement.pdf");
+    let before = s.page_content_generation(0).unwrap();
+    assert_eq!(
+        before,
+        s.page_content_generation(0).unwrap(),
+        "the generation must be stable across a repeat call, or the rest of this proves nothing"
+    );
+
+    let out = s
+        .move_node_in_form(0, 0, 0, Point { x: 40.0, y: 20.0 })
+        .unwrap();
+    assert!(
+        out.invocations > 0,
+        "the verb must actually have rewritten an invocation, or there is nothing to detect"
+    );
+
+    assert_ne!(
+        before,
+        s.page_content_generation(0).unwrap(),
+        "an edit INSIDE a form XObject left the page generation unchanged. A shell keying its          decomposition cache on this number now serves a pre-edit model, and PageObjects          addresses content by INDEX -- so the next edit lands on the wrong object and returns Ok"
+    );
+}
+
+/// ★ The CONTROL: the generation must still hold still when nothing changed.
+///
+/// Without this, "it moves after a form edit" is equally satisfied by a number
+/// that moves on every call -- which would be useless as an agreement check and
+/// would make every shell re-decompose every frame.
+#[test]
+fn the_page_generation_still_holds_still_when_nothing_is_edited() {
+    let mut s = session("forms-xobject/scaled-form-placement.pdf");
+    let a = s.page_content_generation(0).unwrap();
+    let _ = s.page_objects(0).unwrap();
+    let b = s.page_content_generation(0).unwrap();
+    assert_eq!(
+        a, b,
+        "decomposing the page is not an edit and must not move the generation"
+    );
+}

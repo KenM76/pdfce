@@ -2547,10 +2547,37 @@ into a decomposition**. If the two models differ by one object, a drag lands
 on the wrong object and returns `Ok` — the index is in range on both sides and
 neither process can notice.
 
-`page_content_generation(page_index) -> u64` is the cheap continuous check.
-Comparing object *counts* means decomposing twice; comparing this means
+`page_content_generation(&mut self, page_index) -> u64` is the cheap continuous
+check. Comparing object *counts* means decomposing twice; comparing this means
 comparing two integers. Bump your own edit epoch, re-read this, assert they
 moved together.
+
+> ⚠️ **BREAKING, and it is the fix you asked for** (`Pass 196.0`). It took
+> `&self` and now takes `&mut self`, because it must run the (memoised)
+> decomposition to know which form XObjects the page descends into. Which forms
+> a page reaches is an **output** of that walk, so there is no way to fold them
+> into the number without having walked. Your call sites already hold `&mut`
+> for `page_objects`.
+>
+> ★ **What it was getting wrong, which you measured and reported.** An edit
+> **inside a form XObject** left this number unchanged, so a cache keyed on it
+> served a stale model after every in-form edit — and `PageObjects` addresses
+> content by **index**, which is the silent-corruption shape. Your diagnosis was
+> exact: the descended-form set was kept *beside* the internal memo's key, and
+> this accessor published the key alone. `Pass 188.0` repaired the memo and left
+> the accessor behind, so the crate's own staleness test was **strictly
+> stronger** than the one it handed you. **A fix applied to one route is not a
+> fix to the other**, and the second route was the one with a consumer on it.
+>
+> Pinned by `an_edit_inside_a_form_moves_the_page_generation`, which was
+> sabotage-verified: reverting the fix reproduces your reported numbers exactly
+> (identical `u64` either side of `move_node_in_form`) while the
+> nothing-changed control stays green.
+>
+> ✅ **The annotation win is unchanged** — annotation-only edits still hold the
+> number still, because annotations are addressed by `ObjId` and never by index,
+> so they cannot skew a decomposition. That was worth preserving and it was
+> checked, not assumed.
 
 Three things it is **not**, each of which will bite a caller who assumes
 otherwise:

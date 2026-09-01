@@ -12482,14 +12482,42 @@ impl EditSession {
     /// [`EditError::PageOutOfRange`] for a page index outside the document
     /// **as this session has it** — which, since `Pass 186.0`, is the same
     /// page set every editing verb resolves against.
-    pub fn page_content_generation(&self, page_index: usize) -> Result<u64, EditError> {
+    pub fn page_content_generation(&mut self, page_index: usize) -> Result<u64, EditError> {
         let pages = self.pages()?;
         let count = pages.len();
-        let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
-            index: page_index,
-            count,
-        })?;
-        Ok(self.page_model_key(page).fingerprint())
+        let page = pages
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .clone();
+
+        // ★ Run the (memoised) decomposition so the DESCENDED-FORM set exists.
+        // Which forms a page reaches is an output of the walk, so there is no
+        // way to fold them into the digest without having walked -- `R237`'s
+        // own remedy, "where the inputs cannot name a dependency, take the key
+        // from the walk's OUTPUT".
+        //
+        // The error is DELIBERATELY discarded. A page whose content will not
+        // decode has no model for a shell to be stale against, and this
+        // accessor's contract is "has the model changed", not "is the page
+        // decodable" -- turning an undecodable page into an `Err` here would
+        // break a caller polling it once per frame on a document it is
+        // otherwise displaying fine.
+        let _ = self.page_content_and_objects(&page);
+
+        let key = self.page_model_key(&page);
+        // Only THIS page's forms. The cache holds one entry, so a failed walk
+        // above can leave another page's entry in it, and folding those in
+        // would make the number depend on which page was last decomposed.
+        let forms = self
+            .page_objects_cache
+            .as_ref()
+            .filter(|c| c.key == key)
+            .map(|c| c.forms.clone())
+            .unwrap_or_default();
+        Ok(key.fingerprint_with_forms(&forms))
     }
 
     /// The cache lookup shared by [`Self::page_objects`] and the editing
@@ -14203,7 +14231,7 @@ struct PageModelKey {
 }
 
 impl PageModelKey {
-    /// A 64-bit FNV-1a digest of this key, for
+    /// A 64-bit FNV-1a digest of this key PLUS the descended-form set, for
     /// [`EditSession::page_content_generation`].
     ///
     /// # Why it hashes the `Debug` rendering rather than walking the fields
@@ -14228,11 +14256,37 @@ impl PageModelKey {
     /// comparing this number across a rebuild deserves better than a silent
     /// change of meaning. It is **not** a cryptographic digest and is not
     /// used as one.
-    fn fingerprint(&self) -> u64 {
+    /// The digest, folding in the DESCENDED-FORM set the walk found
+    /// (`Pass 196.0`).
+    ///
+    /// # Why the forms cannot simply live in the key
+    ///
+    /// For the reason [`PageObjectsCache::forms`] gives: which forms a page
+    /// reaches is an OUTPUT of the decomposition, not an input to it, so it
+    /// cannot be computed before the walk that finds it. The internal memo
+    /// handles that by comparing the key and then re-reading the form spans
+    /// separately.
+    ///
+    /// # ★ And why the PUBLISHED number has to fold them in anyway
+    ///
+    /// Because a caller has only the number. `Pass 188.0` gave the memo its
+    /// form check and left `page_content_generation` publishing the key alone,
+    /// so the crate's own staleness test became STRICTLY STRONGER than the one
+    /// it hands out. Measured and reported by the consuming shell: an edit
+    /// inside a form XObject rewrote an invocation and the number did not move,
+    /// so a cache keyed on it served a stale model -- and `PageObjects`
+    /// addresses content by INDEX, which is the silent-corruption shape.
+    ///
+    /// A fix applied to one route is not a fix to the other. The memo was
+    /// repaired; the accessor that publishes the same judgement was not.
+    fn fingerprint_with_forms(&self, forms: &[(ObjId, Option<crate::span::ByteSpan>)]) -> u64 {
         use std::fmt::Write as _;
         let mut w = FnvWriter(0xcbf2_9ce4_8422_2325);
         // Infallible: `FnvWriter::write_str` never returns `Err`.
         let _ = write!(w, "{self:?}");
+        // Same construction as above -- digest the `Debug` rendering, so
+        // equality and the digest cannot drift apart.
+        let _ = write!(w, "{forms:?}");
         w.0
     }
 }
