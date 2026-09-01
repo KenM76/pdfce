@@ -83357,3 +83357,162 @@ currency, unpushed-commit count and backup-bundle staleness are **not
 verifiable from here**, and the engineer (who has a shell) should check
 `git rev-list --count origin/main..main` and `ls -lt D:/Dev/pdfce-backups/`
 directly rather than take a number from this entry.
+
+## 2026-08-31 (356th filing) — `Pass 191.1` (`ee7866d`): **EIGHT MORE DELETION VERBS BELIEVED WHAT A KEY NAMED, AND ONE COULD DESTROY THE PAGE TREE WITH A LABEL EDIT ALONE** — the `dc8cde7` filing debt closed — a NEW BUG filed as `Pass 192.0` (`PCS 16.8`, vector soft-masks, Bevel-and-Emboss shadow half missing) — a NEW PASS, `193.0` (PDF internal-structure inspection/dump), filed IN PROGRESS
+
+**Shipped:**
+- **Pass 191.1** — the eight-site audit `Pass 191.0` scoped is closed. Seven
+  sites fixed (`delete_dimension`'s `/PieceInfo` sidecar, `delete_redaction_mark`,
+  `flatten_fields`, `outline_subtree`/`delete_outline_item`,
+  `plan_annotation_deletion` cascade 1, `detach_file`, `unembed_fonts`'s
+  `/CIDSet`); new `EditError::CarrierIsNotAStream` (113 → 114 variants); a
+  second, independently found defect in `refuse_if_in_page_tree`'s error
+  message, stale after gaining seven more callers.
+- **`dc8cde7`** — `tools/check-core-api-verbs.py` gains the proximity-anchor
+  fix `R239` itself called for; filed here as a no-Pass-ID ledger-joining
+  entry, since it sat unfiled after a prior session.
+
+**Decisions made this session:** none. Neither `Pass 191.1` (a private
+helper's type-safety, mirroring `Pass 191.0`) nor `dc8cde7` (a gate-script
+proximity anchor) redraws a crate boundary, picks a library, or redefines an
+invariant. No `ARCHITECTURE.md` §12 entry filed.
+
+**Findings + decisions:**
+
+- **★★★★ All eight of `Pass 191.0`'s audited sites were confirmed exploitable
+  BEFORE being fixed**, via a pinned-worktree measurement at `e4b3481` rather
+  than trusted from the audit's own priority ordering — twelve hostile cases,
+  all twelve at `R238` rung 3 (`Ok` returned, unwalkable page tree written).
+  The headline: **`set_dimension_label`, a caption rename, could destroy the
+  page tree** through the ce-dimension sidecar's unvalidated `/Ap`.
+- **★★★ A guard's error MESSAGE is a claim about a class, same as its logic.**
+  `refuse_if_in_page_tree` gained seven callers and its message still named
+  only the original two carriers — found by reading the guard's output, not
+  by any assertion failing, since every existing test checked the error
+  **variant** and the variant was already correct. `R219`'s trigger, applied
+  to operator-facing text rather than code.
+- **★★ `flatten_fields` reached further than the audit had scoped** — its
+  `emptied_parents` cascade separately misread a page's `/Parent` as a
+  field's `/Kids` and could delete the page-tree root; fixed in the same
+  pass over the verb.
+- **A guard on one ROUTE into a verb is not a guard on the verb.**
+  `delete_annotation` already guarded before routing to
+  `delete_redaction_mark`/`delete_dimension`; the GUI's and CLI's direct
+  calls to those two verbs, bypassing `delete_annotation`, were what was
+  actually exposed. Guards now live inside the verbs themselves.
+- **`dc8cde7` verified working in this filing's own material, not merely
+  trusted**: `Pass 191.1`'s new `EditError` variant moved the true count
+  113 → 114, and the fixed gate caught **both** copies of the stale figure —
+  `index.md`'s and `02-editing-and-saving.md:3794`'s, the latter invisible to
+  the old gate for three days per the 354th/355th filings' own notes.
+- **New bug found and reported, not fixed** (filed as `Pass 192.0`) —
+  `PCS 16.8`'s Bevel-and-Emboss cell renders its highlight half and omits its
+  shadow half. Measured by quadrant against the patch's own baked reference:
+  top-left (the lit side) mean-abs-diff **1.9**, 0 pixels over threshold; the
+  other three quadrants **20.0/33.5/63.4** mean-abs-diff, **1,184/1,868/3,414**
+  pixels over threshold — **6,466 of 18,496 pixels (35.0%)** differ by more
+  than 30, max per-channel difference 141. Root cause **not yet identified**;
+  a smaller, suspected-not-confirmed second defect (a stale `blend_modes_applied`
+  disclosure string) is recorded alongside it, not claimed as diagnosed.
+- **New capability request, filed IN PROGRESS as `Pass 193.0`** — a
+  `pdfce-core`/`pdfce-cli` structure-inspection and structure-dump surface
+  for the COS object graph and the physical file layout, per an explicit
+  operator instruction, motivated directly by `Pass 192.0`'s diagnosis
+  needing exactly this and having no tool for it. Scope is provisional
+  pending an Acrobat-parity read from `pdfce-acrobat-librarian`.
+- **★ A reported-not-fixed item filed to *Backlog*, not folded into
+  `Pass 191.1`'s criteria**: `resize_annotation`'s `/AP` `/N` overwrite
+  excludes structural dictionaries only as a side effect of a different
+  check, not by requiring `Object::Stream`, so it could still overwrite a
+  page's own `/Contents` stream (which passes a `Dict` refusal, being a
+  stream). Needs the whole-document reference census `Pass 191.1`'s own doc
+  comment already names as an open bound, not merely a type test.
+
+**Verification performed by this role, rather than taken on the dispatch's
+word (hard rule 8) — LIMITED THIS FILING, stated explicitly:**
+
+| claim | how checked | result |
+|---|---|---|
+| `Pass 191.1` (`ee7866d`) fix sites, test-file function count, new `docs/core-api/` §6.8 | **NOT checked — no shell available to this role this session** | relayed, attributed as such in the *Shipped* entry |
+| `dc8cde7`'s content and effect | **NOT checked against `git show`** — no shell; relayed from the dispatching engineer's own description, including the fact that it discharges the `02-editing-and-saving.md:3794` gap | relayed |
+| `Pass 192.0`'s measurement table | relayed from the dispatch verbatim; arithmetic cross-checked by hand (0+1,184+1,868+3,414 = 6,466; 4×4,624 = 18,496; 6,466/18,496 ≈ 35.0%) | **consistent** |
+| Existing `Pass 191.1` `ROADMAP.md` *Next up* entry, before removal | `Read` in full before editing | confirmed matches this filing's *Shipped* rewrite in substance |
+| `docs/FEATURES.md` row 208 (annotation deletion) and row 276 (soft masks/group result) | `Read` in full | row 208 unaffected by `Pass 191.1` (already correctly attributes `Pass 190.1`'s refusal, not this Pass's); row 276's own correlation figures for `PCS1_168` (0.725 → 0.978) are already honestly partial and not contradicted by the new quadrant measurement — left unchanged |
+
+**Gates — NOT independently run by this filing; no shell available to this
+role this session.** All test/build/gate figures in the `Pass 191.1` *Shipped*
+entry are engineer-reported and attributed as such in that entry's own
+table. The engineer should run `tools/check-ledger-numbers.py` and
+`bash tools/run-gates.sh` before the next push, and specifically confirm
+`tools/check-core-api-verbs.py` now passes at 114 variants in both gated
+locations (`index.md` and `02-editing-and-saving.md:3794`).
+
+**`FEATURES.md`: two changes, one explicit non-change.**
+- **NO ROW CHANGES for `Pass 191.1`** — hardening across seven already-shipped
+  verbs (ce-dimension label editing, redaction-mark deletion, form flatten,
+  outline deletion, popup-cascade deletion, attachment detachment, font
+  unembedding), no reach change in core/cli/gui for any of them.
+- **NO ROW CHANGE for `Pass 192.0`** — a defect in an already-*Implemented*
+  capability (soft masks on a group's result, row 276) is not itself a
+  Planned-section gap; row 276's own correlation figures already disclose
+  imperfection and are not falsified by the new finding.
+- **NEW *Planned* row added for `Pass 193.0`** — structure inspection/dump,
+  `core [ ] cli [ ] gui ? Acrobat ?`, positioned first in the *Planned* list
+  (ahead of the bold-ladder row) since it is the entry actively IN PROGRESS.
+
+**Still in flight:**
+
+- **`Pass 193.0`** — structure inspection/dump, **in progress this session
+  per the engineer's own dispatch**; acceptance criteria not yet written,
+  pending the Acrobat-parity read.
+- **`Pass 192.0`** — `PCS 16.8` Bevel-and-Emboss defect, **not started**,
+  queued behind `Pass 193.0`; root cause unknown.
+- **`resize_annotation`'s `/AP` `/N` overwrite gap** — filed to *Backlog*,
+  unscoped.
+- The pre-existing carried-forward items in `docs/NEXT_SESSION.md` §A
+  (FeatureRequests channels, `Pass 142.0`, the `text_edit` resolver
+  residual, `/AP` `/D` + `/MK` layout, the n-channel buffer,
+  `CmykIntent::Calibrated`) are **unchanged by this filing** and not
+  re-argued here.
+- Five ungated derivable counts in `docs/core-api/` (found 354th filing) —
+  still a Pass, not touched by this one.
+
+**For next session:**
+
+- `docs/NEXT_SESSION.md` rewritten: §0 now leads with `Pass 193.0` as the
+  active item and `Pass 192.0` as next behind it — read it before
+  re-deriving anything about either.
+- If `Pass 193.0`'s scope changes once the Acrobat-parity read lands, amend
+  its `ROADMAP.md` entry in place (struck, not deleted) rather than opening
+  a second entry.
+- `Pass 192.0`'s three untested hypotheses (shadow-layer blend mode, its
+  soft mask's `/BC` backdrop, a `/TR` transfer function) are candidates for
+  `Pass 193.0`'s own structure dump to adjudicate once it exists.
+
+**Documents edited this filing:**
+
+- `docs/ROADMAP.md` — `Pass 191.1` moved to *Shipped* (top), rewritten in
+  full; `dc8cde7` filed as a no-Pass-ID *Shipped* entry immediately below
+  it; `Pass 193.0` and `Pass 192.0` filed under *Next up* (replacing the
+  removed `Pass 191.1` *Next up* entry); a *Backlog* entry added for
+  `resize_annotation`'s reported-not-fixed gap.
+- `docs/SESSION_LOG.md` — this entry.
+- `docs/NEXT_SESSION.md` — rewritten to lead with `Pass 193.0`/`Pass 192.0`.
+- `docs/FEATURES.md` — one new *Planned* row (`Pass 193.0`); *Implemented*
+  rows explicitly assessed and left unchanged (see above).
+
+**Ceilings after this filing** (stated from the edits made; **not
+independently re-run through `tools/check-ledger-numbers.py`, no shell
+available to this role this session — the engineer should confirm**): Pass
+ceiling `191.1` → **`193.0`** (`191.1` shipped; `192.0` and `193.0` both
+minted in *Next up* in this filing); next free `193.1`/new major `194.0`.
+Standing rules `R239` — **UNCHANGED**, next free `R240`. Decisions `112` —
+**UNCHANGED**, next free `113`. Filings `355` → **`356`**.
+
+**Git/backup state: NOT ASSERTED.** No shell tool was available to this
+role this session — per hard rule 8, the honest statement is that commit
+currency (including `dc8cde7`'s exact position relative to `e4b3481`/
+`ee7866d`), unpushed-commit count and backup-bundle staleness are **not
+verifiable from here**. The engineer should check `git log --oneline -10`,
+`git rev-list --count origin/main..main` and `ls -lt D:/Dev/pdfce-backups/`
+directly rather than take anything in this entry as a measured git claim.

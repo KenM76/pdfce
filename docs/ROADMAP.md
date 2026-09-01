@@ -96,6 +96,203 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 191.1` (`ee7866d`, 2026-08-31) — **★★★★ EIGHT MORE DELETION VERBS BELIEVED WHAT A KEY NAMED, AND ONE COULD DESTROY THE PAGE TREE WITH A LABEL EDIT ALONE** — ★★★★ **ALL TWELVE HOSTILE CASES MEASURED AGAINST THE PRE-FIX BINARY, PINNED AT `e4b3481`: EVERY ONE IS `R238` RUNG 3 — `Ok` RETURNED, BYTES WRITTEN THAT RELOAD WITH NO WALKABLE PAGE TREE** — ★★★ **A SECOND DEFECT FOUND BY READING A GUARD'S OUTPUT, NOT BY ASSERTING ON IT: ITS ERROR MESSAGE STILL NAMED ONE CARRIER AFTER GAINING SEVEN MORE CALLERS** — closes `Pass 191.1` (audited by `Pass 191.0` and filed under *Next up* by the 355th filing) — filed 2026-08-31 (356th filing)
+
+**What it was.** `Pass 191.0`'s audit — run because `R219` requires
+enumerating a hazard's carriers rather than waiting for the next fuzzer hit
+— found eight verbs sharing one shape: dereference a key, assume the pointee
+is the kind of object that key is defined to hold, and delete it (or delete/
+overwrite objects reached through it) with no check. This Pass closes all
+eight.
+
+**Measured before fixing, not sized from the audit's own prose.** Each of
+the eight sites was turned into a hostile fixture and run against the
+**pre-fix** binary, in a git worktree pinned to `e4b3481` (`Pass 191.0`'s own
+commit, i.e. before any of this Pass's changes existed). **Twelve hostile
+cases** (several sites needed more than one shape to trigger), **all twelve
+confirmed at `R238` rung 3** — the verb returns `Ok`, and `to_full_bytes`
+writes a file that reloads with no walkable page tree. All twelve panic in a
+debug build and silently return `Ok` in release.
+
+**★★★★ The headline.** `set_dimension_label` — renaming a ce dimension's
+caption, not deleting anything — returned `Ok(changed=true)` and left a
+document whose page-tree root had been overwritten with a form XObject. The
+`/PieceInfo` sidecar is attacker-writable, and `check_dimension_sidecar`
+compared a version integer and nothing else.
+
+**Two guards, and the rule dividing them — documented once, on
+`refuse_if_occupied_by_non_stream`, so it need not be re-derived at each of
+the eight sites:** collateral reached incidentally through a key is
+**filtered** (the operator's own command still succeeds; pdfce declines to
+free a pointee of the wrong kind rather than refusing the whole operation); a
+deletion **target**, or a write that would **destructively overwrite** an
+existing object, is **refused**. The distinction is load-bearing here
+specifically: refusing outright on any malformed reference would make a
+malformed `/AP` render a redaction mark permanently undeletable.
+
+New `EditError::CarrierIsNotAStream` — variant count **113 → 114**, updated
+in both places `tools/check-core-api-verbs.py` and the §6.7 partition list
+cover (per the `dc8cde7` gate fix, entry immediately below). Grounded in
+§12.5.5, §7.11.4 Table 45, §9.7.4.2 Table 117. **Absence passes
+deliberately** — an id whose object does not exist yet is exactly what an
+appearance the verb is about to *write* looks like before the write, and
+refusing on absence would have broken ce-dimension authoring itself.
+
+**★★★ A second defect, found by reading a guard's OUTPUT, not by any
+assertion passing or failing.** `refuse_if_in_page_tree` went from three
+callers to ten in this Pass, and its message still read *"the file says that
+object is BOTH a form field and a page"* — false for a bookmark, an
+attachment, a redaction mark, or a ce dimension, the new carrier kinds that
+now reach it. Every existing test asserted on the error's **variant**, which
+was right, so nothing caught the message drifting away from its widened
+caller set. ⇒ **A guard written for one carrier is a claim about a class, and
+so is its error message** — `R219`'s trigger, extended from code to
+operator-facing text. Message is now carrier-neutral; no API break (variant
+and field names unchanged). Whether this warrants widening `R219` itself, or
+standing as a dated note on it, is left for the next standing-rule review
+rather than decided in this filing.
+
+**The seven sites, fixed, in the audit's own priority order:**
+
+1. `delete_dimension` — the `/PieceInfo` sidecar's `/Ap`/`/Annot` now pass the
+   categorical type test before being trusted; `regenerate_dimension_writes`
+   no longer overwrites an object of the wrong kind.
+2. `delete_redaction_mark` — `/AP` `/N` and `annot_id` both guarded; no
+   longer relies on its own doc comment's unenforced assumption of pdfce
+   authorship.
+3. `flatten_fields` — gained `refuse_if_in_page_tree`, closing the
+   `Pass 185.1` carrier this verb never received. ★ **Reached further than
+   the audit had scoped**: its `emptied_parents` cascade separately turned
+   out to read a page's `/Parent` (the `/Pages` node) as a field's `/Kids`,
+   find no survivors, and delete the page-tree root — fixed in the same pass
+   over this verb.
+4. `outline_subtree` / `delete_outline_item` — `/First`/`/Next` harvesting
+   now type-tested; the entry gate no longer accepts a `/Page` merely for
+   carrying a `/Parent`.
+5. `plan_annotation_deletion` cascade 1 — the `/Popup` id now joins the
+   `removing` set *before* the guards run, not after.
+6. `detach_file` — the `/EmbeddedFiles` name-tree value and `/EF`
+   `/F`/`/UF` both type-tested.
+7. `unembed_fonts`'s `/CIDSet` — cheapest of the seven; the enforced stream
+   test ten lines away on `/FontFile*` now covers its sibling.
+
+**★ A guard installed on one ROUTE is not a guard on the VERB.**
+`delete_annotation` already guarded before routing to `delete_redaction_mark`
+/ `delete_dimension`, so those two routes were safe; the GUI's and CLI's
+calls that reach those verbs **directly**, bypassing `delete_annotation`,
+were the ones actually exposed. Guards now live inside the verbs themselves,
+not only on one caller into them.
+
+**Verification.** `tests/deletion_collateral_structural.rs`, **20 tests
+(12 hostile + 8 control)**, all green. **Sabotaged in the RELEASE profile
+specifically** — neutering all three guards reddens exactly the twelve
+hostile cases and leaves the eight controls green; sabotaging in debug would
+only have shown the debug assert works, which was never in question.
+`examples/collateral_probe.rs` reports **0 of 12** rung-3 hits post-fix in
+both profiles, against **12 of 12** pre-fix. 18 synthetic fixtures with a
+`PROVENANCE.md` and a deterministic generator (`LEGAL.md` §5 (a)).
+`cargo test --workspace`: **172 suites / 4,912 tests / 0 failed.**
+`cargo fmt --check` and `cargo clippy --workspace --all-targets -- -D
+warnings` clean. `tools/check-core-api-verbs.py` PASS at 114 variants.
+`tools/check-string-gaps.sh` clean. `docs/core-api/` gained a new §6.8 plus
+⚠️ notes on every affected verb row.
+
+**Gates:**
+
+| gate | result | source |
+|---|---|---|
+| `tests/deletion_collateral_structural.rs` (20 tests) | green pre-sabotage; sabotage reddens exactly the 12 hostile tests in **release** | engineer-reported |
+| `examples/collateral_probe.rs`, pre- vs post-fix | 12/12 rung-3 hits pre-fix → 0/12 post-fix, both profiles | engineer-reported |
+| `cargo test --workspace` | 172 suites / 4,912 tests / 0 failed | engineer-reported |
+| `cargo fmt --check` / `cargo clippy -D warnings` | clean | engineer-reported |
+| `tools/check-core-api-verbs.py` | PASS at 114 `EditError` variants | engineer-reported |
+| `tools/check-string-gaps.sh` | clean | engineer-reported |
+
+★ **Not independently verified from source by this filing — no shell
+available to this role this session.** Unlike the `Pass 191.0` entry below,
+this filing could not `Grep`/`Read` the seven fix sites, the new test file's
+function count, or `docs/core-api/`'s new §6.8 to check them against the
+dispatch's word; every figure above is relayed and attributed as such. The
+engineer should re-run `tools/check-ledger-numbers.py` and
+`bash tools/run-gates.sh` to confirm before the next push.
+
+**Invariant check.** No `Cargo.toml` touched per the dispatch; `cargo tree`
+neither run nor asserted here (hard rule 8) — engineer should confirm
+GUI-core separation unaffected before this is treated as closed.
+
+**REPORTED, NOT FIXED — filed to *Backlog*, not folded into this Pass's
+acceptance criteria:** `resize_annotation`'s `/AP` `/N` overwrite via
+`appearance_slot` is guarded against structural *dictionaries* only as a
+side effect of a refuse-`Dict` test, not by a require-`Stream` one, so an
+`/AP` `/N` naming a page's `/Contents` **stream** would be overwritten with
+annotation artwork. `appearance_streams_owned_by`'s own doc comment already
+names the whole-document reference census this needs as a deliberate open
+bound. See *Backlog*, below.
+
+**`FEATURES.md`: assessed explicitly, NO ROW CHANGES.** This Pass hardens
+deletion/overwrite safety across seven already-shipped verbs spanning
+several rows — ce-dimension label editing, redaction-mark deletion, form
+flatten (row 221), outline/bookmark deletion, annotation-popup cascade
+deletion, attachment detachment, and font unembedding — without changing
+what any of them can reach in core, cli or gui. No new capability, no
+removed capability, no changed reach for any checkbox; every affected row's
+existing sentence remains accurate as written.
+
+**Pass ceiling `191.0` → `191.1`, both now SHIPPED. Next free `191.2` / new
+major `192.0`** — two new majors are minted immediately below, in the same
+filing; see the ceiling statement at the end of `Pass 192.0`'s *Next up*
+entry for the figure after both.
+
+---
+
+### `dc8cde7` (2026-08-31) — the `R239` remedy itself: `tools/check-core-api-verbs.py` gains the proximity-anchored partition-count check `docs/NEXT_SESSION.md` had already measured and scoped — made in a prior working session and never filed, found unfiled by `check-commits-filed.py`, filed here — filed 2026-08-31 (356th filing)
+
+**Why this entry exists, and carries no Pass ID.** `dc8cde7` is a code commit
+(`tools/check-core-api-verbs.py`) that closes the exact owed item the
+354th/355th filings recorded — but it was never named in a
+`ROADMAP.md`/`SESSION_LOG.md`/`FEATURES.md` filing, so `tools/
+check-commits-filed.py` went red on it. This is a gate-tooling fix, not an
+architectural decision or a Pass-shaped unit of engineering work — the same
+category as the `v0.15.0`/`89a2af9` release-commit entry elsewhere in this
+section — so it gets a ledger-joining entry rather than a Pass ID.
+
+★ **Its exact position relative to `e4b3481` (`Pass 191.0`) and `ee7866d`
+(`Pass 191.1`) in the commit graph is NOT independently verified by this
+filing — no shell available to this role this session.** It is placed here,
+immediately after `Pass 191.1`'s entry, because that is the order the
+dispatching engineer presented it in, not because a `git log` was run to
+confirm it. The engineer should confirm the actual ordering rather than
+read this placement as a measured claim.
+
+**What it fixed.** `docs/core-api/02-editing-and-saving.md:3794`'s *"113
+variants"* sentence was correct and **ungated**: the existing check matched
+only `index.md`'s exact phrasing (`` `EditError`'s (\d+) variants ``) and was
+blind to any other copy of the same figure — the defect `R239` itself was
+minted from (a gate minted to fix a number protects the phrasing that
+prompted it, and misses the same number phrased differently elsewhere).
+Measured in the 354th filing: a bare `[0-9]+ variants` regex over
+`docs/core-api/` returns 7 hits, 5 of them false positives (`CommandKind` 46,
+`xref` 12, `SnapKind` 8, `FunctionError` ~28, `Destination` 6); requiring the
+same line to **also name `EditError`** narrows that to exactly 2 hits, 0
+false positives — a **proximity anchor, not a wider regex**, per hard rule 11
+clause (e) (*"narrow the file set and widen the pattern, not the reverse"*).
+`dc8cde7` implements that anchor.
+
+**Verified working, not merely trusted, in this very filing's own material.**
+`Pass 191.1`'s new `EditError::CarrierIsNotAStream` variant moved the true
+count from 113 to 114, and the gate caught **both** copies of the stale
+figure — `index.md`'s (already gated before `dc8cde7`) and
+`02-editing-and-saving.md:3794`'s (invisible to the gate for three days
+before `dc8cde7`, per the 354th/355th filings' own dated notes). The fix
+discharged its own reason for existing on its very next opportunity.
+
+**Ledger.** No Pass ID, no ledger movement of its own — this entry exists
+solely so `tools/check-commits-filed.py` has a filing to join `dc8cde7`
+against. See `Pass 191.1`, above, and `Pass 192.0`/`193.0`, filed under
+*Next up*, for this session's actual ledger deltas.
+
+---
+
 ### `Pass 191.0` (`e4b3481`, 2026-08-31) — **★★★★ `/AP` CAN NAME ANYTHING, AND THE DELETION CASCADE DELETED WHATEVER IT REACHED** — ★★★★ **`R238` APPLIED CORRECTLY THIS TIME: MEASURED WITH A RELEASE-PROFILE PROBE INSTEAD OF SIZED FROM THE ASSERTION'S GATING, AND THE WORST OUTCOME WAS FOUND DIRECTLY — `cut_selection` RETURNED `Ok`, `to_full_bytes` WROTE A 904-BYTE FILE THAT RELOADS WITH `PageTreeError::BadKid`** — ★★★★ **TWO ACCIDENTS HAD HIDDEN IT, AND THE SECOND IS A NEW FINDING: A REFUSAL THAT FIRES FOR AN UNRELATED REASON IS NOT A GUARD, IT IS A COINCIDENCE THAT SUPPRESSES EVIDENCE** — ★★★ **THE GUARD IS A TYPE TEST, NOT A STRUCTURAL-OBJECT BLACKLIST, DELIBERATELY — `R219`'S WIDENED TRIGGER APPLIED ON PURPOSE** — ★★★★ **AN AUDIT OF ALL ELEVEN OBJECT-REMOVAL SITES IN `pdfce-core`, RUN BECAUSE `R219` REQUIRES ENUMERATING THE CLASS, RETURNED EIGHT MORE REAL INSTANCES OF THE SAME SHAPE — FILED AS `Pass 191.1` BELOW, NOT MERELY BACKLOG** — closes the `annot_delete_sequence` `BadKid(ObjId 3)` route `Pass 190.1` left open and explicitly unsized, the single item `docs/NEXT_SESSION.md` §0 was carrying — filed 2026-08-31 (355th filing)
 
 **What it was.** `EditSession::appearance_streams_owned_by` (cascade 3 of
@@ -95862,80 +96059,115 @@ never a second file).
 > 2026-08-12 list did not contain**. Still one file, still footers: writing a new
 > RAG file about the inertness of a written RAG file would refute itself.
 
-### `Pass 191.1` — **THE OTHER EIGHT: AN AUDIT OF ALL ELEVEN OBJECT-REMOVAL SITES IN `pdfce-core` FOUND EIGHT MORE VERBS THAT DEREFERENCE A KEY, ASSUME THE POINTEE IS THE KIND OF OBJECT THAT KEY IS DEFINED TO HOLD, AND DELETE IT (OR OBJECTS REACHED THROUGH IT) WITHOUT CHECKING** — filed 2026-08-31 (355th filing) as a follow-on to `Pass 191.0` (`e4b3481`), **IN PROGRESS this session per the engineer's own dispatch**
+### `Pass 193.0` — **PDF INTERNAL-STRUCTURE INSPECTION AND DUMP: A BOUNDED, CYCLE-GUARDED WALK OF THE COS OBJECT GRAPH AND THE PHYSICAL FILE LAYOUT, IN `pdfce-core` AND `pdfce-cli`** — ★★★ OPERATOR INSTRUCTION, VERBATIM (relayed by the engineer): *"make the structure inspection and structure dump part of the core and CLI, then use it to diagnose"* — filed 2026-08-31 (356th filing), **IN PROGRESS this session per the engineer's own dispatch**
 
-**Why this is a Pass and not a Backlog line.** `Pass 191.0` fixed one carrier
-of *"a categorical-membership assumption at a dereferenced key, exploitable
-into a deletion primitive."* `R219`'s widened trigger (`Pass 190.1`) requires
-enumerating every carrier of a hazard in the same change that names one — this
-audit is that enumeration, run deliberately rather than waited for the next
-fuzzer hit, and it returned a population large enough (eight real instances)
-to need its own scoped, ordered work rather than a single Backlog bullet.
+**Motivation, and it is the good kind.** Diagnosing `Pass 192.0`'s
+Bevel-and-Emboss rendering defect (filed immediately below) required seeing
+the `/ExtGState`/`/SMask` structure of the page that produces it, and pdfce
+currently has **no way to inspect its own object graph** — the objects in
+question live inside object streams, so the only route available during
+diagnosis was a throwaway hand-rolled decompressor built for that one
+investigation. A renderer that cannot show its own operator what it read is
+one whose defects can only be diagnosed by whoever wrote the parser.
 
-**The eight, in the auditor's own priority order — reach per unit of
-attacker effort, highest first:**
+**Scope, PROVISIONAL.** A parity read from `pdfce-acrobat-librarian` on
+Acrobat Pro's internal-structure/Preflight browser has been requested and is
+**not yet in hand** — treat every line below as subject to revision once it
+lands, per project rule 12 (scope from actual Acrobat behavior, not from
+guessing what a "structure browser" should contain):
 
-1. **`delete_dimension`** (`edit.rs`, ce-dimension `/PieceInfo` sidecar) — the
-   sidecar's `/Ap` and `/Annot` are attacker-supplied `ObjId`s with **no
-   validation at all**; the sidecar's only existing check compares a version
-   integer. **And `regenerate_dimension_writes` destructively OVERWRITES**
-   whatever object the sidecar's `/Ap` names — so a **label edit**, not even a
-   delete, can destroy the page tree. Highest reach for the least attacker
-   effort of the eight.
-2. **`delete_redaction_mark`** — `/AP` `/N` unguarded, and `annot_id` itself
-   unguarded (runs neither `refuse_if_in_page_tree` nor the structural checks
-   that live only in `annotation_deletion_guards`). ★ Its own doc comment
-   **asserts it is safe** ("`add_redaction` authored that stream") and nothing
-   enforces pdfce authorship of what it is pointed at —
-   `redact::redaction_marks`'s entire test is "listed in some page's
-   `/Annots`" plus `/Subtype /Redact`, both attacker-writable fields.
-   GUI-reachable directly.
-3. **`flatten_fields`** — `Pass 185.1`'s literal carrier, in a verb that
-   **never received that fix**; no `refuse_if_in_page_tree` call anywhere in
-   it.
-4. **`outline_subtree` / `delete_outline_item`** — `/First`/`/Next` harvested
-   with no type test; the entry gate accepts any dict carrying a `/Parent`,
-   which a `/Page` satisfies.
-5. **`plan_annotation_deletion` cascade 1** — the `/Popup` id joins the
-   `removing` set **after** the guards run, so it reaches deletion ungated.
-6. **`detach_file`** — the `/EmbeddedFiles` name-tree value and `/EF`
-   `/F`/`/UF`, both unchecked; CLI-reachable.
-7. **`unembed_fonts`'s `/CIDSet`** — most constrained and cheapest of the
-   eight to fix, since the enforced stream test already exists ten lines away
-   on the `/FontFile*` sibling in the same function.
+- A public `pdfce-core` API for bounded, cycle-guarded traversal and
+  pretty-printing of the COS object graph — dictionaries, arrays, streams,
+  indirect references, resolved vs. unresolved.
+- Stream contents, both raw (as stored) and decoded (filters applied), with
+  an output-size ceiling per `ARCHITECTURE.md` §10 — no unbounded dump of an
+  attacker- or accident-sized stream.
+- The **physical** layout, distinct from the **logical** graph: xref table
+  vs. xref stream, which objects live compressed inside which object
+  streams, incremental-update revision boundaries, the trailer chain across
+  those revisions, and linearization.
+- `pdfce-cli` subcommands over all of the above.
 
-**Checked and CLEAN in the same audit — do not re-audit these:**
-`delete_pages_with` (genuinely guarded, a reachability intersection against
-the post-splice graph — enforcement, not assertion); the `/FontFile*` half of
-`unembed_fonts` (guarded by a real `Object::Stream` test);
-`delete_dimension_group_with` (removes nothing). `appearance_slot`'s `Reuse`
-overwrite is the **weakest of the guarded set** — it refuses `Dict` rather
-than requiring `Stream`, so it excludes structural objects only as a side
-effect; worth a look when this Pass is worked but not filed as one of the
-eight because it is not currently known to be exploitable.
+**Why this is Acrobat-parity plus, not merely parity.** Acrobat has no
+scriptable equivalent to a CLI structure dump (project rule 11) — this is
+the kind of capability the CLI exists to deliver beyond what the GUI
+reference tool can do.
 
-**The cross-cutting sentence to keep, because it is more useful than any one
-row above:** every finding except `/CIDSet` is a verb that **never calls
-`refuse_if_in_page_tree` at all** (`edit.rs:26897`) — the guard exists,
-covers pages + page-tree nodes + catalog, and has **three callers out of
-eleven** deletion sites in the crate. Two remedies are available and this
-Pass should choose, per site, deliberately rather than by default: the
-**categorical type test** used by `Pass 191.0`'s fix (closes the whole class
-at each key, `R219`-shaped) or **adding the existing `refuse_if_in_page_tree`
-call** (narrower — leaves `/Ap → /AcroForm`, `/Ap → /Names`, `/Ap →
-/StructTreeRoot` open even after all eight sites gain it).
+**Acceptance criteria: not yet written.** This Pass is being scoped and
+built in the same working session as this filing; a full criteria ledger
+belongs in this entry's next amendment, once the acrobat-parity read is in
+and the API shape is settled. Do not treat the bullet list above as
+acceptance criteria — it is scope-under-construction, stated as such.
 
-**Acceptance criteria** (mirroring `Pass 191.0`'s shape — sabotage-checked
-tests over saved bytes, not outcome structs, plus a synthetic fixture per
-site large enough to prove a genuine deletion is not refused as a side
-effect): fix all seven ordered sites above; state explicitly, per site,
-which of the two remedies was chosen and why; re-run `annot_delete_sequence`
-and any new/extended fuzz target over the full corpus; re-measure `R236`'s
-population (this Pass will add `debug_assert`s or refusals, so the count is
-expected to move and must be re-derived, not assumed unchanged per
-`Pass 190.0`/`190.1`'s own precedent).
+**★ Numbering is not an ordering, same precedent as `Pass 179.0`/`179.1`/
+`179.3` above.** This Pass is `193.0` and is the one **actively being
+built**; `Pass 192.0`, immediately below, is lower-numbered, **not started**,
+and queued behind it — the numbers reflect filing order in this dispatch,
+not work priority.
 
-**Pass ceiling `191.0` → `191.1`; next free `191.2` / new major `192.0`.**
+**Pass ceiling `191.1` → `193.0`** (`192.0`, immediately below, is minted in
+the same filing). **Next free `193.1` / new major `194.0`.**
+
+---
+
+### `Pass 192.0` — **`PCS 16.8` (VECTOR SOFT-MASKS PART 1): THE GREEN BEVEL-AND-EMBOSS CELL RENDERS ITS HIGHLIGHT AND OMITS ITS SHADOW** — ★★ REPORTED BY THE OPERATOR; MEASURED AGAINST THE PATCH'S OWN BAKED REFERENCE CELL ON THE SAME PAGE; ROOT CAUSE NOT YET IDENTIFIED — filed 2026-08-31 (356th filing), **NOT STARTED, queued behind `Pass 193.0` above**
+
+**What is wrong, measured today.** Reported by the operator. Measured by
+rendering `PCS1_168` and comparing the live "actual test object" cell
+against the file's own baked reference cell on the same page — both
+located **programmatically by content, not cropped by eye**, both 136×136 at
+scale 6:
+
+| quadrant | mean abs diff | pixels > 30 (of 4,624 per quadrant) |
+|---|---|---|
+| top-left | 1.9 | 0 |
+| top-right | 20.0 | 1,184 |
+| bottom-left | 33.5 | 1,868 |
+| bottom-right | 63.4 | 3,414 |
+
+**Total: 6,466 of 18,496 pixels (35.0%) differ by more than 30; max
+per-channel difference 141.** (18,496 = 4 × 4,624, the whole 136×136 cell at
+scale 6 split into four quadrants; the per-quadrant counts sum to the
+total.)
+
+**Reading, stated plainly.** The top-left quadrant — the bevel's lit side —
+is essentially exact (mean diff 1.9, zero pixels over threshold). The three
+quadrants the operator named are wrong, and the visual reading is
+unambiguous: the reference darkens to near-black along the right and bottom
+edges, and pdfce leaves flat mid-green there. **The highlight half of the
+bevel renders; the shadow half does not.**
+
+**Render counters for this page** (from the existing metrics-line
+disclosure, not newly added for this investigation): `soft_masks_applied=9`,
+`soft_masks_on_group_result=5`, `groups_composited=5`,
+`blend_modes_applied=5`, `groups_backdrop_reruns=4`,
+`blend_space_subtractive=6`, `blends_in_wrong_space=0`, `cmyk_buffer=1`.
+
+**Root cause: NOT YET IDENTIFIED — stated plainly rather than implied.**
+Untested hypotheses to try first, in no particular order and none
+preferred: the shadow layer's own blend mode; its luminosity soft-mask's
+backdrop (`/BC`); a transfer function (`/TR`) on that mask. `Pass 193.0`'s
+structure dump (filed immediately above, in progress) exists partly to make
+this diagnosable without a throwaway decompressor.
+
+**★ A separate, smaller, SUSPECTED-not-confirmed defect found alongside
+this one — recorded so it is not lost, not claimed as diagnosed.** The
+`blend_modes_applied` CLI disclosure text still reads *"pdfce blends in
+device sRGB"* on the same run that reports `blends_in_wrong_space=0` and
+`blend_space_subtractive=6` — the note's prose appears stale relative to its
+own counters. Not verified beyond reading the two together.
+
+**Acceptance criteria: not yet written** — root cause is unknown, and
+criteria should follow diagnosis rather than precede it. At minimum: the
+shadow half of the bevel must render, measured the same way as above
+(quadrant mean-abs-diff and pixel-count-over-threshold against the file's
+own baked reference), on this fixture, and re-checked against the full
+print-conformance harness (`tools/suite-check.py`) for regressions on
+neighbouring soft-mask/blend-mode patches.
+
+**Pass ceiling `191.1` → `192.0` → `193.0` (see `Pass 193.0`, above, minted
+in the same filing). Final ceiling after this filing: `193.0`; next free
+`193.1` / new major `194.0`.**
 
 ---
 
@@ -107197,6 +107429,24 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+### Unscoped — **`resize_annotation`'s `/AP` `/N` overwrite guards against structural DICTIONARIES only as a side effect, not against a page's `/Contents` STREAM** — reported, not fixed, by `Pass 191.1` — filed 2026-08-31 (356th filing)
+
+`appearance_slot`'s `Reuse` path (called from `resize_annotation`) rejects a
+`Dict` where it expects to reuse-and-rewrite an appearance stream, and that
+rejection happens to exclude structural *dictionaries* (a `/Pages` node, the
+catalog) as a side effect of a different check — it is not a require-`Stream`
+test. An `/AP` `/N` entry naming a **page's own `/Contents` stream** would
+pass the `Dict` refusal (it is not a dict) and be overwritten with annotation
+artwork. Named in `Pass 191.0`'s audit as "the weakest of the guarded set,"
+not filed as one of that Pass's eight sites because it was not then known to
+be exploitable; `Pass 191.1`'s own doc comment on `appearance_streams_owned_by`
+already names the whole-document reference census this needs (which page's
+`/Contents` object every page in the document currently points at) as a
+deliberate open bound — the fix needs that census run before `resize_annotation`
+overwrites anything, not merely a categorical type test at the point of use,
+because a `/Contents` stream **is** the right kind of object (`Object::Stream`)
+and a type test alone cannot tell it apart from an appearance stream.
 
 ### Unscoped — **a rendering fuzz target over a SUBTRACTIVE page: the harness has NO rendering target at all** — filed 2026-08-31 (352nd filing, named by `Pass 189.0`'s `R236` audit)
 
