@@ -9,48 +9,65 @@ true now, plus a pointer. Corrections and their prior wording live in the
 
 Written 2026-08-31, end of the session-model / widget-appearance / form-geometry
 session (`Pass 186.0` → `187.0` → `188.0`), **updated the same day after
-`Pass 189.0` (`baf0c29`) and after `Pass 190.0`/`190.1` (`77631a6`) and its
-353rd filing**. **For the ledger — Pass ceiling, standing-rule ceiling, decision
-ceiling, filing count — run `python tools/check-ledger-numbers.py`.** It derives
-all four and is the only thing that cannot be stale.
+`Pass 189.0` (`baf0c29`), after `Pass 190.0`/`190.1` (`77631a6`) and its 353rd
+filing, and again after `Pass 191.0` (`e4b3481`) and its 355th filing.** **For
+the ledger — Pass ceiling, standing-rule ceiling, decision ceiling, filing
+count — run `python tools/check-ledger-numbers.py`.** It derives all four and
+is the only thing that cannot be stale. **This role had no shell this
+session; the ledger figures below were not re-run through that script —
+confirm before trusting a number in this file.**
 
 ---
 
-## §0 ALL FOUR PRIOR OWED ITEMS ARE CLOSED. ONE NEW ONE IS OPEN, AND ITS SEVERITY IS UNMEASURED.
-
-Today's arc answered three inbound `pdfceGUI` requests end to end and then
-closed every open item this file was carrying. **Three replies are out; nothing
-is owed back on any of them.**
+## §0 THE PRIOR OPEN ITEM IS CLOSED (`Pass 191.0`, `e4b3481`). A LARGER ONE REPLACED IT, ALREADY SCOPED AND FILED.
 
 ★ **The closed items are kept below as one-line verdicts rather than deleted**,
 so a reader can see they were **answered**, not dropped.
 
-### ★★★ THE ONE OPEN ITEM — `annot_delete_sequence` STILL FIRES, on a route nothing here has sized
+### ~~THE ONE OPEN ITEM — `annot_delete_sequence` STILL FIRES, on a route nothing here has sized~~ — **CLOSED 2026-08-31 by `Pass 191.0` (`e4b3481`)**
 
-**A tracked reproducer exists, so this is a bounded chase, not a hunt:**
+**VERDICT: `R238` was applied correctly this time, and the item was exactly as
+urgent as the unmeasured sentence warned it might be.** Measured with a
+throwaway release-profile probe (`crates/pdfce-core/examples/badkid_probe.rs`)
+rather than sized from the fact that its guard is a `debug_assert`:
+`cut_selection` returned `Ok`, and `to_full_bytes` wrote a **904-byte** file
+that reloads with `PageTreeError::BadKid` — a saved PDF with no walkable page.
+Root cause: `EditSession::appearance_streams_owned_by` trusted an `/AP` `/N`
+dictionary to be an appearance-state subdictionary and harvested every
+reference inside it, with no check that a harvested reference actually named a
+stream — so a dictionary that is neither a stream nor a states-subdictionary
+became a deletion primitive aimed at an attacker-chosen object. Fixed by a
+`push_if_stream` funnel (`edit.rs:24217`) at the single point every branch
+funnels through.
 
-```
-fuzz/corpus/annot_delete_sequence/seed_openbug_badkid_dupobjnum.bin    (1,618 B)
-```
+**★★ TWO ACCIDENTS HAD HIDDEN IT, and the second is a NEW finding, declined as
+a standing rule at `n = 1` and written to the cross-project RAG instead:** the
+fuzz corpus seed reaching this code path carries an invalid base
+cross-reference table, so pdfce's own incremental-save logic refuses to save
+it incrementally (unrelated to this bug) and requires a full rewrite — which
+meant the fuzz harness's own save-and-reload assertion never ran on the input
+that would have tripped it. `save_full`, the actual path an operator reaches,
+carried the corruption through. ⇒ **A refusal that fires for an unrelated
+reason is not a guard; it is a coincidence that suppresses evidence.**
+Full write-up:
+`D:/dev/rag/rust/a_refusal_that_fires_for_an_unrelated_reason_is_not_a_guard.md`.
 
-- **Signature: `BadKid(ObjId 3)`** — **not** `NoPageTreeRoot`, which is the one
-  `Pass 190.1` fixed. Different mechanism, and **the catalog/`/Type` guard does
-  not reach it.**
-- **The shape:** a document with **two `3 0 obj` definitions**, where object 3
-  is the page named by `/Kids`.
-- **★★ WHETHER IT IS RELEASE-VISIBLE HAS NOT BEEN MEASURED.** That sentence is
-  the item, not a caveat on it.
+### ★★★ THE ITEM THIS REPLACED IT WITH — `Pass 191.1`, ALREADY FILED UNDER *Next up*, EIGHT SITES, ONE PRIORITY ORDER
 
-⇒ **Start by measuring exactly that**, and standing rule **`R238`** (minted
-2026-08-31, this route is its first customer) says how: *what does the shipping
-build do when this assertion would have fired?* The answer is one of *panics
-anyway* / *returns an error* / **returns `Ok` and writes wrong bytes**, and only
-the third makes it urgent. **Do not size it from the fact that it is a
-`debug_assert` — that is the exact mistake `R238` exists to stop, and it cost a
-day on the item closed immediately below.**
+An audit of **all eleven object-removal sites** in `pdfce-core` — run
+*because* `R219` requires enumerating the class rather than waiting for the
+next fuzzer hit — found **eight more real instances** of the same shape: a
+verb dereferences a key, assumes the pointee is the kind of object that key is
+defined to hold, and deletes it (or objects reached through it) with no check.
+**Full priority order, remedy choice, and acceptance criteria are already
+written into `ROADMAP.md`'s `Pass 191.1` entry under *Next up* — do not
+re-derive them here.** Highest-reach item: `delete_dimension`'s `/PieceInfo`
+sidecar has **no validation at all** on `/Ap`/`/Annot`, and its sibling
+`regenerate_dimension_writes` **overwrites** whatever the sidecar's `/Ap`
+names — a label edit alone can destroy the page tree.
 
-⇒ **Nothing anywhere claims this target runs clean.** `ROADMAP.md`'s `R236`,
-its `Pass 190.0`/`190.1` entry, and the commit message all say so explicitly.
+⇒ **Start `Pass 191.1` from `ROADMAP.md`'s own entry, not from this
+paragraph.** This file's job is the pointer; the scoping record is there.
 
 ### ~~OWED ITEM 1 — fuzz finding #3 (`delete_field_group`)~~ — **CLOSED 2026-08-31 by `Pass 190.0` (`77631a6`)**
 
@@ -201,16 +218,21 @@ honest about being unchecked and is doing real work.
 ★ **The same measurement names five more ungated derivable counts in that
 directory. Scoping those is a Pass, not a filing.**
 
-### ★ TWO RAG FINDINGS ARE OWED AND NEITHER IS WRITTEN
+### ★ THE TWO RAG FINDINGS PREVIOUSLY OWED HERE ARE BOTH WRITTEN — CLOSED 2026-08-31 (355th filing)
 
 - `D:/dev/rag/rust/an_assertions_compile_time_gating_is_not_a_severity_estimate.md`
-  — `R238`'s cross-project derivation (owed since the 353rd filing). A second
-  candidate from the same commit: *a guard written for one carrier is a claim
-  about a class* (`R219`'s widened trigger).
-- `D:/dev/rag/rust/publish_the_command_not_the_count.md` — `R239`'s derivation
-  (owed from the 354th).
+  — `R238`'s cross-project derivation. **Written and indexed.**
+- `D:/dev/rag/rust/publish_the_command_not_the_count.md` — `R239`'s
+  derivation. **Written and indexed.**
+- **A third, from `Pass 191.0` itself:**
+  `D:/dev/rag/rust/a_refusal_that_fires_for_an_unrelated_reason_is_not_a_guard.md`
+  — declined as a project standing rule at `n = 1` (mint trigger named in
+  `ROADMAP.md`'s *Standing rules*), written to the cross-project RAG anyway
+  per rule 3. **Written and indexed.**
 
-**Reported rather than claimed.**
+**Verified against the filesystem by this filing, not taken on a prior
+filing's word** — all three exist with full content and each has an
+`index.md` bullet in `D:/dev/rag/rust/`.
 
 ### ★ WHAT THIS SESSION ADDED, so the arithmetic is legible
 
@@ -236,13 +258,14 @@ release-silent page-tree destruction within seconds of first existing**, on a
    `request_editing_through_recursion_into_a_form_xobject`), with **three
    outbound replies beside them**. **Nothing is owed back.**
 
-2. **The ONE open item in §0 — the `annot_delete_sequence` `BadKid` route.**
-   All four items this file previously carried are **CLOSED** (`Pass 189.0`
-   `baf0c29`, `93dc9ba`, and `Pass 190.0`/`190.1` `77631a6` for the other two).
-   The new one has a **tracked reproducer** and **no severity estimate**, which
-   makes step one *measure the release behaviour*, per `R238`. ⇒ A bounded
-   chase, not a hunt — but **do not assume it is small because it fires a
-   `debug_assert`**; that assumption is what cost a day on the item it replaced.
+2. **`Pass 191.1` — the eight-site audit, already scoped and filed under
+   *Next up* in `ROADMAP.md`.** The `annot_delete_sequence` `BadKid` route
+   this file previously carried as the one open item is **CLOSED**
+   (`Pass 191.0`, `e4b3481`). What replaced it is larger: an audit of all
+   eleven object-removal sites in `pdfce-core`, run because `R219` requires
+   enumerating the class, found **eight more real instances** of the same
+   shape. Priority order, remedy choice per site, and acceptance criteria are
+   in `ROADMAP.md`'s `Pass 191.1` entry — start there, not here.
 
 3. **`Pass 142.0`** — a font face outside the standard 14. The largest remaining
    *named* feature, **de-prioritised by the consuming project's own use report**,
@@ -427,11 +450,17 @@ release-silent page-tree destruction within seconds of first existing**, on a
     `/Fields` and **never called from the `/Annots` half**, which cost a second
     release-silent page-tree destruction a day later. `R219` already required
     the enumeration and is **widened** to say so for carriers, not just routes.
-    Its unchecked carrier list is in §0.
+    Its unchecked carrier list, now measured in full, is `Pass 191.1` in §0.
 
 ---
 
 ## §D — State of the tree
+
+★ **NOT RE-MEASURED by the 355th filing — no shell available to this role
+this session.** Everything below this line is as the 354th filing left it,
+is now at least one more commit (`e4b3481`, `Pass 191.0`) staler than
+stated, and must not be read as current. Per hard rule 8: **run the
+commands, do not trust the numbers below.**
 
 Run these rather than trusting the sentence:
 

@@ -96,6 +96,142 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 191.0` (`e4b3481`, 2026-08-31) — **★★★★ `/AP` CAN NAME ANYTHING, AND THE DELETION CASCADE DELETED WHATEVER IT REACHED** — ★★★★ **`R238` APPLIED CORRECTLY THIS TIME: MEASURED WITH A RELEASE-PROFILE PROBE INSTEAD OF SIZED FROM THE ASSERTION'S GATING, AND THE WORST OUTCOME WAS FOUND DIRECTLY — `cut_selection` RETURNED `Ok`, `to_full_bytes` WROTE A 904-BYTE FILE THAT RELOADS WITH `PageTreeError::BadKid`** — ★★★★ **TWO ACCIDENTS HAD HIDDEN IT, AND THE SECOND IS A NEW FINDING: A REFUSAL THAT FIRES FOR AN UNRELATED REASON IS NOT A GUARD, IT IS A COINCIDENCE THAT SUPPRESSES EVIDENCE** — ★★★ **THE GUARD IS A TYPE TEST, NOT A STRUCTURAL-OBJECT BLACKLIST, DELIBERATELY — `R219`'S WIDENED TRIGGER APPLIED ON PURPOSE** — ★★★★ **AN AUDIT OF ALL ELEVEN OBJECT-REMOVAL SITES IN `pdfce-core`, RUN BECAUSE `R219` REQUIRES ENUMERATING THE CLASS, RETURNED EIGHT MORE REAL INSTANCES OF THE SAME SHAPE — FILED AS `Pass 191.1` BELOW, NOT MERELY BACKLOG** — closes the `annot_delete_sequence` `BadKid(ObjId 3)` route `Pass 190.1` left open and explicitly unsized, the single item `docs/NEXT_SESSION.md` §0 was carrying — filed 2026-08-31 (355th filing)
+
+**What it was.** `EditSession::appearance_streams_owned_by` (cascade 3 of
+`delete_annotation`) branched on the resolved type of an annotation's `/AP`
+`/N`: a stream was doomed directly; a **dictionary** was treated as an
+appearance-state subdictionary (ISO 32000-1 §12.5.5 Table 168 — an `/N`
+dictionary "shall define multiple appearance streams," one per state key) and
+had **every reference inside it** harvested as an appearance state, with no
+check that the harvested references actually named streams. Nothing in
+§12.5.5 says `/AP` `/N` may only be a stream or a states-subdictionary — it
+says an appearance stream **is a form XObject** — so a dictionary that is
+*not* a states subdictionary turned this branch into **a deletion primitive
+aimed at an attacker-chosen object**, reached from the annotation the
+operator actually asked to delete. Fixed by a `push_if_stream` funnel
+(`edit.rs:24217`) applied at the single point every branch funnels through,
+so a future fourth branch cannot bypass it by omission — `matches!(graph
+.resolved(r), Object::Stream(_))`, checked before any reference from `/AP`
+`/N` (direct or via a states dict, by reference or inline) is added to the
+deletion set.
+
+**★★★★ `R238` was applied, and it worked.** The item was measured before
+being sized, using a throwaway probe
+(`crates/pdfce-core/examples/badkid_probe.rs`) run in the **release**
+profile — not guessed from the fact that its guarding assertion is a
+`debug_assert`, which is exactly the mistake `R238` (`Pass 190.0`) was
+minted to stop. Result, direct and worst-case: the third and worst rung —
+`cut_selection` returned `Ok`, and `to_full_bytes` wrote a **904-byte file
+that reloads with `PageTreeError::BadKid`**, a saved PDF with no walkable
+page.
+
+**★★★★ TWO ACCIDENTS HID THIS, AND THE SECOND ONE IS A NEW FINDING.** The
+first is the familiar one — the guarding `debug_assert` compiled out of the
+release build. The second is not: the crate's fuzz corpus seed reaching this
+code path carries an **invalid base cross-reference table**, so pdfce's own
+incremental-save logic (decision 013, `writer/save.rs:602`,
+`writer/mod.rs:745`) **refuses to save it incrementally and requires a full
+rewrite** — a fact wholly unrelated to the `/AP` cascade bug. That refusal
+sat between the fuzz harness's mutation step and its save-and-reload
+assertion, so the assertion **never ran** on the exact input that would have
+tripped it. `save_full` — the sanctioned path for a recovered document, and
+therefore the one an operator actually reaches — carried the corruption
+straight through. ⇒ **A refusal that fires for a reason unrelated to the
+property under test is not a guard; it is a coincidence that suppresses
+evidence**, and a "0 crashes" harness summary asserts nothing about an input
+where that happened. Written up as a new RAG finding (below); declined as a
+project standing rule at `n = 1` (see *Standing rules*).
+
+**★★★ The guard is a categorical type test, not a structural-object
+blacklist, and that is deliberate.** Refusing catalog/`/Pages`/`/Page` by
+name — what `annotation_deletion_guards` does for the **deletion target**,
+`Pass 190.1`'s fix — would have caught this specific reproducer while
+leaving every *other* non-stream object reachable through `/AP` `/N`
+untouched. Testing `Object::Stream(_)` at the point of harvest closes the
+whole class in one change: `R219`'s widened trigger (*"a guard written for
+one carrier is a claim about a class"*, `Pass 190.1`) applied on purpose
+here rather than discovered after the fact.
+
+**Sabotage run in the RELEASE profile, deliberately** — proving the two
+hostile tests fail on this file's own assertions rather than on the
+`debug_assert` that missed the original bug. Five tests in
+`crates/pdfce-core/tests/annot_ap_cascade_streams.rs`: **two hostile**
+(a states-subdictionary member that resolves to a non-stream; a direct `/AP`
+`/N` reference to a non-stream dict) and **three controls** — a real
+appearance stream must still be deleted; the state-subdictionary form must
+still work **by reference** and **inline**. All five green pre-fix-removal;
+sabotage reddens exactly the two hostile ones in both debug and release,
+controls stay green throughout.
+
+**Gates:**
+
+| gate | result | source |
+|---|---|---|
+| `crates/pdfce-core/tests/annot_ap_cascade_streams.rs` (5 tests) | green; sabotage reddens exactly the 2 hostile tests in debug **and** release | engineer-reported — **not independently re-run by this filing (no shell available to this role this session)** |
+| `cargo +nightly fuzz run annot_delete_sequence -runs=0` over all 1,867 corpus files, including the tracked reproducer | clean | engineer-reported |
+| `bash tools/run-gates.sh` | **PASS, 30 commands** including both filing gates | engineer-reported |
+| `cargo fmt --check` | clean | engineer-reported |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean | engineer-reported |
+| workspace tests | green | engineer-reported |
+
+★ **Verified independently by this filing, from source, rather than taken on
+the dispatch's word:** `push_if_stream` and its single-funnel-point structure
+exist at `crates/pdfce-core/src/edit.rs:24217` as described;
+`annot_ap_cascade_streams.rs` contains exactly 5 `#[test]` functions;
+`crates/pdfce-core/examples/badkid_probe.rs` exists; both RAG files named
+below exist on disk with the stated content and were **already indexed** in
+`D:/dev/rag/rust/index.md` by the 353rd/354th filings.
+
+**Invariant check.** This Pass touched no `Cargo.toml` — `cargo tree`
+neither run nor asserted (hard rule 8); GUI-core separation unaffected by
+construction.
+
+**`docs/core-api/`: verified, not taken on the dispatch's word.** The fix is
+internal to a private cascade helper; no public `EditSession` verb signature
+changed and no `EditError` variant was added. Confirmed by reading
+`docs/core-api/index.md:17`, which still states **113** variants — unchanged
+from `Pass 190.1`, which is what the count would read if a variant had been
+added and the doc not updated. `tools/check-core-api-verbs.py` was **not
+run by this filing** (no shell available to this role this session); the
+grep-level check above is consistent with it being green, and the engineer
+should run it to confirm rather than take this paragraph's word for it.
+
+**`FEATURES.md`: NO ROW CHANGES**, stated explicitly rather than silently
+skipped. `Pass 191.0` is a robustness/correctness fix to an existing shipped
+capability (annotation deletion, row 208) — it closes a way the cascade
+could over-delete, it does not add, remove, or change reach for any
+core/cli/gui box. Row 208's existing sentence (describing `Pass 190.1`'s
+`AnnotationObjectIsStructural` refusal) remains accurate; this Pass adds no
+new named refusal and changes no CLI/GUI-visible behaviour for a
+conforming file.
+
+**★★★★ THE PART LARGER THAN THE FIX — an audit of all eleven object-removal
+sites in `pdfce-core`, run *because* `R219` requires enumerating the class
+rather than waiting for the next fuzz finding, returned EIGHT MORE REAL
+INSTANCES of the same shape**: a verb dereferences a key, assumes the
+pointee is the kind of object that key is defined to hold, and deletes it —
+or deletes objects reached through it. Filed as `Pass 191.1` under *Next
+up*, not merely *Backlog*, with the audit's own priority order preserved.
+Also recorded, so a future session does not re-audit them: `delete_pages_with`
+is **genuinely guarded** (a reachability intersection against the
+post-splice graph — enforcement, not assertion); the `/FontFile*` half of
+`unembed_fonts` is guarded by a real `Object::Stream` test;
+`delete_dimension_group_with` removes nothing.
+
+**★ Cross-cutting finding, kept verbatim because it is the sentence worth
+carrying forward:** every audit finding except the `/CIDSet` one is a verb
+that **never calls `refuse_if_in_page_tree` at all** (`edit.rs:26897`) — the
+guard exists, covers pages + page-tree nodes + catalog, and has **three
+callers out of eleven** deletion sites. The categorical type test used at
+each key (this Pass's own remedy) is the `R219`-shaped answer; adding
+`refuse_if_in_page_tree` to the other eight is the narrower one and would
+still leave `/Ap → /AcroForm`, `/Ap → /Names`, `/Ap → /StructTreeRoot` open.
+
+**Pass ceiling `190.0`/`190.1` → `191.0`.**
+
+---
+
 ### `Pass 190.0` + `Pass 190.1` (`77631a6`, 2026-08-31) — **★★★★ TWO DELETION VERBS, TWO CARRIERS, ONE SHAPE: A STRUCTURAL ARRAY WAS TRUSTED TO CONTAIN WHAT IT IS FOR, AND A QUANTITY WAS DERIVED TWICE FROM TWO DIFFERENT KEYS** — ★★★★ **THE SEVERITY OF FUZZ FINDING #3 WAS SIZED FROM ITS ASSERTION'S *COMPILE-TIME GATING* AND THE SIZING WAS WRONG ON THREE OF FOUR SHAPES: IN RELEASE IT RETURNED `Ok` AND DELETED NOTHING, AND WROTE A DANGLING `/Kids` — `R238` IS MINTED FROM THAT AT `n = 2`** — ★★★★ **`Pass 185.1`/`185.2` IN A SECOND CARRIER: `refuse_if_in_page_tree` EXISTED AND THE SECOND CALLER DID NOT — WHICH IS `R219`'S OBLIGATION, ALREADY STANDING SINCE 2026-08-27, UNPAID** — ★★★ **`--dry-run` DISAGREED WITH THE REAL RUN ON A DESTRUCTIVE VERB, AND `pdfce-cli` AND `pdfceGUI` REPORTED DIFFERENT NUMBERS FOR ONE DELETION** — ★★ **`R236`'S LEDGER IS NOW EMPTY — BOTH REMAINING SITES CLOSED IN ONE COMMIT — AND THE FUZZ TARGET STILL FIRES, WHICH IS NOT A CONTRADICTION AND THIS ENTRY SAYS WHY** — ★ **`R236`'S OWN SITE TABLE SUMS TO 23 AGAINST ITS OWN DENOMINATOR OF 22, AND THE EXTRA ROW IS A COMMENT LINE — THE FOURTH BAD NUMBER IN THE RULE'S ORBIT** — filed 2026-08-31 (353rd filing)
 
 **One commit, two Pass IDs.** They are filed under one heading because
@@ -95726,6 +95862,83 @@ never a second file).
 > 2026-08-12 list did not contain**. Still one file, still footers: writing a new
 > RAG file about the inertness of a written RAG file would refute itself.
 
+### `Pass 191.1` — **THE OTHER EIGHT: AN AUDIT OF ALL ELEVEN OBJECT-REMOVAL SITES IN `pdfce-core` FOUND EIGHT MORE VERBS THAT DEREFERENCE A KEY, ASSUME THE POINTEE IS THE KIND OF OBJECT THAT KEY IS DEFINED TO HOLD, AND DELETE IT (OR OBJECTS REACHED THROUGH IT) WITHOUT CHECKING** — filed 2026-08-31 (355th filing) as a follow-on to `Pass 191.0` (`e4b3481`), **IN PROGRESS this session per the engineer's own dispatch**
+
+**Why this is a Pass and not a Backlog line.** `Pass 191.0` fixed one carrier
+of *"a categorical-membership assumption at a dereferenced key, exploitable
+into a deletion primitive."* `R219`'s widened trigger (`Pass 190.1`) requires
+enumerating every carrier of a hazard in the same change that names one — this
+audit is that enumeration, run deliberately rather than waited for the next
+fuzzer hit, and it returned a population large enough (eight real instances)
+to need its own scoped, ordered work rather than a single Backlog bullet.
+
+**The eight, in the auditor's own priority order — reach per unit of
+attacker effort, highest first:**
+
+1. **`delete_dimension`** (`edit.rs`, ce-dimension `/PieceInfo` sidecar) — the
+   sidecar's `/Ap` and `/Annot` are attacker-supplied `ObjId`s with **no
+   validation at all**; the sidecar's only existing check compares a version
+   integer. **And `regenerate_dimension_writes` destructively OVERWRITES**
+   whatever object the sidecar's `/Ap` names — so a **label edit**, not even a
+   delete, can destroy the page tree. Highest reach for the least attacker
+   effort of the eight.
+2. **`delete_redaction_mark`** — `/AP` `/N` unguarded, and `annot_id` itself
+   unguarded (runs neither `refuse_if_in_page_tree` nor the structural checks
+   that live only in `annotation_deletion_guards`). ★ Its own doc comment
+   **asserts it is safe** ("`add_redaction` authored that stream") and nothing
+   enforces pdfce authorship of what it is pointed at —
+   `redact::redaction_marks`'s entire test is "listed in some page's
+   `/Annots`" plus `/Subtype /Redact`, both attacker-writable fields.
+   GUI-reachable directly.
+3. **`flatten_fields`** — `Pass 185.1`'s literal carrier, in a verb that
+   **never received that fix**; no `refuse_if_in_page_tree` call anywhere in
+   it.
+4. **`outline_subtree` / `delete_outline_item`** — `/First`/`/Next` harvested
+   with no type test; the entry gate accepts any dict carrying a `/Parent`,
+   which a `/Page` satisfies.
+5. **`plan_annotation_deletion` cascade 1** — the `/Popup` id joins the
+   `removing` set **after** the guards run, so it reaches deletion ungated.
+6. **`detach_file`** — the `/EmbeddedFiles` name-tree value and `/EF`
+   `/F`/`/UF`, both unchecked; CLI-reachable.
+7. **`unembed_fonts`'s `/CIDSet`** — most constrained and cheapest of the
+   eight to fix, since the enforced stream test already exists ten lines away
+   on the `/FontFile*` sibling in the same function.
+
+**Checked and CLEAN in the same audit — do not re-audit these:**
+`delete_pages_with` (genuinely guarded, a reachability intersection against
+the post-splice graph — enforcement, not assertion); the `/FontFile*` half of
+`unembed_fonts` (guarded by a real `Object::Stream` test);
+`delete_dimension_group_with` (removes nothing). `appearance_slot`'s `Reuse`
+overwrite is the **weakest of the guarded set** — it refuses `Dict` rather
+than requiring `Stream`, so it excludes structural objects only as a side
+effect; worth a look when this Pass is worked but not filed as one of the
+eight because it is not currently known to be exploitable.
+
+**The cross-cutting sentence to keep, because it is more useful than any one
+row above:** every finding except `/CIDSet` is a verb that **never calls
+`refuse_if_in_page_tree` at all** (`edit.rs:26897`) — the guard exists,
+covers pages + page-tree nodes + catalog, and has **three callers out of
+eleven** deletion sites in the crate. Two remedies are available and this
+Pass should choose, per site, deliberately rather than by default: the
+**categorical type test** used by `Pass 191.0`'s fix (closes the whole class
+at each key, `R219`-shaped) or **adding the existing `refuse_if_in_page_tree`
+call** (narrower — leaves `/Ap → /AcroForm`, `/Ap → /Names`, `/Ap →
+/StructTreeRoot` open even after all eight sites gain it).
+
+**Acceptance criteria** (mirroring `Pass 191.0`'s shape — sabotage-checked
+tests over saved bytes, not outcome structs, plus a synthetic fixture per
+site large enough to prove a genuine deletion is not refused as a side
+effect): fix all seven ordered sites above; state explicitly, per site,
+which of the two remedies was chosen and why; re-run `annot_delete_sequence`
+and any new/extended fuzz target over the full corpus; re-measure `R236`'s
+population (this Pass will add `debug_assert`s or refusals, so the count is
+expected to move and must be re-derived, not assumed unchanged per
+`Pass 190.0`/`190.1`'s own precedent).
+
+**Pass ceiling `191.0` → `191.1`; next free `191.2` / new major `192.0`.**
+
+---
+
 ### `Pass 179.0` — **BOLD BECOMES AUTOMATIC: A FALLBACK LADDER THAT BINDS A REAL FACE WHEN ONE EXISTS AND SYNTHESISES WHEN ONE DOES NOT, WITH NO OPERATOR INTERVENTION** — ★★★ **OPERATOR RULING, 2026-08-30; DECISION `106`. REVERSES THREE CLAUSES OF pdfce's OWN DOCUMENTED POSTURE AND AMENDS `R90`** — filed 2026-08-30 (340th filing), **NOT STARTED**
 
 **The ruling, verbatim (Ken, 2026-08-30):**
@@ -131988,6 +132201,43 @@ it is wrong**, and the doc comment saying so does not reach the operator.
 That is `R195`'s sentence — **rustdoc is not a disclosure surface** — arriving
 from the opposite direction, and it is the reason both the method and the CLI
 column had to be corrected in the same commit rather than one of them.
+
+### ★★ STANDING-RULE DISPOSITION, 355th filing — ONE CANDIDATE ASSESSED AND DECLINED AT `n = 1`, with the mint trigger named
+
+`Pass 191.0` surfaced a candidate rule: *"a refusal that fires for a reason
+unrelated to the property under test is not a guard — it is a coincidence
+that suppresses evidence."* A fuzz harness's save-and-reload assertion never
+ran on the seed that would have tripped it, because pdfce's own incremental-
+save logic refuses to save incrementally over a recovered document's invalid
+base cross-reference (decision 013) — a fact wholly unrelated to the `/AP`
+cascade bug the harness existed to find.
+
+**DECLINED at `n = 1`, applying this project's own two-instance promotion
+bar** (the same bar `R238`/`R239` were both minted against, at `n = 2`).
+This is a **first occurrence** in this project — distinct in kind from
+`a_debug_assert_postcondition_is_a_tripwire_for_a_fuzzer_not_a_guard_for_an_operator.md`'s
+subject (an assertion with no input source at all): here the input source
+existed and ran, but an unrelated downstream refusal prevented the assertion
+from being *reached* on the one input that would have tripped it.
+
+**Mint trigger, named per `R239`'s own lesson about writing triggers against
+remedies rather than mechanisms:** a second instance, anywhere in this
+project, where a property-harness's "clean" summary is later shown to have
+masked a real finding because a refusal or short-circuit on an axis
+unrelated to the property under test prevented the harness's own assertion
+from running on the input that would have failed it.
+
+**Written up rather than dropped:**
+`D:/dev/rag/rust/a_refusal_that_fires_for_an_unrelated_reason_is_not_a_guard.md`
+— cross-project, so a second instance on *any* Rust project this operator
+touches is recognised rather than re-derived, per rule 3 (findings get
+written, not asked about) even where the project-local bar for a numbered
+standing rule is not yet met.
+
+**Standing rules ceiling `R239` — UNCHANGED**, next free `R240`. **Decision
+ceiling `112` — UNCHANGED**, next free `113` — no architectural decision is
+implicated; the fix is a private-helper type test, not a crate boundary, a
+library choice, or an invariant redefinition.
 
 ## Update protocol
 

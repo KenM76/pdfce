@@ -83203,3 +83203,157 @@ UNCHANGED**, next free `113`. **Filings `353` → `354`.**
   `R239`'s clause 4 that earns the promotion — not a new rule.
 - **Mint triggers get written against remedies from here on.** That is the
   transferable half of this filing, and it is the half with no gate.
+
+## 2026-08-31 (355th filing) — `Pass 191.0` (`e4b3481`): **`/AP` CAN NAME ANYTHING, AND THE DELETION CASCADE DELETED WHATEVER IT REACHED** — closes the ONE open item `docs/NEXT_SESSION.md` §0 was carrying — ★★★★ **`R238` APPLIED CORRECTLY: MEASURED WITH A RELEASE-PROFILE PROBE, NOT SIZED FROM THE ASSERTION'S GATING** — ★★★★ **A NEW FINDING: A REFUSAL THAT FIRES FOR AN UNRELATED REASON IS NOT A GUARD — DECLINED AS A STANDING RULE AT `n = 1`, WRITTEN TO THE CROSS-PROJECT RAG** — ★★★★ **AN AUDIT OF ALL ELEVEN OBJECT-REMOVAL SITES FOUND EIGHT MORE REAL INSTANCES, FILED AS `Pass 191.1` IN *Next up***
+
+**Shipped:**
+- **Pass 191.0** — `EditSession::appearance_streams_owned_by` (cascade 3 of
+  `delete_annotation`) trusted an `/AP` `/N` dictionary to be an
+  appearance-state subdictionary and harvested every reference inside it as
+  an appearance state, with no check that the harvested references named
+  streams. ISO 32000-1 §12.5.5 does not restrict `/AP` `/N` to a stream or a
+  states-subdictionary shape, so a dictionary that is neither turned the
+  branch into a deletion primitive aimed at an attacker-chosen object.
+  Fixed by a `push_if_stream` funnel (`edit.rs:24217`) applied at the single
+  point every branch already funnels through.
+
+**Decisions made this session:** none. This is an implementation-level fix
+(a private cascade helper's type-safety), not a crate boundary, library
+choice, or invariant redefinition — no `ARCHITECTURE.md` §12 entry filed.
+
+**Findings + decisions:**
+
+- **★★★★ `R238` (`Pass 190.0`) was applied on its very next opportunity, and
+  it worked.** Rather than sizing the item from the fact that its guard is a
+  `debug_assert`, the engineer built a throwaway release-profile probe
+  (`crates/pdfce-core/examples/badkid_probe.rs`) and measured the worst case
+  directly: `cut_selection` returned `Ok`, and `to_full_bytes` wrote a
+  **904-byte** file that reloads with `PageTreeError::BadKid` — a saved PDF
+  with no walkable page tree. **Verified on disk by this filing** (the probe
+  file and the `push_if_stream` funnel both exist as described).
+
+- **★★★★ NEW FINDING — a refusal that fires for an unrelated reason is not a
+  guard, it is a coincidence that suppresses evidence.** Two accidents had
+  hidden this bug, and only the first (`debug_assert` compiled out of
+  release) was the familiar shape. The second: the crate's fuzz corpus seed
+  reaching this code path carries an invalid base cross-reference table, so
+  pdfce's own incremental-save logic (decision 013) refuses to save it
+  incrementally and requires a full rewrite — wholly unrelated to the `/AP`
+  cascade bug. That refusal sat between the fuzz harness's mutation and its
+  save-and-reload assertion, so the assertion **never ran** on the exact
+  input that would have tripped it; `save_full`, the actual sanctioned path
+  for a recovered document, carried the corruption straight through. A "0
+  crashes" harness summary asserted nothing about this input.
+  ⇒ **Assessed against this project's own two-instance promotion bar and
+  DECLINED as a standing rule at `n = 1`** (`R238`/`R239` were both minted
+  at `n = 2`; this is a first occurrence, distinct in kind from the
+  existing `debug-assert-postcondition-is-a-tripwire` finding, whose
+  subject is an assertion with no input source at all — here the input
+  source existed and ran, and an unrelated downstream refusal is what
+  prevented it from reaching the one input that mattered). **Mint trigger
+  named** (a second instance where a "clean" harness summary is later shown
+  to have masked a finding via an unrelated short-circuit) and recorded in
+  *Standing rules*. **Written to the cross-project RAG regardless of the
+  standing-rule decline**, per rule 3 — findings get written, not asked
+  about, and the project-local promotion bar for a numbered rule is a
+  separate question from whether the finding is worth capturing:
+  `D:/dev/rag/rust/a_refusal_that_fires_for_an_unrelated_reason_is_not_a_guard.md`.
+  **Already indexed in the same edit** (`D:/dev/rag/rust/index.md`).
+
+- **★★★ The guard is a categorical type test, not a structural-object
+  blacklist, and that was a deliberate design choice, not an accident of
+  the fix.** Refusing catalog/`/Pages`/`/Page` by name (what
+  `annotation_deletion_guards` does for the deletion **target**,
+  `Pass 190.1`) would have caught this specific reproducer while leaving
+  every *other* non-stream object reachable through `/AP` `/N` open. Testing
+  `Object::Stream(_)` at the point of harvest closes the whole class —
+  `R219`'s widened trigger, applied on purpose here rather than discovered
+  after a second fuzz finding.
+
+- **★★★★ THE LARGER FINDING — an audit of all eleven object-removal sites in
+  `pdfce-core`, run because `R219` requires enumerating the class rather
+  than waiting for the next crash, returned EIGHT MORE real instances of
+  the same shape.** Filed as `Pass 191.1` under *Next up*, not merely
+  *Backlog*, with the audit's own priority order (`delete_dimension`'s
+  `/PieceInfo` sidecar first — no validation at all on `/Ap`/`/Annot`, and
+  its sibling `regenerate_dimension_writes` **overwrites** whatever the
+  sidecar's `/Ap` names, so a label edit alone can destroy the page tree).
+  **Cross-cutting sentence:** every finding but one is a verb that never
+  calls the crate's existing `refuse_if_in_page_tree` at all — three
+  callers out of eleven deletion sites. **Also recorded as checked and
+  clean**, so it is not re-audited: `delete_pages_with` (genuinely guarded),
+  `unembed_fonts`'s `/FontFile*` half (real `Object::Stream` test),
+  `delete_dimension_group_with` (removes nothing).
+
+**Verification performed by this role, rather than taken on the dispatch's
+word (hard rule 8's discipline, applied to source-tree claims via Read/Grep
+in the absence of a shell this session):**
+
+| claim | how checked | result |
+|---|---|---|
+| `push_if_stream` funnel exists as described | `Grep crates/pdfce-core/src/edit.rs` | confirmed at `:24217`, single funnel point |
+| `annot_ap_cascade_streams.rs` has 5 tests | `Grep` for `#[test]` | confirmed, 5 |
+| `badkid_probe.rs` exists | `Glob` | confirmed |
+| both RAG findings from the 353rd/354th filings exist and are indexed | `Glob` + `Read` | both exist with full content; both already carried an `index.md` bullet — no index work owed from that pair |
+| `EditError` variant count unchanged (no public-API-surface change) | `Grep docs/core-api/index.md` | still reads **113**, matching `Pass 190.1`'s count — consistent with no new variant |
+
+**Gates — NOT independently run by this filing; no shell available to this
+role this session.** All test/build/fuzz/gate results in the `Pass 191.0`
+Shipped entry are **engineer-reported**, attributed as such in that entry's
+own table, per hard rule 8's "state which" discipline. `tools/check-
+core-api-verbs.py` specifically was **not** run here; the grep-level check
+above is consistent with a green result but is not a substitute for running
+it, and the engineer should confirm rather than take this entry's word.
+
+**`FEATURES.md`: explicitly assessed, NO CHANGE.** Annotation deletion
+(row 208) is a robustness fix to an existing shipped capability, not a new
+capability; core/cli/gui boxes and the row's sentence are unaffected and
+were not touched.
+
+**Still in flight:**
+
+- **`Pass 191.1`** — the eight-site audit, filed under *Next up*, **in
+  progress this session per the engineer's own dispatch**.
+- The pre-existing carried-forward items in `docs/NEXT_SESSION.md` §A
+  (FeatureRequests channels, `Pass 142.0`, the `text_edit` resolver
+  residual, `/AP` `/D` + `/MK` layout, the n-channel buffer, `CmykIntent
+  ::Calibrated`) are **unchanged by this filing** and not re-argued here.
+- Five ungated derivable counts in `docs/core-api/` (found 354th filing) —
+  still a Pass, not touched by this one.
+
+**For next session:**
+
+- `docs/NEXT_SESSION.md` §0 rewritten to close the `annot_delete_sequence`
+  item and point at `Pass 191.1` as the live open item — read it before
+  re-deriving anything about this Pass's aftermath.
+- If a second instance of the "refusal fires for an unrelated reason"
+  shape turns up anywhere, promote per the mint trigger recorded in
+  *Standing rules* rather than re-deriving the finding from scratch.
+
+**Documents edited this filing:**
+
+- `docs/ROADMAP.md` — `Pass 191.0` Shipped entry (top of *Shipped*);
+  `Pass 191.1` filed under *Next up*; standing-rule decline recorded in
+  *Standing rules* before *Update protocol*.
+- `docs/SESSION_LOG.md` — this entry.
+- `docs/NEXT_SESSION.md` — §0 rewritten to close the prior open item and
+  point at `Pass 191.1`.
+- `D:/dev/rag/rust/a_refusal_that_fires_for_an_unrelated_reason_is_not_a_guard.md`
+  — new finding, written in full.
+- `D:/dev/rag/rust/index.md` — new bullet for the file above.
+- `FEATURES.md` — assessed, deliberately unchanged (see above).
+
+**Ceilings after this filing** (stated from the edits made; **not
+independently re-run through `tools/check-ledger-numbers.py`, no shell
+available to this role this session — the engineer should confirm**): Pass
+ceiling `190.0`/`190.1` → **`191.1`** (191.0 shipped, 191.1 minted in *Next
+up* in the same filing); next free `191.2`/new major `192.0`. Standing
+rules `R239` — **UNCHANGED**, next free `R240`. Decisions `112` —
+**UNCHANGED**, next free `113`. Filings `354` → **`355`**.
+
+**Git/backup state: NOT ASSERTED.** No shell tool was available to this
+role this session — per hard rule 8, the honest statement is that commit
+currency, unpushed-commit count and backup-bundle staleness are **not
+verifiable from here**, and the engineer (who has a shell) should check
+`git rev-list --count origin/main..main` and `ls -lt D:/Dev/pdfce-backups/`
+directly rather than take a number from this entry.
