@@ -96,6 +96,217 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `Pass 199.0` + `Pass 199.1` (`a821393` + `9f1887e`, 2026-09-01) — **`ri`/`/RI` WAS A RECOGNISED NO-OP: A CONFORMANCE DEFECT, NOT A QUALITY GAP — FOUR SEPARATE DEFAULTS DOCUMENTED (D1–D4), D3 NOW IMPLEMENTED AS `image_intent`** — filed 2026-09-01 (359th filing)
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8).
+Commit messages for `a821393` and `9f1887e` were **not** independently read
+via `git log` — relayed from the engineer's dispatch, cross-checked against
+live source (`crates/pdfce-core/src/color/intent.rs`,
+`crates/pdfce-render/src/interpret.rs:2800-2820,6890-6903`,
+`crates/pdfce-render/src/gstate.rs:481`) via `Read`/`Grep`.
+
+#### `Pass 199.0` — the defect, the four defaults, and the fifth rule that is not a default
+
+`ri`/`/RI` (§8.6.5.8) was a **recognised no-op** — parsed, discarded. Three
+`shall`s make that a conformance defect, not a quality gap: Table 70's four
+intents "shall be recognized"; an unrecognised name "shall use
+`RelativeColorimetric`" by default; the intent used at paint time "shall be
+the current rendering intent in effect in the graphics state at the time of
+the painting operation" (§11.7.5.3). ★ The printed NOTE that reads as an
+escape hatch — "a particular device does not have to support all PDF
+rendering intents" — is **struck** by ISO-approved erratum `pdf-issues` #63
+(closed 2021-04-16): NOTEs are informative only, and the resolution states
+the normative requirement to support all four intents remains.
+
+`ri` now sets `gstate.rs`'s `rendering_intent:
+pdfce_core::color::RenderingIntent` (`AbsoluteColorimetric` /
+`RelativeColorimetric` (default) / `Saturation` / `Perceptual`), and
+increments a new diagnostics counter `rendering_intents_set`, disclosed on
+`pdfce-cli`'s `render-page` metrics line and JSON output.
+
+**Four distinct defaults, documented in `pdfce_core::color::intent`'s module
+doc — a single `Default::default()` used for all four would be wrong three
+times over:**
+
+| | question | answer | clause |
+|---|---|---|---|
+| D1 | intent at page start | `RelativeColorimetric` | Table 52 initial value, §8.4.1 `shall` |
+| D2 | unrecognised name | `RelativeColorimetric` | §8.6.5.8 `shall` |
+| D3 | image with no `/Intent` | the **graphics state's current intent**, not a constant | Table 89 default value — **documented this Pass, implemented in `Pass 199.1` below** |
+| D4 | page-group→device conversion | `RelativeColorimetric` (ISO 32000-2 §11.4.7 `shall`) | — **not yet consumed by any conversion code; see `Pass 199.2`, Backlog** |
+
+★★★ **D4 is the one that would have been got wrong.** A content-stream `ri
+/Saturation` does **not** govern the page-group's own conversion to the
+device — that is a separate step with its own answer (§11.4.7), and applying
+a source-side painting intent to a destination-side conversion is a category
+error, not a refinement. This Pass's value is as much in **not** making that
+mistake as in what it implements.
+
+★ **A fifth rule, and it is not a default: `gs` does not reset the intent.**
+§8.4.5: `ExtGState` results "shall be cumulative" and persist until
+explicitly overridden — an `/ExtGState` dict with no `/RI` key must leave the
+graphics-state intent alone. ISO 32000-2's Table 57 printed "The default
+value is: Default" for this entry, the only one in that table to claim one,
+and ISO-approved erratum `pdf-issues` #360 **deletes** that line for exactly
+that reason; re-raised as #746 in 2026, closed as a duplicate. A live
+implementer trap, not a historical curiosity.
+
+**A measured ink-error ranking is not evidence an intent is correct.**
+`Saturation`/`Perceptual` carry no output metric in either standard — ISO
+32000-1 §10.2 puts gamut mapping in the reader's own implementation; ISO
+32000-2 §10.3.1 defers to ICC.1:2010 clause 0.4, which calls
+perceptual/saturation rendering "vendor specific." The fix therefore carries
+the file's own declared intent faithfully to whatever converts colour; it
+never hard-codes an intent because a fixture happens to score well under it.
+
+A test caught the author breaking `pdfce-cli`'s metrics **key-order
+contract** (`tools/check-metrics-line-contract.py`) by inserting
+`rendering_intents_set` mid-line instead of appending it — corrected before
+this commit; the field now sits last in the line, per contract.
+
+#### `Pass 199.1` — D3 implemented: `pdfce_core::color::image_intent`
+
+`Pass 199.0` documented D3 and did not implement it. `pdfce_core::color::
+image_intent(gs, image_intent_name: Option<&[u8]>, is_mask: bool) ->
+RenderingIntent` now does: an explicit `/Intent` wins; its absence falls
+back to **the graphics state's current intent**, not a hardcoded constant —
+the inheritance trap Table 89's wording invites, and this Pass's doc-tests
+assert directly. Image masks (`is_mask: true`) **suppress** an explicit
+`/Intent` and always inherit the graphics-state intent — an `/ImageMask` is
+a 1-bit stencil with no colour of its own, so a per-image intent has nothing
+to apply to. Doc-tested (`crates/pdfce-core/src/color/intent.rs`).
+
+**Soft-mask `/Intent` is out of scope, disclosed as such** — a
+luminosity/alpha soft mask's own `/Intent` key is not consumed by this Pass;
+recorded as a stated boundary, not a silent gap.
+
+#### What did NOT ship — see `Pass 199.2`, Backlog
+
+D4 and the terminal sRGB→CMYK conversion
+(`crates/pdfce-render/src/cmyk_paint.rs::paint_solid_into_cmyk`) still do not
+consume `rendering_intent` — verified live, no `rendering_intent` reference
+anywhere in `cmyk_paint.rs`. The intent is now carried and honoured for
+D1–D3; it is not yet the input to any colour *conversion*. The remaining
+work — reading a PDF/X `/DestOutputProfile`'s bytes, supplying an sRGB
+source profile, routing only the terminal conversion sites — is
+`Pass 199.2`, gated on how pdfce depends on `iccce` (operator decision owed;
+see *Backlog*).
+
+**Decision log.** `ARCHITECTURE.md` §12 decision **114** minted this filing
+(extends decision 064's `iccce` boundary; forward pointer added to 064). No
+dedicated `ARCHITECTURE.md` body section exists for colour management yet —
+the "body" for this invariant is `pdfce_core::color::intent`'s own module
+doc plus this entry; flagged to the engineer as a candidate future body
+section, not created speculatively.
+
+**`FEATURES.md`.** Row 369 (rendering intent carried through the graphics
+state) moves core `[ ]` → `◐` (partial: D1–D3 shipped, D4/terminal
+conversion not). Rows 367/368 (`/OutputIntents`-aware CMYK conversion,
+`/ICCBased` real-profile resolution) reworded — gated on `Pass 199.2`, not
+`Pass 199.0` (now shipped). No box ticked on 367/368; nothing in the
+terminal-conversion half has shipped.
+
+---
+
+### `Pass 200.0` + `Pass 200.1` (`5f7c232` + `c7d1543`, 2026-09-01) — **THE PRINT-CONFORMANCE HARNESS HAD TWO MORE FALSE-VERDICT CLASSES: FIVE PASSING PATCHES MIS-ROUTED TO A COMPARATOR THAT SCORES ANY PHOTOGRAPH AGAINST A PAGE FOOTER, THEN A THIRD COMPARATOR (`reference_similarity`) FOUND ANTI-CORRELATED WITH CORRECTNESS AND REPLACED** — filed 2026-09-01 (359th filing)
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8).
+Relayed from the engineer's dispatch; `engine_similarity`/
+`reference_similarity`/`X_CRITERION` confirmed present in
+`tools/suite-check.py` via `Read`/`Grep`, not independently re-run.
+
+**Discovered while re-verifying `Pass 199.0`/`199.1`, above** — neither is a
+renderer change; both are measurement-honesty fixes to
+`tools/suite-check.py`, the harness's **fourth and fifth** false-verdict
+classes after `REF` (`Pass 94.0`), `MARK?`, and `CRIT?` (`Pass 196.0`,
+above).
+
+#### `Pass 200.0` — five PASSING patches scored as failures by a mis-routed comparator
+
+Five patches caption an 8-bit image "Reference image (cross)" while stating
+their own pass criterion outright in text (`X_CRITERION`: "no x must be
+visible" / "no x should be visible"). The harness's mention-grep matched
+"cross"/"Reference image" and routed all five to the **strip comparator** —
+built for a different patch shape — which correlated a photograph against
+the page footer and returned ≈0.09, read as a failure.
+
+**Control that settles it:** Acrobat's own renders of the same five patches
+score the same under the same (wrong) comparator — 0.094/0.065/0.109 vs
+pdfce's 0.089/0.057/0.098. A comparator that scores a correct renderer and
+pdfce identically low is not measuring either of them; it is measuring the
+mismatch between a photograph and a footer.
+
+★ **The tell had been seen once already and mis-read.** A prior session
+spotted these same absurd ~0.05–0.06 numbers, correctly refused to call them
+green, and added a guard **downstream of the misclassification** rather than
+asking why the number was absurd in the first place.
+
+**16-bit decoding ruled out as an alternative explanation** — the patch
+design hides a cross under the test image that would show if decoding
+failed; it did not show, so decoding is not the cause.
+
+Fix: recognise `X_CRITERION` text directly and route these five to their
+stated criterion instead of the strip comparator.
+
+**Verdicts:** literal `clean` **26 → 31**, of 51 (five patches move;
+harness's own printed pass total 31 → 36).
+
+**Cross-reference.** This is a narrow instance of the already-filed Backlog
+item *"invert `tools/suite-check.py`'s DEFAULT so `clean` requires the
+patch's own text to state the criterion"* (357th filing) — that entry called
+for exactly an "X-language detector first," and `X_CRITERION` is one. The
+general default-inversion for other, still-undiscovered shapes remains open
+and unscoped; see *Backlog*, amended this filing.
+
+#### `Pass 200.1` — `reference_similarity` never compared pdfce to the oracle, and was anti-correlated with correctness
+
+`reference_similarity` correlates a render's own two bands against
+**itself**; `--reference-dir` ran the same self-comparison on the oracle's
+PNG rather than comparing the two renders to each other. It never measured
+pdfce-vs-oracle agreement at all.
+
+★★★ **Anti-correlated, not merely uninformative:** replacing every shading
+with solid black **raised** `reference_similarity` 0.823→0.953 and
+0.445→0.794; rotating the shading 180° moved it only ±0.003. **The shading
+render was fine all along** — 0.954–0.999 per cell against each patch's own
+baked reference, the five-segment `/Bounds` stitch character-identical to
+the reference.
+
+**The "passing" sibling patch was not passing for a good reason either —
+same meaningless number, higher by accident.**
+
+**Replacement:** `engine_similarity(png, ref_png, grid=160)` — direct
+render-vs-oracle comparison. Threshold calibrated from a measured gap:
+correct renders score 0.783–0.822, deliberately ablated (broken) renders
+score 0.573–0.771.
+
+★★ **An independent control not run by the original diagnosis:** matched
+page scores 0.944, a sibling page scores 0.671, an unrelated page scores
+0.262 — confirming the threshold correctly separates a true match from a
+near-miss sibling, not merely from a random page.
+
+**Verdicts:** `REF` **3 → 0**; `REF-PASS` **8**; harness's own printed pass
+total **36 → 39**, of 51.
+
+#### Harness pass-count progression this session (of 51 patches — total beside per-stage reason, per hard rule 10)
+
+| stage | pass count | of 51 | reason |
+|---|---:|---:|---|
+| before `Pass 196.0` | 34 | 51 | baseline, includes 3 false passes (`CRIT?` gap) |
+| after `Pass 196.0` | 31 | 51 | 3 false passes removed (no detector existed for baked correct/wrong artwork) |
+| after `Pass 200.0` (this filing) | 36 | 51 | 5 false failures restored (`X_CRITERION` mis-routing fixed) |
+| after `Pass 200.1` (this filing) | 39 | 51 | `reference_similarity` retired, `engine_similarity` adjudicated the last 3 |
+
+**Six genuine failures are unchanged throughout** — none of the harness
+fixes this session or last (`CRIT?`, `X_CRITERION`, `engine_similarity`)
+touched a real renderer defect; each corrected what the harness itself was
+measuring.
+
+**`FEATURES.md`: no row changes.** Both Passes fix `tools/suite-check.py`,
+outside `crates/`; no pdfce capability's reach changed.
+
+---
+
 ### `Pass 198.0` (`ffd0921`, 2026-09-01) — **`nonseparable_composited` READ 0 ON A PAGE THAT DID APPLY TWO NON-SEPARABLE BLEND MODES — THE COUNTER'S BLIND SPOT IS THE GROUP-COMPOSITE PATH, NOT AN UNDERCOUNT** — filed 2026-09-01 (358th filing)
 
 **★ Sourcing.** No shell available to this role this filing (hard rule 8).
@@ -96639,7 +96850,19 @@ in the "still open" list. Full build record: this file's own
 > (`/StructParent` / `/OBJR`) — different graph, different carrier, no
 > name-string component.
 
-### `Pass 199.0` — **`PCS 16.1` FAILS 15 OF 16 CELLS, AND THE BLEND ARITHMETIC IS CORRECT — THE sRGB→CMYK CONVERSION FEEDING IT IS NOT, AND THE FIX IS NOW UNBLOCKED: `iccce` ALREADY HAS THE CAPABILITY** — filed 2026-09-01 (358th filing), **NOT STARTED**
+> ★★★ **`Pass 199.0` SHIPPED (PARTIALLY) AND HAS LEFT THIS SECTION,
+> 2026-09-01 (359th filing).** Items 1–2 of the 5-item list below (read
+> `/RI`; treat the intent as load-bearing, D3 implemented) shipped as
+> `Pass 199.0` + `Pass 199.1` — top of *Shipped*, above `Pass 198.0`. **Items
+> 3–5 (read `/DestOutputProfile` bytes, supply an sRGB source profile, route
+> the terminal conversion sites) did NOT ship** — split out as `Pass 199.2`,
+> *Backlog*, gated on the operator's `iccce`-dependency decision. No
+> remnant of the original entry stays here — the shipped half is in
+> *Shipped*, the unshipped half is in `Pass 199.2`, per the partial-ship
+> convention (see the `pdfce-librarian` agent file's "bundled Backlog entry,
+> partial ship" precedent).
+
+### ~~`Pass 199.0`~~ — **`PCS 16.1` FAILS 15 OF 16 CELLS, AND THE BLEND ARITHMETIC IS CORRECT — THE sRGB→CMYK CONVERSION FEEDING IT IS NOT, AND THE FIX IS NOW UNBLOCKED: `iccce` ALREADY HAS THE CAPABILITY** — filed 2026-09-01 (358th filing), ~~**NOT STARTED**~~ ★ **PARTIALLY SHIPPED as `Pass 199.0`/`199.1` — SEE *Shipped*; RESIDUE SPLIT TO `Pass 199.2`, *Backlog* — 359th filing**
 
 **★ Sourcing.** No shell available to this role this filing (hard rule 8).
 The diagnosis below is **relayed from an ablation run this role did not
@@ -108129,6 +108352,67 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+### `Pass 199.2` — **CONSUME THE RENDERING INTENT IN THE ACTUAL COLOUR CONVERSION: `PCS 16.1`'s FIX, NOT YET BUILT** — filed 2026-09-01 (359th filing, `Pass 199.0`'s undelivered residue, split out per the partial-ship convention)
+
+**Status: NOT STARTED. Gated on an operator decision** (below), not on
+further diagnosis — the diagnosis is complete (struck `Pass 199.0` entry,
+*Next up* section, 358th filing — full ablation record kept there rather
+than repeated here) and the ownership question is answered (`iccce`
+already exposes the needed conversion, same entry).
+
+**What is owed**, items 3–5 of the 358th filing's 5-item list (items 1–2
+shipped as `Pass 199.0`/`Pass 199.1`, *Shipped*, this filing):
+
+1. Read the PDF/X `/OutputIntent`'s `/DestOutputProfile` **bytes**.
+   `iccce` has no identifier registry by design (decision 064's boundary:
+   pdfce owns compositing/meaning, `iccce` owns conversion).
+2. Supply an sRGB **source** profile as bytes — `iccce` has no built-in
+   sRGB source.
+3. Route **only** the terminal conversion sites
+   (`crates/pdfce-render/src/cmyk_paint.rs::paint_solid_into_cmyk`), never a
+   global search-and-replace. `overprint::rgb_to_cmyk` **must remain** the
+   return leg of `snapshot_srgb_backdrop`↔`composite_srgb` — mixing the
+   calibrated and the invertible transforms across those legs previously
+   cost a different patch 10 trap markers against a baseline of 2 (a
+   regression precedent, not a hypothetical one).
+
+**★ The `iccce`-dependency framing is corrected this filing.** A prior
+framing of this choice (relayed to this role verbally, by the dispatching
+engineer's own prompt — **not found written into any editable pdfce
+document by this role's search of `ROADMAP.md`/`SESSION_LOG.md`/
+`ARCHITECTURE.md` for "publish or vendor"/"vendor it"**) posed it as
+"publish `iccce` to crates.io, or vendor its source into pdfce's tree."
+**There is a third, probably-better option: a git dependency on
+`github.com/KenM76/iccce`.** Verified this filing: `iccce` has **zero
+external dependencies** and `unsafe_code = "deny"` in its own
+`Cargo.toml`, so a git dependency clears pdfce's wasm32 CI gate as
+trivially as a vendored copy would, without a vendored fork's maintenance
+burden. **The choice among the three is the operator's**, not scoped
+further here. (Sourcing note: because no editable pdfce document stated
+the "publish or vendor" framing, this is filed as a **new fact**, not as
+an edit to a prior stale statement — hard rule 8's discipline against
+over-precise corrections.)
+
+**Secondary lead, still unmeasured — do not treat as confirmed:** `PCS
+13.0` reports `blend_modes_applied=0` with `cmyk_bridged_pixels=6396` on
+the same conversion path; plausibly resolved by the same fix, not
+re-checked this filing (carried forward from the 358th filing's own
+caveat, still true).
+
+**Related finding, not a new mystery:** the ICC-RGB tone bias already
+diagnosed on this conversion path (+13.3 on the ICC-profile-carrying
+member, −0.3/+3.6 on the device-space members) is now also observed in
+the 16-bit patches — same known conversion issue (the terminal
+sRGB→CMYK category error this Pass fixes), not a separate defect. No new
+measurement owed beyond re-checking after `Pass 199.2` lands.
+
+**Owed dependency, unchanged:** `iccce`'s own
+`request_can_you_hand_me_the_output_intent_and_an_intent.md`
+(2026-08-25) has no pdfce reply in `iccce`'s `open/` folder as of this
+filing. It asks exactly the `/DestOutputProfile` hand-off and per-paint
+`/RI` questions this Pass needs settled. Independent of whether
+`Pass 199.2`'s code starts first.
+
 ### Unscoped — **`nonseparable_composited` has no path from GROUP composites, only direct paint** — filed 2026-09-01 (358th filing, `Pass 198.0`'s deliberately-unimplemented half)
 
 `canvas.rs`'s `layer_blend` (the group-compositing blend-resolution site)
@@ -108194,6 +108478,15 @@ just hasn't been catalogued by this harness yet," which is a real
 classification problem, not a one-line default flip. Scope with the
 operator before starting — this touches every one of the suite's 51
 patches' scoring, not one.
+
+**★ AMENDED 2026-09-01 (359th filing) — a narrow instance of this shipped,
+the general inversion did not.** `Pass 200.0` (*Shipped*, above) added
+`X_CRITERION`, exactly the "X-language detector" this entry called for —
+but scoped to one mention-grep pattern (five patches whose text states "no
+x must/should be visible"), not the general default-inversion this entry
+asks for. **What remains open, unchanged:** flipping `clean`'s default
+for every *other*, still-undiscovered criterion shape. Still needs
+operator scoping before starting, per this entry's own text above.
 
 ### Unscoped — **`resize_annotation`'s `/AP` `/N` overwrite guards against structural DICTIONARIES only as a side effect, not against a page's `/Contents` STREAM** — reported, not fixed, by `Pass 191.1` — filed 2026-08-31 (356th filing)
 

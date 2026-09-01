@@ -68,6 +68,7 @@ heading (`**<N>. `).**
 | 52 | ★ **THE SIBLING-CARRIER dispatch** ("build clause C's file, parallel to C′'s"). The dispatch's "clause X is absent" was true of the FILE and false of the COVERAGE — **third instance** · **★ the headline was a CORRECTION to the corpus's own record, and its mechanism is corpus-wide: an ISO 32000-2 erratum's review `/State` is a CHAIN of `/Text` replies linked by `/IRT` — LATEST `/M` wins — and 376 of 547 `Accepted` annots (68.7 %) carry a later `Completed` reply, so an `Accepted` read from the first reply is stale two times in three** · **a table NUMBER can name DIFFERENT TABLES in the two editions** (1.7 T178 = polygon, 2.0 T178 = LINE) · **a `free_primary` table row can be corrupted by COPY-PASTE, and the next edition printing it clean is the proof** · **a key can be VACUOUS in one edition** (1.7's `/IC` fills "line endings" on a shape that has none) **and the later edition's ADDITION proves it** · complementary restrictions in one table are a pattern — grep for the mirror of a recorded one · **"must X bound Y?" can be a true negative whose practical answer is a DIFFERENT clause with a DIFFERENT failure mode** (no clipping; §12.5.5 SCALES the `/AP` to `/Rect`) · three readings can disagree on legality and agree on the decision · **a term with EXACTLY 1 hit per edition IS the headline** · a ~58 kB Bash heredoc dies with `ENAMETOOLONG`, use Write |
 | 61 | ★ **THE OVERDUE-REGISTER-FILING dispatch** (*"two ambiguity entries have been owed to you; file them in the register's existing schema"*) — the transcription is the cheap half, **the audit is the deliverable, and BOTH ambiguities were misstated**. *"Neither reading contradicts any `shall`"* is CHECKABLE: refuted by **the adjacent sentence**, by **a summary TABLE that enumerates the case** (Tables 148/149 row 2), and ⇒ the finding is a **spec-vs-Acrobat DIVERGENCE, not a silence**. But **ISO 32000-2 DELETED two of the three supports** (including a whole table — grep table TITLES, a deletion leaves no renumbering trace). A **null measurement over a settings axis** was **predicted by a table row** ⇒ the FIXTURE was wrong, not the axis. *"The spec says nothing about sub-pixel strokes"* — **grep the RASTERISING clause (clause 10), not the parameter clause**: three provisions, and the carve-out releases the **ZERO-width** case, not the sub-pixel one. The residual ambiguity survives **only because the normative model is BILEVEL** (`anti-?alias` = 4 hits/edition, none in clause 10). **The dispatch's blanket preamble about its own codebase was FALSE** ("both are shipped"; one had **0 hits workspace-wide**) — verify the blanket, not just the caveat. And a register **"verified by grep on <date>"** line was **892 hits stale** and had mis-bucketed ~20 IDs. |
 | 62 | ★ **THE VERIFY-MY-RECALL / DIRECTION-OF-A-CONSTANT dispatch** (*"my recall says key K is CCW and its sibling CW — do NOT take that as a premise"*). **The recall was CORRECT and the file was still the deliverable**: the headline is the SENTENCE STRUCTURE (two parallel rows differing in one word), not the verdict. ★★★ **To test whether a qualifying phrase carries meaning, find another key using the IDENTICAL phrase** — the movie `/Rotate` says *"clockwise relative to the page"* against `/MK /R`'s *"counterclockwise relative to the page"* ⇒ the phrase carries NOTHING. ★★★ **A *"the spec is silent"* question can be ANSWERED BY AN ERRATUM** — search the errata repo by the CONTAINER key (`MK+dictionary` hit; `rotate+widget` = 0), and the corrected sentence is FREE and QUOTABLE where the ISO page is not. An ignore-list membership is a **THREE-state** fact (1.7 / 2.0-as-printed / 2.0+errata). **Bound every "NOT SOURCED" with a key-name term count first** (`MK` = 4 hits/edition, all in one clause pair ⇒ "no fifth place to look"). **GREP SPELLING: the standard uses BOTH `counterclockwise` (7) and `counter clockwise` (2, two words) and the two-word form is where the CONVENTION-DEFINING loci are** (§8.3.4's rotation matrix). A **THIRD copy-paste erratum** found and the corpus had transcribed it faithfully (Table 188 cites `/L` on a table with no `/L`) — detection heuristic now 3-for-3, but the PROOF shape differs (2.0 **deleted** here vs **printed clean** for `PG-E1`). A cross-edition **table-number collision hit THREE tables at once** and one number was already cited elsewhere ⇒ grep the corpus for the OLD number. **The standard's own generation RECIPE excluded the key** (§12.7.3.3's upright `/BBox`) — stronger than absence of a prohibition. **The dispatch's own codebase error was in a STRING LITERAL** (a refusal message asserting `{0,90,180,270}` and "the generator reads it"; both refuted). File count stale a FIFTH session. |
+| 65 | ★ **THE IS-IT-ADVISORY? dispatch** (*"my strong suspicion is this clause is largely permissive — do not soften it either way"*). **The hypothesis was HALF right and the halves live in different documents** — recognition/selection are hard `shall`s in ISO 32000, the OUTPUT is unconstrained, and the unconstrained-ness only becomes provable by following the delegation chain OUT of PDF into ICC.1:2010's Introduction. **An ISO-APPROVED ERRATUM DELETED THE ONE PERMISSIVE SENTENCE** — search the errata by the FEATURE PHRASE, not the key name. **Enumerate the carriers by counting the concept phrase document-wide (50/50 hits) rather than trusting the clause's own list.** **A RESTRICTION TABLE for a container type can kill a feature outright** (`Intent  Ignored.`). **The cross-edition table shift the corpus generalised as −1 is −2 two clauses later.** **The dispatch's own sibling file already held the answer to one of its questions while a THIRD file asserted the opposite** — fourth instance. **`gs` partial-application is an ISO-approved erratum, not folklore.** |
 
 ---
 
@@ -5084,3 +5085,129 @@ method, not the resource.
   and `|` — the bash heredoc died on the first attempt exactly as the standing
   caution predicts. `io.open(..., encoding='utf-8')` + `assert anchor in s`
   before every replace.
+
+
+---
+
+## 65. ★ THE "IS-IT-ADVISORY?" DISPATCH — ingest a clause whose MODALITY is the engineering decision (2026-09-01, §8.6.5.8 rendering intents)
+
+Shape: *"ingest clause C. My strong suspicion is that it is largely permissive — a hint rather than a `shall` on output values — and
+if so I need that in writing, because it determines whether ignoring it is a conformance defect or a quality-of-implementation gap.
+**Do not soften this either way.**"* Adjacent to item **49** (`shall` vs `should` IS the decision) but distinct: 49 was one clause with
+two modalities; this is one clause whose modality is **split across two obligations that a reader will merge**.
+
+### 65a. ★★ THE ANSWER SHAPE: SPLIT THE OBLIGATION FROM THE OUTPUT, AND SAY SO IN THE HEADLINE
+
+The verdict that survived was **"HALF RIGHT, and the two halves must not be merged"**:
+
+- **RECOGNITION and SELECTION are hard `shall`s** — *"lists the standard rendering intents that **shall** be recognized"*,
+  *"**shall** use the `RelativeColorimetric` intent by default"*, *"the rendering intent used **shall be** the current rendering
+  intent"*. ⇒ discarding the operand is a **conformance defect**.
+- **The OUTPUT VALUES are unconstrained** for two of the four values — the same table rows carry `shall` *and*
+  *"may or may not be colourimetrically accurate"*.
+
+**A `shall` with no measurable predicate is a real obligation and an untestable one, and those are different facts.** Reporting only
+one of them is how a dispatch gets an answer it can act on wrongly in either direction. **Build the modality ladder as a TABLE with one
+row per SENTENCE** (`M1`…`M11` here, each with clause + modality + *what it binds*); the split falls out of it and is unarguable.
+
+### 65b. ★★★ THE DELEGATION CHAIN LEAVES THE STANDARD — FOLLOW IT, THE ANSWER IS AT THE FAR END
+
+PDF 1.7 disclaims the algorithm (*"are part of the implementation of the conforming reader"*). **PDF 2.0 DELETED that disclaimer and
+replaced it with a `shall`** pointing at **ISO 15076-1:2010 (ICC.1:2010)** — which looks like the permissive half closing. It does
+not: **ICC.1:2010 clause 0.4 says *"The colour rendering of the perceptual and saturation rendering intents is vendor specific."***
+
+**Generalise: when a clause delegates its arithmetic to a referenced standard, the question "is this testable?" is NOT answered until
+you read the referenced standard's own Introduction.** ICC.1:2010 is **free** at
+`https://www.color.org/specification/ICC1v43_2010-12.pdf` (HTTP 200, 2 335 478 B, 130 pp, `%%EOF` verified) — a **targeted read of one
+clause** (~5 min: `curl`, dump, whitespace-stripped locate) beat every amount of re-reading ISO 32000. **Do not stage a whole spec to
+answer one question**; record the URL + hash + the sentence, and leave the prefix empty.
+
+### 65c. ★★ AN ISO-APPROVED ERRATUM CAN DELETE THE EXACT SENTENCE THE DISPATCH'S HYPOTHESIS RESTS ON
+
+The printed NOTE said *"a particular device **does not have to support all** PDF rendering intents"* — which is precisely why the
+clause reads permissive. `pdf-issues` **#63** (`ISO approved`) **strikes that phrase**, and the resolution comment states the
+consequence in the standards body's own words (*"the existing normative requirements to support all 4 rendering intents remains"*).
+
+**Search technique that found it: the FEATURE PHRASE, not the key name** — `rendering+intent` returned it at rank 8 of 10, while
+the key-name searches (`UseBlackPtComp`, `AbsColorimetric`) returned unrelated or zero. Item **4n** says search by container key; this
+session adds: **when the question is about a MODALITY rather than a key, search the feature's NAME.** Run both.
+
+**And the submitter's own body text is the best available statement of the pre-erratum contradiction** — free, quotable, and worth
+keeping in the file **because files in the wild were authored against the printed text** (item 43's `[INS]`-is-a-correction rule).
+
+### 65d. ★★ ENUMERATE CARRIERS BY COUNTING THE CONCEPT PHRASE DOCUMENT-WIDE, NOT BY TRUSTING THE CLAUSE'S OWN LIST
+
+§8.6.5.8 lists its three carriers explicitly, so the list looked settled. **The verification that makes "the list is CLOSED" a
+finding rather than an assumption** is the whitespace-stripped locate of **all 50** `rendering intent` occurrences with an `awk`
+walk-back to the owning heading. Same count in both editions. That sweep is what surfaced **four consumption sites nobody would
+dispatch you to**: §8.6.5.5 (the ICC profile's own intent is **ignored** — a `shall`), §8.6.8 (`ri` is in the restricted-operator
+list ⇒ dead inside a `d1` glyph and an uncoloured tiling pattern), §11.6.7 (rendering intent is named as an `sh`-affecting
+parameter), and §8.6.5.6's rationale bullet (the *only* 1.7 route by which an intent reaches a device colour).
+
+Cost: one ~15-line Python locate. **This is item 4l's semantic sweep applied to a CONCEPT rather than to table rows.**
+
+### 65e. ★★ A CONTAINER-TYPE RESTRICTION TABLE CAN KILL A FEATURE OUTRIGHT — AND IS INVISIBLE FROM THE FEATURE'S CLAUSE
+
+`Intent  Ignored.` is a **verbatim row of 1.7 Table 145 / 2.0 Table 143** (*Restrictions on the entries in a soft-mask image
+dictionary*). Nothing in §8.6.5.8, nothing in the image-dictionary table, and nothing in the operator tables says a soft-mask image
+ignores the intent. **The dispatch explicitly asked about soft-mask images and the answer was one word in a table three clauses away.**
+
+**Generalise: whenever a key can appear on more than one object type, grep for a `Restrictions on the entries in a <type>` table before
+answering.** ISO 32000 uses that exact caption idiom. Related: 2.0 amended the *image dictionary's own* `/Intent` row by erratum #13
+to cross-reference it — **the standards body agreed the omission was a trap.**
+
+### 65f. THE CROSS-EDITION SHIFT A CORPUS FILE GENERALISED WAS SCOPED, AND IT DRIFTS
+
+`color__cie_based.md` recorded *"EVERY TABLE NUMBER SHIFTS BY −1 … the shift runs 1.7 Tables 59–70 → 2.0 58–69"* and proved it over
+exactly that range. **Measured this session: −1 holds to Table 70 and becomes −2 by Table 89** (image dictionary → 87) **and stays
+−2 at Table 145** (soft-mask restrictions → 143). **The offset GROWS down the document.** Two live collisions fell out:
+*"Table 57"* = graphics-state **OPERATORS** in 1.7 and the **ExtGState ENTRY** table in 2.0 (and a sibling corpus file cites "2.0
+Table 57" correctly, which is exactly how a reader carries the wrong number backwards); *"Table 69"* = *Ranges for Typical ICC Colour
+Spaces* in 1.7 and *Rendering intents* in 2.0. **A proven-over-a-range shift is a MEASUREMENT WITH A DOMAIN, not a rule.** Write the
+domain into the file. Clause numbers drift too: 1.7 §10.2 = 2.0 §10.3.
+
+### 65g. ★ FOURTH INSTANCE: THE ANSWER WAS IN A SIBLING FILE WHILE A THIRD FILE ASSERTED THE OPPOSITE
+
+`iso32000__s__11.7.5.3.md` §2 said flatly *"In PDF 2.0 the standard does not say which rendering intent converts the page group to the
+device"* — and **its own §0 cross-referenced `iso32000__s__11.7.2.md`'s `GCS-20`, which quotes 2.0 §11.4.7's
+`RelativeColorimetric` `shall`.** The measurement behind the wrong sentence (`default rendering intent for the page` 1→0) was
+**correct**; only the inference from it was wrong, because **2.0 RELOCATED the rule to a different clause with different words.**
+
+Its §6 then recommended pdfce implement 1.7's *"default rendering intent for the page"* — **a term 1.7 uses once and never defines** —
+in preference to a value 2.0 mandates. That is a wrong engineering default sitting in the corpus for eleven days.
+
+**Two rules, both already in this file and both re-earned:** (item 44) a finding stranded in a sibling file is a **GAP** — duplicate it
+into the section a decision will cite; and **a 1→0 phrase count proves the SENTENCE was deleted, never that the RULE was.** Before
+writing "and nothing replaces it", grep the **concept** in the target edition (`rendering intent of RelativeColorimetric` = 0 in 1.7,
+**1** in 2.0 — one command).
+
+### 65h. `gs` PARTIAL APPLICATION IS AN ISO-APPROVED ERRATUM, NOT FOLKLORE
+
+*"An `ExtGState` without `/RI` does not reset the rendering intent"* is the kind of claim a librarian would normally grade DERIVED.
+It is **SOURCED twice**: §8.4.5's *"The results of `gs` **shall be cumulative**"*, and `pdf-issues` **#360** (`ISO approved`), which
+deletes 2.0 Table 57's uniquely-printed *"The default value is: Default"* **for exactly this reason**, with the resolution stating
+*"all other entries do not mention their default values."* **#746 re-asked it in 2026 and was closed `duplicate`** ⇒ a live implementer
+trap, not a corpus invention. **A `duplicate`-labelled recent issue is evidence the question is commonly gotten wrong.**
+
+### 65i. THE ENGINEERING ADVICE THE FILE OWED, WHICH THE CLAUSE ALONE COULD NOT GIVE
+
+The dispatch arrived with a failing test and a measured ranking (*"saturation gives ≤0.014 ink error, relative colorimetric 0.02–0.68"*).
+**A measured ranking is not evidence about which intent is CORRECT** when the standard declines to constrain the output (65a/65b). The
+file says so, and says what the ranking *could* mean instead (the fixture's authoring CMS), and routes that to `personal_rag\pdf`.
+**It also warned that the failing conversion may not be the one the operator governs at all** — `ri` governs object→group; the
+page-group→device hop is a different boundary with a different, mandated intent (65g). **When a dispatch names a symptom and a
+suspected cause, check whether the clause even REACHES the code path** (item 64c, second instance).
+
+### 65j. Filing mechanics
+
+- **New `iso32000__s__*` file ⇒ index.md takes SIX edits**: manifest row, prefix-table count (**102 → 103, `ls`-verified before
+  touching the cell**), a trigger-topic paragraph **carrying the short answers so a lookup can stop without opening the file**, and
+  three separate stale "still out" gap sentences (§563, §2841, §3904 — the same gap was recorded in **three** places).
+- **Ten search recipes added, all ten RUN before saving**; the id-sweep recipe (`rg -no "RINT-(N|A|E)?[0-9]+" | sort -u`) doubles as a
+  completeness check on the file's own numbering.
+- **Five sibling files amended with dated footers** (§8.4 — a *"`ri` is a safe no-op"* Pass-1 triage bullet that had become a false
+  statement about the operator; §8.4.5; §8.9; `color__cie_based.md`; §8.6). **A triage note ages into a claim.** Strike the old text,
+  keep it legible, and say *why* it was right when written.
+- **The ambiguity register took four edits**: two new §5 SETTING rows, one §7 out-of-band row, and the clause-10 gap row that had
+  named §8.6.5.8 as *"still uningested"*.
+- **`Write` the Python patch script, then run it** — the bash heredoc died on this session's punctuation on the first attempt, again.

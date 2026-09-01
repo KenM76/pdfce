@@ -17,6 +17,8 @@
 | "does feature F apply inside context C?" | corpus **64d** — three places: C's own clause, a whole-document co-occurrence count, and **C's entry-RESET list read as a CLOSED set** (absence from it = affirmative inheritance) |
 | "the spec is silent on X" | corpus **62c** (an erratum can answer it), **63a** (grade the silence by counting the sentence elsewhere), **63b** (grep the feature name document-wide) |
 | ingest clause C in full before a Pass is written from it | corpus **63** (whole item), **58** (submit-form precedent) |
+| **"is clause C advisory or mandatory? — don't soften it either way"** | corpus **65** (whole item). **65a: SPLIT the obligation from the output — a `shall` with no measurable predicate is BOTH real and untestable, and reporting one half is how the answer gets acted on wrongly. Build an `M1`…`Mn` ladder, one row per SENTENCE. 65b: FOLLOW THE DELEGATION OUT OF PDF — the answer was in ICC.1:2010's Introduction, free at color.org, a 5-minute targeted read. 65c: an ISO-approved erratum may have DELETED the permissive sentence — search the errata by the FEATURE PHRASE, not the key name.** |
+| "where can X be set / which carrier wins?" | corpus **65d** (count the CONCEPT phrase document-wide — the clause's own carrier list is a hypothesis; 50/50 hits surfaced 4 consumption sites nobody would dispatch you to), **65e** (grep for a `Restrictions on the entries in a <type>` table — one word there can kill the feature) |
 | "enumerate every X" / build a census or closed set | corpus **59** (semantic sweep beats key-name sweep), **63e** (state each predicate separately) |
 | verify or refute the dispatch's own recall / premise | corpus **62**, **55**, **61f** — everything a dispatch asserts is a hypothesis, including claims about pdfce's own code |
 | licensing: may this text/data cross into pdfce or a public repo? | `project_embeddable_data_licensing.md`; corpus **45**, **60**; extraction **4m-iii**/**4m-iv** (check the DATA repo separately; read NOTICE, and the manual inside a bundled corpus) |
@@ -26,6 +28,8 @@
 ## Standing cautions
 
 - **Bash heredocs break on spec punctuation at file size.** Use `Write` for corpus files and for any multi-line script, then run it.
+- **A cross-edition table shift proven over a RANGE is a measurement with a DOMAIN, not a rule.** `−1` through Table 70, **`−2` by Table 89 and Table 145** — the offset GROWS down the document. Corpus **65f**.
+- **A 1→0 phrase count proves the SENTENCE was deleted, never that the RULE was.** 2.0 relocated a rule to another clause in different words while a corpus file wrote "and nothing replaces it" — and its OWN §0 cross-referenced the sibling holding the answer (4th instance of the stranded-finding failure). Before writing "nothing replaces it", grep the CONCEPT in the target edition. Corpus **65g**.
 - **A clause number is not a key across editions** (1.7 §12.6.4.10 = Hide, 2.0 §12.6.4.10 = Movie). Neither is a table number. Corpus **63c**, **52**, **62h**.
 - **A scope-exclusion banner is an untested claim about material its author deliberately did not read.** Corpus **58**.
 - **A "no free route exists" negative has a scope: the method you tried, not the resource.** It can expire in a day. Corpus **57**; extraction **4g** vs **4h**.

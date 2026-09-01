@@ -23793,6 +23793,16 @@ wrong in a way that shows up as a wrong PIXEL?"*; and such code lives in
 `tools/`, outside the workspace, never in `pdfce-core`/`pdfce-render`.
 **The boundary in this entry is unchanged** — no conversion moved.
 
+**★★★ FOURTH FORWARD POINTER, added 2026-09-01 (359th filing) — decision
+114 (below) gives pdfce the "carrying" half of a colour value's meaning
+that this entry's own boundary sentence implies but never states.**
+`Pass 199.0`/`Pass 199.1` shipped `ri`/`/RI` parsing into the graphics
+state and the image-default (D3) inheritance rule — pdfce now carries the
+document's declared rendering intent faithfully through painting. **The
+boundary is unchanged, not revised**: pdfce owns carrying and meaning;
+`iccce` will own consuming the intent inside a real conversion (D4, the
+terminal sRGB→CMYK path) once `Pass 199.2` (`ROADMAP.md` *Backlog*) lands.
+
 ### 2026-08-17 (hundred-and-fiftieth filing) — decision 065: **AMB-3 RESOLVED — pdfce paints a radial shading's `s`-circles ON their circumference (`|P−c(s)|=r(s)`, ISO 32000-2's "on"), never as a filled disc (ISO 32000-1's "within")**
 
 **Status: DECIDED, SHIPPED.** `Pass 85.0` (`33ea830` model +
@@ -29012,6 +29022,88 @@ subject line claims. `tools/check-passes-filed.py`'s collision detector
 claimed by two commits as a `note` — informational by the tool's own
 design, not a failure — and this entry is the reason a future reader
 should not be surprised by that note.
+
+### 2026-09-01 (359th filing, `a821393` + `9f1887e`) — decision 114: **RENDERING INTENT IS FOUR SEPARATE DEFAULTS (D1–D4), NOT ONE — AND THE CONTENT-STREAM `ri` OPERATOR GOVERNS PAINTING ONLY, NEVER THE PAGE-GROUP→DEVICE HOP (D4)**
+
+**Status: DECIDED, PARTIALLY SHIPPED.** D1/D2 (page-start default,
+unrecognised-name fallback) and D3 (image default) implemented and tested
+(`Pass 199.0`/`Pass 199.1`, `ROADMAP.md`, *Shipped*). D4 (page-group→device
+conversion) is a stated boundary, not yet consumed by any conversion code —
+see `Pass 199.2`, *Backlog*.
+
+**★ Sourcing.** No shell available to this role this filing (hard rule 8).
+Relayed from the engineer's dispatch; cross-checked against live source
+(`crates/pdfce-core/src/color/intent.rs`,
+`crates/pdfce-render/src/interpret.rs:2800-2820`) via `Read`/`Grep`, not
+`git log`.
+
+**The finding.** pdfce parsed the `ri` operator (§8.6.5.8) and discarded
+it — a recognised no-op. That is a conformance defect, not a quality gap:
+Table 70's four intents "shall be recognized"; an unrecognised name "shall
+use `RelativeColorimetric`" (§8.6.5.8); the intent used at paint time
+"shall be the current rendering intent in effect in the graphics state"
+(§11.7.5.3). The printed NOTE that reads as an escape hatch — "a
+particular device does not have to support all PDF rendering intents" —
+is **struck** by ISO-approved erratum `pdf-issues` #63 (closed
+2021-04-16): NOTEs are informative only, the normative requirement to
+support all four intents remains.
+
+**Four distinct defaults, and merging them is the failure mode this
+decision exists to prevent:**
+
+| | question | answer | clause |
+|---|---|---|---|
+| D1 | intent at page start | `RelativeColorimetric` | Table 52 initial value, §8.4.1 `shall` |
+| D2 | unrecognised name | `RelativeColorimetric` | §8.6.5.8 `shall` |
+| D3 | image with no `/Intent` | **the graphics state's current intent**, not a constant | Table 89 default value |
+| D4 | page-group→device conversion | `RelativeColorimetric` (ISO 32000-2 §11.4.7 `shall`) | — |
+
+**D4 is the one that would have been got wrong.** A content-stream `ri
+/Saturation` does not govern the page-group's own conversion to the
+device — that is a separate step with its own answer (§11.4.7), and
+applying a source-side painting intent to a destination-side conversion is
+a category error, not a refinement. This is the load-bearing half of the
+decision: it forecloses the obvious-looking wrong fix before any
+conversion code is written, rather than after.
+
+**A fifth rule, not a default: `gs` does not reset the intent.** §8.4.5:
+`ExtGState` results "shall be cumulative" and persist until explicitly
+overridden. An `/ExtGState` dict with no `/RI` key must leave the
+graphics-state intent alone. ISO 32000-2's Table 57 printed "The default
+value is: Default" for this entry — the only entry in that table to claim
+one — and ISO-approved erratum `pdf-issues` #360 **deletes** that line for
+exactly that reason; re-raised as #746 in 2026 and closed as a duplicate.
+A live implementer trap, not a historical curiosity.
+
+**A measured ink-error ranking is not evidence that an intent is
+correct.** `Saturation` and `Perceptual` carry no output metric in either
+standard — ISO 32000-1 §10.2 puts gamut mapping in the reader's own
+implementation; ISO 32000-2 §10.3.1 defers to ICC.1:2010, whose clause 0.4
+states perceptual/saturation rendering "is vendor specific." So the fix
+carries the file's own declared intent faithfully to whatever converts
+colour; it never hard-codes an intent because a fixture happens to score
+well under it.
+
+**Extends decision 064's `iccce` boundary, does not revise it.** pdfce
+owns what a colour component *means* and now owns carrying the document's
+declared rendering intent through the graphics state (D1–D3, this
+decision); `iccce` will own consuming that intent inside a real conversion
+(D4 and the terminal CMYK path) once `Pass 199.2` lands. Forward pointer
+added to decision 064, above.
+
+**No standing rule minted** — this is a spec-interpretation/invariant
+decision, not a finding about pdfce's own tooling or gates.
+
+**★ No dedicated `ARCHITECTURE.md` body section exists for colour
+management** (unlike decisions 111–113 above, which pair with §11.7
+because undo/redo's overlay is genuinely that section's topic — rendering
+intent is not). This role's tertiary duty ("both the decision log and the
+body section change together") is discharged here as a **flagged gap**
+rather than by inventing a mismatched section: the body of record for this
+invariant is `pdfce_core::color::intent`'s own module doc plus this entry
+and `Pass 199.0`/`199.1`'s `ROADMAP.md` entries. Whether a dedicated
+colour-management section belongs in `ARCHITECTURE.md` is the engineer's
+call, not decided speculatively here.
 
 **GUI-core separation:** not independently re-verified by this role — no
 shell available this filing (hard rule 8); relayed as the engineer's

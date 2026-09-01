@@ -83858,3 +83858,202 @@ count and backup-bundle staleness are **not verifiable from here**. The
 engineer should check `git log --oneline -10`,
 `git rev-list --count origin/main..main` and `ls -lt D:/Dev/pdfce-backups/`
 directly rather than take anything in this entry as a measured git claim.
+
+**★ CORRECTION, 2026-09-01 (359th filing) — the "Ceilings after this
+filing" paragraph above is STALE and internally inconsistent with its own
+entry.** It reads filing "`356` → `357`" and decision "`112` —
+**UNCHANGED**, next free `113`" directly beneath a "Documents edited this
+filing" list, two paragraphs above, that states *"one new §12 decision
+(`113`)"* was minted **this same filing**. The paragraph was not updated
+when the rest of this entry was retargeted from the 357th filing's close
+to the 358th's. Not independently re-derived here — this role has no
+shell this filing either; the engineer should confirm the correct figures
+via `tools/check-ledger-numbers.py` rather than trust either the struck
+paragraph above or this footer's absence of a replacement number.
+
+## 2026-09-01 (359th filing) — `Pass 199.0` + `Pass 199.1` (rendering intent conformance fix, D3 `image_intent`) SHIPPED; `Pass 200.0` + `Pass 200.1` (print-conformance harness: `X_CRITERION` false-failure fix, `reference_similarity`→`engine_similarity` replacement) SHIPPED; `Pass 199.2` (consume the intent in the terminal CMYK conversion) split to *Backlog*, NOT STARTED
+
+**★ Sourcing (hard rule 8).** No shell available to this role this
+filing. Commit messages for `a821393`, `5f7c232`, `c7d1543` and `9f1887e`
+were **not** independently read via `git log` — every fact below is
+relayed from the engineer's dispatch; where this role could corroborate
+against live source (`Read`/`Grep`, no `git`), that is stated inline in
+each `ROADMAP.md` entry.
+
+**Shipped:**
+
+- **`Pass 199.0`** (`a821393`) — `ri`/`/RI` was a recognised no-op; now
+  sets the graphics-state rendering intent. Documents four separate
+  defaults (D1–D4) and a fifth non-default rule (`gs` does not reset the
+  intent); struck an ISO erratum-removed NOTE that reads as permission.
+  D3 (image default) documented, not implemented this Pass.
+- **`Pass 199.1`** (`9f1887e`) — implements D3:
+  `pdfce_core::color::image_intent`, doc-tested, image-mask suppression
+  asserted; soft-mask `/Intent` out of scope, disclosed.
+- **`Pass 200.0`** (`5f7c232`) — five PASSING patches were scored as
+  failures by `tools/suite-check.py`'s mention-grep misrouting them to a
+  photograph-vs-footer strip comparator; `X_CRITERION` fixes it. Control:
+  Acrobat's own renders score the same under the same broken comparator.
+  Verdicts: `clean` 26 → 31, of 51.
+- **`Pass 200.1`** (`c7d1543`) — `reference_similarity` never compared
+  pdfce to the oracle (self-correlated a render against itself) and was
+  anti-correlated with correctness (destroying the shading RAISED the
+  score). Replaced with `engine_similarity`, threshold calibrated from a
+  measured correct/ablated gap. Verdicts: `REF` 3 → 0, `REF-PASS` 8,
+  harness pass total 36 → 39, of 51.
+
+**Decisions made this session:**
+
+- **Decision 114** (`ARCHITECTURE.md` §12) — rendering intent is four
+  separate defaults (D1–D4), not one; the content-stream `ri` operator
+  governs painting only, never the page-group→device hop (D4). Extends
+  decision 064's `iccce` boundary (forward pointer added); no dedicated
+  colour-management body section exists in `ARCHITECTURE.md` — flagged
+  to the engineer as a gap rather than filled speculatively.
+- **A Pass-ID scare that was NOT a collision, confirmed by reading
+  before acting.** The 358th filing minted `Pass 199.0` (NOT STARTED,
+  *Next up*) for exactly the ICCBasedRGB/`PCS 16.1` diagnosis this
+  filing's commits then implemented — the engineer picked up that
+  Next-up entry and shipped it under the same ID, which is the correct,
+  expected workflow, not a collision. This role initially read it as a
+  collision (two things both called `Pass 199.0`, one NOT STARTED, one
+  with real commits) before reading the Next-up entry's own body and
+  recognising both described the SAME finding at two stages. Worth
+  recording because this project has genuinely hit real Pass-ID
+  collisions this same week (`Pass 196.0`) — the discriminator is
+  whether the two entries describe the same feature or different ones,
+  not whether the numeral repeats.
+- **The `iccce`-dependency framing corrected**: from a two-way "publish
+  or vendor" choice to a three-way choice including a **git dependency**
+  on `github.com/KenM76/iccce` (zero external deps, `unsafe_code =
+  "deny"`, clears the wasm32 CI gate as trivially as a vendored copy).
+  The two-way framing being corrected was **not found written into any
+  editable pdfce document** by this role's grep of `ROADMAP.md`/
+  `SESSION_LOG.md`/`ARCHITECTURE.md` — filed as a new fact in
+  `Pass 199.2`'s Backlog entry, not as an edit to a located stale
+  statement (hard rule 8's discipline against over-precise corrections).
+
+**Findings + decisions:**
+
+- The remaining half of `Pass 199.0`'s original 5-item list (read
+  `/DestOutputProfile` bytes, supply an sRGB source profile, route the
+  terminal conversion sites) did **not** ship — split to `Pass 199.2`,
+  *Backlog*, gated on the operator's `iccce`-dependency choice, not on
+  further diagnosis.
+- The ICC-RGB tone bias already diagnosed on this conversion path
+  (+13.3 on the ICC-profile-carrying member, −0.3/+3.6 on the
+  device-space members) also shows in the 16-bit patches — same known
+  conversion issue `Pass 199.2` will fix, not a new mystery. No new
+  measurement owed.
+- `Pass 200.0` is a narrow instance of an already-filed Backlog item
+  ("invert `tools/suite-check.py`'s DEFAULT…", 357th filing) —
+  cross-referenced and amended in place; the general default-inversion
+  for other, still-undiscovered criterion shapes remains open and
+  unscoped.
+- A stale "Ceilings after this filing" paragraph was found at the tail
+  of the 358th filing's own entry (states filing "356→357" and decision
+  "112, next free 113" directly beneath a "Documents edited" list that
+  says decision 113 **was** minted that same filing) — flagged with a
+  dated correction footer in place immediately above this entry, not
+  silently rewritten; not independently re-derived (no shell this
+  filing either).
+
+**★★ Standing-rule judgement — DECLINED TO MINT.** The engineer proposed a
+rule for a finding: three-plus defects this session (a Pass-number
+collision, a doc fix landing on prose but not its table row, a rustdoc
+sentence that was the defect stated as a reassurance — all `6e2b69e`/
+`28b982c`; and D3 documented-but-unimplemented, `9f1887e`) were found by
+dispatching an agent to **write an outbound explanation**, not by any gate
+or test — the mechanism being that writing an explanation forces a read
+from the consumer's position, the one position the author never occupies.
+The engineer's own framing was honest about the weakness: "n≈4 by
+instances but n=1 by mechanism," against this project's own two-occurrence
+promotion bar. Two reasons, not one, for declining:
+1. **Two of the four instances are already claimed** — this project's own
+   `Pass 197.0` entry and decision 113 both file the doc-table-row miss
+   and the reassuring-rustdoc-sentence as **"a further `R93` instance,"
+   explicitly not a new rule**, per the ninety-fourth filing's ruling that
+   `R93` keeps no formal count. Minting a second rule over the same two
+   facts double-files them.
+2. **n=1 by mechanism, all within one session, is exactly the shape this
+   project has declined before** — the closest precedent is
+   `pdfce-engineer.md`'s own "RAG deliverable is not handed off until a
+   pdfce doc names it" note, filed 2026-08-06 as **prose in the agent
+   file, explicitly not a standing rule**, on a single occurrence against
+   the same two-occurrence bar. The same file's hard rule 11 makes the
+   general principle explicit for exactly this class of finding: **"no
+   mechanical gate can content-check a disclosure… this belongs where it
+   demonstrably works: in the reading, on your side"** — i.e. a
+   discovery-*technique* finding (as opposed to a defect-*shape* finding
+   like `R93`) is a procedural habit for the role that does the reading,
+   not a numbered ledger entry.
+
+**Recorded, not ruled out for the future**: if "dispatch an agent to write
+an outbound explanation and read it from the consumer's position" catches
+a genuinely independent defect in a *different* session or *different*
+subsystem, that would be occurrence two by the project's own bar, and
+should be raised again then — this time as one instance short of the bar,
+not four instances that collapse to one.
+
+**Still in flight:**
+
+- `Pass 199.2` is filed and unblocked but NOT STARTED — see its
+  `ROADMAP.md` Backlog entry for the 3-item list and the dependency
+  choice owed to the operator.
+- `PCS 13.0` secondary lead remains unmeasured, carried forward
+  unchanged from the 358th filing.
+- pdfce still owes `iccce` a reply to
+  `request_can_you_hand_me_the_output_intent_and_an_intent.md`
+  (2026-08-25) — unchanged from the 358th filing, still outstanding.
+- The general `tools/suite-check.py` default-inversion (Backlog, 357th
+  filing) remains unscoped; needs the operator before starting.
+
+**For next session:**
+
+- Confirm `tools/check-ledger-numbers.py` and
+  `tools/check-passes-filed.py` before the next push — neither was run
+  by this role this session (no shell).
+- Resolve the `Pass 199.2` `iccce`-dependency choice (publish / vendor /
+  git dependency) with the operator before starting that Pass.
+- Re-measure `PCS 13.0` once `Pass 199.2` lands.
+- Confirm the stale-ceilings-paragraph correction above against
+  `tools/check-ledger-numbers.py`'s actual output, and correct the
+  footer's own missing replacement figures once it can be run.
+
+**Documents edited this filing:**
+
+- `docs/ROADMAP.md` — two new *Shipped* entries (`Pass 199.0` + `Pass
+  199.1`; `Pass 200.0` + `Pass 200.1`, both topmost of *Shipped*); the
+  `Pass 199.0` *Next up* entry struck (partial ship) with a pointer
+  blockquote, its diagnostic body kept as the ablation record per this
+  file's own precedent for struck-not-deleted entries; one new *Backlog*
+  entry (`Pass 199.2`); one existing *Backlog* entry amended in place
+  (cross-reference to `Pass 200.0`).
+- `docs/ARCHITECTURE.md` — one new §12 decision (`114`); one forward
+  pointer added to decision 064.
+- `docs/FEATURES.md` — three rows amended (367–369): 367/368 regated
+  from `Pass 199.0` to `Pass 199.2`; 369 (rendering intent) core column
+  moved `[ ]` → `◐`.
+- `docs/SESSION_LOG.md` — this entry, plus a dated correction footer on
+  the 358th filing's stale "Ceilings" paragraph.
+
+**Ceilings after this filing** (stated from the edits made; **not
+independently re-run through `tools/check-ledger-numbers.py`, no shell
+available to this role this session — the engineer should confirm**):
+Pass ceiling `198.0` → **`200.1`** (new work this filing, in commit
+order: `199.0`, `199.1`, `200.0`, `200.1` — note `199.0`/`199.1` as IDs
+were already minted by the 358th filing's *Next up* entry and are
+*shipped*, not freshly *minted*, here; `200.0`/`200.1` are the genuinely
+new major); next free `199.2` (already claimed by the *Backlog* entry
+filed this session, no `### Pass` heading yet since it is Backlog, not
+Shipped)/`200.2`/new major `201.0`. Standing rules — **UNCHANGED** this
+filing (no rule minted; see "Standing-rule judgement" above). Decisions
+`113` → **`114`**. Filings `358` → **`359`**.
+
+**Git/backup state: NOT ASSERTED.** No shell tool was available to this
+role this session — per hard rule 8, commit currency, unpushed-commit
+count and backup-bundle staleness are **not verifiable from here**. The
+engineer should check `git log --oneline -10`,
+`git rev-list --count origin/main..main` and
+`ls -lt D:/Dev/pdfce-backups/` directly rather than take anything in
+this entry as a measured git claim.

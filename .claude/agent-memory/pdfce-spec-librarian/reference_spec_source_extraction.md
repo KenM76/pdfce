@@ -554,6 +554,31 @@ and `pdfminer` installed. Extraction recipe that works:
   BEHAVIOUR, NOT SPECIFICATION**, fence it in its own section, and expect it to be
   able to contradict the corpus's own ruling (it did). See [[pdf-spec-corpus-state]]
   item 44.
+- **★★ ICC SPECIFICATIONS ARE FREE AND PLAIN-`curl`-ABLE AT `color.org` — and one of them is a NORMATIVE
+  REFERENCE OF ISO 32000-2 BY A `shall` (verified 2026-09-01).** ISO 32000-2 §10.3.1: *"Conversion from a
+  CIE-based source colour to a CIE-based destination colour **shall** be performed based on **ISO 15076-1:2010
+  (ICC.1:2010)**"* — i.e. the paywalled-at-ISO document is **free at its originating body**, the standard
+  open-publication-mirror pattern.
+  - **ICC.1:2010 (v4.3) = ISO 15076-1:2010** — `https://www.color.org/specification/ICC1v43_2010-12.pdf`
+    (HTTP 200, `application/pdf`, **2 335 478 B**, 130 pp, `%%EOF` present, SHA-256
+    `cbb26a01abcf55fb6741d710a2e9aee2fd03de1b99af8a1b6baca2299234322d`, `pypdf`-readable).
+  - **ICC.1:2022** — `https://www.color.org/specification/ICC.1-2022-05.pdf` (HTTP 200). Index page:
+    `https://www.color.org/icc_specs2.xalter` (HTTP 200).
+  - **The payload is often in the INTRODUCTION (clause 0.x), not the body.** The whole
+    *"is a rendering intent's output testable?"* question is answered by clause **0.4**: *"The colour rendering of
+    the perceptual and saturation rendering intents is **vendor specific**."* **When a PDF clause delegates its
+    arithmetic to a referenced standard, read that standard's Introduction before grading the delegation as
+    closing the gap** — it may hand the gap straight back.
+  - **Do not stage a whole spec to answer one question.** Fetch to the scratchpad, dump, whitespace-stripped
+    locate, record **URL + byte count + SHA-256 + the sentence** in the RAG file, and leave the prefix empty.
+    `license_basis: free_primary`.
+- **`iso.org/standard/<id>.html` via `r.jina.ai` DOES return the ABSTRACT and the LIFECYCLE line** (re-verified
+  2026-09-01 on ISO 18619:2015, id **63033**: *Published*, Edition 1, 2015-07, "last reviewed and confirmed in
+  2025", plus the full abstract). Item **4g** says jina does not defeat OBP — **that is about
+  `iso.org/obp/ui/...`, not about `iso.org/standard/<id>.html`.** The catalogue-page route is the cheap way to
+  get a paywalled standard's **scope in ISO's own words**. **The iTeh free-preview route (4h) does NOT cover
+  every standard** — a filename web search for `cdn.standards.iteh.ai/samples/63033/...` returned nothing and
+  the catalogue page links no sample, so ISO 18619 stays unobtained.
 - **Adobe font technical notes** live at
   `https://adobe-type-tools.github.io/font-tech-notes/pdfs/<NNNN>.<Name>.pdf`
   (e.g. `5004.AFM_Spec.pdf`). **All `partners.adobe.com` TN URLs are dead.**
