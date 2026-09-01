@@ -3252,6 +3252,65 @@ enum Command {
         max_stream_bytes: usize,
     },
 
+    /// **Export a PDF's internals to an editable form** (`Pass 194.0`).
+    ///
+    /// Writes a **valid PDF** with object streams expanded, stream data decoded
+    /// and `/Filter` dropped, and a classic cross-reference table — the form
+    /// qpdf calls QDF. Open it in a text editor, change what you like, then
+    /// compile it back with `import-structure`.
+    ///
+    /// It is deliberately NOT byte-identical to the input: it is a full
+    /// rewrite. Only the compile-back is minimal-diff.
+    ///
+    /// Refuses an encrypted document rather than writing its decrypted
+    /// contents to disk.
+    ExportStructure {
+        /// Input PDF.
+        input: PathBuf,
+        /// Where to write the editable PDF.
+        #[arg(long, short)]
+        output: PathBuf,
+    },
+
+    /// **Compile an edited export back**, appending only what changed
+    /// (`Pass 194.0`).
+    ///
+    /// Diffs the edited export against the ORIGINAL and, by default, writes a
+    /// §7.5.6 **incremental update**: the original bytes are left as an
+    /// untouched prefix and only the objects you actually changed are appended.
+    ///
+    /// ★ That is the half qpdf does not have — its own issue tracker lists
+    /// incremental updates and digital-signature support as unimplemented, so
+    /// every qpdf round trip rewrites the file and invalidates every signature
+    /// in it. Here, a signature over a byte range you did not edit stays valid;
+    /// only editing an object a signature covers breaks it, which no
+    /// implementation can avoid.
+    ///
+    /// Streams are compared SEMANTICALLY — same decoded payload, ignoring
+    /// `/Filter`, `/DecodeParms` and `/Length` — because the export decoded
+    /// them and the original is compressed. Without that, every stream in the
+    /// document would look edited.
+    ImportStructure {
+        /// The ORIGINAL PDF the export came from.
+        input: PathBuf,
+        /// The edited export.
+        #[arg(long)]
+        edited: PathBuf,
+        /// Where to write the result.
+        #[arg(long, short)]
+        output: PathBuf,
+        /// Write a full rewrite instead of an incremental update.
+        ///
+        /// Destroys every existing signature (§12.8.1) and renumbers nothing,
+        /// but produces a single-revision file. The default is incremental
+        /// precisely because it does not.
+        #[arg(long)]
+        full: bool,
+        /// Report what would change and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// **Inventory every object, and report the file's physical layout.**
     ///
     /// Two things a page-level view cannot show. Per object: where it actually
@@ -8586,6 +8645,14 @@ fn run() -> ExitCode {
             layout_only,
             show_unreferenced,
         ),
+        Command::ExportStructure { input, output } => cmd_export_structure(&input, &output),
+        Command::ImportStructure {
+            input,
+            edited,
+            output,
+            full,
+            dry_run,
+        } => cmd_import_structure(&input, &edited, &output, full, dry_run),
         Command::ListFields {
             input,
             fillable_only,
@@ -34787,6 +34854,134 @@ fn cmd_list_objects(
         for id in orphans {
             println!("  {id}");
         }
+    }
+    exit::SUCCESS
+}
+
+/// **Export a PDF's internals to an editable form** (`Pass 194.0`).
+///
+/// Read-only with respect to the input; writes one new file. The note on stderr
+/// is rule 4's off-canvas disclosure: an export is a FULL REWRITE, and an
+/// operator who expects pdfce's usual minimal diff has to be told so at the
+/// moment it happens rather than inferring it from a byte count.
+fn cmd_export_structure(input: &Path, output: &Path) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let bytes = match pdfce_core::editable::export(&doc) {
+        Ok(b) => b,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    if let Err(err) = std::fs::write(output, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", output.display());
+        return exit::IO_ERROR;
+    }
+    let layout = pdfce_core::structure::layout(&doc);
+    println!(
+        "exported {} -> {} objects={} bytes={} objstm_expanded={}",
+        input.display(),
+        output.display(),
+        doc.object_count(),
+        bytes.len(),
+        layout.object_streams.len()
+    );
+    eprintln!(
+        "pdfce-cli: note: this export is a FULL REWRITE and is deliberately not byte-identical to the input -- object streams are expanded and stream data is decoded so the file can be read and edited. Compile it back with `import-structure`, which IS minimal-diff: it appends only the objects you changed and leaves the original bytes untouched"
+    );
+    exit::SUCCESS
+}
+
+/// **Compile an edited export back**, appending only what changed
+/// (`Pass 194.0`).
+///
+/// Defaults to an incremental update because that is the capability qpdf lacks:
+/// the original bytes stay as an untouched prefix, so a signature over a range
+/// the operator did not edit remains valid.
+fn cmd_import_structure(
+    input: &Path,
+    edited_path: &Path,
+    output: &Path,
+    full: bool,
+    dry_run: bool,
+) -> u8 {
+    let original = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let edited = match open_document(edited_path) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", edited_path.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let (dirty, report) = pdfce_core::editable::import(&original, &edited);
+    println!(
+        "modified={} added={} removed={} unchanged={} streams_matched_after_decode={}",
+        report.modified.len(),
+        report.added.len(),
+        report.removed.len(),
+        report.unchanged,
+        report.streams_matched_after_decode
+    );
+    for id in &report.modified {
+        println!("  modified {id}");
+    }
+    for id in &report.added {
+        println!("  added    {id}");
+    }
+    for id in &report.removed {
+        println!("  removed  {id}");
+    }
+    if dry_run {
+        println!("dry-run: nothing written");
+        return exit::SUCCESS;
+    }
+    if report.is_empty() && !full {
+        // Worth saying rather than quietly writing a copy: it tells the
+        // operator their edit did not take, which is the one failure they
+        // cannot otherwise see.
+        eprintln!(
+            "pdfce-cli: note: nothing changed between the original and the edited export, so the output is byte-identical to the input"
+        );
+    }
+    let opts = pdfce_core::writer::SaveOptions::identity();
+    let saved = if full {
+        pdfce_core::writer::save_full(&original, &dirty, &opts)
+    } else {
+        pdfce_core::writer::save_incremental(&original, &dirty, &opts)
+    };
+    let (bytes, _) = match saved {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", output.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    if let Err(err) = std::fs::write(output, &bytes) {
+        eprintln!("pdfce-cli: {}: {err}", output.display());
+        return exit::IO_ERROR;
+    }
+    println!(
+        "wrote {} bytes={} mode={}",
+        output.display(),
+        bytes.len(),
+        if full { "full-rewrite" } else { "incremental" }
+    );
+    if full {
+        eprintln!(
+            "pdfce-cli: note: a full rewrite DESTROYS every existing digital signature (ISO 32000-1 section 12.8.1). The default incremental mode does not"
+        );
     }
     exit::SUCCESS
 }

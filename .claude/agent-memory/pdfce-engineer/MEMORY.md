@@ -85,3 +85,4 @@
 - [A plan's list is a snapshot, not the ruling](feedback_a_plan_list_is_a_snapshot_not_the_ruling.md) - a cited plan resolves the SAFEGUARDS; the operator's sentence defines the SCOPE, and mine omitted an action he'd asked for
 - [`Ok` + an unchanged model = check the READ path](feedback_ok_plus_an_unchanged_model_means_check_the_read_path.md) — a memo whose key omits a dependency makes every verb over it address the wrong object, silently
 - [Fan out agents in parallel](feedback_fan_out_agents_in_parallel.md) — Ken 2026-08-31: independent reads/audits go out in ONE message; serialise only writes to the same file
+- [Rotate, don't tunnel](feedback_rotate_dont_tunnel.md) — Ken 2026-08-31: work queued independent defects in rotation or parallel; zero-progress-after-hours is the failure mode he's guarding against

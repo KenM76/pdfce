@@ -92,6 +92,7 @@ pub mod crypto;
 pub mod dimension;
 pub mod document;
 pub mod edit;
+pub mod editable;
 pub mod export;
 pub mod fdf;
 pub mod filters;
