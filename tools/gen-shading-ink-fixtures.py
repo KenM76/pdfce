@@ -184,6 +184,62 @@ def overprint_mixed(overprint: bool) -> bytes:
     ])
 
 
+# ---------------------------------------------------------------------------
+# Pass 202.0 -- a SPOT-ONLY /DeviceN shading under overprint must still paint.
+# ---------------------------------------------------------------------------
+#
+# A `/DeviceN` naming ONLY spot colorants puts all four of the group's process
+# components in Table 149's "not named in the source space" column, which under
+# `/OP true` is `c_b` -- the backdrop. Composited literally that is correct for
+# a press, where the spot ink sits on its own plate, and a VANISHED MARK for a
+# renderer with four process planes and no spot plane.
+#
+# ★ THE DEFECT THIS PINS WAS A COMMENT WITHOUT A GUARD. `interpret.rs` carried
+# a detailed block -- naming the patch, the shape, and the exact "451 x 29
+# device pixels of bare white paper" it produced -- announcing a refusal that
+# routed such a shading to the flattening bridge instead. The comment shipped;
+# the condition did not. Prose describing a safeguard is indistinguishable from
+# a safeguard to every tool in this project, which is why the regression test
+# is a RENDER rather than a code inspection.
+#
+# The tint transform: inputs (s1, s2) are on the stack; `{ 0 0 }` appends two
+# zeros, giving C=s1, M=s2, Y=0, K=0. Deliberately reaching two process
+# channels through the TRANSFORM while naming no process colorant in the SPACE
+# -- that combination is exactly what makes `names_a_process_colorant` false
+# while there is still real ink to paint.
+SPOT_ONLY_TINT = b"{ 0 0 }"
+
+
+def overprint_spot_only() -> bytes:
+    """A two-spot `/DeviceN` axial shading over white paper, `/OP true`.
+
+    No process colorant is NAMED, so the native-ink route must refuse and let
+    the bridge paint. The page needs a `/Group` with `/CS /DeviceCMYK` for the
+    same reason the fixture above does: without a subtractive blending space
+    pdfce opens no colorant buffer, Table 149 never runs, and the fixture
+    asserts nothing while looking fine.
+    """
+    content = b"q /GS0 gs /Sh0 sh Q\n"
+    return assemble([
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        b"/Group << /S /Transparency /CS /DeviceCMYK /I false /K false >> "
+        b"/Resources << /ExtGState << /GS0 5 0 R >> /Shading << /Sh0 6 0 R >> >> "
+        b"/Contents 4 0 R >>",
+        stream(b"", content),
+        b"<< /Type /ExtGState /OP true /op true /OPM 1 >>",
+        b"<< /ShadingType 2 /ColorSpace 7 0 R /Coords [20 0 180 0] "
+        b"/Function 8 0 R /Extend [true true] >>",
+        b"[ /DeviceN [/SpotAlpha /SpotBeta] /DeviceCMYK 9 0 R ]",
+        # The SHADING's function: t -> (s1, s2), a real ramp between the two.
+        b"<< /FunctionType 2 /Domain [0 1] /C0 [1 0] /C1 [0 1] /N 1 >>",
+        # The COLOUR SPACE's tint transform: (s1, s2) -> CMYK.
+        stream(b"/FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1]",
+               SPOT_ONLY_TINT),
+    ])
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, data in {
@@ -196,6 +252,7 @@ def main() -> None:
         # -- which is what the spot-only refusal produces, one branch away in
         # the same function.
         "shading-overprint-off-control.pdf": overprint_mixed(False),
+        "shading-overprint-spot-only.pdf": overprint_spot_only(),
     }.items():
         (OUT / name).write_bytes(data)
         print(f"wrote {OUT / name}  ({len(data)} bytes)")

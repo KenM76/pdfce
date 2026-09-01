@@ -272,3 +272,82 @@ fn the_overprinting_shading_actually_paints_and_ramps() {
         "expected blue to rise across the spot-to-cyan ramp; got left={left:?} right={right:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Pass 202.0 -- a SPOT-ONLY /DeviceN shading under overprint must still paint.
+// ---------------------------------------------------------------------------
+
+/// ★★★ A shading that names no process colorant must not render as blank paper.
+///
+/// # The defect
+///
+/// A `/DeviceN` naming only SPOT colorants puts all four of the group's process
+/// components in Table 149's "not named in the source space" column, which
+/// under `/OP true` is `c_b` — the backdrop. Composited literally, the shading
+/// preserves the entire backdrop and paints NOTHING: correct for a press, where
+/// the ink is on its own plate, and a vanished mark for a renderer with four
+/// process planes and no spot plane. The intended behaviour is to refuse the
+/// native-ink route and let the bridge paint the flattened tint instead — a
+/// disclosed approximation, and enormously better than nothing.
+///
+/// # ★★ Why this test exists at all, which is the transferable part
+///
+/// The refusal was **documented and not implemented**. `interpret.rs` carried a
+/// long block headed "THE SPOT-ONLY REFUSAL" that named the conformance patch,
+/// described the shape, and even quoted the measured damage — "451 × 29 device
+/// pixels of bare white paper, with `shadings_painted = 1` and
+/// `overprint_shadings_unsupported = 0`". Every word of it was accurate. The
+/// guard it described was never added to that route; it went to the *path*
+/// route only, and the comment sat above an unguarded call for every Pass
+/// since.
+///
+/// ⇒ **A comment describing a safeguard is indistinguishable from a safeguard**
+/// to review, to clippy and to the type system — and a detailed, measured one
+/// is *more* convincing than most real code, not less. Nothing could have
+/// caught this except rendering the file and asking why the bar was white.
+/// Hence a render-based regression test rather than any form of inspection.
+///
+/// # The oracle
+///
+/// Blank paper is an unambiguous failure state and needs no reference render:
+/// the assertion is that the band is not white, and that it *ramps*. Both
+/// halves are required — see the sibling test below for why "not white" alone
+/// would be satisfied by a bug.
+#[test]
+fn a_spot_only_devicen_shading_under_overprint_still_paints() {
+    let page = render("shading-overprint-spot-only.pdf");
+    let luma = mean_luma(&page);
+    assert!(
+        luma < 250.0,
+        "a spot-only /DeviceN shading under /OP true rendered as bare white \
+         paper (mean luma {luma:.1}). Table 149 puts every process component \
+         in the backdrop column, so the native-ink route paints nothing and \
+         must refuse in favour of the flattening bridge. This is the defect a \
+         detailed comment described for several Passes while the guard it \
+         announced was absent from the code beneath it"
+    );
+}
+
+/// The control that stops "not white" from being satisfied by the wrong thing.
+///
+/// A build that painted one flat colour across the whole band — or that filled
+/// it with an arbitrary solid — would pass the assertion above while having
+/// lost the shading entirely. Requiring the band to RAMP pins that the tint
+/// transform was actually evaluated across the parametric domain rather than
+/// once.
+#[test]
+fn the_spot_only_shading_ramps_rather_than_painting_one_flat_colour() {
+    let page = render("shading-overprint-spot-only.pdf");
+    let w = page.pixmap.width();
+    let (left, right) = (
+        patch(&page, w / 8, w / 4),
+        patch(&page, w * 3 / 4, w * 7 / 8),
+    );
+    let d = mean_abs(left, right);
+    assert!(
+        d > 10.0,
+        "the band must RAMP across the two spot colorants; got left={left:?} \
+         right={right:?}, mean |diff| {d:.2}. Ends that match mean the shading \
+         function was not evaluated and the test above asserts nothing"
+    );
+}

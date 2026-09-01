@@ -4850,7 +4850,40 @@ impl Interpreter<'_> {
                 // transform — a disclosed approximation this project has
                 // carried from the start, and a far better answer than
                 // nothing. The real fix is the per-colorant buffer.
-                if shading
+                //
+                // ★★★ AND THE GUARD THAT COMMENT PROMISED WAS NEVER WRITTEN.
+                //
+                // Everything above this line has been in the file since
+                // `Pass 130.3`, describing this patch by name and by pixel
+                // count. What shipped in that Pass was the guard on the PATH
+                // route (`names_a_process_colorant`, further down this file)
+                // and the COMMENT here — the condition itself was never added,
+                // so the route it warns about ran unguarded for every Pass
+                // since. The bar it predicted would be blank was blank.
+                //
+                // ⇒ The transferable point, and the reason this is written at
+                // length rather than quietly fixed: a comment describing a
+                // safeguard reads exactly like a safeguard. Nothing in review,
+                // in clippy, or in the test suite distinguishes "this is
+                // guarded" from "this explains why it should be", and the
+                // prose was detailed enough — with a measured pixel count —
+                // to be more convincing than most real code. It was found by
+                // rendering the file and asking why the bar was white.
+                //
+                // Verified by ablation on the patch, with the route proved
+                // reached first (the classification prints
+                // `names_a_process_colorant=false` for its two-spot
+                // `/DeviceN`): the bar goes from bare white paper to a ramp of
+                // (135,125,178) -> (144,194,74), against Acrobat's
+                // (127,124,162) -> (134,195,52). Page mean |diff| 38.75 ->
+                // 34.14.
+                if !crate::overprint::names_a_process_colorant(&kind) {
+                    // Refused, and SAID SO. Without the counter this looks
+                    // identical to a shading that had nothing to paint — which
+                    // is precisely how the original defect stayed invisible
+                    // with every counter reading green.
+                    self.diag.overprint_shadings_unsupported += 1;
+                } else if shading
                     .paint_cmyk(to_target, region, clip, alpha, rules, buf)
                     .is_some()
                 {
