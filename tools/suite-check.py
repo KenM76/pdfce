@@ -219,7 +219,29 @@ import cv2
 import numpy as np
 
 AREA_MIN = 200      # px; below this a mark is a glyph, not a swatch trap
-EDGE_MIN, EDGE_MAX = 16, 90
+# ★★ EDGE_MAX WAS 90 AND MISSED A REAL FAILURE BY FOUR PIXELS.
+#
+# The bound was calibrated on PCS 16.0, whose traps are 38x38 at the harness's
+# default scale, with 90 as generous headroom. PCS 22.1's trap is **94x94** --
+# a light X on a dark swatch, plainly visible to the operator, scoring 0.563
+# fill and passing every OTHER test -- and it was rejected for being four
+# pixels too wide. The harness reported that patch as a PASS.
+#
+# ⇒ A threshold calibrated on one specimen is a claim about every specimen. The
+# fill and diagonal tests below are what actually discriminate a trap from a
+# glyph or a swatch; the size bound was doing no work except excluding traps
+# that happened to be large.
+#
+# 160 is chosen BY THE REFERENCE CONTROL rather than by taste. Run against all
+# 51 Acrobat renders, which are the ground truth for "a correct engine trips
+# nothing":
+#
+#   EDGE_MAX  90 / 120 / 160   Acrobat trips 2 patches (both already TRAP?)
+#   EDGE_MAX  200              Acrobat trips a THIRD -- too loose
+#
+# So 160 is the largest value that does not start inventing failures in the
+# engine being used as the oracle.
+EDGE_MIN, EDGE_MAX = 16, 160
 FILL_LO, FILL_HI = 0.15, 0.60
 DIAG_MIN = 0.85
 CONTRAST_MIN = 6.0    # 8-bit levels; below this the X is not "clear".
