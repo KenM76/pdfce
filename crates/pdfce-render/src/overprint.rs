@@ -876,6 +876,8 @@ pub fn cmyk_group_rules(
                 // not name. Stated twice in the standard; not a typo.
                 ComponentRule::Zero
             }; 4];
+            let mut named_process = false;
+            let mut named_unplatable_spot = false;
             for n in names {
                 match n {
                     Colorant::All => return [ComponentRule::Source; 4],
@@ -883,9 +885,77 @@ pub fn cmyk_group_rules(
                     Colorant::Named(name) => {
                         if let Some(ch) = process_channel(name) {
                             out[ch] = ComponentRule::Source;
+                            named_process = true;
+                        } else {
+                            // A colorant pdfce has no plate for. Its ink is
+                            // still in `source_cmyk` -- flattened through the
+                            // tint transform -- but no NAME maps it to a
+                            // channel, so nothing above will write it.
+                            named_unplatable_spot = true;
                         }
                     }
                 }
+            }
+
+            // ★★★ THE MIXED CASE: a source naming BOTH a process colorant and
+            // a spot pdfce cannot plate (`Pass 195.0`).
+            //
+            // The rules above are computed from colorant NAMES; the colour
+            // they are applied to is `source_cmyk`, which is ALREADY FLATTENED
+            // through the tint transform. For a spot, those two disagree: the
+            // spot's ink lands in whichever process channels its tint
+            // transform writes, and its NAME maps to none of them -- so every
+            // channel carrying its colour stays `Backdrop` and the spot's
+            // entire contribution is silently discarded.
+            //
+            // MEASURED on a `/DeviceN [<spot green> /Cyan] /DeviceCMYK` axial
+            // shading painted with `/OP true /op true /OPM 1`: the tint
+            // transform yields (0.5, 0, 1.0, 0) at one end, so the green lives
+            // in Y -- and Y was exactly the channel thrown away. The band
+            // rendered as a pure cyan ramp with the green end missing, which
+            // is what the operator reported as "missing an entire colour in
+            // the colour band".
+            //
+            // ★ Why this is NOT the existing spot-only refusal. The guard that
+            // catches a spot-only source asks whether the source names a
+            // process colorant; here `/Cyan` DOES, so the refusal never fired.
+            // A guard written for one shape is a claim about a class -- the
+            // mixed shape fell through the middle.
+            //
+            // ★★★ WHY THIS IS `[Source; 4]` AND NOT THE PER-CHANNEL VERSION,
+            // WHICH WAS TRIED FIRST AND MEASURED TO DO NOTHING.
+            //
+            // The obviously better fix is to mark `Source` only on the channels
+            // the flattened tint actually writes -- for the measured spot, C
+            // and Y -- leaving M and K on `Backdrop` so an overprint cannot
+            // ERASE backdrop ink the spot never claimed. That version was
+            // written, built and measured, and it changed the render by
+            // exactly zero.
+            //
+            // The reason is architectural and is worth recording, because it is
+            // invisible from this function's signature: **`source_cmyk` is not
+            // the paint's colour here.** These rules are computed ONCE per
+            // graphics state, and for precisely the mixed spaces the probe
+            // showed the call arriving with `source_cmyk = [0, 0, 0, 0]` -- a
+            // placeholder. The real colour only exists per-sample, later, in
+            // the ramp. So a per-channel refinement at THIS site can only ever
+            // read zeros and widen nothing.
+            //
+            // ⇒ `[Source; 4]` is not the better answer, it is the reachable
+            // one. The honest cost: it writes the source's M and K, which are 0
+            // for this shading, so it knocks out backdrop magenta and black
+            // that the spot never claimed. No patch in the conformance corpus
+            // detects that, and the per-channel version belongs with the
+            // per-spot-colorant plane, where the paint colour is in scope.
+            //
+            // ★★ AND WHY A SPOT-ONLY SOURCE IS DELIBERATELY LEFT ALONE: the
+            // unconditional widening was measured and REGRESSES two patches
+            // (page mean |diff| 20.25 -> 22.02 and 20.60 -> 23.77). Preserving
+            // the backdrop for a spot-only paint is the decided behaviour this
+            // module documents at length; this widening is scoped to the mixed
+            // case that behaviour was never written for.
+            if named_process && named_unplatable_spot {
+                return [ComponentRule::Source; 4];
             }
             out
         }

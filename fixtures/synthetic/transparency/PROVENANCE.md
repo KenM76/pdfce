@@ -102,3 +102,16 @@ Each isolates ONE decision, so a failure names its own cause.
 | `stencil-mask-decode.pdf` | The same stencil with `/Decode [1 0]`. Rendering these two identically is the classic silent-inversion bug: the mask hides exactly the half it was meant to reveal, and the result looks deliberate rather than broken. |
 | `colour-key.pdf` | `/Mask` as an array (§8.9.6.4) over a red/green/red/blue strip, masking pure red. Position-independent: it is the COLOUR that vanishes. This is what a single-transparent-colour PNG (`tRNS` on truecolour) becomes. |
 | `colour-key-indexed.pdf` | The same over an `/Indexed` image, where n is **1** (the index), not the base space's 3 — so the array is two integers. A reader using the base space's count calls it malformed and masks nothing. |
+
+## `gs /SMask` REPLACES; it does not intersect (Pass 192.0)
+
+Written by `tools/gen-smask-replace-fixtures.py`; same `LEGAL.md` SS5 category (a) as everything above -- byte-authored, no PDF library involved.
+
+ISO 32000-1 Table 58's `/SMask` row: altering the soft mask with `gs` *"completely replaces the old value with the new one, rather than intersecting the two as is done with the current clipping path"*. pdfce folds a mask into the clip by multiplication, which is a sound way to apply ONE mask and a wrong way to apply two.
+
+| File | Claim it makes falsifiable |
+|---|---|
+| `smask-replaces-not-intersects.pdf` | Two soft-masked fills in ONE q-level with **no `q`/`Q` between them** -- the shape a bevel-and-emboss uses. Their masks cover disjoint halves, so if a second `/SMask` multiplies onto the first the product is 0 and the second layer paints NOTHING. Hard halves rather than the real case's complementary gradients, deliberately: it makes this a colour test (left red, right blue) instead of a tolerance test. |
+| `smask-single-layer-control.pdf` | * The control: ONE masked layer, which must render identically. The fix touches the path every single-mask document uses, so without this "the second layer now paints" is equally consistent with a change that broke masking altogether. |
+
+Regenerate with `python tools/gen-smask-replace-fixtures.py`; the writer is deterministic, so regenerating must be a byte-for-byte no-op.

@@ -4149,10 +4149,62 @@ impl Interpreter<'_> {
                         // this is the operation, not an approximation of
                         // it — §8.5.4 NOTE 2 guarantees a clip only ever
                         // shrinks, and a mask only ever shrinks too.
-                        if self.gs.current.clip_before_smask.is_none() {
-                            self.gs.current.clip_before_smask = Some(self.gs.current.clip.clone());
-                            self.gs.current.clips_since_smask = 0;
+                        // ★★★ A NEW /SMask REPLACES THE ONE IN FORCE. IT DOES
+                        // NOT INTERSECT WITH IT (`Pass 192.0`).
+                        //
+                        // ISO 32000-1 Table 58, the `/SMask` row, verbatim:
+                        // "Although the current soft mask is sometimes referred
+                        // to as a 'soft clip', altering it with the `gs`
+                        // operator COMPLETELY REPLACES the old value with the
+                        // new one, rather than intersecting the two as is done
+                        // with the current clipping path parameter."
+                        // §11.6.4.3 says the same from the other side: "at most
+                        // one mask input shall be provided to any PDF
+                        // compositing operation" -- there is no arithmetic slot
+                        // for a second mask.
+                        //
+                        // pdfce folds the mask INTO the clip by multiplication,
+                        // which is a sound way to apply one mask and a wrong way
+                        // to apply two. The guard here used to snapshot the
+                        // pre-mask clip only when none was saved, so a SECOND
+                        // `gs /SMask` with no intervening `q`/`Q` never lifted
+                        // the first mask out -- the clip became `mask1 x mask2`.
+                        //
+                        // ★ THE SHAPE THAT MAKES THIS COSTLY: a bevel is a
+                        // highlight and a shadow whose masks are COMPLEMENTARY
+                        // gradients. Their product is approximately zero, so
+                        // the second layer paints under no coverage at all and
+                        // simply vanishes -- while the first, painted when only
+                        // its own mask was in force, renders correctly. "First
+                        // masked layer works, second is missing" is the exact
+                        // symptom that was reported.
+                        //
+                        // MEASURED on the bevel: the shadow fill's coverage was
+                        // 0 of 0 pixels before and 362,248 over 2,425 after,
+                        // and the cell's mean luminance error against the
+                        // page's own baked reference fell 21.48 -> 2.83. A cell
+                        // with only ONE masked layer is byte-identical either
+                        // way, which is the control.
+                        match self.gs.current.clip_before_smask.clone() {
+                            None => {
+                                self.gs.current.clip_before_smask =
+                                    Some(self.gs.current.clip.clone());
+                            }
+                            Some(saved) => {
+                                if self.gs.current.clips_since_smask == 0 {
+                                    self.gs.current.clip = saved;
+                                } else {
+                                    // A `W n` landed while the mask was in
+                                    // force, so the snapshot predates it and
+                                    // restoring it would discard a real clip.
+                                    // The same known limit `/SMask /None`
+                                    // already discloses: counted, never
+                                    // silently mis-clipped.
+                                    self.diag.soft_masks_reset_stale += 1;
+                                }
+                            }
                         }
+                        self.gs.current.clips_since_smask = 0;
                         // Keep the mask ITSELF, un-folded: §11.4.5 needs
                         // it as a value a group composite can apply once,
                         // not as a coverage multiplier already fused into
