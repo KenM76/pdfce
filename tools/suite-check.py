@@ -244,6 +244,38 @@ CONTRAST_MIN = 6.0    # 8-bit levels; below this the X is not "clear".
 # built by searching for words and read as if it had been built by reading
 # the rule, which is the same shape as every other false-green this harness
 # has produced.
+# ★★★ A STATED CRITERION OUTRANKS A MENTION -- the fourth classification
+# defect in this harness, and the first that reported a PASS as a FAILURE.
+#
+# Five patches exercising 16-bit images caption their underlying 8-bit image
+# "Reference image (cross): 8Bit, ZIP" while stating the X criterion outright:
+# "No X must be visible when rendered correctly." The word "reference image"
+# tripped `ref_style`, so they were routed to the strip comparator instead of
+# the X detector -- and `content_bands` then correlated a 141-row photograph
+# against the 21-row PAGE FOOTER, giving ~0.09 BY CONSTRUCTION.
+#
+# ★★ THE CONTROL THAT SETTLES IT: ACROBAT'S OWN RENDERS SCORE THE SAME.
+# Run through this file's own `reference_similarity` at the same scale,
+# Acrobat gives 0.094 / 0.065 / 0.109 against pdfce's 0.089 / 0.057 / 0.098,
+# and `None` for the same two patches. A metric that scores the oracle and the
+# subject identically is not measuring the subject. The five renders are
+# structurally identical to Acrobat's -- same size, position and orientation,
+# no noise -- and tone-correlate 0.94-0.98, better than a patch this harness
+# already passes.
+#
+# ★ AND THE TELL WAS SEEN AND MIS-READ ONCE ALREADY. This file's own comment
+# further down records "four 16-bit-image patches 'passed' on scores of 0.05 vs
+# 0.06 -- pdfce agreeing with Acrobat that neither resembles the reference". A
+# prior session spotted the anomaly, correctly refused to call it green, and
+# added a guard DOWNSTREAM of the misclassification instead of asking why the
+# number was absurd. The number was absurd because the patch was in the wrong
+# comparator.
+#
+# This is `MARK_CRITERION`'s own warning turned on `ref_style`: a grep for a
+# phrase finds a MENTION, not a criterion. So an explicit criterion wins.
+X_CRITERION = ("no x must be visible", "no x should be visible",
+               "no x may be visible")
+
 MARK_CRITERION = ("check mark", "checkmark", "check marks", "checkmarks")
 
 # ★★★ A THIRD CRITERION WITH NO DETECTOR, and the third false-green this
@@ -416,6 +448,60 @@ def content_bands(im):
     return segs
 
 
+def classify(txt):
+    """Which pass criterion does this patch state on its own face?
+
+    Returns `(ref_style, mark_style, crit_style)`. `txt` is the patch's own
+    extracted text, lowercased.
+
+    ★ **Precedence is the whole point.** `ref_style` is a MENTION-grep, and a
+    patch that merely mentions a reference image while stating the X criterion
+    outright is an X-trap patch. Routing it to the strip comparator scored a
+    photograph against the page footer and reported five passing patches as
+    failures -- see `X_CRITERION`. So a stated criterion outranks a mention,
+    and that ordering is the thing this function exists to make testable.
+
+    The three flags are not mutually exclusive by construction, and the caller
+    resolves them in its own documented order (X marks first, then `ref_style`,
+    then `mark_style`, then `crit_style`, then `clean`).
+    """
+    ref = ("reference image" in txt) or ("match the reference" in txt)
+    if any(k in txt for k in X_CRITERION):
+        # The patch says what a failure looks like. Believe it over a caption.
+        ref = False
+    mark = any(k in txt for k in MARK_CRITERION)
+    # All words in any one group must appear -- see CRITERION_UNKNOWN.
+    crit = any(all(k in txt for k in g) for g in CRITERION_UNKNOWN)
+    return ref, mark, crit
+
+
+def self_test() -> int:
+    """Pin the classification rules without needing a PDF or the corpus.
+
+    The bug this guards was pure string classification, so the test is too --
+    which also means it runs on a machine that has no licensed corpus at all.
+    """
+    # ★ THE REGRESSION. A verbatim lowercased transcript of what `extract-text`
+    # returns for a 16-bit patch: it mentions a reference image AND states the
+    # X criterion. Pinning the real string rather than a paraphrase is the
+    # point -- a paraphrase would have passed while the real one failed.
+    t = ("no x must be visible when rendered correctly. "
+         "reference image (cross): 8bit, zip test image: 16 bit, zip")
+    assert classify(t)[0] is False, "a stated X criterion must outrank a mention"
+
+    # Unchanged: genuine reference-strip patches, which state no X criterion.
+    assert classify("each of these should match the reference images")[0] is True
+    assert classify("reference image")[0] is True
+
+    # The other two criteria still resolve, and are independent of the above.
+    assert classify("if a check mark is visible then devicen is respected")[1] is True
+    assert classify("the correct result is on the left and the wrong one on the right")[2] is True
+    assert classify("nothing in particular is stated here") == (False, False, False)
+
+    print("suite-check --self-test: classification rules hold")
+    return 0
+
+
 def reference_similarity(png):
     """Compare a patch's "Actual test objects" strip to its "Reference
     Images" strip.
@@ -483,11 +569,7 @@ def main():
         # Does this patch use the reference-strip design rather than an X?
         txt = subprocess.run([cli, "extract-text", os.path.join(args.dir, f)],
                              capture_output=True, text=True, errors="replace").stdout.lower()
-        ref_style = ("reference image" in txt) or ("match the reference" in txt)
-        # Read from the patch's own face, like `ref_style` above.
-        mark_style = any(k in txt for k in MARK_CRITERION)
-        # All words in any one group must appear -- see CRITERION_UNKNOWN.
-        crit_style = any(all(k in txt for k in g) for g in CRITERION_UNKNOWN)
+        ref_style, mark_style, crit_style = classify(txt)
         sim = reference_similarity(png) if ref_style else None
         ref_sim = None
         if marks:
@@ -587,6 +669,10 @@ def main():
     print("A correlation well below 1.0 means the strips visibly differ.")
     return 0
 
+
+
+if "--self-test" in sys.argv:
+    raise SystemExit(self_test())
 
 if __name__ == "__main__":
     raise SystemExit(main())
