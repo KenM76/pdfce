@@ -2912,16 +2912,23 @@ enum Command {
         /// ISO 32000-1 §8.6.7 scopes `OPM 1`'s zero-tint rule to a
         /// `DeviceCMYK` source. A `DeviceGray` fill under `/OP true` either
         /// knocks its backdrop out (the literal reading) or preserves the
-        /// backdrop's C, M and Y (Acrobat, which converts grey to K-only CMYK
-        /// first and then applies the rule). pdfce's default is Acrobat's,
-        /// because this is a print axis scored against press behaviour.
+        /// backdrop's C, M and Y (converting grey to K-only CMYK first, then
+        /// applying the rule). pdfce's default preserves.
+        ///
+        /// ★ Which value matches Acrobat DEPENDS ON THE GEOMETRY, so neither
+        /// is "the Acrobat setting": the default agrees with Acrobat over a
+        /// SPOT backdrop, and `device_cmyk_only` agrees with it over PROCESS
+        /// components. Measured 2026-09-01. The underlying difference is that
+        /// Acrobat has a per-spot-colorant plane and pdfce does not yet.
         ///
         /// ★ This help said "the ambiguity this exposes" until `Pass 174.5`,
         /// and under **ISO 32000-1** that is wrong: §8.6.7's next sentence
         /// excludes *"conversions from some other colour space"* by name, and
         /// Tables 148/149 tabulate *"any process colour space"* and give it
-        /// `OPM 0` behaviour. **The default is a deliberate divergence toward
-        /// Acrobat.** ISO 32000-**2** deletes both of those supports, so the
+        /// `OPM 0` behaviour. **The default is a deliberate divergence from
+        /// ISO 32000-1**, kept for the sequencing reason above rather than
+        /// because it matches any reference. ISO 32000-**2** deletes both of
+        /// those supports, so the
         /// question really is open there — the edition matters. Choosing
         /// `device_cmyk_only` gets you ISO 32000-1 to the letter.
         ///
