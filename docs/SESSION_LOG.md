@@ -84057,3 +84057,364 @@ engineer should check `git log --oneline -10`,
 `git rev-list --count origin/main..main` and
 `ls -lt D:/Dev/pdfce-backups/` directly rather than take anything in
 this entry as a measured git claim.
+
+## 2026-09-01 (360th filing) — three unfiled commits filed together: `Pass 201.0` (`f773683`), `Pass 199.2` (`3194f1b`) and `Pass 202.0` (`b796bc0`) SHIPPED — ★★★★★ **THE COLOUR ENGINE LANDS: pdfce COLOUR-MANAGES AN `ICCBased` PAINT FOR THE FIRST TIME, VIA `iccce` AS A GIT DEPENDENCY PINNED TO TAG `v0.3.0` (decision `115`)** — ★★★★★ **A COMMENT DESCRIBED A GUARD IN MEASURED DETAIL AND THE GUARD WAS NEVER WRITTEN: A SPOT-ONLY `/DeviceN` SHADING UNDER `/OP true` RENDERED AS BARE WHITE PAPER FOR EVERY PASS SINCE `130.3`** — ★★★★ **A FIX FOR INK BEING *DROPPED* WAS *ERASING* INK: SIXTEEN CHECK MARKS VANISHED, AND `K` IS A PLANE pdfce HAS** — ★★★★ **`Write` ATE A COMMITTED TEST FILE AND ITS FIXTURE GENERATOR, `cargo test` SAID 0 FAILURES, AND THE ONLY SIGNAL WAS AN UNEXPLAINED `-3`** — ★★★ **A GATE HAD BEEN FAILING LOUDLY WITH NOBODY READING IT ACROSS SEVERAL PASSES** — ★★ **`PCS 3.1`'s SECOND, INDEPENDENT DEFECT NEWLY DIAGNOSED: THREE SOURCE COMMENTS CALL A SILENT PATH CONFORMING BY MISREADING A TABLE 149 ROW'S SCOPE**
+
+**Sourcing:** a shell **was** available to this role this filing. All three
+commit messages were read with `git log -1 --format=%B <hash>`; every live
+cross-check below names the file and line it came from. Figures are the
+engineer's, as stated in the commits; where a denominator is absent from a
+commit it is said so rather than supplied (hard rule 10(a)).
+
+**Shipped:**
+
+- **`Pass 202.0`** (`b796bc0`) — a spot-only `/DeviceN` shading under
+  `/OP true` rendered as **bare white paper** and now paints. Such a space
+  puts all four process components in Table 149's *"not named in the source
+  space"* column, which under `/OP true` is `c_b` — correct for a press,
+  a vanished mark for a renderer with four process planes and no spot plane.
+  The intended refusal (fall to the sRGB bridge, paint the flattened tint,
+  disclose it) **had been described in a comment since `Pass 130.3` and
+  never implemented on that route.** Measured on **`PCS 8.01`**, route proved
+  reached first (`names_a_process_colorant = false`): bar goes from bare
+  paper to a ramp; at Acrobat's most-colourful row pdfce means RGB
+  (155.6, 169.5, 144.0) against Acrobat (134.7, 153.1, 128.5) — **still
+  lighter, and that residual is the flattening approximation.** The refusal
+  now increments `overprint_shadings_unsupported`, which was reporting **0**
+  while the bar was blank. New synthetic fixture
+  `fixtures/synthetic/shading/shading-overprint-spot-only.pdf` (authored from
+  ISO 32000-1's own object syntax; nothing from the licensed suite copied or
+  consulted), two tests — *not white* and *must RAMP* — **sabotage-verified**:
+  disabling the guard fails both new tests while the five pre-existing tests
+  stay green. `cargo test -p pdfce-render --test shading_ink` **7 passed**;
+  `tools/run-gates.sh` **30 of 30 green**.
+- **`Pass 199.2`** (`3194f1b`) — **pdfce's first ICC colour-management
+  engine.** An `ICCBased` paint on a page that composites in ink is now
+  converted by **`iccce`** (`github.com/KenM76/iccce`, MIT) using the
+  document's own embedded source profile and its `/OutputIntents` →
+  `/DestOutputProfile` destination, at the graphics state's intent. New
+  module `crates/pdfce-render/src/icc.rs`. Measured on **`PCS 16.1`**, with
+  the ablation proved effective first (`icc_managed_paints` **30 with the fix,
+  0 ablated**): **28,301 pixels changed** (denominator not stated in the
+  commit — no rate derivable), **max change 92 levels**, **mean error vs
+  Acrobat 33.46 → 32.06**. **The patch still fails on a separate trap; this
+  closes the colour half only.** Two new counters,
+  `icc_managed_paints` / `icc_unmanaged_paints`, shipped **as a pair**.
+  `cargo tree` clean for core/render; no-network and wasm32 gates cleared
+  because `iccce` has **zero external dependencies** and **denies `unsafe`**;
+  `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`;
+  `tools/run-gates.sh` **30 of 30 green**.
+- **`Pass 201.0`** (`f773683`) — `Pass 195.0`'s own widening was **erasing**
+  ink. A `1 0 1 .5 k` check mark under an overprinting
+  `/DeviceN [<the named spot green>, /Cyan]` shading lost its `K = 0.5` and
+  **vanished sixteen times on one page**. Fixed by `ColorRamp::ink_reach` —
+  which of the four channels a ramp **ever** writes — narrowing the mixed
+  case on the **shading route only** to `named process channels UNION ramp
+  reach`. **Sixteen check marks return; conformance verdicts across all 51
+  unchanged; 176 suites, 4,946 tests, 0 failed** (≈ 28 tests per suite).
+  **Sabotage-verified:** reverting the narrowing renders overprint-on and
+  overprint-off at luminance **171.5 and 171.5 — identical** — while the
+  control stays green.
+
+**Decisions made this session:**
+
+- **`ARCHITECTURE.md` §12 decision `115` minted** — **`iccce` enters as a GIT
+  dependency PINNED to tag `v0.3.0`** (`iccce-profile` + `iccce-cmm`, in
+  `pdfce-render` only; verified live at
+  `crates/pdfce-render/Cargo.toml:57-80`). **Not a path dependency**, which
+  would resolve only on the author's machine and be a broken build for anyone
+  cloning the public repo; **not a vendored copy**, a fork's burden with none
+  of a fork's purpose. **Pinning keeps colour output reproducible** — an
+  unpinned git dependency lets a sibling-project commit silently change what
+  pdfce renders between two builds of the same pdfce commit, in the one area
+  where a silent change stays invisible until a conformance figure moves.
+  **Named as reversible** if the operator prefers crates.io publication.
+  §9 gains its **fifth "Nth dependency" paragraph** in the same filing, so
+  the decision log and the body section moved together.
+- ★ **That decision was the ENGINEER's, and the 359th filing had recorded it
+  as the OPERATOR's to make.** Filed as what it is rather than smoothed: the
+  engineer took the third option the 359th filing had itself verified as
+  *"probably better"*, on the reasoning above. **If Ken wants crates.io
+  publication instead, decision `115` is the entry to amend.**
+- **Colour policy, recorded as a standing shape rather than a local scope:
+  pdfce manages `ICCBased` and REFUSES `DeviceRGB`.** `iccce` exposes a
+  built-in sRGB as a **destination only**, and **pdfce is not entitled to
+  invent a source characterisation the document never made.** Same posture as
+  decision `114`'s refusal to hard-code an intent because a fixture scores
+  well under it.
+- **`overprint::rgb_to_cmyk` stays on the round-trip path, deliberately.**
+  Substituting an accurate, non-invertible transform there would make the
+  return leg drift — worse and far harder to see than the defect fixed.
+- **Standing rules: NOTHING MINTED, ceiling `R239` unchanged.** Two
+  candidates assessed and both declined; see *ROADMAP.md* → *Standing rules*
+  → *Standing-rule disposition, 360th filing*.
+
+**Findings + decisions:**
+
+- ★★★★★ **A COMMENT DESCRIBING A SAFEGUARD IS INDISTINGUISHABLE FROM A
+  SAFEGUARD — AND A *MEASURED* ONE IS MORE CONVINCING THAN MOST REAL CODE.**
+  `interpret.rs` carried a block headed *"THE SPOT-ONLY REFUSAL, `Pass 130.3`"*
+  that named the patch, described the colour space and **quoted the measured
+  damage** — *"451 × 29 device pixels of bare white paper, with
+  `shadings_painted = 1` and `overprint_shadings_unsupported = 0`"*
+  (451 × 29 = **13,079** device pixels; the multiplication is filed here
+  because the commit states only the factored form). Every word accurate;
+  **the `if` was never written on that route.** `Pass 130.3` had added the
+  real guard to the **path** route and the **comment** here. **Several later
+  Passes edited the block around it without noticing.** Found by rendering
+  the file and asking why the bar was white — not by review, test or gate.
+  **Filed as `R93`'s FIFTH instance with a new practical form** (*a Pass that
+  adds a guard to one route and a comment to a sibling route owes the sibling
+  a test that fails when the guard is absent there*); **no new number** —
+  the 351st filing's precedent governs.
+- ★★★★★ **AN UNEXPLAINED COUNT IS THE WHOLE WARNING. A GREEN SUITE IS
+  COMPATIBLE WITH HAVING DELETED A DIFFERENT GREEN SUITE.** Writing
+  `Pass 201.0`'s test, the engineer used `Write` on
+  `crates/pdfce-render/tests/shading_ink.rs` believing it new. It already held
+  **three tests from `Pass 137.0`**, and `tools/gen-shading-ink-fixtures.py`
+  went the same way **in the same minute** — **tests and their inputs,
+  together.** The tool result said *"has been updated successfully"* rather
+  than *"created"*, **read past twice**; `cargo test` reported **0 failures**
+  because the replacement compiled and passed. **What caught it: the total
+  pass count fell by one while two tests had been added — a `-3` discrepancy
+  nearly waved through as noise.** `git diff --stat` then showed **146
+  deletions on a file believed created.** Both restored with
+  `git checkout --`; `4,944 + 2 = 4,946` is what confirms nothing else went
+  missing. **Second carrier of an existing lesson** (a week ago `mkdir -p` +
+  `rm -rf` ate two committed files). **Same root: acting as if CREATING when
+  the thing already existed.** Escalated cross-project this filing.
+- ★★★★ **A CORRECT FUNCTION USED FOR THE WRONG JOB PRODUCES NUMBERS THAT
+  LOOK EXACTLY LIKE AN ARITHMETIC DEFECT.** `overprint::rgb_to_cmyk` is a
+  deliberately **invertible** max-GCR formula whose purpose is to let
+  `snapshot_srgb_backdrop` and `composite_srgb` round-trip. It was being used
+  as a **terminal** conversion, which has the opposite requirement: accurate,
+  with no obligation to be reversible. **Three hypotheses about pdfce's blend
+  arithmetic were raised and each refuted by ablation before the real cause
+  was found.** ⇒ **An invertible transform and an accurate transform are
+  different objects; a codebase that composites in one space and converts to
+  another needs both, named as such.** *"The document had embedded the profile
+  saying what its numbers mean, and pdfce was parsing it for `/N` and
+  throwing it away."*
+- ★★★★ **A CAVEAT THAT ENDS "NOTHING DETECTS THIS" IS AN EMPIRICAL CLAIM, NOT
+  A CAVEAT — AND IT IS THE SENTENCE MOST WORTH TURNING INTO A TEST.**
+  `Pass 195.0`'s own comment said its widening *"knocks out backdrop magenta
+  and black that the spot never claimed. **No patch in the conformance corpus
+  detects that.**"* **One does.** It is checkable, it was not checked, and it
+  was false. ★ And the defect it caused was **ink being ERASED by a fix for
+  ink being DROPPED** — `K` is a plane pdfce **has**, so this was **not** the
+  n-channel blocker and was fixable now.
+- ★★★★ **THE INFORMATION WAS NOT MISSING; IT WAS IN A DIFFERENT OBJECT.**
+  `Pass 195.0` could not narrow per channel because `cmyk_group_rules` runs
+  **once per graphics state with a placeholder colour** — the real colour
+  exists only per sample. A **ramp** is the whole set of colours the shading
+  can produce and is **already built**. Answerable for a shading, and
+  **scoped to the shading route deliberately**: the same narrowing applied for
+  every caller was **measured** to regress a duotone image (**region mean
+  |diff| 15.91 → 53.95**; region pixel count not stated in the commit).
+  Image callers keep the old behaviour until the per-spot plane lands.
+- ★★★ **A GATE THAT FAILS FOR A *LOCATOR* REASON IS INDISTINGUISHABLE FROM A
+  GATE GUARDING NOTHING — AND IT FAILS LOUDLY, WHICH IS WHY IT SURVIVES.**
+  `tools/check-metrics-line-contract.py` anchors on the **last key** of the
+  stable stdout line; `rendering_intents_set` was appended without updating
+  the anchor, so the gate exited *"substring not found"* and **the key-order
+  contract went unchecked across several Passes.** Two more red gates fixed
+  in the same commit: `check-bypass-paths.sh` red since `Pass 194.0`
+  (`import` **builds** a `DirtySet` and never applies one — now a named
+  exception with its reason), and a literal `\n` reaching the metrics format
+  string **via a heredoc**, which would have injected a newline into the
+  middle of a single-line contract at runtime — invisible to grep, caught by
+  the gate. **Declined as a standing rule at `n = 1`**, with its own mint
+  trigger written and the 355th filing's near-neighbour trigger **re-examined
+  and deliberately not fired** (different mechanism, same consequence).
+- ★★★ **A DISCLOSURE COUNTER SHIPS AS A PAIR OR ITS ZERO IS UNREADABLE.**
+  `icc_managed_paints = 0` alone cannot separate *"the engine ran and agreed
+  with the fallback"* from *"the branch was never reached"* — the exact
+  ambiguity that made an earlier ablation in this area uninterpretable.
+  `icc_unmanaged_paints` exists to make the zero mean one thing. **This is
+  part of decision `115`, not an implementation detail.**
+- ★★ **`PCS 3.1` HAS A SECOND, INDEPENDENT DEFECT IN FRONT OF THE n-CHANNEL
+  ONE — NEWLY DIAGNOSED, NOT FIXED.** A **process-space sampled image** under
+  `/OP true` never enters overprint compositing at all (the gate requires
+  `Separation`/`DeviceN`), so it takes **no counter on the way past** — not
+  composited, not refused, not disclosed. **That is a rule 4 violation
+  independent of what the correct pixel answer turns out to be.** ★ **Three
+  source comments assert this is conforming**, citing *"Table 149 row 1"* —
+  verified live at `crates/pdfce-render/src/interpret.rs:460` and
+  `crates/pdfce-render/src/image.rs:1343` and `:2688` (the last two verbatim
+  duplicates). **Row 1's scope is *"specified directly, NOT in a sampled
+  image"*, which removes a sampled image from ROW 1 — it does not exempt it**;
+  and **NOTE 2 makes `/Indexed` over `DeviceCMYK` a `DeviceCMYK` source.**
+  The comments therefore **contradict the spec, pdfce's own Table 149
+  implementation** (`overprint.rs:409`, `:158`, `:589`, `:612`, `:1704`,
+  which treat the qualifier as a row selector) **and the CLI's operator note,
+  which `Pass 196.1` already corrected to say the gap "is owed"**. Filed as
+  owed work in *Backlog* with the explicit warning **not to close it by
+  adding the counter alone.**
+- ★★ **THE PER-SPOT-COLORANT PLANE'S DEPENDENT SET IS NOW ENUMERATED — NINE
+  DEPENDENTS, ONE OPERATOR DECISION.** `PCS 2.0`, `PCS 3.0`, `PCS 4.0`; the
+  spot-only **image** half of `PCS 8.1`/`8.01`; `PCS 8.01`'s **colorimetric
+  residual** that `Pass 202.0` deliberately left open; `PCS 3.1` (behind its
+  own second defect above); `grey_overprint.rs`'s deliberately-wrong pinned
+  assertion; `tools/overprint_image.rs`'s missing signature row; and Table
+  149's spot-component row family, implemented and unreachable. **Filed as an
+  enumeration because an unenumerated blocker cannot be ranked against
+  anything.** Cheap approximations have been measured and rejected **twice**
+  — the page-sized multiplier plate (−1 trap of 17, **0 of 51** patches
+  flipped, one **regressed**), and at `Pass 130.3` ink union `max(c_b, c_s)`
+  (**broke 6 of 51**) and painting the flattened tint normally (**broke 8 of
+  51**), against **4 of 51** for the shipped behaviour. **The next step is a
+  decision, not another experiment.**
+- ★ **THE `≥ 2 /OutputIntents` QUESTION IS NOW ANSWERED TWICE, DIFFERENTLY,
+  AND NEITHER ANSWER IS A RECORDED DECISION.** `output_intent_blend_space`
+  takes the first entry yielding a **determinable space**;
+  `output_intent_profile` (new this Pass) takes the first entry whose
+  `/DestOutputProfile` **decodes**, on an explicit recovery argument. **They
+  can select different intents on the same file.** That is exactly the *"rare
+  enough to be got wrong quietly"* case the *APPLY THE OUTPUT INTENT* backlog
+  entry was filed to prevent (population: **1 in 51 of 51** suite print
+  files). Amended onto that entry.
+- ★ **A GATE THAT IS NOT IN THE RELEASE PATH IS A GATE THE RELEASE DOES NOT
+  HAVE.** A ten-space gap baked into an assertion message in
+  `crates/pdfce-core/tests/form_geometry_edit.rs` — this machine's Bash tool
+  eating backslash line-continuations out of a heredoc — **shipped in
+  v0.18.0**. `tools/check-string-gaps.sh` catches it and **was not run between
+  writing the message and tagging.** Two more of the same were caught inside
+  `Pass 201.0`'s own new test, and a third variant (a literal `\n` via
+  heredoc) inside `Pass 199.2`. **A recurring machine-level hazard, not a
+  typo.** Filed as owed work.
+
+**★★ HARD-RULE-11 SWEEP — searched for the CLAIM, not for a string.** Two
+capability claims changed meaning this filing: *"pdfce has no ICC engine"*
+and *"the rendering intent is declared but not consumed"*. Grepped
+case-insensitively for the bare keywords (`ICC`, `not-linked`,
+`colour[- ]management`, `iccce`) over the handful of files the feature
+touches, per clause (e), and read every hit.
+
+**Discharged inside `3194f1b` itself (zero-interval `R180` instances, not
+survivors):** `crates/pdfce-render/src/color.rs:1636` (the
+`icc_alternate_used` note, corrected with the history kept in the comment)
+and `crates/pdfce-cli/src/main.rs:349` (`rendering_intents_set`'s doc row,
+rewritten to say the intent **is** consumed).
+
+**SURVIVORS — reported, NOT edited (`crates/` is outside this role's remit):**
+
+| # | site | the stale claim |
+|---|---|---|
+| 1 | `crates/pdfce-cli/src/main.rs:12781` | **operator-visible `eprintln!`**: *"pdfce has no colour-management engine, so an operator matching a brand colour should not treat this render as colour-managed"*. The **first clause is now false**; the *advice* is still right for the paints that took the `/Alternate`. Needs narrowing to *this space was not managed*, not *pdfce cannot manage*. **The worst of the three — it is shipped output, and it is the exact shape `R180` exists for.** |
+| 2 | `crates/pdfce-render/src/color.rs:262` | rustdoc on the `IccBased` variant: *"pdfce has no ICC colour-management engine and this module does not contain one."* **First half false, second half still true** — the engine is in `icc.rs`, not `color.rs`, so the sentence needs splitting rather than deleting. |
+| 3 | `crates/pdfce-render/src/color.rs:821` | `ColorDiagnostics`' doc lists *"pdfce has no ICC engine"* as one of three questions the counters keep separate. The **separation is still right**; the **wording is stale**. |
+| 4 | `crates/pdfce-cli/src/main.rs:357` | `overprint_shadings_unsupported`'s doc row enumerates *"what STILL counts here"* **exhaustively** — and `Pass 202.0` added a **third** population (a spot-only `/DeviceN` shading refused under `/OP true`) that the enumeration does not mention. **A counter that gained a population while its published enumeration stayed closed.** |
+| 5 | the `--version` banner | `crates/pdfce-core/build.rs:37,45,234,250`, `crates/pdfce-core/src/build.rs:23,42,92,118,150`, `crates/pdfce-cli/src/main.rs:612,629` — all still explain or print `iccce: not-linked-yet`. **pdfce links `iccce`.** Filed as its own *Backlog* entry because it is a fix, not just a wording sweep. |
+
+**Hits that SURVIVE AND ARE CORRECT — do not "fix" these on the next sweep:**
+`crates/pdfce-render/src/image_codec/jpx.rs:171` (*"pdfce applies no colour
+management"* — true of the **JPEG 2000 decode path**, which is not managed)
+and `crates/pdfce-render/src/interpret.rs:1622` (*"converted by pdfce's own
+XYZ→sRGB … no colour management, no rendering intent"* — true of the
+**CIE-space image** path, likewise unmanaged). Both are scoped claims about
+their own route, not capability claims about pdfce.
+
+**Still in flight:**
+
+- **`PCS 16.1` still FAILS** on a separate trap. The colour half is closed;
+  the patch is not.
+- **`PCS 13.0`'s secondary lead is STILL UNMEASURED** —
+  `blend_modes_applied = 0` with `cmyk_bridged_pixels = 6396` on the same
+  conversion path, plausibly resolved by `Pass 199.2` and **not re-checked**.
+  Carried forward from the 358th and 359th filings with its caveat intact.
+- **`iccce`'s own `request_can_you_hand_me_the_output_intent_and_an_intent.md`
+  (2026-08-25) still has no pdfce reply** in `iccce`'s `open/` folder — and
+  **it is now answerable**, because the hand-off it asks about is built.
+- **`docs/DEPENDENCIES.md` was not updated** when `iccce` landed;
+  `ARCHITECTURE.md` §9 requires it. `docs/PRIOR_ART.md` should be checked in
+  the same pass (rule 13).
+- **No dedicated colour-management section exists in `ARCHITECTURE.md`** —
+  the **second consecutive filing** to want one. Flagged, not invented; the
+  engineer's call.
+
+**For next session:**
+
+1. **★ THE OPERATOR DECISION, and it is the largest one open in colour:**
+   build the **per-spot-colorant (n-channel) colorant buffer**? Nine
+   enumerated dependents; a page-sized `f32` plate per spot colorant against
+   a buffer whose byte ceiling is already an open entry (`Pass 122.3`). Every
+   cheap approximation has been measured and rejected. **Not a diagnosis
+   problem any more.**
+2. **★ Confirm or overturn decision `115`.** The engineer chose the git
+   dependency pinned to `v0.3.0`; the 359th filing had recorded the choice as
+   Ken's. Publishing `iccce` to crates.io is the live alternative.
+3. Fix the five hard-rule-11 survivors above — **#1 first** (shipped
+   operator-visible output) and **#5** (a false `--version` line).
+4. Decide `PCS 3.1`'s process-space-sampled-image question **as a recorded
+   decision**, and correct the three comments **whatever the answer is** —
+   they misread Table 149's structure even where they land on the right
+   outcome.
+5. One recorded decision for the **`≥ 2 /OutputIntents`** selection rule
+   covering **both** call sites, or a recorded decision that they are
+   deliberately different and why.
+6. Put the full `tools/run-gates.sh` sweep in the **tag checklist** —
+   `check-string-gaps.sh` caught a defect that had already shipped in v0.18.0.
+
+**Files edited this filing:**
+
+- `docs/ROADMAP.md` — three new *Shipped* entries (`Pass 202.0`,
+  `Pass 199.2`, `Pass 201.0`, in commit order, newest first); the *Backlog*
+  `Pass 199.2` entry **struck with a pointer** rather than deleted (hard
+  rule 1) and annotated with what did and did not ship against its own
+  five-item list; **four new *Backlog* entries** (the `PCS 3.1` sampled-image
+  defect; the `--version` banner's false `iccce` line; `DEPENDENCIES.md`
+  unswept; `check-string-gaps.sh` outside the release path); the *APPLY THE
+  OUTPUT INTENT* entry amended with what `Pass 199.2` discharged and the new
+  two-rules finding; the *Table 149 SPOT-COMPONENT ROW FAMILY* entry amended
+  with the nine-dependent enumeration; `R93` amended with its fifth instance
+  and a new practical form; a *Standing-rule disposition, 360th filing* block.
+- `docs/ARCHITECTURE.md` — **decision `115`** appended to §12; **§9** gains
+  its fifth "Nth dependency" paragraph (the body-section counterpart).
+- `docs/FEATURES.md` — rows changed: **Colour spaces and PDF functions**
+  (*"No ICC engine"* corrected, no box moved); **Overprint SIMULATION** (the
+  spot-only and mixed-source clauses corrected, no box moved); **Build
+  provenance stamp** (the `iccce` line marked as a **false claim in shipped
+  output**, no box moved); **`iccce` revision in version output** (blocker
+  text corrected, **deliberately still `[ ] [ ] [ ]`** — the reporting is not
+  built); **`/OutputIntents`-aware CMYK conversion** core `[ ]` → **`◐`**,
+  cli `—` → **`[x]`**, gui `—` → **`[ ]`**; **`/ICCBased` through a real
+  profile** core `[ ]` → **`◐`**, cli `—` → **`[x]`**, gui `—` → **`[ ]`**;
+  **Rendering intent** stays **`◐`** with its sentence corrected (the intent
+  IS consumed now — for `ICCBased` on an ink page; D4 still is not);
+  **Per-colorant (n-channel) buffer** annotated as the largest remaining
+  colour blocker, **no box moved**.
+- `docs/SESSION_LOG.md` — this entry.
+
+**★ `FEATURES.md` judgement, stated because the dispatch asked for it.**
+**`Pass 201.0` and `Pass 202.0` moved NO checkbox, deliberately.** Both are
+render-correctness fixes **inside** a capability already ticked (*Overprint
+SIMULATION*, core+cli). Ticking nothing is the honest answer; **what they did
+earn is a correction of two clauses that had become false** — the row said
+the mixed-source case was *"untouched by design"* (`Pass 195.0` touched it,
+`Pass 201.0` narrowed it) and said nothing at all about a spot-only shading
+under `/OP true`, which was rendering blank paper. **`Pass 199.2` is the only
+one of the three that moved boxes**, and it moved them to `◐`, not `[x]`:
+managed on the ink-compositing path only, `DeviceRGB` refused, `PCS 16.1`
+still failing. **No `gui` box was ticked** — the `gui` column tracks
+`D:\dev\pdfceGUI` and nothing there reads any of this; two `gui` cells moved
+`—` → `[ ]`, which is a move **downward** (from *not applicable* to *a real
+gap*), justified because the new counters are shell-readable exactly as the
+twelve colour counters in the *Colour spaces* row are.
+
+**Ceilings after this filing:** Pass ceiling `200.1` → **`202.0`** (new majors
+this filing: `201.0`, `202.0`; `199.2` was already a minted ID, shipped not
+freshly minted); next free `201.1`/`202.1`/new major `203.0`. **Standing
+rules `R239` — UNCHANGED**, next free `R240` (no rule minted; two candidates
+declined). **Decisions `114` → `115`**, next free `116`. **Filings `359` →
+`360`.** **Pass-number collisions: NONE** — `grep` for `Pass 201.0` and
+`Pass 202.0` across `ROADMAP.md` and `SESSION_LOG.md` returned **0 prior
+uses** before this filing.
+
+**Git/backup state — CHECKED, not inferred (hard rule 8).** `HEAD` is
+`b796bc0` (2026-09-01). `git rev-list --count origin/main..main` = **0** —
+**all three commits are pushed to `github.com/KenM76/pdfce`**, consistent
+with what the dispatch stated. Working tree before this filing's own edits:
+clean. **Backup bundles are STALE:** `ls -lt D:/Dev/pdfce-backups/` shows the
+newest as `pdfce-20260830-2005-1e63186-full.bundle` (2026-08-30 20:05), and
+`git log --oneline 1e63186..main | wc -l` = **38 commits** since it was
+taken. The engineer should cut a fresh bundle.

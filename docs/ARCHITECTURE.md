@@ -6905,6 +6905,44 @@ into the shipped binary; see decision 086 for why the write side is a
 separate, deferred deliverable rather than a smaller slice of the same
 one. `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`.
 
+**Fifth dependency, and the first that is a SIBLING PROJECT rather than a
+third-party crate: `iccce-profile` + `iccce-cmm`, pinned to tag `v0.3.0`
+(2026-09-01, `Pass 199.2`, `3194f1b`; see §12 decision 115, which extends
+decision 064).** pdfce's **first ICC colour-management engine**, declared in
+`crates/pdfce-render/Cargo.toml` — **`pdfce-core` does not depend on it**, so
+the object model stays free of a colour engine. **MIT**, verified against
+`iccce`'s own `Cargo.toml` at adoption time rather than relayed from an
+earlier reading; permissive, so rule 13's escalation trigger did not fire and
+no operator licence call was needed. `THIRD_PARTY_LICENSES.md` regenerated via
+`cargo-about`.
+
+★ **The form is a GIT dependency PINNED TO A TAG, and both halves are
+deliberate.** A **path** dependency (`../../../iccce`) resolves only on the
+author's machine and would be a broken build for anyone cloning the public
+repository; **pinning to a tag** keeps colour output reproducible, because an
+unpinned git dependency would let a sibling-project commit change what pdfce
+renders between two builds of the same pdfce commit — silently, in the one
+area where a silent change stays invisible until a conformance figure moves.
+A **vendored copy** was considered and rejected: a fork's maintenance burden
+with none of a fork's purpose. Reversible if the operator prefers crates.io
+publication; decision 115 names it as such.
+
+★★ **`iccce` has ZERO external dependencies and sets `unsafe_code = "deny"`
+in its own `Cargo.toml`**, which is why it is admissible without any of the
+machinery `aes`/`sha2` needed above. That one fact clears the **no-network**
+gate, the **wasm32** web-fork target, and **R24's zero-`unsafe` posture** at
+once — **compiler-enforced inside the dependency**, rather than negotiated
+via `default-features = false` and bounded by a CI job the way decision 039's
+cfg-selected hardware backends had to be. **No decision-039-style exception
+is needed or claimed.**
+
+**Owed at the time of this writing (2026-09-01):** `docs/DEPENDENCIES.md`
+was **not** updated when this dependency landed, and this section requires it
+— see `ROADMAP.md`'s *Backlog*. It is the one dependency in the tree whose
+*"why is this here"* is an architectural decision (064, 115) rather than a
+utility choice, so its absence from the purpose-shaped companion is the
+worst-placed gap that file can have.
+
 ## 10. Adversarial input hardening & fuzzing
 
 `pdfce-core` parses files from the public internet by design — every
@@ -29115,3 +29153,144 @@ paragraph, amended in place in this filing.
 **Decision ceiling moves `112` → `113`; next free `114`.** No standing
 rule minted; `R93` gains a further cited instance (text in `ROADMAP.md`'s
 *Shipped*, `Pass 197.0` entry).
+
+### 2026-09-01 (360th filing, `3194f1b`) — decision 115: **`iccce` ENTERS AS A GIT DEPENDENCY PINNED TO TAG `v0.3.0` — NOT A PATH DEPENDENCY, NOT A VENDORED COPY. pdfce NOW HAS AN ICC COLOUR-MANAGEMENT ENGINE FOR THE FIRST TIME, AND IT IS `ICCBased`-ONLY BY REFUSAL**
+
+**Status: DECIDED and SHIPPED** (`Pass 199.2`, `ROADMAP.md` *Shipped*).
+**Extends decision `064`** (which set the boundary — pdfce owns compositing
+and meaning, `iccce` owns conversion — and recorded both consumers as NOT
+STARTED). **This is the integration half of `064`. `064` is not superseded;
+its boundary is unchanged, and it is what made this a dependency question
+rather than a design question.**
+
+**★ Sourcing.** A shell WAS available to this role this filing (hard rule 8).
+The commit message was read with `git log -1 --format=%B 3194f1b`; the
+dependency declaration was read live from
+`crates/pdfce-render/Cargo.toml:57-80`; `iccce_provenance()`'s behaviour was
+read live from `crates/pdfce-core/build.rs:225-251`.
+
+#### The decision
+
+`crates/pdfce-render/Cargo.toml` gains **two** crates from the sibling
+project — `iccce-profile` and `iccce-cmm`, both declared as
+`{ git = "https://github.com/KenM76/iccce.git", tag = "v0.3.0" }`.
+
+**In `pdfce-render` only** — `pdfce-core` does not depend on `iccce`, which
+keeps the object model free of a colour engine, and which is also the reason
+the version banner did not self-update (see below).
+
+#### Why a git dependency, and why pinned — the engineer's reasoning, recorded in full
+
+The 359th filing recorded three candidate forms and said the choice was the
+operator's: **publish `iccce` to crates.io**, **vendor its source into
+pdfce's tree**, or **a git dependency**. It also verified that the third was
+*"probably better"*. The engineer took the third, on two grounds:
+
+1. **A PATH dependency would not resolve for anyone cloning the public pdfce
+   repo.** `iccce` lives beside pdfce on the author's machine at
+   `D:\dev\iccce`, so `path = "../../../iccce"` builds **only there**. The
+   repository is public (`LEGAL.md` §1.1), so a dependency form that works on
+   one machine is a broken build for every other reader — the same class of
+   error as a document asserting an unmeasured fact about the environment.
+2. **PINNING TO A TAG KEEPS COLOUR OUTPUT REPRODUCIBLE.** An unpinned git
+   dependency would let a sibling-project commit change what pdfce renders,
+   silently, between two builds of the same pdfce commit. **Colour output is
+   exactly the kind of result where a silent change stays invisible until a
+   conformance figure moves and nobody can say why.** A tag makes the colour
+   engine's identity part of pdfce's own revision.
+
+**REVERSIBLE, and named as such.** If the operator prefers publication to
+crates.io — for third-party consumers of `pdfce-render`, or for `Cargo.lock`
+semantics a git dependency does not provide — this decision is the one to
+amend. **A vendored copy remains rejected** for the maintenance reason the
+359th filing already gave: a fork's burden with none of a fork's purpose.
+
+#### Why it is admissible at all — the three gates it had to clear
+
+| gate | result |
+|---|---|
+| **rule 13 / `LEGAL.md` §6** — licence classification before adoption | **MIT**, verified against `iccce`'s own `Cargo.toml` at adoption time (2026-09-01), not relayed from an earlier reading. Permissive; no operator licence call needed. `THIRD_PARTY_LICENSES.md` **regenerated via `cargo-about`**, never hand-edited. |
+| **rule 2 / §3** — GUI-core separation | `cargo tree -p pdfce-core` and `-p pdfce-render` clean: **no GUI dependency.** |
+| **§1.1 / wasm32 web-fork target** | **`iccce` has ZERO external dependencies and sets `unsafe_code = "deny"`.** That single fact clears **three** obligations at once: the **no-network** gate (nothing to fetch at runtime), the **wasm32** target (nothing that cannot cross), and **`R24`'s zero-`unsafe` posture** (compiler-enforced inside the dependency rather than negotiated via `default-features = false`). ★ Contrast `aes`/`sha2` above, whose cfg-selected hardware backends could **not** be forced off and required decision `039`'s named exception. **`iccce` needs no exception**, and that is the strongest single argument for it over any third-party ICC crate. |
+
+#### What is managed, and what is REFUSED
+
+**Managed:** an **`ICCBased`** paint on a page that composites in ink. The
+document's own embedded source profile plus the catalog's `/OutputIntents` →
+`/DestOutputProfile` destination, converted at the intent the graphics state
+asked for (decision `114`'s D1–D3 supply that intent; **D4 remains a stated
+boundary**).
+
+**REFUSED, not omitted — `DeviceRGB` is NOT managed.** `iccce` exposes a
+built-in sRGB as a **DESTINATION** only, and **pdfce is not entitled to
+invent a source characterisation the document never made.** ⇒ Only the case
+where **the file did the work of saying what its numbers mean** is
+colour-managed. This is the same posture as decision `114`'s refusal to
+hard-code an intent because a fixture scores well under it, and it should be
+read as the standing shape of pdfce's colour policy rather than as this
+Pass's local scope.
+
+**Also deliberately unchanged: `overprint::rgb_to_cmyk` stays on the
+round-trip path.** It is an **invertible** max-GCR formula that exists so
+`snapshot_srgb_backdrop` and `composite_srgb` return where they started.
+Substituting an accurate, non-invertible transform there would make the
+return leg drift.
+
+★★ **The defect this Pass fixed was that same function used as a TERMINAL
+conversion — a correct function in the wrong job, producing numbers that look
+exactly like an arithmetic defect** (three blend-arithmetic hypotheses were
+raised and ablated away before the real cause was found). **The generalizable
+half of decision 115: an INVERTIBLE transform and an ACCURATE transform are
+different objects with opposite requirements, and a codebase that composites
+in one space and converts to another needs BOTH, named as such.** Naming them
+is the cheap defence; the expensive one is three ablations against innocent
+arithmetic.
+
+#### Disclosure obligation this decision creates (rule 4)
+
+Colour management is **invisible by construction** — nothing on the page is
+drawn differently, and a managed paint and an approximated one are
+indistinguishable to look at. The decision therefore ships with **a PAIR of
+counters**, `icc_managed_paints` and `icc_unmanaged_paints`, on
+`render-page`'s stable metrics line and JSON output. **The pair is part of
+the decision, not an implementation detail:** `managed = 0` alone cannot
+distinguish *"the engine ran and agreed with the fallback"* from *"the branch
+was never reached"*, and a counter whose zero has two readings is not a
+disclosure.
+
+#### Body-section counterpart
+
+**§9 (Open-source dependencies & attribution)** gains its **fifth "Nth
+dependency" paragraph** in this same filing, so the decision log and the
+living body section move together (this role's tertiary duty).
+
+★ **A body-section gap is flagged rather than invented, exactly as decision
+`114` flagged it:** there is still **no dedicated colour-management section**
+in this document. `114` recorded that gap for rendering intent; `115` makes
+it larger, because there is now an **engine**, a **boundary**, a **refusal**
+and a **disclosure pair** whose body of record is spread across
+`pdfce_core::color::intent`'s module doc, `crates/pdfce-render/src/icc.rs`'s
+module doc, and several `ROADMAP.md` entries. **Whether to create a §13
+"Colour management" is the engineer's call**; this role does not invent a
+section, and records that this is the **second consecutive filing** to want
+one.
+
+#### One consequence NOT swept, and it is a false claim in shipped output
+
+**`pdfce-cli --version` still reports `iccce: not-linked-yet (integration
+pending -- Pass 97.x; see ARCHITECTURE.md decision 064)`.** Verified live:
+`crates/pdfce-core/build.rs:250` returns that literal, because it detects the
+dependency via `DEP_ICCCE_PROVENANCE` — an env var Cargo sets only for a
+dependency declaring a `links` key, which `iccce` does not — **and because
+the build script lives in `pdfce-core`, which does not depend on `iccce` at
+all.** The function's own doc comment promised *"this begins reporting the
+moment that becomes true."* **The moment came and it did not begin
+reporting.** Filed as owed work in `ROADMAP.md`'s *Backlog*; recorded here
+because it is a direct consequence of **where** this decision put the
+dependency, which is the kind of consequence a decision log exists to carry.
+
+**Decision ceiling moves `114` → `115`; next free `116`.** **No standing rule
+minted** — `R93` gains a fifth cited instance from a sibling commit in the
+same filing (`ROADMAP.md` *Standing rules*), and two rule candidates were
+assessed and declined (*Standing-rule disposition, 360th filing*). **Standing
+rules ceiling `R239` — UNCHANGED.**
