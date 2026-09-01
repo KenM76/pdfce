@@ -1865,14 +1865,31 @@ pub(crate) fn item_prelude(o: &VectorObject, own_bytes: &[u8]) -> Vec<u8> {
                 out.extend_from_slice(b" w ");
             }
             // Colours are emitted as DeviceRGB, which is what the model
-            // records. A source in DeviceCMYK or a `Separation` arrives as its
-            // RGB equivalent -- a real limitation, stated here rather than
-            // discovered: the decomposition holds an `Rgb`, and inventing a
-            // colourant name pdfce never measured would be worse.
-            if !sets(b" rg") {
+            // records for a DEVICE paint. A source in DeviceCMYK arrives as
+            // its RGB equivalent -- a real limitation, stated here rather than
+            // discovered.
+            //
+            // ★★ THIS COMMENT USED TO SAY "or a `Separation`" ALONGSIDE
+            // DeviceCMYK, AND THAT WAS FALSE. The decomposer had no arm for
+            // `cs`/`scn` at all, so a `/Separation` path did not arrive as
+            // "its RGB equivalent" -- it arrived carrying a STALE colour from
+            // whatever device operator ran last, often for an unrelated
+            // object. Pasting one wrote that wrong colour into a file.
+            //
+            // ⇒ A comment claiming a graceful degradation that does not happen
+            // is worse than no comment: it tells the next reader the case is
+            // handled. `Pass 218.0` gave the model `PathPaint`, so the case
+            // can now be DETECTED, and the honest response is to emit NOTHING
+            // rather than a colour pdfce made up.
+            //
+            // Emitting nothing means the pasted object inherits the ambient
+            // colour at its destination. That is visibly wrong in a way an
+            // operator can see and undo, where a synthesised RGB is invisibly
+            // wrong and survives into print.
+            if !sets(b" rg") && !p.fill_paint.is_other() {
                 emit_rgb(&mut out, p.fill_color, false);
             }
-            if !sets(b" RG") {
+            if !sets(b" RG") && !p.stroke_paint.is_other() {
                 emit_rgb(&mut out, p.stroke_color, true);
             }
         }

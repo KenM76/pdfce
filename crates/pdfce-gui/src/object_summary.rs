@@ -85,7 +85,8 @@
 //! verbatim instead and lets the operator draw the conclusion.
 
 use pdfce_core::vector::{
-    Bounds, ImageSource, PaintStyle, Rgb, TextBoundsBasis, TextFont, TextPreview, VectorObject,
+    Bounds, ImageSource, PaintStyle, PathPaint, Rgb, TextBoundsBasis, TextFont, TextPreview,
+    VectorObject,
 };
 
 /// Which kind of thing a selection is.
@@ -340,7 +341,7 @@ pub fn describe_object(object: &VectorObject) -> ObjectSummary {
             ObjectSummary {
                 kind: ObjectKind::Path,
                 paint: Some(p.style),
-                colour: visible_colour(p.style, p.fill_color, p.stroke_color),
+                colour: visible_colour(p.style, &p.fill_paint, &p.stroke_paint),
                 nodes: Some(nodes),
                 line_width: p.style.stroke.then_some(p.line_width),
                 text: None,
@@ -445,11 +446,24 @@ fn decode_note(preview: &TextPreview) -> Option<ObjectNote> {
 /// that appears nowhere on the page. This is the same resolution the Objects
 /// panel's row label already used; centralising it here is what stops the row
 /// and the readout from drifting apart.
-fn visible_colour(style: PaintStyle, fill: Rgb, stroke: Rgb) -> Option<Rgb> {
+fn visible_colour(style: PaintStyle, fill: &PathPaint, stroke: &PathPaint) -> Option<Rgb> {
+    // ★ TAKES `PathPaint`, NOT `Rgb`, AND THAT IS THE WHOLE FIX HERE.
+    //
+    // This function's LOGIC was always right — it correctly declines to report
+    // a fill colour for a stroke-only path. Its INPUT was wrong: the
+    // decomposer had no arm for `cs`/`scn`, so a path painted in a
+    // `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed` or `/Lab` space
+    // carried a stale colour from an unrelated earlier object, and this panel
+    // printed it as a confident hex — `stroked #1A73E8` — about an ink that is
+    // not that colour.
+    //
+    // `PathPaint::rgb()` returns `None` for a space pdfce does not decode, so
+    // the row now shows no swatch rather than a wrong one. On a print job that
+    // difference is a plate.
     if style.fill.is_some() {
-        Some(fill)
+        fill.rgb()
     } else if style.stroke {
-        Some(stroke)
+        stroke.rgb()
     } else {
         None
     }

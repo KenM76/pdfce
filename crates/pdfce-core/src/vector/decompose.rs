@@ -354,9 +354,20 @@ pub struct PathObject {
     /// stroke-proximity hit-test widens by.
     pub line_width: f64,
     /// Non-stroking (fill) colour at paint time.
+    ///
+    /// ★ ONLY MEANINGFUL WHEN [`Self::fill_paint`] IS `Device` OR `Default`.
+    /// For a `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed`, `/Lab` or
+    /// pattern fill this holds pdfce's best-effort screen value, which before
+    /// `Pass 218.0` was a stale colour from an unrelated earlier operator.
+    /// Consult `fill_paint` before asserting a colour or writing one out.
     pub fill_color: Rgb,
-    /// Stroking colour at paint time.
+    /// Stroking colour at paint time. Same caveat as [`Self::fill_color`].
     pub stroke_color: Rgb,
+    /// The fill paint **as the file states it**, including the case pdfce
+    /// cannot decode. See [`PathPaint`].
+    pub fill_paint: PathPaint,
+    /// The stroke paint as the file states it. See [`PathPaint`].
+    pub stroke_paint: PathPaint,
     /// The defining-operator token range (the future editing handle).
     pub tokens: TokenRange,
     /// The equivalent byte span in the decoded content buffer.
@@ -881,6 +892,101 @@ impl TextRun {
         self.text_start..self.text_end
     }
 }
+/// A path's paint colour **as the file states it**, including the case pdfce
+/// cannot decode here.
+///
+/// # Why this replaced a bare `Rgb`
+///
+/// The decomposer's graphics-state tracker handled only the DEVICE colour
+/// operators — `g G rg RG k K` — and had no arm for `cs CS sc scn SC SCN`.
+/// A path painted in a `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed`,
+/// `/Lab` or `/Pattern` space therefore inherited whatever the last device
+/// operator had set: a **stale, silently wrong colour**, with no value meaning
+/// "I do not know".
+///
+/// ★ That is exactly the shape [`crate::text_edit::FillState`] already solved
+/// for TEXT — `Default` / `Device` / `Other`, with the raw operator bytes kept
+/// so an undecodable colour can be restored verbatim. One half of this crate
+/// had the honest model and the other half had a lossy one, and nothing
+/// connected them. This is that model, applied to paths.
+///
+/// # Why `Other` does not resolve the colour
+///
+/// Resolving a `/Separation` to a screen colour means evaluating its tint
+/// transform, and that machinery lives in `pdfce-render`, which `pdfce-core`
+/// cannot depend on. Duplicating it here would create a SECOND colour-space
+/// implementation — the very class of defect this type exists to remove.
+///
+/// It is also not needed for the job. A shell asking "may I recolour this?"
+/// needs to know the paint is a named spot ink, not what that ink looks like;
+/// answering *"this stroke is spot ink `PANTONE 185 C`"* is more useful than a
+/// swatch, and infinitely more useful than a wrong swatch.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PathPaint {
+    /// §8.6.8's initial value: `DeviceGray` 0, black. No operator set it.
+    ///
+    /// Distinct from `Device { … }` holding black, because "nobody chose a
+    /// colour" and "somebody chose black" are different facts about the file,
+    /// and only the first may be silently replaced.
+    Default,
+    /// A device colour pdfce fully models, with its resolved sRGB.
+    Device {
+        /// Which device operator family set it.
+        space: DevicePaintSpace,
+        /// The components as written (`0.0..=1.0`, §8.6.4).
+        comps: Vec<f64>,
+        /// The resolved screen colour.
+        rgb: Rgb,
+    },
+    /// A colour space pdfce does not decode here. The components are kept
+    /// because they are what the file said; the space NAME is kept because it
+    /// is what a shell must show and what a refusal must cite.
+    Other {
+        /// The resource name from `cs`/`CS` — e.g. `CS0` — or `None` when the
+        /// operator named an inline space.
+        space: Option<Vec<u8>>,
+        /// The operands of `sc`/`scn`/`SC`/`SCN`, as written. A `/Separation`
+        /// has one (its tint); a `/DeviceN` has one per colorant.
+        comps: Vec<f64>,
+        /// True when the operator was `scn`/`SCN` **with a name operand** —
+        /// i.e. a pattern (§8.7.3). A pattern has no colour at all, which is
+        /// a different refusal from "a colour pdfce cannot decode".
+        pattern: bool,
+    },
+}
+
+/// Which device operator family set a [`PathPaint::Device`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DevicePaintSpace {
+    /// `g` / `G`.
+    Gray,
+    /// `rg` / `RG`.
+    Rgb,
+    /// `k` / `K`.
+    Cmyk,
+}
+
+impl PathPaint {
+    /// The screen colour, when pdfce has one.
+    ///
+    /// `None` for [`Self::Other`] — and callers are expected to SHOW that
+    /// rather than substitute black. A control that opens on black for a spot
+    /// ink is a control that discards the ink the moment it is touched.
+    #[must_use]
+    pub fn rgb(&self) -> Option<Rgb> {
+        match self {
+            Self::Default => Some(Rgb::BLACK),
+            Self::Device { rgb, .. } => Some(*rgb),
+            Self::Other { .. } => None,
+        }
+    }
+
+    /// Whether this paint is in a space pdfce cannot decode here.
+    #[must_use]
+    pub const fn is_other(&self) -> bool {
+        matches!(self, Self::Other { .. })
+    }
+}
 
 /// A selectable object on a page — the unit the GUI target provider hands
 /// back as a hit and the snapping engine (12.M1) consumes.
@@ -970,6 +1076,20 @@ pub struct DecomposeDiagnostics {
     /// Keyed on the form's **object number**: the same stream is reachable
     /// under different resource names, so a name-keyed guard would miss it.
     pub form_cycles: usize,
+    /// Paths whose fill or stroke was set in a colour space this decomposition
+    /// does not decode — `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed`,
+    /// `/Lab` or a pattern (`Pass 218.0`).
+    ///
+    /// ★ THE DISCLOSURE HALF, AND IT WAS ENTIRELY ABSENT. Before this Pass the
+    /// decomposer silently kept whatever colour the last DEVICE operator had
+    /// set, so a spot-coloured path was reported with an unrelated colour and
+    /// nothing anywhere counted it. This struct had twelve counters and not one
+    /// of them could report unmodelled graphics state.
+    ///
+    /// A non-zero value means [`PathObject::fill_color`] / `stroke_color` are
+    /// best-effort for those objects and [`PathObject::fill_paint`] /
+    /// `stroke_paint` are the honest answer.
+    pub paths_with_undecoded_colour: usize,
 }
 
 /// One object reached by **descending into a form XObject** — the unit a hit
@@ -1846,6 +1966,18 @@ struct GState {
     line_width: f64,
     fill_color: Rgb,
     stroke_color: Rgb,
+    /// The honest paint, tracking colour SPACE as well as value.
+    ///
+    /// Carried BESIDE the `Rgb` rather than replacing it: the `Rgb` is still
+    /// the right answer for the device cases and is what hit-testing and the
+    /// selection overlay want. `PathPaint` is what a consumer must consult
+    /// before asserting a colour or writing one into a file.
+    fill_paint: PathPaint,
+    stroke_paint: PathPaint,
+    /// The colour-space resource name most recently selected by `cs` / `CS`,
+    /// which `sc`/`scn` then take their operands in.
+    fill_space: Option<Vec<u8>>,
+    stroke_space: Option<Vec<u8>>,
     /// The `Tf` size operand (§9.3.1 `Tfs`), text space, unscaled.
     font_size: f64,
     /// The `Tf` resource name, verbatim from the content stream.
@@ -1875,6 +2007,10 @@ impl GState {
             line_width: 1.0, // Table 52 initial
             fill_color: Rgb::BLACK,
             stroke_color: Rgb::BLACK,
+            fill_paint: PathPaint::Default,
+            stroke_paint: PathPaint::Default,
+            fill_space: None,
+            stroke_space: None,
             font_size: 0.0,
             font_resource: None,
             font: None,
@@ -2195,12 +2331,92 @@ impl<'a> Decomposer<'a> {
                 }
             }
             // ---- device colours (§8.6.4, Table 74 subset) ----
-            b"g" => set_color(&mut self.gs.fill_color, Rgb::from_gray, &nums),
-            b"G" => set_color(&mut self.gs.stroke_color, Rgb::from_gray, &nums),
-            b"rg" => set_rgb(&mut self.gs.fill_color, &nums),
-            b"RG" => set_rgb(&mut self.gs.stroke_color, &nums),
-            b"k" => set_cmyk(&mut self.gs.fill_color, &nums),
-            b"K" => set_cmyk(&mut self.gs.stroke_color, &nums),
+            b"g" => {
+                set_color(&mut self.gs.fill_color, Rgb::from_gray, &nums);
+                self.gs.fill_paint =
+                    device_paint(DevicePaintSpace::Gray, &nums, self.gs.fill_color);
+                self.gs.fill_space = None;
+            }
+            b"G" => {
+                set_color(&mut self.gs.stroke_color, Rgb::from_gray, &nums);
+                self.gs.stroke_paint =
+                    device_paint(DevicePaintSpace::Gray, &nums, self.gs.stroke_color);
+                self.gs.stroke_space = None;
+            }
+            b"rg" => {
+                set_rgb(&mut self.gs.fill_color, &nums);
+                self.gs.fill_paint = device_paint(DevicePaintSpace::Rgb, &nums, self.gs.fill_color);
+                self.gs.fill_space = None;
+            }
+            b"RG" => {
+                set_rgb(&mut self.gs.stroke_color, &nums);
+                self.gs.stroke_paint =
+                    device_paint(DevicePaintSpace::Rgb, &nums, self.gs.stroke_color);
+                self.gs.stroke_space = None;
+            }
+            b"k" => {
+                set_cmyk(&mut self.gs.fill_color, &nums);
+                self.gs.fill_paint =
+                    device_paint(DevicePaintSpace::Cmyk, &nums, self.gs.fill_color);
+                self.gs.fill_space = None;
+            }
+            b"K" => {
+                set_cmyk(&mut self.gs.stroke_color, &nums);
+                self.gs.stroke_paint =
+                    device_paint(DevicePaintSpace::Cmyk, &nums, self.gs.stroke_color);
+                self.gs.stroke_space = None;
+            }
+
+            // ---- colour SPACES (§8.6.8, Table 74) -- previously ABSENT.
+            //
+            // ★★ THE WHOLE POINT OF THIS BLOCK. Without these six arms a path
+            // painted in a `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed`,
+            // `/Lab` or `/Pattern` space kept whatever the last DEVICE
+            // operator had set -- a stale colour from an unrelated earlier
+            // object, with nothing recording that pdfce did not know.
+            //
+            // `cs`/`CS` select the space; `sc`/`scn`/`SC`/`SCN` then set a
+            // value in it. §8.6.8 also says selecting a space RESETS the
+            // colour to that space's initial value, which is why the space
+            // operators set the paint rather than only remembering a name.
+            b"cs" | b"CS" => {
+                let stroking = name == b"CS";
+                let space_name = operand_names(operands).into_iter().next();
+                let paint = PathPaint::Other {
+                    space: space_name.clone(),
+                    comps: Vec::new(),
+                    pattern: false,
+                };
+                if stroking {
+                    self.gs.stroke_space = space_name;
+                    self.gs.stroke_paint = paint;
+                } else {
+                    self.gs.fill_space = space_name;
+                    self.gs.fill_paint = paint;
+                }
+            }
+            b"sc" | b"scn" | b"SC" | b"SCN" => {
+                let stroking = name == b"SC" || name == b"SCN";
+                // A NAME operand means a pattern (§8.7.3), which has no colour
+                // at all -- a different fact from "a colour pdfce cannot
+                // decode", and a different refusal.
+                let pattern = !operand_names(operands).is_empty();
+                let space = if stroking {
+                    self.gs.stroke_space.clone()
+                } else {
+                    self.gs.fill_space.clone()
+                };
+                let paint = PathPaint::Other {
+                    space,
+                    comps: nums.clone(),
+                    pattern,
+                };
+                if stroking {
+                    self.gs.stroke_paint = paint;
+                } else {
+                    self.gs.fill_paint = paint;
+                }
+            }
 
             // ---- path construction (Table 59) ----
             b"m" => {
@@ -2638,6 +2854,8 @@ impl<'a> Decomposer<'a> {
             line_width: self.gs.line_width,
             fill_color: self.gs.fill_color,
             stroke_color: self.gs.stroke_color,
+            fill_paint: self.gs.fill_paint.clone(),
+            stroke_paint: self.gs.stroke_paint.clone(),
             tokens: TokenRange {
                 start: pa.token_start,
                 end: op_index + 1,
@@ -2646,6 +2864,9 @@ impl<'a> Decomposer<'a> {
             page_bbox,
         };
         self.diag.paths += 1;
+        if self.gs.fill_paint.is_other() || self.gs.stroke_paint.is_other() {
+            self.diag.paths_with_undecoded_colour += 1;
+        }
         self.objects.push(VectorObject::Path(obj));
     }
 
@@ -3202,6 +3423,22 @@ fn operand_nums(operands: &[ContentToken]) -> Vec<f64> {
         .collect()
 }
 
+/// The NAME operands of an operation, in order.
+///
+/// Needed because `sc`/`scn` distinguish a colour from a PATTERN by whether a
+/// name is present (§8.7.3), and `cs`/`CS` take a name as their only operand.
+/// [`operand_nums`] silently drops names, which is right for every other
+/// operator and wrong for these.
+fn operand_names(operands: &[ContentToken]) -> Vec<Vec<u8>> {
+    operands
+        .iter()
+        .filter_map(|t| match &t.kind {
+            ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes().to_vec()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Cut a name at [`MAX_FONT_NAME_BYTES`], on a UTF-8 character boundary.
 ///
 /// `floor_char_boundary` is not stable, so the boundary is found by
@@ -3227,6 +3464,19 @@ fn last_name(operands: &[ContentToken]) -> Option<Vec<u8>> {
         ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes().to_vec()),
         _ => None,
     })
+}
+
+/// Build a [`PathPaint::Device`] from a device operator's operands.
+///
+/// The resolved `Rgb` is passed in rather than recomputed, so the honest paint
+/// and the legacy `Rgb` field cannot disagree about the same operator — two
+/// derivations of one value are two things that can drift.
+fn device_paint(space: DevicePaintSpace, nums: &[f64], rgb: Rgb) -> PathPaint {
+    PathPaint::Device {
+        space,
+        comps: nums.to_vec(),
+        rgb,
+    }
 }
 
 /// Set a colour from a single-component (`g`/`G`) operator.
@@ -3324,6 +3574,105 @@ mod tests {
     fn model(src: &[u8]) -> PageObjects {
         let cs = ContentStream::parse(src.to_vec()).unwrap();
         decompose(&cs, Matrix::IDENTITY, &NoXObjects)
+    }
+
+    // -- colour spaces (Pass 218.0) -----------------------------------------
+
+    /// ★★★ A path painted in a `/Separation` must NOT report the last device
+    /// colour as its own.
+    ///
+    /// # The defect
+    ///
+    /// The decomposer handled only `g G rg RG k K` and had no arm for
+    /// `cs CS sc scn SC SCN`. A spot-coloured path therefore inherited
+    /// whatever the previous device operator had set — here a red fill from an
+    /// unrelated earlier object — and reported it as its own colour, with
+    /// nothing recording that pdfce did not know.
+    ///
+    /// The renderer had this exact bug and fixed it on 2026-08-10, recording
+    /// that the consequence "was not a missing feature but WRONG PIXELS". The
+    /// decomposer never received that fix; this test is it, three weeks later.
+    ///
+    /// # Why the red fill is in the fixture
+    ///
+    /// Without it the stale value would be the initial black, which is also
+    /// what a plausible-but-wrong implementation would report — so the test
+    /// would pass on the bug. The red makes the stale answer *distinctive*.
+    #[test]
+    fn a_separation_painted_path_does_not_report_the_previous_device_colour() {
+        let m = model(b"1 0 0 rg 0 0 10 10 re f /CS0 cs 0.5 scn 20 20 10 10 re f\n");
+        let paths: Vec<&PathObject> = m
+            .objects
+            .iter()
+            .filter_map(|o| match o {
+                VectorObject::Path(p) => Some(p),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(paths.len(), 2, "two filled rectangles");
+
+        // The DEVICE one is unchanged and still fully modelled.
+        assert!(
+            matches!(paths[0].fill_paint, PathPaint::Device { .. }),
+            "a plain `rg` fill must still be Device, got {:?}",
+            paths[0].fill_paint
+        );
+
+        // The SEPARATION one must say so rather than inherit the red.
+        match &paths[1].fill_paint {
+            PathPaint::Other {
+                space,
+                comps,
+                pattern,
+            } => {
+                assert_eq!(space.as_deref(), Some(b"CS0".as_slice()));
+                assert_eq!(comps, &[0.5]);
+                assert!(!pattern, "a numeric operand is a colour, not a pattern");
+            }
+            other => panic!("expected Other for a /Separation fill, got {other:?}"),
+        }
+        assert_eq!(
+            paths[1].fill_paint.rgb(),
+            None,
+            "★ and it must refuse to name a screen colour it does not have — \
+             returning the stale red here is the whole defect"
+        );
+        assert_eq!(
+            m.diagnostics.paths_with_undecoded_colour, 1,
+            "and the situation is DISCLOSED, not silent"
+        );
+    }
+
+    /// A pattern fill (`scn` with a NAME operand) is a third thing.
+    ///
+    /// §8.7.3: a pattern has no colour at all, which is a different refusal
+    /// from "a colour pdfce cannot decode" — a shell may reasonably offer to
+    /// replace an undecodable colour and must not offer to replace a pattern
+    /// with one.
+    #[test]
+    fn a_pattern_fill_is_distinguished_from_an_undecodable_colour() {
+        let m = model(b"/Pattern cs /P0 scn 0 0 10 10 re f\n");
+        let VectorObject::Path(p) = &m.objects[0] else {
+            panic!("expected a path")
+        };
+        match &p.fill_paint {
+            PathPaint::Other { pattern, .. } => assert!(*pattern, "a name operand means a pattern"),
+            other => panic!("expected Other, got {other:?}"),
+        }
+    }
+
+    /// The device operators still set BOTH representations, and they agree.
+    ///
+    /// Two derivations of one value are two things that can drift, so this
+    /// pins that they do not.
+    #[test]
+    fn a_device_fill_agrees_with_the_legacy_rgb_field() {
+        let m = model(b"0 0 1 rg 0 0 10 10 re f\n");
+        let VectorObject::Path(p) = &m.objects[0] else {
+            panic!("expected a path")
+        };
+        assert_eq!(p.fill_paint.rgb(), Some(p.fill_color));
+        assert_eq!(m.diagnostics.paths_with_undecoded_colour, 0);
     }
 
     // -- the font-resolution test rig ---------------------------------------
