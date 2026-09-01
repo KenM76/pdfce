@@ -498,8 +498,103 @@ def self_test() -> int:
     assert classify("the correct result is on the left and the wrong one on the right")[2] is True
     assert classify("nothing in particular is stated here") == (False, False, False)
 
+    # ★★ THE METRIC MUST FALL WHEN THE RENDER GETS WORSE, which is exactly
+    # what its predecessor did not do: destroying every shading RAISED
+    # `reference_similarity` by +0.130 / +0.349. Pinned synthetically, in
+    # memory, so this runs with no PDF, no corpus and no licensed file.
+    import tempfile
+
+    def _write(img):
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        cv2.imwrite(path, img)
+        return path
+
+    h, w = 120, 200
+    good = np.zeros((h, w), np.uint8)
+    good[:, :] = np.linspace(0, 255, w).astype(np.uint8)[None, :]
+    cv2.circle(good, (w // 2, h // 2), 30, 0, -1)
+    same = good.copy()
+    # The ablation: the artwork destroyed, the page otherwise identical.
+    broken = good.copy()
+    cv2.rectangle(broken, (0, 0), (w, h), 0, -1)
+    # A different page entirely -- the far end of the scale.
+    other = np.full((h, w), 255, np.uint8)
+    cv2.circle(other, (30, 30), 20, 0, -1)
+
+    ref, a, b, c = _write(good), _write(same), _write(broken), _write(other)
+    try:
+        identical = engine_similarity(a, ref)[0]
+        destroyed = engine_similarity(b, ref)[0]
+        unrelated = engine_similarity(c, ref)[0]
+        assert identical > 0.99, f"an identical render must score ~1.0, got {identical}"
+        assert destroyed < identical, (
+            f"destroying the artwork must LOWER the score -- the metric this "
+            f"replaced raised it. identical={identical}, destroyed={destroyed}"
+        )
+        assert unrelated < ENGINE_CORR_MIN, (
+            f"an unrelated page must fall below the threshold, got {unrelated}"
+        )
+    finally:
+        for path in (ref, a, b, c):
+            os.unlink(path)
+    print("suite-check --self-test: the engine metric falls when the render worsens")
+
     print("suite-check --self-test: classification rules hold")
     return 0
+
+
+# ★★★ NOT A NUMBER SOMEBODY LIKED. Calibrated by ablation on the two shading
+# patches: a CORRECT render scores 0.822 / 0.783 against the reference engine,
+# and the SAME render with every shading destroyed scores 0.573 - 0.771. 0.75
+# sits inside that gap.
+#
+# It is a FLOOR for "the artwork is structurally there", not a claim of pixel
+# equality -- two engines never reach 1.0 on a text-heavy page, because they
+# hint and antialias type differently.
+ENGINE_CORR_MIN = 0.75
+
+
+def engine_similarity(png, ref_png, grid=160):
+    """Correlate a render against a KNOWN-GOOD ENGINE'S render of the same page.
+
+    ★★★ WHY THIS EXISTS, AND IT IS WORSE THAN A BAD THRESHOLD.
+    `reference_similarity` compares a render **to itself** -- its "objects"
+    band against its "reference images" band. On a patch laid out as a 2x2
+    GRID of (object, reference-image) pairs, `content_bands` finds the two GRID
+    ROWS, and the comparison correlates row 1's artwork against row 2's
+    ENTIRELY DIFFERENT artwork. The resulting number is a function of how much
+    the two rows happen to resemble each other, and NOT of whether anything
+    rendered correctly.
+
+    ★★ MEASURED BY ABLATION, and the direction is the point: replacing every
+    shading in pdfce's own render with SOLID BLACK **RAISES**
+    `reference_similarity` from 0.823 -> 0.953 and 0.445 -> 0.794. Rotating
+    every shading 180 degrees moves it by +0.000 / -0.003. The old metric is
+    ANTI-CORRELATED with shading fidelity on this layout -- a renderer that
+    painted nothing where every shading belongs scores BETTER than the correct
+    one, and one that draws them upside-down is indistinguishable.
+
+    The same ablations run through THIS function all move the right way
+    (-0.006 .. -0.212), because it compares two renders of the same page.
+
+    ★ Both images are reduced to a fixed `grid`-wide luminance raster first.
+    The two engines hint and antialias type differently, and at full resolution
+    that noise dominates a page whose ink is mostly text. Downsampling averages
+    it away and leaves the artwork, which is what these patches actually test.
+
+    Returns `(correlation, mean_abs_diff)`, or `None` if either image is
+    unreadable -- which is a genuine "cannot tell", not a failure.
+    """
+    a = cv2.imread(ref_png, cv2.IMREAD_GRAYSCALE)
+    b = cv2.imread(png, cv2.IMREAD_GRAYSCALE)
+    if a is None or b is None:
+        return None
+    h = max(8, round(grid * a.shape[0] / a.shape[1]))
+    a = cv2.resize(a, (grid, h), interpolation=cv2.INTER_AREA).astype(np.float32)
+    b = cv2.resize(b, (grid, h), interpolation=cv2.INTER_AREA).astype(np.float32)
+    corr = float(((a - a.mean()) * (b - b.mean())).mean() / (a.std() * b.std() + 1e-6))
+    return corr, float(np.abs(a - b).mean())
 
 
 def reference_similarity(png):
@@ -572,6 +667,7 @@ def main():
         ref_style, mark_style, crit_style = classify(txt)
         sim = reference_similarity(png) if ref_style else None
         ref_sim = None
+        eng = None
         if marks:
             verdict = "X"
         elif ref_style:
@@ -593,7 +689,19 @@ def main():
                 # this, four 16-bit-image patches "passed" on scores of
                 # 0.05 vs 0.06 -- pdfce agreeing with Acrobat that neither
                 # resembles the reference, read as success.
-                if ref_sim is not None and sim is not None and ref_sim[0] >= 0.50:
+                # ★★ THE ORACLE IS THE OTHER ENGINE'S RENDER, NOT THIS
+                # ONE'S OTHER HALF. `ref_sim` -- the reference engine's score
+                # against its own embedded strip -- is KEPT, but only as the
+                # honesty guard it was written to be: it says whether the band
+                # split suits this layout. It never adjudicates again, because
+                # a layout it does NOT suit can still score high by accident.
+                # PCS 6.0 scores 0.817 on it and passes a guard set at 0.50,
+                # on a 2x2 grid the band split cannot read at all -- so
+                # `REF-PASS` was printed for a number measuring nothing.
+                eng = engine_similarity(png, cand)
+                if eng is not None:
+                    verdict = "REF-PASS" if eng[0] >= ENGINE_CORR_MIN else "REF-FAIL"
+                elif ref_sim is not None and sim is not None and ref_sim[0] >= 0.50:
                     verdict = "REF-PASS" if sim[0] >= ref_sim[0] - 0.05 else "REF-FAIL"
         elif mark_style:
             # ★ NOT `clean`. This patch is scored by a mark that should be
@@ -618,6 +726,8 @@ def main():
             "ref_corr": None if sim is None else round(sim[0], 3),
             "ref_absdiff": None if sim is None else round(sim[1], 1),
             "ref_engine_corr": None if ref_sim is None else round(ref_sim[0], 3),
+            "engine_corr": None if eng is None else round(eng[0], 3),
+            "engine_absdiff": None if eng is None else round(eng[1], 1),
         })
 
     if args.json:
