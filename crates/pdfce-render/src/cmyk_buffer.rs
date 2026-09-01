@@ -726,6 +726,7 @@ impl CmykBuffer {
                 self.planes[2][idx],
                 self.planes[3][idx],
             ],
+            s: [0.0; crate::compositor::MAX_SPOTS],
             a: self.alpha[idx],
         }
     }
@@ -896,6 +897,7 @@ impl CmykBuffer {
                 // wrong exactly where the clause exists.
                 let source = PixelCmyk {
                     c: colour,
+                    s: [0.0; crate::compositor::MAX_SPOTS],
                     a: alpha * c,
                 };
                 if self.composite_at(idx, source, c, blend) {
@@ -976,6 +978,7 @@ impl CmykBuffer {
                 let b = Chan::from(px.blue()) / 255.0 / a;
                 let source = PixelCmyk {
                     c: crate::overprint::rgb_to_cmyk(r, g, b),
+                    s: [0.0; crate::compositor::MAX_SPOTS],
                     a: a * alpha,
                 };
                 // An image's own alpha is SHAPE, not opacity: §11.6.4.2
@@ -1062,6 +1065,7 @@ impl CmykBuffer {
                 let un = |v: u8| Chan::from(v) / 255.0 / a;
                 let source = PixelCmyk {
                     c: [un(cm.red()), un(cm.green()), un(cm.blue()), un(kk.red())],
+                    s: [0.0; crate::compositor::MAX_SPOTS],
                     a: a * alpha,
                 };
                 // An image's own alpha is SHAPE, not opacity (§11.6.4.2), so
@@ -1236,6 +1240,7 @@ impl CmykBuffer {
                 }
                 let after = PixelCmyk {
                     c: mixed,
+                    s: [0.0; crate::compositor::MAX_SPOTS],
                     a: t.mul_add(1.0 - before.a, before.a),
                 };
                 if after != before {
@@ -1654,6 +1659,7 @@ impl CmykBuffer {
                 // bug the moment this buffer ever is one.
                 let source = PixelCmyk {
                     c,
+                    s: [0.0; crate::compositor::MAX_SPOTS],
                     a: agn * alpha * m,
                 };
                 if self.composite_at(idx, source, agn, blend) {
@@ -1839,10 +1845,18 @@ impl CmykBuffer {
                     ko.initial[2][idx],
                     ko.initial[3][idx],
                 ],
+                s: [0.0; crate::compositor::MAX_SPOTS],
                 a: ko.initial_alpha[idx],
             };
             let c = remove_backdrop_cmyk(accum, initial, ag);
-            self.set_pixel(idx, PixelCmyk { c, a: ag });
+            self.set_pixel(
+                idx,
+                PixelCmyk {
+                    c,
+                    s: [0.0; crate::compositor::MAX_SPOTS],
+                    a: ag,
+                },
+            );
         }
         self
     }
@@ -1868,6 +1882,7 @@ impl CmykBuffer {
                     ko.initial[2][idx],
                     ko.initial[3][idx],
                 ],
+                s: [0.0; crate::compositor::MAX_SPOTS],
                 a: ko.initial_alpha[idx],
             };
             let (px, ag) = composite_element_knockout_cmyk(
@@ -2321,7 +2336,14 @@ mod tests {
         // is why the inequality below is asserted rather than assumed.
         let ink = [0.9_f32, 0.9, 0.9, 0.9];
         let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
-        b.set_pixel(0, PixelCmyk { c: ink, a: 0.5 });
+        b.set_pixel(
+            0,
+            PixelCmyk {
+                c: ink,
+                s: [0.0; crate::compositor::MAX_SPOTS],
+                a: 0.5,
+            },
+        );
         let out = b.to_srgb_over_white().unwrap();
         let got = out.pixels()[0];
 
@@ -2446,6 +2468,7 @@ mod tests {
             0,
             PixelCmyk {
                 c: [0.0, 0.0, 0.0, 1.0],
+                s: [0.0; crate::compositor::MAX_SPOTS],
                 a: 1.0,
             },
         );
@@ -2497,6 +2520,7 @@ mod tests {
             0,
             PixelCmyk {
                 c: [0.0, 0.0, 0.0, 1.0],
+                s: [0.0; crate::compositor::MAX_SPOTS],
                 a: 0.5,
             },
         );
@@ -2526,6 +2550,7 @@ mod tests {
             0,
             PixelCmyk {
                 c: [0.1, 0.2, 0.3, 0.4],
+                s: [0.0; crate::compositor::MAX_SPOTS],
                 a: 1.0,
             },
         );

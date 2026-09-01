@@ -603,9 +603,37 @@ pub fn composite_element(backdrop: Pixel, source: Pixel, blend: Blend) -> Pixel 
 pub struct PixelCmyk {
     /// Subtractive tints `[C, M, Y, K]`, `0.0..=1.0`.
     pub c: [f32; 4],
+    /// Tints of the page's SPOT colorants, indexed by the page's spot roster
+    /// (`Pass 217.0`). Unused entries are `0.0` — "no ink", which is the
+    /// correct value for a colorant this page never names.
+    ///
+    /// ★ A fixed array HERE and a `Vec` in the buffer, because they answer
+    /// different questions. `PixelCmyk` is a TRANSIENT value — one pixel in
+    /// flight — so a fixed array keeps it `Copy` and costs nothing that
+    /// survives the call. The buffer is per-page STORAGE where an unused plane
+    /// is real memory, so it allocates only what the page's roster needs.
+    pub s: [f32; MAX_SPOTS],
     /// Alpha, `[0, 1]`.
     pub a: f32,
 }
+
+/// The most spot colorants one page can composite natively.
+///
+/// # Why there is a ceiling, and why it is small
+///
+/// A census of 4,023 real PDFs found **98.6% name no spot colorant at all**,
+/// 99.85% name three or fewer, and the maximum seen anywhere was nine. A small
+/// ceiling therefore covers essentially the whole corpus, and the pages it does
+/// not cover fall back to the flattening that predates this — disclosed, not
+/// silent.
+///
+/// ★★ MEMORY is what sets the number, not the census. Each plane costs 4 bytes
+/// per pixel on top of the existing 20, and a 300 DPI US-Letter page with four
+/// spot planes needs **289 MiB** against the 256 MiB default buffer ceiling —
+/// so it would be REFUSED outright. That measurement is why planes are
+/// allocated from the page's actual roster rather than provisioned to this
+/// maximum, and why this maximum is 4 rather than 9.
+pub const MAX_SPOTS: usize = 4;
 
 impl PixelCmyk {
     /// A fully transparent pixel.
@@ -623,6 +651,7 @@ impl PixelCmyk {
     /// zero alpha. It is not an initialiser for an opaque one.
     pub const TRANSPARENT: Self = Self {
         c: [0.0; 4],
+        s: [0.0; MAX_SPOTS],
         a: 0.0,
     };
 }
@@ -662,7 +691,11 @@ pub fn composite_element_cmyk(backdrop: PixelCmyk, source: PixelCmyk, blend: Ble
     for i in 0..4 {
         c[i] = w.mul_add(blended[i] - backdrop.c[i], backdrop.c[i]);
     }
-    PixelCmyk { c, a: ai }
+    PixelCmyk {
+        c,
+        s: [0.0; MAX_SPOTS],
+        a: ai,
+    }
 }
 
 /// **§11.4.8's element-compositing formula for a KNOCKOUT group.**
@@ -836,7 +869,14 @@ pub fn composite_element_knockout_cmyk(
         let ct = a_s.mul_add(blended[i], k * initial.c[i]);
         c[i] = (1.0 - f_s).mul_add(accum.a * accum.c[i], ct) / ai;
     }
-    (PixelCmyk { c, a: ai }, ag)
+    (
+        PixelCmyk {
+            c,
+            s: [0.0; MAX_SPOTS],
+            a: ai,
+        },
+        ag,
+    )
 }
 
 /// **§11.4.4's backdrop removal, in a subtractive space.**
@@ -1313,6 +1353,7 @@ mod tests {
     fn subtractive_composite_over_nothing_is_the_source() {
         let src = PixelCmyk {
             c: [0.3, 0.7, 0.1, 0.4],
+            s: [0.0; MAX_SPOTS],
             a: 1.0,
         };
         for mode in [
