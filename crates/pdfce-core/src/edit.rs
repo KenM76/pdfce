@@ -805,6 +805,11 @@ pub enum CommandKind {
     /// byte-identical pre-delete content stream. See
     /// [`EditSession::delete_object`].
     DeleteObject,
+    /// One or more vector objects were **recoloured** (`Pass 219.0`): each
+    /// object's own bytes were wrapped in `q <colour> … Q` so the change is
+    /// confined to the objects the operator picked and every other byte on the
+    /// page stays verbatim. See [`EditSession::set_object_paint`].
+    SetObjectPaint,
     /// One anchor **node** of a path object was dragged (Pass 9c-min,
     /// decision 011 §2.5): exactly one coordinate pair was rewritten in an
     /// `m`/`l`/`c`/`v`/`y` operand list (surgery, R46/§5.7). ONE undoable
@@ -10779,6 +10784,139 @@ impl EditSession {
         let _ = self.coalesce_last(committed, CommandKind::CutSelection);
         Ok(clip)
     }
+    /// **Recolour** page objects (`Pass 219.0`), at a consuming shell's
+    /// request.
+    ///
+    /// # Why this did not exist
+    ///
+    /// Every colour verb pdfce had coloured an ANNOTATION, a ce dimension, a
+    /// redaction mark or a TEXT RUN. A line, a rectangle, a polygon, a CAD
+    /// drawing's every stroke: readable, selectable, movable, deletable, and
+    /// not recolourable. The operator's words were *"I don't see where I am
+    /// able to edit the color of text, vectors, etc."* — text worked; vectors
+    /// had nothing for a control to call.
+    ///
+    /// # `fill` and `stroke` are independent
+    ///
+    /// `None` leaves that channel alone. Passing both changes both in one
+    /// command and one undo entry; passing neither is a no-op that still
+    /// reports which objects it would have refused, so a shell can drive the
+    /// control's enabled state without making an edit.
+    ///
+    /// # ★★ What it REFUSES, and why refusing beats converting
+    ///
+    /// An object whose paint is in a space pdfce does not decode — a
+    /// `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed` or `/Lab` — is left
+    /// alone and reported by name in [`PaintOutcome::refused`].
+    ///
+    /// A CAD sheet's strokes are frequently named spot inks and the operator's
+    /// own drawings are printed. Writing `DeviceRGB` over a named ink would
+    /// look right on screen and **destroy the plate**, and it would do so
+    /// invisibly, which is the worst combination available. So the refusal is
+    /// by name, per object, and the shell decides what to tell the operator.
+    ///
+    /// Patterns are refused separately (§8.7.3 — a pattern has no colour at
+    /// all), because replacing a pattern with a flat colour is a different act
+    /// from replacing an ink pdfce cannot read.
+    ///
+    /// # The reader is [`Self::page_objects`]
+    ///
+    /// No separate colour reader ships, because none is needed:
+    /// `PathObject::fill_paint` / `stroke_paint` already carry the honest
+    /// answer, including `PathPaint::Other` for the spaces this verb refuses.
+    /// A shell opens its swatch on `PathPaint::rgb()` and shows the ink's name
+    /// when that is `None`.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::PageOutOfRange`] — no such page.
+    /// - [`EditError::VectorEditNoContents`] — the page has nothing to edit.
+    /// - A vector-edit error when an index is out of range. Every index is
+    ///   resolved BEFORE anything is planned, so a bad one refuses the whole
+    ///   call rather than recolouring the prefix that happened to resolve.
+    /// - The encryption and certification guards.
+    pub fn set_object_paint(
+        &mut self,
+        page_index: usize,
+        object_indices: &[usize],
+        fill: Option<crate::vector::Rgb>,
+        stroke: Option<crate::vector::Rgb>,
+    ) -> Result<PaintOutcome, EditError> {
+        let model = self.page_objects(page_index)?;
+        let count = model.objects.len();
+
+        let mut accepted: Vec<usize> = Vec::new();
+        let mut refused: Vec<PaintRefusal> = Vec::new();
+        for &i in object_indices {
+            let obj = model
+                .objects
+                .get(i)
+                .ok_or(crate::vector::VectorEditError::ObjectOutOfRange { index: i, count })?;
+            let crate::vector::VectorObject::Path(p) = obj else {
+                refused.push(PaintRefusal {
+                    object: i,
+                    reason: PaintRefusalReason::NotAPath,
+                    space: None,
+                });
+                continue;
+            };
+            // Only the channels being CHANGED can refuse. Recolouring the fill
+            // of an object whose STROKE is a spot ink is legitimate and must
+            // not be blocked by the channel nobody touched.
+            let mut blocked = None;
+            for (want, paint) in [
+                (fill.is_some(), &p.fill_paint),
+                (stroke.is_some(), &p.stroke_paint),
+            ] {
+                if !want {
+                    continue;
+                }
+                if let crate::vector::PathPaint::Other { space, pattern, .. } = paint {
+                    blocked = Some(PaintRefusal {
+                        object: i,
+                        reason: if *pattern {
+                            PaintRefusalReason::Pattern
+                        } else {
+                            PaintRefusalReason::UndecodedColourSpace
+                        },
+                        space: space.clone(),
+                    });
+                    break;
+                }
+            }
+            match blocked {
+                Some(r) => refused.push(r),
+                None => accepted.push(i),
+            }
+        }
+
+        if accepted.is_empty() {
+            return Ok(PaintOutcome {
+                changed: Vec::new(),
+                refused,
+            });
+        }
+
+        let targets = accepted.clone();
+        self.vector_surgery(CommandKind::SetObjectPaint, page_index, |stream, model| {
+            let count = model.objects.len();
+            let objs = targets
+                .iter()
+                .map(|&i| {
+                    model
+                        .objects
+                        .get(i)
+                        .ok_or(crate::vector::VectorEditError::ObjectOutOfRange { index: i, count })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(crate::vector::plan_recolour(stream, &objs, fill, stroke)?)
+        })?;
+
+        Ok(PaintOutcome {
+            changed: accepted,
+            refused,
+        })
+    }
 
     /// Delete **several objects at once** from page `page_index`, as ONE
     /// undoable command (Pass 47.0, R168).
@@ -13571,6 +13709,55 @@ fn inherited_dv<G: ObjectGraph + ?Sized>(graph: &G, start: ObjId) -> Option<Obje
         id = dict.get(b"Parent").and_then(Object::as_reference)?;
     }
     None
+}
+/// What [`EditSession::set_object_paint`] did, per object (`Pass 219.0`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PaintOutcome {
+    /// Paint-order indices that were recoloured.
+    pub changed: Vec<usize>,
+    /// Objects left alone, each with the reason — see [`PaintRefusal`].
+    ///
+    /// ★ A SEPARATE LIST, not a count, because the consuming shell asked for
+    /// exactly this: *"a selection of twelve strokes where three are in a
+    /// colour space pdfce will not rewrite needs to say 'nine changed', not
+    /// 'done'."*
+    pub refused: Vec<PaintRefusal>,
+}
+
+/// Why one object was not recoloured.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PaintRefusal {
+    /// The object's paint-order index.
+    pub object: usize,
+    /// Why, in a form a shell can show without inventing wording.
+    pub reason: PaintRefusalReason,
+    /// The colour-space resource name from `cs`/`CS`, when there was one.
+    /// Present so a shell can name the ink rather than say "some space".
+    pub space: Option<Vec<u8>>,
+}
+
+/// The kinds of refusal [`EditSession::set_object_paint`] issues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PaintRefusalReason {
+    /// The object's paint is in a colour space pdfce does not decode —
+    /// `/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed`, `/Lab`.
+    ///
+    /// ★★ THE REFUSAL THAT MATTERS. A CAD sheet's strokes are frequently named
+    /// spot inks, and writing `DeviceRGB` over one would look right on screen
+    /// and **destroy the plate**. Refused rather than converted, and named
+    /// rather than counted, so an operator learns which lines and why.
+    UndecodedColourSpace,
+    /// The object is painted with a PATTERN (§8.7.3), which has no colour at
+    /// all. Distinct from the above because replacing a pattern with a flat
+    /// colour is a different act from replacing an ink pdfce cannot read, and
+    /// a shell should offer them differently.
+    Pattern,
+    /// The object is not a path — text and images carry their colour
+    /// elsewhere and are not recoloured by this verb.
+    NotAPath,
 }
 
 /// The disclosures a fuzzy-never-sneaky fill owes the operator: how many

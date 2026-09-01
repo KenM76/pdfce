@@ -40,11 +40,12 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use pdfce_core::document::Document;
-use pdfce_core::edit::{CommandKind, EditError, EditSession};
+use pdfce_core::edit::{CommandKind, EditError, EditSession, PaintRefusalReason};
 use pdfce_core::object::{ObjId, Object, Provenance};
 use pdfce_core::page_tree;
 use pdfce_core::vector::{
-    Matrix, PageObjects, PathObject, Point, Segment, VectorEditError, VectorObject, decompose_page,
+    Matrix, PageObjects, PathObject, Point, Rgb, Segment, VectorEditError, VectorObject,
+    decompose_page,
 };
 use pdfce_core::writer::SaveOptions;
 
@@ -753,4 +754,149 @@ fn editing_a_file_level_content_stream_leaves_the_objstm_siblings_verbatim() {
     // And undo is byte-identical here too.
     s.undo();
     assert_eq!(save(&s), base);
+}
+
+// ---------------------------------------------------------------------------
+// Pass 219.0 -- recolouring page objects, and refusing the inks that must not
+// be recoloured.
+// ---------------------------------------------------------------------------
+
+/// A page with two filled rectangles: one in `DeviceRGB`, one in a
+/// `/Separation`.
+///
+/// ★ The two are painted in that ORDER deliberately. The Separation path's
+/// stale colour — the defect `Pass 218.0` fixed — would be the red from the
+/// first rectangle, so a test built on this fixture fails loudly if the model
+/// ever regresses to inheriting it.
+fn two_paths_one_spot() -> Vec<u8> {
+    let content = b"1 0 0 rg 0 0 20 20 re f\n/CS0 cs 1 scn 40 0 20 20 re f\n".to_vec();
+    let mut objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /ColorSpace \
+         << /CS0 5 0 R >> >> /Contents 4 0 R >>"
+            .to_owned(),
+        format!(
+            "<< /Length {} >>\nstream\n{}endstream",
+            content.len(),
+            String::from_utf8_lossy(&content)
+        ),
+        "[/Separation /SpotGreen /DeviceCMYK 6 0 R]".to_owned(),
+        "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 0 1 0] /N 1 >>".to_owned(),
+    ];
+    let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, body) in objs.drain(..).enumerate() {
+        offsets.push(buf.len());
+        buf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref_at = buf.len();
+    let size = offsets.len() + 1;
+    buf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+    for off in &offsets {
+        buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    buf.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+            .as_bytes(),
+    );
+    buf
+}
+
+/// ★★★ THE ONE THAT MATTERS. A spot-inked path is REFUSED BY NAME, and the
+/// device path beside it is recoloured in the same call.
+///
+/// Writing `DeviceRGB` over a named spot ink would look right on screen and
+/// destroy the printing plate — invisibly, which is the worst combination
+/// available. The consuming shell asked for exactly this: *"a selection of
+/// twelve strokes where three are in a colour space pdfce will not rewrite
+/// needs to say 'nine changed', not 'done'."*
+#[test]
+fn a_spot_inked_path_is_refused_by_name_while_its_neighbour_is_recoloured() {
+    let mut s = session(&two_paths_one_spot());
+    let out = s
+        .set_object_paint(
+            0,
+            &[0, 1],
+            Some(Rgb {
+                r: 0.0,
+                g: 0.0,
+                b: 1.0,
+            }),
+            None,
+        )
+        .expect("the call succeeds; the refusal is DATA, not an error");
+
+    assert_eq!(
+        out.changed,
+        vec![0],
+        "only the DeviceRGB path was recoloured"
+    );
+    assert_eq!(out.refused.len(), 1, "and the spot one was refused");
+    let r = &out.refused[0];
+    assert_eq!(r.object, 1);
+    assert_eq!(r.reason, PaintRefusalReason::UndecodedColourSpace);
+    assert_eq!(
+        r.space.as_deref(),
+        Some(b"CS0".as_slice()),
+        "★ named, not merely counted -- an operator must learn WHICH lines"
+    );
+
+    // The new colour is in the file, and the spot path's own bytes are not.
+    let text = String::from_utf8_lossy(&save(&s)).into_owned();
+    assert!(text.contains(" rg"), "a fill colour was written: {text}");
+    assert!(
+        text.contains("1 scn"),
+        "★ and the spot ink survives verbatim -- the whole point of refusing"
+    );
+}
+
+/// Refusing is per CHANNEL, not per object.
+///
+/// Recolouring the FILL of an object whose STROKE is a spot ink is legitimate
+/// and must not be blocked by the channel nobody touched. The fixture's spot
+/// path has no stroke at all, so asking to change only the stroke must not
+/// refuse it for its fill.
+#[test]
+fn a_channel_nobody_touched_does_not_cause_a_refusal() {
+    let mut s = session(&two_paths_one_spot());
+    let out = s
+        .set_object_paint(
+            0,
+            &[1],
+            None,
+            Some(Rgb {
+                r: 0.0,
+                g: 1.0,
+                b: 0.0,
+            }),
+        )
+        .expect("succeeds");
+    assert!(
+        out.refused.is_empty(),
+        "the spot ink is on the FILL; a stroke-only change must not refuse it: {:?}",
+        out.refused
+    );
+    assert_eq!(out.changed, vec![1]);
+}
+
+/// One undoable command, and undo restores the bytes exactly.
+#[test]
+fn recolouring_is_one_command_and_undo_restores_the_content() {
+    let mut s = session(&two_paths_one_spot());
+    let before = save(&s);
+    s.set_object_paint(
+        0,
+        &[0],
+        Some(Rgb {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+        }),
+        None,
+    )
+    .expect("succeeds");
+    assert_eq!(s.undo_depth(), 1, "exactly one undo entry for one gesture");
+    s.undo().expect("undo");
+    assert_eq!(save(&s), before, "undo restores the document byte for byte");
 }

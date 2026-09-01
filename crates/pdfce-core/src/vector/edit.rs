@@ -108,7 +108,7 @@ use crate::text_edit::edit::splice;
 use crate::writer::content::emit_number;
 
 use super::decompose::{PathObject, RunPositioning, TextObject, VectorObject};
-use super::geometry::{Matrix, Point, rect_corners};
+use super::geometry::{Matrix, Point, Rgb, rect_corners};
 
 /// Why a vector-edit surgery could not be planned.
 ///
@@ -1042,6 +1042,114 @@ fn resolve_singular(
             Ok(clamped)
         }
     }
+}
+
+/// Plan a **recolour** of `objs`: wrap each object's own bytes in `q … Q` with
+/// the requested colour operators in front (`Pass 219.0`).
+///
+/// # Why a wrap and not an operand rewrite
+///
+/// Colour is GRAPHICS STATE, not a property of a path. The operators that set
+/// it — `rg`, `k`, `scn` … — sit *before* the object's construction and are
+/// routinely SHARED: one `0 0 1 RG` commonly governs every stroke on a CAD
+/// sheet. Rewriting the operand an object happens to inherit would recolour
+/// every other object that inherits the same one, silently, and the operator
+/// would have selected one line and changed a thousand.
+///
+/// So nothing existing is rewritten. Each object's span is wrapped, exactly as
+/// [`plan_transform_many`] wraps a `cm`, and the `Q` confines the change to
+/// the object the operator picked. That also makes the edit trivially
+/// invertible and keeps every other byte on the page verbatim (the
+/// minimal-diff invariant, `ARCHITECTURE.md` §5).
+///
+/// ★ The wrap is safe against the object's own bytes overriding it because a
+/// `PathObject`'s span begins at its first CONSTRUCTION operator — colour
+/// operators are outside it by construction. If that ever changes, this
+/// becomes a silent no-op, which is why the caller counts what it touched.
+///
+/// # This planner does no policy
+///
+/// It does not decide whether an object MAY be recoloured — refusing a spot
+/// ink is the session's job, because the session is what holds the
+/// [`crate::vector::PathPaint`] and what must report the refusal by name. A
+/// planner that silently skipped objects would make "nine of twelve changed"
+/// unreportable.
+pub fn plan_recolour(
+    content: &ContentStream,
+    objs: &[&VectorObject],
+    fill: Option<Rgb>,
+    stroke: Option<Rgb>,
+) -> Result<PlannedEdit, VectorEditError> {
+    if objs.is_empty() || (fill.is_none() && stroke.is_none()) {
+        return Ok(PlannedEdit {
+            content: content.buf.clone(),
+            operators_touched: 0,
+            disclosures: Vec::new(),
+        });
+    }
+
+    let mut prefix = b"q ".to_vec();
+    if let Some(c) = fill {
+        emit_rgb_op(&mut prefix, c, false);
+    }
+    if let Some(c) = stroke {
+        emit_rgb_op(&mut prefix, c, true);
+    }
+
+    let mut spans: Vec<(usize, usize)> = objs
+        .iter()
+        .map(|o| {
+            let s = o.bytes();
+            (s.start, s.end())
+        })
+        .collect();
+    spans.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+
+    let mut kept: Vec<(usize, usize)> = Vec::with_capacity(spans.len());
+    for (start, end) in spans {
+        match kept.last() {
+            Some(&(_, prev_end)) if end <= prev_end => continue,
+            Some(&(_, prev_end)) if start < prev_end => {
+                return Err(VectorEditError::OverlappingObjectSpans { start, end });
+            }
+            _ => kept.push((start, end)),
+        }
+    }
+
+    let touched = kept.len();
+    let mut edits: Vec<(usize, usize, Vec<u8>)> = kept
+        .into_iter()
+        .map(|(s, e)| {
+            let mut body = prefix.clone();
+            // `get` rather than a slice index: the spans come from the
+            // decomposition of THIS buffer so they are in range, but a panic
+            // on untrusted input is never the right failure mode
+            // (`ARCHITECTURE.md` §10). An out-of-range span degrades to
+            // wrapping nothing, which the caller's `operators_touched` count
+            // still reports.
+            if let Some(original) = content.buf.get(s..e) {
+                body.extend_from_slice(original);
+            }
+            body.extend_from_slice(b" Q");
+            (s, e, body)
+        })
+        .collect();
+
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: touched,
+        disclosures: Vec::new(),
+    })
+}
+
+/// `r g b rg ` (or `RG ` when stroking), with the round-trip-safe emitter every
+/// other planner uses.
+fn emit_rgb_op(out: &mut Vec<u8>, c: Rgb, stroking: bool) {
+    for v in [c.r, c.g, c.b] {
+        emit_number(out, f64::from(v));
+        out.push(b' ');
+    }
+    out.extend_from_slice(if stroking { b"RG " } else { b"rg " });
 }
 
 /// `q a b c d e f cm ` as bytes, with `emit_number`'s round-trip-safe
