@@ -4897,3 +4897,190 @@ explicitly, or a reader treats the ambiguity as a blocker.
 - Bash heredocs broke **twice** on the spec's punctuation at this size — use the `Write`
   tool for the file and for any multi-line script, then run it (corpus-state item 51's
   lesson, reconfirmed).
+
+---
+
+## 64. The **WHICH-OF-TWO-READINGS / "I NARROWED IT TO ONE CLAUSE"** dispatch — *"a measured rendering defect reduces to one sentence; tell me if the standard settles it or if it must become a disclosed setting"* (2026-08-31, overprint of a `DeviceGray` source in a `DeviceCMYK` group + inside a soft-mask group, `iso32000__ref__overprint_in_softmask_group.md`)
+
+**Shape.** The best-prepared dispatch yet: a real measured defect, an oracle
+(a baked reference image on the fixture's own page), the exact clause quoted
+verbatim **from the corpus**, both readings stated, the arithmetic worked, and
+an explicit invitation to answer *"it is ambiguous"*. **The verdict was
+nevertheless the least interesting deliverable.** The dispatched question was
+**determinate six times over**; the value was in (a) *why* the corpus file it
+quoted could not answer it, (b) a **neighbouring** question that IS ambiguous
+and is the second gate in the same bug, and (c) a **scope correction to a
+setting pdfce had shipped two days earlier**.
+
+### 64a. ★★★ A CLAUSE'S **EXAMPLE**s ARE PART OF HOW ITS NORMATIVE SENTENCE READS — AND OMITTING THEM TURNS A DETERMINATE CLAUSE INTO AN APPARENT AMBIGUITY
+
+`iso32000__s__11.7.md` transcribed §11.7.4.3's blend-function bullets
+**verbatim and accurately**, and transcribed NOTE 2 right after them — **but
+skipped EXAMPLE 1, which sits between them.** The dispatch quoted the corpus
+file, hit the gap, and reasonably concluded the phrase *"all colour components
+**specified in the current colour space**"* was arity-ambiguous.
+
+EXAMPLE 1 disposes of it twice in two sentences: *"If the current colour space is
+`DeviceCMYK` **or `CalRGB`**, the value of the blend function is `c_s` for
+**process colour components** and `c_b` for spot components. On the other hand,
+if the current colour space is a `Separation` space … the value is `c_s` for that
+spot component and `c_b` for **all process components and all other spot
+components**."* `CalRGB` is **3**-component against a possibly-**4**-component
+group ⇒ the test is **process-vs-spot CLASS membership**, not channel count.
+
+⇒ **Generalise: transcribe EXAMPLEs whenever the clause's own wording is
+arity-, class-, scope- or type-dependent.** They are the drafters' own worked
+disambiguation. A corpus file that keeps `shall`s and NOTEs but drops EXAMPLEs
+is **accurate and incomplete**, which is the more expensive failure — it reads
+as settled.
+
+**And the same trap has a second door: the SUMMARY TABLE five subclauses later.**
+Table 149 row 2 (*"Any process colour space (including other cases of
+`DeviceCMYK`)"* × *Process component* = `c_s` in all three columns) was
+transcribed in the same file and answered the question by itself — nobody
+connected it to the bullet it summarises. **When a prose sentence looks
+under-determined, the standard's own summary table for that clause is the first
+place to look.** (Item **61a** said this once already, for a different clause.
+It has now fired twice. It is a rule, not an anecdote.)
+
+### 64b. ★★ GRADE EVERY SUPPORT BY **EDITION**, BECAUSE A DETERMINATE ANSWER CAN HAVE A DIFFERENT NUMBER OF LEGS PER EDITION
+
+Six supports; **three hold in both editions, three are 1.7-only**:
+
+| holds | support |
+|---|---|
+| both | Table 149 / 2.0 Table 146 row 2 |
+| both | §8.6.7 *"shall not apply to the painting of **images**"* |
+| both | §8.6.7's scope sentence + §8.6.5.7 being **CIE-based only** |
+| **1.7 only** | EXAMPLE 1's `CalRGB` — **2.0 says "or equivalent"** (`OP-D1`, newly measured) |
+| **1.7 only** | §8.6.7's *"conversions from some other colour space"* — deleted in 2.0 |
+| 2.0 explicit | §11.7.2's *"shall be converted to the group's colour space"* |
+
+⇒ **A "the standard settles it" answer still owes a per-edition count.** Same
+mechanism as item **61b** (a DELETION re-opens a closed question) — but note the
+new instance: **2.0 did not delete EXAMPLE 1, it WEAKENED it by swapping one
+word** (`CalRGB` → `or equivalent`). A deletion probe (`grep` the phrase, 1→0)
+finds that only if you grep the *distinctive* half. **Grep the example's
+DISCRIMINATING TOKEN, not the sentence.**
+
+### 64c. ★★★ THE DISPATCHED QUESTION WAS DETERMINATE; ITS **NEIGHBOUR** WAS THE AMBIGUITY — AND THE NEIGHBOUR WAS THE ACTUAL SECOND GATE
+
+The dispatch asked about the **blend function**. It never asked whether the
+blend function is even *reached*. §11.3.3's basic compositing formula weights
+`B(c_b, c_s)` by **`α_b`**:
+
+`C_r = (1 − α_s/α_r)·C_b + (α_s/α_r)·[ (1 − α_b)·C_s + α_b·B(C_b, C_s) ]`
+
+⇒ **`α_b = 0` collapses the bracket to `C_s` for EVERY blend mode.** So in an
+**isolated** group no blend function can see the backdrop at all, and the whole
+`/BC`-leaks-into-C/M/Y story is unreachable — *if* a luminosity soft-mask group
+is isolated. **Table 147's `/CS` row is the sentence nobody quotes:** *"the `CS`
+entry **may be present only for isolated** transparency groups … **However**,
+this entry **shall** be present … for any transparency group XObject that has
+**no parent group or page from which to inherit** — in particular, one that is
+the value of the `G` entry in a soft-mask dictionary of subtype `Luminosity`."*
+Against it: Table 147's `/I` **default `false`**, and 1.7 §11.4.5 NOTE 1's
+`shall` is **informative** — **and 2.0 deleted it**. ⇒ minted `OPSM-A1`.
+
+⇒ **Generalise: when a dispatch names a blend/compositing rule as its one
+question, ALSO answer whether the rule is REACHED.** The compositing formula's
+`α_b` weight, the group's isolation flag, and the reset performed on group entry
+are three cheap gates upstream of any blend-mode question, and any of them can
+make the dispatched question moot.
+
+### 64d. ★★ A "does feature F apply inside context C?" QUESTION IS ANSWERED FROM **THREE** PLACES, AND THE THIRD IS THE ONE THAT CONVINCES
+
+Asked: *"does overprint apply at all inside a soft-mask group?"* Answered as a
+sourced negative from:
+
+1. **the clause that defines C** (§11.6.5 — its only carve-out is spot colours);
+2. **a whole-document co-occurrence measurement** (`overprint` lines ∩
+   `mask`\|`luminos` lines = **0 / 0** in both editions — cheap, and it is the
+   evidence that the silence is real rather than un-searched);
+3. **★ the ENTRY-RESET LIST for C, read as a CLOSED SET.** §11.6.6: *"Before
+   execution of the transparency group XObject's content stream, the current
+   blend mode shall be initialized to `Normal`, the current stroking and
+   nonstroking alpha constants to 1.0, and the current soft mask to `None`."*
+   **Three items. `/OP`//`op`//`OPM` are not among them ⇒ they are INHERITED**,
+   and the following bullet affirmatively says the transparency-related
+   parameters *"shall be honoured"*.
+
+(3) turns "no prohibition found" into "**positively in scope**". ⇒ **When a
+context has an initialisation/reset list, read it as an exhaustive enumeration
+and check whether your feature is absent from it.** Absence from a closed reset
+list is affirmative evidence of inheritance.
+
+### 64e. ★★★ THE DISPATCHED QUESTION WAS **ALREADY A SHIPPED pdfce SETTING**, AND THE REGISTER HAD PREDICTED THIS EXACT FIXTURE
+
+`OP-A5` (`overprint_zero_tint_scope`, register §5.19, **shipped `Pass 143.0`
+2026-08-29**) is the same question in the opaque model; pdfce ships option (ii)
+`grey_as_k_only` = the dispatch's **Reading A**. The entry even predicted the
+fixture: *"the live domain is a non-`DeviceCMYK` process source over **process**
+components."* **Two days later the engineer walked into it and did not
+recognise it as his own setting.**
+
+Two things to carry:
+
+- **ALWAYS grep the ambiguity register for the dispatched question before
+  answering it.** One `rg` would have surfaced `OP-A5` immediately. A dispatch
+  framed as *"what does the spec say?"* can be a **setting pdfce already chose**
+  — in which case the deliverable is *"you shipped a choice; here is the
+  fixture that falsifies it"*, a different and more useful sentence.
+- **★ A SETTING HAS A SCOPE, AND A SHARED CODE PATH LEAKS IT.** `OP-A5` is a
+  defensible reading in the **opaque** model (where 1.7's text and Acrobat
+  genuinely disagree) and is **flatly contradicted by Table 149 row 2** in the
+  **transparent** model. If one gate serves both paths, the setting is
+  exercising a "reading" in a place where the standard is determinate. **When
+  amending a register entry, ask which MODEL/EDITION/DEVICE-CLASS it is scoped
+  to — an entry that names two tables jointly (“Table 148/149”) is a scope
+  smell.** Same family as item 54's device-class trap and 61e's
+  different-device-model trap.
+
+### 64f. ★ VERIFYING THE DISPATCH'S CLAIM ABOUT ITS OWN CODE **DID NOT** CONFIRM THE DIAGNOSIS — AND SAYING SO IS THE DELIVERABLE
+
+Per item **61f**, the claim *"this is what pdfce currently renders"* was treated
+as a hypothesis. Read-only measurement found `overprint.rs`'s `classify`
+**already** gates the grey→K upgrade on `!in_image_sample`, and the source here
+is an **image** ⇒ it should already take the Reading-B path. Meanwhile
+`interpret.rs::build_soft_mask` **pre-fills the mask pixmap with `/BC` and paints
+into it** — the **non-isolated** model — which is a *different* mechanism for the
+same black render.
+
+⇒ **Report leads, not a diagnosis, when you have not run the thing.** The file
+says so in those words. **A librarian who confirms the engineer's diagnosis
+without measuring has added nothing; one who measures and finds the stated cause
+does not fit has redirected the whole fix.**
+
+### 64g. Paywalled-standard question — grade the negative by WHICH PAGES the preview stops before
+
+Q5 was *"does PDF/X-4 constrain overprint inside soft masks?"* Answer:
+**UNSOURCED, not absent**, and the evidence is specific rather than a shrug:
+the staged iTeh preview of ISO 15930-7:2010 is **12 pages** (front matter →
+part of clause 3) and **stops before §6.13, §6.20 and Annex B — the only three
+places that could carry it**; the preview's **TOC** (which *is* readable) shows
+**no clause named for overprint at all**; and **veraPDF ships no PDF/X profile**,
+so the usual free-secondary route is unavailable. Two closing routes named.
+
+⇒ **A paywalled negative is worth writing when you can name (i) the exact
+clauses the free extract does not reach, (ii) what the readable part of it DOES
+establish, and (iii) the routes that would close it.** Otherwise it is just
+"I could not find it". Compare item **57**: the scope of a negative is the
+method, not the resource.
+
+### 64h. Filing mechanics this session
+
+- **New `iso32000__ref__*` file ⇒ index.md takes FIVE edits**, same as item 61h:
+  prefix-table count (**23 → 24, `ls`-verified**), the **totals line** (was
+  "165 files / 162 content" and was **stale by 8** — five builds had added files
+  without recounting; now 173 / 170, `find`-verified), a manifest row, **three**
+  trigger-topic tables (prepress, soft masks, ambiguity), and a **search-recipe
+  block**. **Every one of the 7 recipes was RUN before the file was saved** —
+  all returned non-empty.
+- **The ambiguity register's §11a PENDING INTAKE convention is the right home
+  for a newly minted row**, not §5 — it exists precisely so a build does not
+  falsify §2's count arithmetic. Use it; a proper triage sweeps it later.
+- **`Write` a Python patch script to the scratchpad, then run it.** Three of
+  this session's four corpus edits contained em-dashes, `§`, `★`, `α`, backticks
+  and `|` — the bash heredoc died on the first attempt exactly as the standing
+  caution predicts. `io.open(..., encoding='utf-8')` + `assert anchor in s`
+  before every replace.

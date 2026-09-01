@@ -1,7 +1,7 @@
 # Memory index — pdfce-spec-librarian
 
 - [Spec source extraction toolchain](reference_spec_source_extraction.md) — how to GET a spec and get text out of it: 17 numbered routes (4a–4q), verified free URLs, paywall workarounds, errata-scan recipes. Read before any acquisition or extraction.
-- [PDF_Spec corpus conventions + dispatch-shape playbook](project_corpus_state.md) — 63 numbered items, one per past dispatch. **Find the item matching your dispatch's SHAPE and read it first.** Naming, banners, grading vocabulary, negative-result evidencing, index-filing mechanics.
+- [PDF_Spec corpus conventions + dispatch-shape playbook](project_corpus_state.md) — 64 numbered items, one per past dispatch. **Find the item matching your dispatch's SHAPE and read it first.** Naming, banners, grading vocabulary, negative-result evidencing, index-filing mechanics.
 - [Font + spec-data licensing patterns](project_embeddable_data_licensing.md) — what may cross into pdfce's MIT tree; data-vs-document, widths-vs-shapes, availability ≠ redistribution licence.
 
 ## Where to look, by what you were asked to do
@@ -13,6 +13,8 @@
 | a phrase/term count is going into a file | extraction **4b** (whitespace-stripped counting — a raw `grep -c` on a multi-word phrase is a lower bound) |
 | a formula, figure or annex looks empty or scrambled | extraction **4a**/**4a-bis**/**4a-sexies** (glyph x-positions, path-drawn symbols), **4c**/**4f** (the figure is a raster) |
 | "is this amended? is there an erratum?" | extraction **4j**/**4k**/**4n**; corpus **63d** (three channels + a positive control) |
+| **"which of these two readings is right? — I narrowed it to one clause"** | corpus **64** (whole item). **64a: transcribe the clause's EXAMPLEs and its summary TABLE — an omitted EXAMPLE is what makes a determinate clause look ambiguous. 64e: grep the ambiguity register FIRST — the question may be a setting pdfce already shipped.** 64c: also answer whether the rule is even REACHED |
+| "does feature F apply inside context C?" | corpus **64d** — three places: C's own clause, a whole-document co-occurrence count, and **C's entry-RESET list read as a CLOSED set** (absence from it = affirmative inheritance) |
 | "the spec is silent on X" | corpus **62c** (an erratum can answer it), **63a** (grade the silence by counting the sentence elsewhere), **63b** (grep the feature name document-wide) |
 | ingest clause C in full before a Pass is written from it | corpus **63** (whole item), **58** (submit-form precedent) |
 | "enumerate every X" / build a census or closed set | corpus **59** (semantic sweep beats key-name sweep), **63e** (state each predicate separately) |
@@ -27,3 +29,5 @@
 - **A clause number is not a key across editions** (1.7 §12.6.4.10 = Hide, 2.0 §12.6.4.10 = Movie). Neither is a table number. Corpus **63c**, **52**, **62h**.
 - **A scope-exclusion banner is an untested claim about material its author deliberately did not read.** Corpus **58**.
 - **A "no free route exists" negative has a scope: the method you tried, not the resource.** It can expire in a day. Corpus **57**; extraction **4g** vs **4h**.
+- **A shipped SETTING has a scope (model / edition / device class), and a shared code path leaks it.** A register entry citing two tables jointly (“Table 148/149”) is a scope smell — one may be a real choice while the other is determinate. Corpus **64e**, **61e**, **54**.
+- **A clause’s EXAMPLEs are normative-adjacent; dropping them is the accurate-but-incomplete failure.** Corpus **64a**. And the corresponding edition probe: 2.0 can WEAKEN an example by swapping one word rather than deleting the sentence — grep the discriminating TOKEN (`CalRGB`), not the sentence. Corpus **64b**.

@@ -4982,13 +4982,39 @@ impl Interpreter<'_> {
         let bytes = filters::decode_stream(&g_dict, raw).ok()?;
         let content = ContentStream::parse(bytes).ok()?;
 
+        // ★★★ THE BACKDROP IS COMPOSITED UNDER THE RESULT, NOT PRE-FILLED
+        // INTO THE OBJECTS' BACKDROP (`Pass 192.0`).
+        //
+        // This buffer used to start FILLED with `/BC`, which is the
+        // NON-ISOLATED model: every object painted inside the group then saw
+        // `/BC` as its backdrop, with alpha 1. A luminosity mask group is
+        // ISOLATED -- Table 147 makes its `/CS` **Required** precisely because
+        // the group is rootless, and §11.4.5 makes a group with an explicit
+        // `/CS` isolated -- so its backdrop alpha is **0**, and §11.3.3 weights
+        // the blend function `B(c_b, c_s)` by that alpha. With alpha_b = 0
+        // every blend mode collapses to `c_s`.
+        //
+        // The two models are indistinguishable while everything inside is
+        // opaque and `Normal`-blended, which is why this stood for so long.
+        // They diverge exactly when an object inside the mask group blends or
+        // overprints against the backdrop -- and that is the measured defect:
+        // a `/BC [1 1 1 1]` (four inks = black) pre-fill made an overprinting
+        // `DeviceGray` image inside the group composite against black, pinning
+        // C/M/Y at 1, so every pixel was black, the mask was zero everywhere,
+        // and the artwork it masked VANISHED.
+        //
+        // `/BC` participates exactly once, at §11.5.3's outer composite
+        // `C = (1 - alpha_g) * C_0 + alpha_g * C_g`, which is what the
+        // `SourceOver` draw below performs. That still makes "outside the
+        // `/BBox`" correct -- nothing was painted there, so alpha_g is 0 and
+        // the result is `/BC` -- which was the pre-fill's other job and is the
+        // reason it must not simply be deleted.
+        let backdrop = if luminosity {
+            Some(self.soft_mask_backdrop(&g_dict, sm))
+        } else {
+            None
+        };
         let mut buf = Pixmap::new(canvas.width(), canvas.height())?;
-        if luminosity {
-            // §11.5.3's opaque backdrop. This fill is ALSO what makes
-            // "outside the BBox" correct, so it is not merely an
-            // initialisation.
-            buf.fill(self.soft_mask_backdrop(&g_dict, sm));
-        }
 
         // §11.6.6: inside a group the blend mode is Normal, both alpha
         // constants are 1.0 and the soft mask is None — "to ensure that
@@ -5004,7 +5030,9 @@ impl Interpreter<'_> {
         if let Some(rect) = rect_entry(doc, &g_dict, b"BBox") {
             if rect.width() <= 0.0 || rect.height() <= 0.0 {
                 // A degenerate BBox paints nothing, so the mask is the
-                // backdrop everywhere — which `buf` already holds.
+                // backdrop everywhere — which the outer composite supplies,
+                // `buf` being wholly transparent.
+                Self::composite_over_backdrop(&mut buf, backdrop);
                 return Self::mask_from_buffer(&buf, luminosity, canvas);
             }
             let path = PathBuilder::from_rect(rect);
@@ -5075,7 +5103,37 @@ impl Interpreter<'_> {
             None,
         );
         self.diag.merge(nested);
+        Self::composite_over_backdrop(&mut buf, backdrop);
         Self::mask_from_buffer(&buf, luminosity, canvas)
+    }
+
+    /// §11.5.3's outer composite: put the mask group's result over an opaque
+    /// backdrop of `/BC`.
+    ///
+    /// `C = (1 - alpha_g) * C_0 + alpha_g * C_g`, which is exactly what a
+    /// `SourceOver` draw of the group's buffer onto a `/BC`-filled one
+    /// computes. Separated from the group's own painting because the two are
+    /// different steps of the model and merging them is the defect this
+    /// function exists to have fixed: a pre-filled buffer makes `/BC` the
+    /// backdrop of every OBJECT, and it is only the backdrop of the GROUP.
+    ///
+    /// An alpha mask has no backdrop colour (§11.6.5.1 -- `/BC` is meaningful
+    /// only for `/S /Luminosity`), so `None` leaves the buffer alone.
+    fn composite_over_backdrop(buf: &mut Pixmap, backdrop: Option<tiny_skia::Color>) {
+        let Some(colour) = backdrop else { return };
+        let Some(mut base) = Pixmap::new(buf.width(), buf.height()) else {
+            return;
+        };
+        base.fill(colour);
+        base.draw_pixmap(
+            0,
+            0,
+            buf.as_ref(),
+            &tiny_skia::PixmapPaint::default(),
+            tiny_skia::Transform::identity(),
+            None,
+        );
+        *buf = base;
     }
 
     /// Turn a rendered mask-group buffer into per-pixel mask coverage.
