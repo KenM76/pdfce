@@ -1190,7 +1190,7 @@ only creation verb whose successful result is a control that does not work"*
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
-| Delete a whole field | `delete_field(&mut self, fqn: &str) -> Result<FieldDeletion, EditError>` | 8464 | Every widget + dict + registration + emptied grouping nodes. ⚠️ **Refuses with `FieldObjectIsInPageTree` when the field (or a widget, or an emptied node) is ALSO a page-tree node** (`Pass 185.1`) — a malformed `/AcroForm` can name a `/Page` in its `/Fields`, and deleting it produced a file pdfce could not reopen. Same guard on `delete_field_group` and `delete_widget`. ★ **`action_targets_orphaned` (`Pass 184.0`) — button actions left naming a field that is gone.** Reset, submit and show/hide targets are fully-qualified **name strings**, so a deletion strands them. **Counted, never repaired**, and the asymmetry with `rename_field` is deliberate: a rename supplies the new name so the rewrite is a substitution, while *"what should this button reset instead?"* has no correct answer. **`census_dangling` cannot see it** — a name is not a reference. JavaScript is not counted, so this is a floor for scripted forms. |
+| Delete a whole field | `delete_field(&mut self, fqn: &str) -> Result<FieldDeletion, EditError>` | 8464 | Every widget + dict + registration + emptied grouping nodes. ⚠️ **Refuses with `FieldObjectIsInPageTree` when the field (or a widget, or an emptied node) is ALSO a page-tree node** (`Pass 185.1`) — a malformed `/AcroForm` can name a `/Page` in its `/Fields`, and deleting it produced a file pdfce could not reopen. Same guard on `delete_field_group` and `delete_widget`. ⚠️ **That variant's MESSAGE changed at `Pass 191.1`** — it no longer says "a form field", because the guard now protects seven other carriers; `name` carries a phrase such as `the form field "Order.Qty"` or `the outline item`. **No API break; re-read the string if you display it.** §6.8. ★ **`action_targets_orphaned` (`Pass 184.0`) — button actions left naming a field that is gone.** Reset, submit and show/hide targets are fully-qualified **name strings**, so a deletion strands them. **Counted, never repaired**, and the asymmetry with `rename_field` is deliberate: a rename supplies the new name so the rewrite is a substitution, while *"what should this button reset instead?"* has no correct answer. **`census_dangling` cannot see it** — a name is not a reference. JavaScript is not counted, so this is a floor for scripted forms. |
 | Preview a grouping-node deletion | `field_group_deletion_preview(&mut self, fqn) -> Result<FieldGroupDeletion, EditError>` | 8535 | ⚠️ Takes `&mut self` although it writes nothing. |
 | Delete a grouping node and its subtree | `delete_field_group(&mut self, fqn) -> Result<FieldGroupDeletion, EditError>` | 8574 | Refuses a terminal with `NotAGroupingNode` — deliberately **not** redirected to `delete_field`. ★ **`action_targets_orphaned` (`Pass 184.0`) — button actions left naming a field that is gone.** Reset, submit and show/hide targets are fully-qualified **name strings**, so a deletion strands them. **Counted, never repaired**, and the asymmetry with `rename_field` is deliberate: a rename supplies the new name so the rewrite is a substitution, while *"what should this button reset instead?"* has no correct answer. **`census_dangling` cannot see it** — a name is not a reference. JavaScript is not counted, so this is a floor for scripted forms. Matched by **prefix** here, since the node takes its subtree. ⚠️ **`0` on the PREVIEW is *not measured***, not a count of zero. |
 | Delete ONE widget of a field | `delete_widget(&mut self, fqn, index: usize) -> Result<FieldDeletion, EditError>` | 8764 | Siblings survive. `action_targets_orphaned` is **always `0` and that is a fact, not a not-tracked**: the field, its name and every action naming it survive a deleted appearance. |
@@ -1444,7 +1444,7 @@ would alter how every pdfce-authored check box already in the wild renders.
 | Export filled data | `export_form_data(&self) -> Option<fdf::FormData>` | 13446 | `None` ⇒ no interactive form. |
 | Import data | `import_form_data(&mut self, data: &fdf::FormData) -> Result<ImportOutcome, EditError>` | 13471 | ⚠️ **Each field is its own undo entry.** Unknown names are counted and skipped, never an error. |
 | Regenerate appearances, clear `/NeedAppearances` | `regenerate_appearances(&mut self) -> Result<RegenOutcome, EditError>` | 13600 | ONE undo entry. |
-| Flatten fields into page content | `flatten_fields(&mut self, names: Option<&[&str]>) -> Result<FlattenOutcome, EditError>` | 13730 | **Destructive.** ONE undo entry. Burns by overlay-append (§5.8). |
+| Flatten fields into page content | `flatten_fields(&mut self, names: Option<&[&str]>) -> Result<FlattenOutcome, EditError>` | 13730 | **Destructive.** ONE undo entry. Burns by overlay-append (§5.8). ⚠️ **Refuses with `FieldObjectIsInPageTree` since `Pass 191.1`** — `Pass 185.1`'s exact input against a verb that never received that fix, and it reached further than the original: the `emptied_parents` cascade read a page's `/Parent` (the `/Pages` node) as a field's `/Kids`, found no survivors, and **deleted the page-tree root**. The guard runs over the whole delete list **after** the cascade, because the cascade is what adds the ids nobody named. §6.8. |
 
 ### 1.14 Form refusal preflights (5) — see §6.4 for whether they are load-bearing
 
@@ -1471,8 +1471,8 @@ always errors.
 | Author a text-bearing annotation | `add_text_annotation(&mut self, page_index, spec: &TextAnnotSpec) -> Result<ObjId, EditError>` | 12034 | FreeText / Text+`/Popup` / Stamp. Exactly `add_text_annotation_with(.., &MarkupOptions::default())`. |
 | Author a text-bearing annotation **at an opacity** | `add_text_annotation_with(&mut self, page_index, spec: &TextAnnotSpec, options: &MarkupOptions) -> Result<ObjId, EditError>` | — | `Pass 81.1`. The twin of the above, shipped in the same Pass because Table 164 is the **markup-annotation** entry list and a sticky note is a markup annotation. `/CA` goes on the parent, never on its `/Popup`. |
 | Author a `/Redact` mark (non-destructive) | `add_redaction(&mut self, page_index, spec: &RedactSpec) -> Result<ObjId, EditError>` | 10480 | A **mark**. Nothing is removed yet. |
-| Un-mark a redaction | `delete_redaction_mark(&mut self, annot_id) -> Result<(), EditError>` | 10617 | Refuses any non-`/Redact` annotation. |
-| Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. ⚠️ **Refuses with `AnnotationObjectIsStructural` when the `/Annots` entry is the document catalog, the `/AcroForm`, a page-tree node or a page** (`Pass 190.1`) — **an entry in a structural array is not necessarily the kind of object that array is for**, and a page whose `/Annots` named the catalog produced a file with no page-tree root. Same shape as `delete_field`'s `FieldObjectIsInPageTree` above, in a second carrier; the guard is `refuse_if_in_page_tree` plus an identity check plus a `/Type` test (`/Type` is optional on an annotation, so its **absence** proves nothing and its **presence** naming something else is decisive). ★ The refusal lives in `annotation_deletion_guards`, which `annotation_deletion_preview` also calls, **so the dry run and the real run agree.** |
+| Un-mark a redaction | `delete_redaction_mark(&mut self, annot_id) -> Result<(), EditError>` | 10617 | Refuses any non-`/Redact` annotation. ⚠️ **Also refuses with `FieldObjectIsInPageTree` since `Pass 191.1`** when `annot_id` is a page or page-tree node. `delete_annotation` guarded before *routing* here — but this is a public verb the GUI and the CLI call **directly**, and that route bypassed the guard entirely: **a guard installed on one route is not a guard on the verb**, so it now lives inside this one. ✅ **Its `/AP` `/N` is COLLATERAL and is FILTERED, not refused** — a malformed appearance must not make the mark permanently undeletable, so the call still returns `Ok` and simply does not free the wrong-kinded pointee. **Do not write an error path for that half.** §6.8. |
+| Delete any annotation | `delete_annotation(&mut self, annot_id) -> Result<AnnotationDeletion, EditError>` | 10847 | **Routes** to the two specialised verbs above for `/Redact` and ce dimensions. ⚠️ **Refuses with `AnnotationObjectIsStructural` when the `/Annots` entry is the document catalog, the `/AcroForm`, a page-tree node or a page** (`Pass 190.1`) — **an entry in a structural array is not necessarily the kind of object that array is for**, and a page whose `/Annots` named the catalog produced a file with no page-tree root. Same shape as `delete_field`'s `FieldObjectIsInPageTree` above, in a second carrier; the guard is `refuse_if_in_page_tree` plus an identity check plus a `/Type` test (`/Type` is optional on an annotation, so its **absence** proves nothing and its **presence** naming something else is decisive). ★ The refusal lives in `annotation_deletion_guards`, which `annotation_deletion_preview` also calls, **so the dry run and the real run agree.** ⚠️ **Widened at `Pass 191.1`: the guard now runs over the whole removal SET, after the cascades rather than before them.** It had run on the *target* only, and this command deletes a set — the `/Popup` cascade joined it afterwards, un-guarded, and could take a page with it. A guard written over "the target plus whatever the cascades added" cannot be out-flanked by a cascade added later. §6.8. |
 | **Move** any annotation | `move_annotation(&mut self, annot_id, dx, dy) -> Result<AnnotationMove, EditError>` | 16978 | `Pass 149.0`. Translates `/Rect` **and every geometry key**. **Refuses** a widget and a ce dimension by name — see below. |
 | **Resize** any annotation | `resize_annotation(&mut self, annot_id, anchor: (f64, f64), sx, sy, opts: &ResizeOptions) -> Result<AnnotationResize, EditError>` | 17442 | `Pass 151.0`. Scales `/Rect` **and every geometry key** about `anchor`. `/RD` scales by default; `/BS /W` does not — both are flags. **Re-authors the `/AP` only where pdfce drew it**, refusing rather than distorting a foreign one. Same two refusals as `move_annotation`. |
 | **Rotate** any annotation | `rotate_annotation(&mut self, annot_id, anchor: (f64, f64), degrees: f64) -> Result<AnnotationRotate, EditError>` | 17429 | `Pass 155.0`. Turns geometry keys AND composes the rotation into the appearance's own `/Matrix` (§12.5.5 step a), so a FOREIGN appearance rotates correctly and nothing is redrawn. No options type — a rotation is an isometry, so no stroke can distort. `/Rect` grows to the upright box that bounds the result, which §12.5.2 requires. **★ The angle is applied AS GIVEN and the result is never snapped** — see below. |
@@ -1822,7 +1822,7 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
 | Embed a file | `attach_file(&mut self, name, bytes, description: Option<&str>) -> Result<ObjId, EditError>` | 10147 | §7.11.4.1 route 2 (`/EmbeddedFiles` name tree). ONE undo entry. |
-| Remove an attachment | `detach_file(&mut self, key: &[u8]) -> Result<(), EditError>` | 10347 | By name-tree key. ⚠️ **Not a redaction verb** — see §5.4. |
+| Remove an attachment | `detach_file(&mut self, key: &[u8]) -> Result<(), EditError>` | 10347 | By name-tree key. ⚠️ **Not a redaction verb** — see §5.4. ⚠️ **Refuses with `FieldObjectIsInPageTree` since `Pass 191.1`** when the name-tree value (the filespec) is a page or page-tree node — a filespec's declared type is a *dictionary*, so a type test cannot distinguish it from a page and the structural guard is the one that applies. ✅ **Its `/EF` `/F` and `/UF` are COLLATERAL and are FILTERED** (§7.11.4 Table 45 defines both as embedded-file **streams**): a malformed `/EF` must not make the attachment permanently undetachable, so the call returns `Ok` and leaves the wrong-kinded pointee alone. §6.8. |
 
 `AttachmentTreeUnsupported` (`edit.rs:2374`) is a refused name-tree shape;
 `AttachmentNotFound` (`edit.rs:2386`) is an unknown key.
@@ -1841,7 +1841,7 @@ Both take `&mut self` despite changing nothing (they read `self.view()`).
 | Add a bookmark | `add_outline_item(&mut self, parent: Option<ObjId>, title: &str, destination: Option<Destination>) -> Result<ObjId, EditError>` | The new item's id. Creates `/Outlines` if absent. ONE undo entry. |
 | **Rotate a ce dimension** | `rotate_dimension(&mut self, dimension: DimensionId, pivot: (f64, f64), degrees: f64) -> Result<DimensionRotate, EditError>` | `Pass 159.0`. The measured value is UNCHANGED by construction — a rotation is an isometry. **Scaling is deliberately not offered**: it has no honest reading, and `set_group_scale` is the operation actually wanted. A `Linear` axis constraint is relaxed to `Aligned` and reported. |
 | **Rename a bookmark** | `set_outline_title(&mut self, item_id: ObjId, title: &str) -> Result<(), EditError>` | `Pass 156.0`. The commonest bookmark edit, and the one with no structural risk. Encoded through the same text-string path as every other title. |
-| **Delete a bookmark and its subtree** | `delete_outline_item(&mut self, item_id: ObjId) -> Result<usize, EditError>` | `Pass 156.0`. Relinks the sibling chain (`/First`, `/Last`, `/Next`, `/Prev`) and fixes `/Count` on every OPEN ancestor and the root. Returns how many objects went. Refuses the outline ROOT by name — that is a different act. |
+| **Delete a bookmark and its subtree** | `delete_outline_item(&mut self, item_id: ObjId) -> Result<usize, EditError>` | `Pass 156.0`. Relinks the sibling chain (`/First`, `/Last`, `/Next`, `/Prev`) and fixes `/Count` on every OPEN ancestor and the root. Returns how many objects went. Refuses the outline ROOT by name — that is a different act. ⚠️ **Also refuses with `FieldObjectIsInPageTree` since `Pass 191.1`**, over the **whole `/First`/`/Next` subtree** rather than the named entry — the walk is what adds the ids the operator never named, and `/First`/`/Next` can be pointed at a page. §6.8. |
 | **Move a bookmark — reorder or re-parent** | `move_outline_item(&mut self, item_id: ObjId, to: OutlinePlacement) -> Result<OutlineMove, EditError>` | `Pass 161.0`. The subtree travels with it. Unlinks from one sibling chain and splices into another, netting `/Count` up **both** branches. ONE undo entry. See below. |
 | **Expand or collapse a bookmark** | `set_outline_open(&mut self, item_id: ObjId, open: bool) -> Result<bool, EditError>` | `Pass 161.0`. Flips `/Count`'s sign and propagates the **magnitude** to the ancestors that can now see (or no longer see) the subtree. `false` = nothing to do (a leaf, or already in that state) — not an error. |
 
@@ -2353,8 +2353,8 @@ CLI: `pdfce-cli add-named-dest --name X --page N [--top Y]`, then
 > |---|---|---|
 > | Rename a group | `rename_dimension_group(&mut self, group: GroupId, name: &str) -> Result<(), EditError>` | Metadata only — **no appearance is regenerated**, because the name is not drawn. Names are **not** required to be unique; `GroupId` is the identity. |
 > | Delete an empty group | `delete_dimension_group(&mut self, group: GroupId) -> Result<(), EditError>` | Refuses a populated group with `DimensionGroupNotEmpty { members }`. |
-> | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. ⚠️ **Refuses the DEFAULT group with `DimensionGroupIsDefault`, whatever the policy** (`Pass 176.0`) — see below. |
-> | **Move a dimension to another group** | `set_dimension_group(&mut self, dimension: DimensionId, group: GroupId) -> Result<(), EditError>` | ★ **RE-MEASURES it** — see below. |
+> | Delete, answering the members question | `delete_dimension_group_with(&mut self, group: GroupId, policy: GroupDeletion) -> Result<usize, EditError>` | Count of members reassigned. ONE undo entry. ⚠️ **Refuses the DEFAULT group with `DimensionGroupIsDefault`, whatever the policy** (`Pass 176.0`) — see below. ⚠️ **On `GroupDeletion::Reassign` only, can also return `CarrierIsNotAStream` (`Pass 191.1`)** — reassignment re-measures each member through the shared regenerate path, which overwrites the attacker-supplied sidecar `/Ap` wholesale. `Refuse` never regenerates and cannot raise it. §6.8. |
+> | **Move a dimension to another group** | `set_dimension_group(&mut self, dimension: DimensionId, group: GroupId) -> Result<(), EditError>` | ★ **RE-MEASURES it** — see below. ⚠️ **Can therefore also return `CarrierIsNotAStream` (`Pass 191.1`)**: the re-measure overwrites the attacker-supplied sidecar `/Ap` wholesale. §6.8. |
 >
 > ### ★★ Every ce-dimension group verb now refuses an id that does not exist
 >
@@ -2607,7 +2607,7 @@ constructed, then committed, under one `&mut`.
 | Read the sidecar model | `dimension_model(&self) -> DimensionModel` | 15361 | Overlay-aware; a fresh model if none stored. |
 | Author a ce dimension | `add_dimension(&mut self, page_index, group: GroupId, kind: DimensionKind) -> Result<(ObjId, DimensionId), EditError>` | 15380 | Annotation id + model id. ONE undo entry. ⚠️ **Refuses an unknown `group` since `Pass 178.1`** — it used to author into the DEFAULT group silently and return success, and the group carries the scale, so the ce dimension was measured at a scale nobody chose. |
 | Create a group | `add_dimension_group(&mut self, name, unit: Unit) -> Result<GroupId, EditError>` | 15523 | Scale-never-set, visible, OCG allocated lazily. |
-| Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** ⚠️ **Refuses an unknown `group` since `Pass 178.2`** — it used to return `Ok` and change nothing. |
+| Set a group's scale + number format | `set_group_scale(&mut self, group, scale: ScaleState, format: NumberFormat) -> Result<usize, EditError>` | 15549 | **Count of members regenerated.** ⚠️ **Refuses an unknown `group` since `Pass 178.2`** — it used to return `Ok` and change nothing. ⚠️ **Can also return `CarrierIsNotAStream` (`Pass 191.1`)** — it regenerates through the shared path that overwrites each member's attacker-supplied sidecar `/Ap` wholesale. §6.8. |
 | Toggle a group's layer | `toggle_dimension_layer(&mut self, group, visible) -> Result<bool, EditError>` | 15600 | Resulting visibility. The default group is un-hideable. |
 | **The page's vector objects, memoised** | `page_objects(&mut self, page_index) -> Result<Arc<PageObjects>, EditError>` | 11400 | ⚡ **Use this instead of `vector::decompose_page`** (`Pass 181.0`). The editing verbs share the same cache, so a shell that decomposes to get object indices does not pay for the identical parse again inside `move_objects` — measured **385 ms → 0 ms** on a 130k-object CAD page. `&mut self` because populating a cache is a mutation; see below. |
 | **Has this page's model changed?** | `page_content_generation(&self, page_index) -> Result<u64, EditError>` | 11700 | ⚡ A cheap `u64` that moves whenever the page's drawable content does — the FNV-1a digest of the same key `page_objects` memoises on (page id + every `/Contents` entry with its staged span + the effective `/Resources`). Compare two of these instead of decomposing twice. **Session-local and not a content digest** — see the box below. `Pass 186.0`. |
@@ -2618,8 +2618,8 @@ constructed, then committed, under one `&mut`.
 | Set a group's drafting standard | `set_group_standard(&mut self, group, standard: DimStandard) -> Result<usize, EditError>` | 15983 | Count of members regenerated. |
 | Set a group's style defaults | `set_group_style(&mut self, group, style: GroupStyle) -> Result<usize, EditError>` | 16052 | ⚠️ **Count REGENERATED, not count MOVED.** See §8, trap T-00. |
 | Set one ce dimension's overrides | `set_dimension_style(&mut self, dimension, style: StyleOverrides) -> Result<usize, EditError>` | 16115 | ⚠️ Count of **properties overridden afterwards** — a different unit from the sibling above, same type. |
-| **Override / restore one ce dimension's TEXT** | `set_dimension_label(&mut self, dimension, label: Option<&str>) -> Result<DimensionLabelChange, EditError>` | 29734 | ✅ **`Some` overrides, `None` restores the measurement exactly** — the measured value is SHADOWED, never replaced, and survives in the sidecar. `<DIM>` in the text is substituted with the measured caption at bake time, so `"2X <DIM> TYP"` keeps tracking the geometry. ⚠️ **0 undo entries on a no-op** (a third granularity exception — see §3.4). Refuses empty, >128 chars, or any character outside `WinAnsiEncoding`. |
-| Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. |
+| **Override / restore one ce dimension's TEXT** | `set_dimension_label(&mut self, dimension, label: Option<&str>) -> Result<DimensionLabelChange, EditError>` | 29734 | ✅ **`Some` overrides, `None` restores the measurement exactly** — the measured value is SHADOWED, never replaced, and survives in the sidecar. `<DIM>` in the text is substituted with the measured caption at bake time, so `"2X <DIM> TYP"` keeps tracking the geometry. ⚠️ **0 undo entries on a no-op** (a third granularity exception — see §3.4). Refuses empty, >128 chars, or any character outside `WinAnsiEncoding`. ⚠️★ **Can now also return `CarrierIsNotAStream` (`Pass 191.1`)** — this verb re-bakes the appearance through the shared regenerate path, which **overwrites the sidecar's `/Ap` object wholesale**, and the sidecar is attacker-writable. **A sidecar naming the page-tree root turned this label edit into page-tree destruction.** Refused rather than filtered: skipping would leave the operator seeing a label change that did not happen. Unreachable on a well-formed document — present it as a corrupt-file diagnostic. §6.8. |
+| Delete a ce dimension | `delete_dimension(&mut self, dimension) -> Result<(), EditError>` | 16178 | `/Annots` ref + dict + `/AP` + sidecar record. Group survives. ⚠️ **Both sidecar ids are now guarded (`Pass 191.1`), and the two halves answer differently.** The `/PieceInfo` sidecar is attacker-writable — `check_dimension_sidecar` compares a **version integer and nothing else** — so `/Annot` and `/Ap` are ids a hostile file chose. `/Annot` is the **TARGET** ⇒ **refused** with `FieldObjectIsInPageTree`; `/Ap` is **COLLATERAL** ⇒ ✅ **FILTERED, still `Ok`** (a poisoned sidecar must not make the ce dimension permanently undeletable). Guarded inside this verb because `delete_annotation` guards before *routing* here while the GUI and the CLI call it **directly**. §6.8. |
 | **Translate** a ce dimension | `move_dimension(&mut self, dimension, dx, dy) -> Result<(), EditError>` | 16779 | ⚠️ Translates the **measured points** — takes the ce dimension off the feature it was measuring. |
 
 | **Move one vertex** of a ce dimension | `move_dimension_vertex(&mut self, dimension, index: usize, dx, dy) -> Result<VertexOutcome, EditError>` | 22304 | ⚠️ **The ONLY ce-dimension verb that deliberately RE-MEASURES.** Works on a perimeter at any index and on a linear at 0/1. Cannot refuse for a shape reason, so a drag preview may always be drawn. |
@@ -2633,7 +2633,7 @@ constructed, then committed, under one `&mut`.
 |---|---|---|---|
 | Preview an unembed | `unembed_preview(&self, &UnembedRequest) -> UnembedPlan` | 16278 | Pure. `bytes_reclaimable` is **vacuous under incremental save**. |
 | Ask whether unembedding is refused | `unembed_refusal(&self) -> Option<EditError>` | 16303 | ✅ **Load-bearing** — the verb calls it. |
-| Remove embedded font programs | `unembed_fonts(&mut self, &UnembedRequest) -> Result<UnembedPlan, EditError>` | 16373 | ONE undo entry however many fonts. ⚠️ **Bytes are reclaimed by a FULL REWRITE, not by this call.** |
+| Remove embedded font programs | `unembed_fonts(&mut self, &UnembedRequest) -> Result<UnembedPlan, EditError>` | 16373 | ONE undo entry however many fonts. ⚠️ **Bytes are reclaimed by a FULL REWRITE, not by this call.** ✅ **`/FontDescriptor` `/CIDSet` is now FILTERED, not refused (`Pass 191.1`)** — §9.7.4.2 Table 117 defines it as a **stream**, and a descriptor pointing it at a page could take the page with the font program. Its `/FontFile*` sibling was always guarded; `/CIDSet` was never routed through the same test. **This adds no error case** — the call still returns `Ok` and `UnembedPlan`'s counts simply omit the object pdfce declined to free. §6.8. |
 | Preview an embed | `embed_preview(&self, &EmbedRequest) -> EmbedPlan` | 16530 | Pure. |
 | Ask whether embedding is refused | `embed_refusal(&self) -> Option<EditError>` | 16553 | ✅ Load-bearing. |
 | Add missing font programs | `embed_fonts(&mut self, &EmbedRequest) -> Result<EmbedPlan, EditError>` | 16625 | ONE undo entry. **The file gets bigger, and the save mode does not change that.** |
@@ -3610,6 +3610,13 @@ private to `pdfce-gui` (`crates/pdfce-gui/src/main.rs:1411`). `WriteReport`:
 
 Plus the allocator's `EditError::ObjectNumbersExhausted` (`edit.rs:2336`).
 
+★ **These four are session-level preflights — they ask "may this document be
+edited at all."** A **fifth, per-verb** family asks a different question: *"is
+the object this key names actually the kind of object the key is for?"* It is
+answered by two guards that behave in **opposite** ways (one refuses, one
+silently filters and still returns `Ok`), it fires on eleven removal verbs, and
+one of its variants is new at `Pass 191.1`. **§6.8.**
+
 ### 6.2 Certification is THREE gates, not one — and they disagree on purpose
 
 ```rust
@@ -3791,7 +3798,7 @@ borrow it (`tests/image_placement.rs:238-247`).
 ### 6.7 The `EditError` taxonomy
 
 `edit.rs:2300`, `#[derive(Debug, Clone, thiserror::Error)]`, `#[non_exhaustive]`.
-**113 variants** at `77631a6`, counted at depth 1 inside `pub enum EditError`.
+**114 variants** at `Pass 191.1`, counted at depth 1 inside `pub enum EditError`.
 No inherent `impl EditError` block and **no `is_*` classification helpers**
 (`NOT FOUND — searched `impl EditError` in `edit.rs`); callers discriminate with
 `matches!`.
@@ -3851,7 +3858,9 @@ Grouped for a shell's error presenter:
 `PageTree` 2311 (from `PageTreeError`) · `NotADictionary` 2327 ·
 `ObjectNumbersExhausted` 2336 · `AnnotsNotAnArray` 2819 · `WidgetRectMissing` 2600 ·
 `RadioGroupUsesPositionalOpt` 2644 · `FieldNotFillable` 3014 · `FieldIsRichText` 3007 ·
-`FieldStateUnknown` 3023 · `TextExtraction` 3099 · `VectorEditNoContents` 3114
+`FieldStateUnknown` 3023 · `TextExtraction` 3099 · `VectorEditNoContents` 3114 ·
+the three **structural-carrier** refusals — `FieldObjectIsInPageTree`,
+`AnnotationObjectIsStructural`, `CarrierIsNotAStream` (§6.8, cited by name)
 
 **Wrapped subsystem errors** (`#[from]` — a shell should unwrap and present the inner)
 `FieldAuthoring(FormAuthorError)` 2560 · `SeparationSplit(SeparationSplitRefused)` 2748 ·
@@ -3863,6 +3872,141 @@ Grouped for a shell's error presenter:
 `add_text`) return `crate::text_edit`'s own error types, and encryption there
 surfaces as `text_edit::EditError::Encrypted`, **not** `EditError::DocumentEncrypted`
 (guards at `edit.rs:4134`, `:4193`, `:4252`, `:4306`, `:4376`).
+
+### 6.8 The structural-carrier guards — one defect class, eleven verbs, TWO different answers
+
+> #### ★ Added `Pass 191.1`. Read this before writing error handling for any deletion verb.
+
+**The class, in one sentence:** *a verb dereferences a dictionary key, assumes
+the pointee is the kind of object that key is **defined** to hold, and deletes it
+— or deletes and overwrites objects reached through it.*
+
+Found at `/AcroForm` `/Fields` (`Pass 185.1`), again at a page's `/Annots`
+(`Pass 190.1`), again at `/AP` `/N` (`Pass 191.0`), and then audited across **all
+eleven object-removal sites in `pdfce-core`**. **Eight more were confirmed by
+measurement — twelve hostile cases, every one of which returned `Ok` and wrote a
+file that reloads with no walkable page tree.** All twelve **panic in a debug
+build** (`debug_assert_page_tree_still_walks`) and **return `Ok` in release**,
+which is exactly why they survived: the assertion knew, and the build an operator
+runs did not. The measurement is
+`crates/pdfce-core/tests/deletion_collateral_structural.rs` (12 hostile cases +
+8 controls) and `crates/pdfce-core/examples/collateral_probe.rs`.
+
+#### ★★ Two guards — and only ONE of them produces an error
+
+Which guard applies is decided by **what the object is to the command**, not by
+which key named it. ⚠️ **A shell that gets this backwards writes error handling
+for a case that can never fire.**
+
+| The pointee is… | pdfce… | What the caller sees | Guard |
+|---|---|---|---|
+| **Collateral** — an object removed *in addition to* what the caller named: an appearance stream, an `/EF` stream, a `/CIDSet` | **filters** it — declines to free a pointee of the wrong kind and carries on | ⚠️ **`Ok`. The command SUCCEEDS.** There is **no error to handle here**; the only visible effect is a count that does not include the skipped object. | `resolves_to_stream` |
+| **The target** the verb exists to act on, or an object it is about to **overwrite wholesale** | **refuses**, before any mutation (§6.3) | `Err(FieldObjectIsInPageTree)` — the object is also a page or a page-tree node — or `Err(CarrierIsNotAStream)` | `refuse_if_in_page_tree` · `refuse_if_occupied_by_non_stream` |
+
+The asymmetry is deliberate, and argued on `refuse_if_occupied_by_non_stream`
+itself: refusing on collateral would make a malformed `/AP` render a redaction
+mark **permanently undeletable**, and the mark is what the operator asked to
+remove. Refusing on a target or on an overwrite is the only honest answer,
+because proceeding acts on — or destroys — the wrong object. This is **not** a
+rule 4 exception: declining to free an object that is not the kind the standard
+says it is is a correctness constraint, not an inference about intent, and the
+counts a verb discloses report what it actually did.
+
+#### `CarrierIsNotAStream` — the new variant
+
+```rust
+CarrierIsNotAStream { key: &'static str, id: ObjId, what: &'static str, verb: &'static str }
+```
+
+`key` is written as an operator sees it (`/AP /N`, `the ce-dimension sidecar's
+/Ap`); `what` is what the object actually resolved to, in the operator's terms
+(`a page`, `a page-tree node`, `the document catalog`, `an annotation`, `an
+array`, `a dictionary`); `verb` names what was refused, so the message says what
+did not happen rather than only what was wrong.
+
+It is the **categorical** form of `AnnotationObjectIsStructural`: that variant
+refuses an *enumerated* set of structural objects and so has to be extended every
+time something new turns out to be worth protecting, while this one refuses
+**everything that is not a stream** on a key the standard defines as holding one
+(`/AP` `/N` §12.5.5; `/EF` `/F`/`/UF` §7.11.4 Table 45; `/CIDSet` §9.7.4.2
+Table 117). ★ **An absent or null id passes** — that is exactly what an
+appearance a verb is *about to author for the first time* looks like, and
+§7.3.10 resolves a dangling reference to null rather than to an error.
+
+#### ★ `FieldObjectIsInPageTree`'s MESSAGE changed — re-read it if you display it
+
+**This is not an API break.** The variant and both field names (`name: String`,
+`object: u32`) are unchanged, and `matches!` on it still works. **The rendered
+string is different.**
+
+It used to read *"The file says that object is BOTH a form field and a page"* —
+true while the guard had three callers and all three were form verbs. `Pass
+191.1` gave it seven more carriers, and the sentence became **false for every one
+of them**: deleting a bookmark reported a collision with a form field the
+document does not contain. The message is now **carrier-neutral**, and `name`
+carries a phrase rather than a bare field name — `the outline item`, `the
+embedded file`, `the redaction mark`, `the ce dimension`, `the annotation`, `the
+flattened field`, or `the form field "Order.Qty"`.
+
+⚠️ **A shell that parsed, matched on, or concatenated the old sentence is now
+wrong.** Render the `Display` text whole, or render `name` and `object` yourself.
+The general lesson, and it applies to every guard a shell wraps: **a guard
+written for one carrier is a claim about a class, AND SO IS ITS ERROR MESSAGE.**
+
+#### ★ A guard installed on one ROUTE is not a guard on the VERB
+
+`delete_annotation` **routes** to `delete_redaction_mark` and `delete_dimension`
+and guarded before routing. Both of those are also public verbs that the GUI and
+`pdfce-cli` call **directly**, and that route bypassed the guards entirely. Each
+guard now lives **inside its own verb** and is simply re-run (idempotently, at
+the cost of one page walk) on the routed path.
+
+The same shape one hop further out, inside `delete_annotation` itself: its guard
+ran on the *target*, but the command deletes a **set** — the `/Popup` cascade
+joins it afterwards — so the guard now runs over the whole removal set, **after**
+the cascades rather than before them. `flatten_fields` and `delete_outline_item`
+are guarded the same way and for the same reason: the cascade is what adds the
+ids nobody named.
+
+#### Where each guard fires
+
+| Verb | **Refuses** (target, or wholesale overwrite) | **Filters** (collateral — still `Ok`) |
+|---|---|---|
+| `delete_field` · `delete_field_group` · `delete_widget` | the field, its widgets, and every emptied grouping node | — |
+| `flatten_fields` | the whole post-cascade delete list | — |
+| `delete_annotation` | the whole removal set, `/Popup` cascade included | — |
+| `delete_redaction_mark` | the mark itself | `/AP` `/N` |
+| `delete_dimension` | the sidecar's `/Annot` | the sidecar's `/Ap` |
+| the **14** ce-dimension verbs that re-bake an appearance (list below) | the sidecar's `/Ap`, which they overwrite wholesale | — |
+| `delete_outline_item` | the whole `/First`/`/Next` subtree | — |
+| `detach_file` | the name-tree value (the filespec dictionary) | `/EF` `/F` and `/UF` |
+| `unembed_fonts` | — | `/FontDescriptor` `/CIDSet` |
+
+> ##### ★★ A LABEL EDIT could destroy the page tree — the least destructive-looking verb in the set
+>
+> Every ce-dimension verb that regenerates an appearance goes through one shared
+> path (`regenerate_dimension_writes`), and that path **overwrites the sidecar's
+> `/Ap` object wholesale**. The `/PieceInfo` sidecar is ordinary,
+> **attacker-writable** PDF content — `check_dimension_sidecar` (§6.1) compares a
+> **version integer and nothing else** — so `/Ap` and `/Annot` arrive as object
+> ids a hostile file chose. A sidecar naming the page-tree root turned
+> `set_dimension_label` into page-tree destruction.
+>
+> **Refused, not filtered**, and the reason is the SKIP-vs-REFUSE rule above:
+> skipping would silently not regenerate the appearance, and the operator would
+> see a label change that did not happen.
+>
+> The 14 verbs that can now return `CarrierIsNotAStream` for this reason:
+> `set_dimension_label` · `set_group_scale` · `set_dimension_group` ·
+> `delete_dimension_group_with` (**on `GroupDeletion::Reassign` only**) ·
+> `set_group_standard` · `set_group_style` · `set_dimension_style` ·
+> `set_dimension_display` · `place_dimension` · `move_dimension` ·
+> `rotate_dimension` · `move_dimension_vertex` · `insert_dimension_vertex` ·
+> `remove_dimension_vertex`.
+>
+> On a well-formed document authored by pdfce this refusal is unreachable —
+> **treat it as a corrupt/hostile-file diagnostic, not as an ordinary outcome
+> the operator caused**, and say so in whatever the shell puts on screen.
 
 ---
 

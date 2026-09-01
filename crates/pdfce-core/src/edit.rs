@@ -4701,6 +4701,56 @@ pub enum EditError {
         /// What it actually is, in the operator's terms.
         what: &'static str,
     },
+    /// A key defined by the standard to hold a **stream** names something that
+    /// is not one, and a verb was about to delete or overwrite it
+    /// (`Pass 191.1`).
+    ///
+    /// # ★ The categorical form of `AnnotationObjectIsStructural`
+    ///
+    /// That variant refuses a named list of structural objects — the catalog,
+    /// a `/Pages` node, a `/Page`. This one refuses **everything that is not
+    /// the kind of object the key is for**, which is a stronger statement and
+    /// a cheaper one: it needs no enumeration, so it cannot fall behind the
+    /// set of things worth protecting.
+    ///
+    /// `Pass 191.0` measured what the absence costs. `delete_annotation`'s
+    /// appearance cascade harvested a `/Widget` dictionary sitting under
+    /// `/AP` `/N`, followed that widget's `/P` to the **page**, deleted the
+    /// page, returned `Ok`, and wrote a file that reloads with no walkable
+    /// page tree. The same shape was then found at seven more carriers, every
+    /// one of them a key the standard defines as a stream:
+    ///
+    /// - `/AP` `/N` on a redaction mark (§12.5.5),
+    /// - the ce-dimension `/PieceInfo` sidecar's `/Ap`, on both the delete and
+    ///   the **regenerate** path — where a *label edit* could overwrite an
+    ///   arbitrary object,
+    /// - `/EF` `/F` and `/UF` on an embedded-file specification
+    ///   (§7.11.4 Table 45),
+    /// - `/FontDescriptor` `/CIDSet` (§9.7.4.2 Table 117).
+    ///
+    /// # Why refuse rather than skip
+    ///
+    /// Skipping silently would leave the operator with a half-completed
+    /// destructive command and no way to know which half. Refusing names the
+    /// collision and leaves a document they can look at — §10's fail-clean
+    /// posture, and the same reasoning `Pass 185.1` records for its own
+    /// refusal.
+    #[error(
+        "{key} names object {id}, which is {what} rather than a stream; {verb} would have \
+         removed or overwritten it, so it is refused"
+    )]
+    CarrierIsNotAStream {
+        /// The key that named it, written as an operator would see it — for
+        /// example `/AP /N` or the ce-dimension sidecar's `/Ap`.
+        key: &'static str,
+        /// The object the key named.
+        id: ObjId,
+        /// What it actually resolved to, in the operator's terms.
+        what: &'static str,
+        /// The verb that was about to act on it, so the message says what was
+        /// refused rather than only what was wrong.
+        verb: &'static str,
+    },
     /// The leaf index is past the end of this page's
     /// [`PageObjects::leaves`](crate::vector::PageObjects) (`Pass 188.0`).
     ///
@@ -5008,8 +5058,30 @@ pub enum EditError {
     /// **Refused rather than resolved**: the file says the object is both
     /// things, and choosing which one it "really" is would be an inference
     /// about a malformed document made silently on a destructive verb.
+    ///
+    /// # ★★ THE MESSAGE USED TO NAME A FORM FIELD, AND IN SEVEN CARRIERS THAT
+    /// # WAS A LIE (`Pass 191.1`)
+    ///
+    /// It read *"The file says that object is BOTH a form field and a page"*,
+    /// which was true while `refuse_if_in_page_tree` had exactly three callers
+    /// and all three were form verbs. `Pass 191.1` gave it seven more —
+    /// outline items, redaction marks, ce dimensions, embedded files, a
+    /// flattened field, a pop-up — and the sentence became **false for every
+    /// one of them**: deleting a bookmark reported a collision with a form
+    /// field the document does not contain.
+    ///
+    /// The `name` field already carried the carrier; the message simply did
+    /// not use it. So the fix is to say what `name` says, and the general
+    /// lesson is the sharper half of `R219`: **a guard written for one carrier
+    /// is a claim about a class, AND SO IS ITS ERROR MESSAGE.** Widening a
+    /// guard's reach without re-reading its operator-facing text ships a
+    /// confidently-worded wrong diagnosis — worse than a generic one, because
+    /// it sends the reader to look for a form field.
+    ///
+    /// Caught by running the probe and *reading the output*, not by any gate:
+    /// every test asserted on the error's variant, and the variant was right.
     #[error(
-        "field {name:?} resolves to object {object}, which is part of this document's page tree -- deleting it would delete a page. The file says that object is BOTH a form field and a page; pdfce will not decide which it meant by destroying the page tree"
+        "{name} resolves to object {object}, which is part of this document's page tree -- deleting it would delete a page. The file says one object is both of those things at once, and pdfce will not decide which it meant by destroying the page tree"
     )]
     FieldObjectIsInPageTree {
         /// The fully-qualified field name the caller asked to delete.
@@ -18540,7 +18612,7 @@ impl EditSession {
             .chain(widget_ids.iter().copied())
             .chain(emptied.iter().copied())
             .collect();
-        self.refuse_if_in_page_tree(fqn, &doomed)?;
+        self.refuse_if_in_page_tree(&format!("the form field {fqn:?}"), &doomed)?;
 
         // The field dict, its non-merged widgets, and every grouping node the
         // removal emptied. A merged widget IS the field dict, so it is not
@@ -18676,7 +18748,7 @@ impl EditSession {
             .chain(widget_ids.iter().copied())
             .chain(emptied.iter().copied())
             .collect();
-        self.refuse_if_in_page_tree(fqn, &doomed)?;
+        self.refuse_if_in_page_tree(&format!("the form field {fqn:?}"), &doomed)?;
 
         let removals: Vec<Removal> = field_ids
             .iter()
@@ -18986,7 +19058,7 @@ impl EditSession {
         // ALSO a page is the same collision one level down, and `delete_widget`
         // reaches it without going through either verb above.
         if !widget.merged {
-            self.refuse_if_in_page_tree(fqn, &[widget.id])?;
+            self.refuse_if_in_page_tree(&format!("the form field {fqn:?}"), &[widget.id])?;
         }
 
         let removals = if widget.merged {
@@ -21642,6 +21714,19 @@ impl EditSession {
         // would be inventing a change.
         let mut doomed: Vec<ObjId> = Vec::new();
         if let Object::Reference(spec_id) = victim {
+            // ★ THE NAME-TREE VALUE IS NOT NECESSARILY A FILE SPECIFICATION
+            // (`Pass 191.1`). §7.11.3 says `/Names /EmbeddedFiles` maps a name
+            // to a file-specification DICTIONARY, and nothing enforced that
+            // here -- a name tree naming the catalog or a page had it freed.
+            // Refused rather than filtered, because this id IS the target: the
+            // operator asked to detach *this* attachment, and quietly
+            // detaching nothing would be a success report for a no-op.
+            //
+            // A dictionary is the declared type, so a type test cannot
+            // distinguish a filespec from a page; the structural guard is the
+            // one that applies. See `refuse_if_occupied_by_non_stream` for
+            // when to prefer which.
+            self.refuse_if_in_page_tree("the embedded file", &[spec_id])?;
             doomed.push(spec_id);
             if let Some(spec) = self.deref_dict(Some(&Object::Reference(spec_id)))
                 && let Some(ef) = self.deref_dict(spec.get(b"EF"))
@@ -21653,6 +21738,13 @@ impl EditSession {
                 for k in [&b"F"[..], &b"UF"[..]] {
                     if let Some(Object::Reference(id)) = ef.get(k)
                         && !doomed.contains(id)
+                        // §7.11.4 Table 45 defines `/EF` `/F` and `/UF` as
+                        // embedded file STREAMS. Anything else is not this
+                        // attachment's to free -- COLLATERAL, so filtered
+                        // rather than refused: the attachment is what the
+                        // operator asked to remove, and a malformed `/EF` must
+                        // not make it permanently undetachable.
+                        && self.resolves_to_stream(*id)
                     {
                         doomed.push(*id);
                     }
@@ -21889,6 +21981,19 @@ impl EditSession {
             .ok_or(EditError::NotARedactionMark { id: annot_id })?
             .id;
 
+        // ★ THE TARGET'S OWN STRUCTURAL GUARD (`Pass 191.1`), and it is here
+        // rather than in the caller because THIS VERB HAS TWO ROUTES.
+        // `delete_annotation` runs `annotation_deletion_guards` before routing
+        // a `/Redact` here, so that path was already covered -- but the GUI
+        // calls this verb DIRECTLY (`pdfce-gui/src/main.rs`), as does the CLI,
+        // and those bypass the guards entirely. A guard installed on one route
+        // is not a guard on the verb.
+        //
+        // Re-running it on the routed path is idempotent and costs one page
+        // walk; that is the right price for not having to reason about which
+        // caller arrived.
+        self.refuse_if_in_page_tree("the redaction mark", &[annot_id])?;
+
         // The mark's own appearance stream, if it has one. Resolved before
         // any mutation; a mark with no /AP simply contributes nothing.
         let ap_id = self
@@ -21918,6 +22023,19 @@ impl EditSession {
             Some(shared) => objects.push(shared),
             None => objects.push(self.page_write(page_id, updated)),
         }
+
+        // COLLATERAL FILTER (`Pass 191.1`). The doc comment above claims this
+        // stream may be freed unconditionally because `add_redaction` authored
+        // it -- but NOTHING ENFORCES THAT AUTHORSHIP. `redact::redaction_marks`
+        // recognises a mark by two attacker-writable facts: it is listed in
+        // some page's `/Annots`, and its `/Subtype` is `/Redact`. So any file
+        // can present as a redaction mark and point `/AP` `/N` wherever it
+        // likes, and this loop would free it.
+        //
+        // Filtered rather than refused, per the rule on `refuse_if_occupied_by_non_stream`:
+        // the mark is what the operator asked to remove, and a malformed `/AP`
+        // must not make it permanently undeletable.
+        let ap_id = ap_id.filter(|id| self.resolves_to_stream(*id));
 
         let mut removals: Vec<Removal> = Vec::new();
         for id in std::iter::once(annot_id).chain(ap_id) {
@@ -22999,6 +23117,26 @@ impl EditSession {
             replies,
             group_members,
         } = plan;
+
+        // ★ THE GUARDS RAN ON THE TARGET; THE COMMAND DELETES A SET
+        // (`Pass 191.1`). `annotation_deletion_guards` was applied to
+        // `annot_id` far above, and cascade 1 then adds the `/Popup` this
+        // annotation names -- so an id nobody guarded reaches `removals`.
+        //
+        // The plan's own popup test is a real check but not this one: it
+        // requires the pointee to be listed in some page's `/Annots` and to
+        // carry `/Subtype /Popup`, and BOTH ARE ATTACKER-WRITABLE. A page or
+        // the catalog listed in `/Annots` with `/Subtype /Popup` added, named
+        // by a victim annotation's `/Popup`, satisfies it exactly.
+        //
+        // This is `Pass 190.1` one hop further out: the guard was installed at
+        // the entry point rather than over the set the command actually
+        // deletes. Re-checking `annot_id` here is redundant and deliberate --
+        // guarding the SET is the invariant worth stating, and a guard written
+        // over "the target plus whatever the cascades added" cannot be
+        // out-flanked by a cascade added later.
+        self.refuse_if_in_page_tree("the annotation", &removing)?;
+
         let (replies_orphaned, group_members_promoted) = (replies.len(), group_members.len());
         let mut objects: Vec<ObjectWrite> = Vec::new();
 
@@ -23802,7 +23940,7 @@ impl EditSession {
         // length: pdfce would have to decide which of two things the object
         // really is, and the file says both. A refusal naming the collision
         // leaves the operator a document they can look at.
-        self.refuse_if_in_page_tree("(annotation)", &[annot_id])?;
+        self.refuse_if_in_page_tree("the annotation", &[annot_id])?;
         if self
             .acroform_id()
             .into_iter()
@@ -26855,6 +26993,127 @@ impl EditSession {
         Ok(())
     }
 
+    /// **Refuse when a key the standard defines as holding a stream names
+    /// something else, and a verb is about to delete or overwrite it**
+    /// (`Pass 191.1`).
+    ///
+    /// # ★ Why this is the categorical guard and `refuse_if_in_page_tree` is
+    /// # the narrow one
+    ///
+    /// Its sibling above refuses an enumerated set — pages, page-tree nodes,
+    /// the catalog — and that set has already had to grow once (the catalog
+    /// was added after a first cut closed the reproducer and the fuzzer walked
+    /// straight past it). An enumeration is a maintenance obligation: every
+    /// object worth protecting has to be *thought of*.
+    ///
+    /// This guard inverts that. The standard says what the key holds, so
+    /// anything else is wrong **by definition** — a font dictionary, an
+    /// `/AcroForm`, a `/Names` tree, a `/StructTreeRoot`, an unrelated
+    /// annotation and the catalog are all equally not-a-stream, and none of
+    /// them needs naming. Where a carrier key is defined as a stream, prefer
+    /// this; `refuse_if_in_page_tree` remains correct for keys defined to hold
+    /// *dictionaries*, where the type alone does not distinguish a legitimate
+    /// pointee from a structural one.
+    ///
+    /// # The measurement behind it
+    ///
+    /// `Pass 191.0` measured the cost of one such key being unguarded: an
+    /// `/AP` `/N` naming a `/Widget` let `delete_annotation` follow that
+    /// widget's `/P` to the page, delete the page, return `Ok`, and write a
+    /// file with no walkable page tree — invisible in a release build, because
+    /// the only thing that noticed was a `#[cfg(debug_assertions)]`
+    /// postcondition. `Pass 191.1` then found the same shape at seven more
+    /// stream-typed carriers and routed every one of them through here.
+    ///
+    /// A `None` value — a dangling reference — is refused too. §7.3.10 makes a
+    /// dangling reference resolve to null rather than being an error, which is
+    /// right for a *reader*; for a verb about to remove the object it names,
+    /// "there is nothing there" and "there is a stream there" are different
+    /// enough to be worth saying out loud.
+    ///
+    /// # ★★ SKIP FOR COLLATERAL, REFUSE FOR A TARGET — the rule this guard and
+    /// # [`Self::resolves_to_stream`] divide between them
+    ///
+    /// Both answer the same question and they are used in opposite ways, so
+    /// the choice is stated once, here, rather than re-argued per call site:
+    ///
+    /// - **Collateral** — an object a verb removes *in addition to* what the
+    ///   operator named: an appearance stream, an embedded-file stream, a
+    ///   `/CIDSet`. Use [`Self::resolves_to_stream`] as a **filter** and simply
+    ///   do not delete a pointee of the wrong kind. The operator's actual
+    ///   command still succeeds, which is the better outcome: refusing here
+    ///   would make a malformed `/AP` render a redaction mark permanently
+    ///   undeletable, and the mark is what they asked to remove.
+    /// - **A target, or a destructive overwrite** — the object the verb exists
+    ///   to act on, or one it is about to replace wholesale. Use **this**
+    ///   function and refuse. Proceeding would either act on the wrong object
+    ///   or overwrite an arbitrary one, and neither has a silent form that is
+    ///   honest.
+    ///
+    /// This is not a rule 4 ("fuzzy, never sneaky") exception. Declining to
+    /// delete an object that is not the kind the standard says it is is a
+    /// **correctness constraint**, not an inference about the operator's
+    /// intent — and the counts a verb discloses report what it actually did,
+    /// so nothing is hidden.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::CarrierIsNotAStream`], naming the key, the object, what it
+    /// actually is, and the verb that was refused.
+    fn refuse_if_occupied_by_non_stream(
+        &self,
+        key: &'static str,
+        verb: &'static str,
+        id: ObjId,
+    ) -> Result<(), EditError> {
+        let what = match self.value(id) {
+            // ★ ABSENCE IS NOT A VIOLATION, and getting this backwards would
+            // have broken ce-dimension authoring. An id whose object does not
+            // exist yet is exactly what an appearance the verb is ABOUT TO
+            // WRITE looks like, and §7.3.10 makes a dangling reference resolve
+            // to null rather than to an error. What this guard is for is an id
+            // that is ALREADY OCCUPIED by something of the wrong kind -- there
+            // is a real object there, it is not a stream, and overwriting or
+            // freeing it destroys whatever it actually was.
+            None | Some(Object::Null) | Some(Object::Stream(_)) => return Ok(()),
+            Some(Object::Dict(d)) => match d.get(b"Type").and_then(Object::as_name) {
+                Some(t) if t.0 == b"Catalog" => "the document catalog",
+                Some(t) if t.0 == b"Pages" => "a page-tree node",
+                Some(t) if t.0 == b"Page" => "a page",
+                Some(t) if t.0 == b"Annot" => "an annotation",
+                _ => "a dictionary",
+            },
+            Some(Object::Array(_)) => "an array",
+            Some(Object::Name(_)) => "a name",
+            Some(Object::String(_)) => "a string",
+            Some(Object::Integer(_) | Object::Real(_)) => "a number",
+            Some(Object::Boolean(_)) => "a boolean",
+            Some(_) => "not a stream",
+        };
+        Err(EditError::CarrierIsNotAStream {
+            key,
+            id,
+            what,
+            verb,
+        })
+    }
+
+    /// Does `id` resolve to a stream in the SESSION's view?
+    ///
+    /// The filter half of the pair documented on
+    /// [`Self::refuse_if_occupied_by_non_stream`] -- used where the object is
+    /// **collateral** (an appearance stream, an embedded-file stream, a
+    /// `/CIDSet`) and the right answer is to leave a wrong-kinded pointee
+    /// alone rather than to refuse the operator's actual command.
+    ///
+    /// Reads through [`Self::value`], not the base document, so an object
+    /// authored or replaced this session is judged as it currently is. A
+    /// dangling reference is `false` -- §7.3.10 resolves it to null, and null
+    /// is not a stream.
+    fn resolves_to_stream(&self, id: ObjId) -> bool {
+        matches!(self.value(id), Some(Object::Stream(_)))
+    }
+
     /// `/Fields` as text strings (§12.7.5.3 Table 238).
     ///
     /// The entry permits indirect field references OR fully-qualified name
@@ -28549,6 +28808,23 @@ impl EditSession {
         // held. Leaving it would leave a named node in the field tree that
         // owns nothing — see `remove_fields_from_form`'s cascade.
         let delete_ids: Vec<ObjId> = delete_ids.into_iter().chain(emptied_parents).collect();
+
+        // ★★ `Pass 185.1`'S EXACT INPUT, AGAINST A VERB THAT NEVER GOT THE FIX
+        // (`Pass 191.1`). There, an `/AcroForm` `/Fields` naming an object that
+        // is ALSO a `/Page` made `delete_field` delete the page and return
+        // `Ok`. `refuse_if_in_page_tree` was written for that verb and wired
+        // into `delete_field`, `delete_field_group` and `delete_widget` -- and
+        // not here, although `flatten_fields` reads the same `/Fields` array
+        // and deletes what it names.
+        //
+        // The `emptied_parents` cascade widens it rather than narrowing it:
+        // `remove_fields_from_form` walks `/Parent`/`/Kids` and adds any node
+        // whose `/Kids` ends up with no survivor, and a `/Pages` node satisfies
+        // that structurally.
+        //
+        // Checked over the WHOLE list, after the cascade rather than before it,
+        // because the cascade is what adds the ids nobody named.
+        self.refuse_if_in_page_tree("the flattened field", &delete_ids)?;
 
         // Delete the flattened field/widget dictionaries (§7.5.4). Their
         // /AP appearance streams survive — they are now page resources.
@@ -32314,6 +32590,25 @@ impl EditSession {
         // Everything under the item, plus the item. Collected BEFORE anything
         // is unlinked, because the walk uses the links being removed.
         let subtree = self.outline_subtree(item_id);
+
+        // ★ `/First` AND `/Next` ARE OUTLINE-ITEM POINTERS, AND THE WALK
+        // BELIEVED THEM (`Pass 191.1`). §12.3.3 Tables 152-153 define both as
+        // naming outline item dictionaries; `outline_subtree` accepted any
+        // dictionary it reached and pushed every one onto the removal list. So
+        // an outline whose `/First` names a `/Pages` node, a `/Page` or the
+        // catalog deleted it.
+        //
+        // Worse, the ENTRY GATE does not close this either: it accepts any
+        // dictionary carrying a `/Parent` reference, which a `/Page` satisfies
+        // by definition (§7.7.3.3 makes `/Parent` required on a page). So the
+        // TARGET itself need not be an outline item.
+        //
+        // Guarded over the whole subtree rather than the entry alone, because
+        // the walk is what adds the ids the operator never named -- the same
+        // reason `flatten_fields`' guard runs after its `emptied_parents`
+        // cascade rather than before it.
+        self.refuse_if_in_page_tree("the outline item", &subtree)?;
+
         let visible_lost = self.visible_outline_count(item_id);
 
         let prev = match item.get(b"Prev") {
@@ -34759,7 +35054,23 @@ impl EditSession {
         let annot_id = record
             .annot
             .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
-        let ap_id = record.ap;
+        // ★ THE SIDECAR IS ATTACKER-WRITABLE (`Pass 191.1`). `/PieceInfo` is
+        // ordinary PDF content under the catalog, and `check_dimension_sidecar`
+        // compares a VERSION INTEGER and nothing else -- so `/Ap` and `/Annot`
+        // arrive here as unvalidated object ids that a hostile file chose.
+        //
+        // `/Ap` is COLLATERAL, so it is filtered rather than refused: the ce
+        // dimension is what the operator asked to delete, and a poisoned
+        // sidecar must not make it permanently undeletable.
+        let ap_id = record.ap.filter(|id| self.resolves_to_stream(*id));
+
+        // The TARGET's structural guard. `annot_id` is sidecar-supplied too,
+        // and the only thing downstream implicitly requires of it is a `/P`
+        // reference (used to find the page) -- which a hostile file adds to the
+        // catalog in one line. This verb has two routes, as
+        // `delete_redaction_mark` does: `delete_annotation` guards before
+        // routing here, while the GUI and the CLI call it directly.
+        self.refuse_if_in_page_tree("the ce dimension", &[annot_id])?;
 
         // The page it lives on, from the annotation's own `/P` (§12.5.2) —
         // the sidecar deliberately does not duplicate the page, so `/P` is the
@@ -35026,11 +35337,25 @@ impl EditSession {
             // that is NOT in this operation still reaches the stream — the
             // key comes out of this descriptor either way, but the bytes
             // stay, because freeing them would blank that font.
+            //
+            // ★ `/CIDSet` GETS THE TYPE TEST ITS SIBLING ALREADY HAD
+            // (`Pass 191.1`). §9.7.4.2 Table 117 defines `/CIDSet` as a
+            // STREAM, and this path took it as a bare reference. The
+            // `/FontFile*` half ten lines upstream has always been guarded --
+            // `fontinfo.rs` refuses a non-stream program with `NotAStream`,
+            // which makes it `Removability::Unknown` and blocks the free --
+            // so this was one carrier of a class where the fix already
+            // existed and the second caller did not. That is `R219`'s trigger
+            // verbatim, and it is the third time this project has paid for it.
+            //
+            // COLLATERAL, so filtered: unembedding is what the operator asked
+            // for, and a descriptor with a malformed `/CIDSet` must not make
+            // the font permanently un-unembeddable.
             let freed = target
                 .program_id
                 .filter(|_| target.program_freed)
                 .into_iter()
-                .chain(target.cid_set_id);
+                .chain(target.cid_set_id.filter(|id| self.resolves_to_stream(*id)));
             for id in freed {
                 if self.base.get(id).is_some() || self.state.contains_key(&id) {
                     removals.push(Removal {
@@ -35800,6 +36125,24 @@ impl EditSession {
                 Name::from(b"Length"),
                 Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
             );
+            // ★ THIS WRITE IS A WHOLESALE OVERWRITE OF `ap_id` (`Pass 191.1`),
+            // and `ap_id` came out of the `/PieceInfo` sidecar, which is
+            // ordinary attacker-writable PDF content -- `check_dimension_sidecar`
+            // compares a version integer and nothing else.
+            //
+            // Without this guard a sidecar naming the page-tree root turned
+            // `set_dimension_label` -- A LABEL EDIT -- into page-tree
+            // destruction. That is why this site is REFUSED rather than
+            // filtered: skipping would silently not regenerate the appearance,
+            // and the operator would see a label change that did not happen.
+            //
+            // An ABSENT id passes; that is what an appearance this verb is
+            // about to author for the first time looks like.
+            self.refuse_if_occupied_by_non_stream(
+                "the ce-dimension sidecar's /Ap",
+                "regenerating a ce dimension's appearance",
+                ap_id,
+            )?;
             let ap_span = self.stage_bytes(&authored.ap_content);
             objects.push(ObjectWrite {
                 id: ap_id,
