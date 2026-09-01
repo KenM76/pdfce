@@ -4809,6 +4809,43 @@ impl Interpreter<'_> {
                 // and narrowing pushes it into `CompatibleOverprint`, where it
                 // comes out greyscale. Image callers keep the old behaviour
                 // until the per-spot plane lands.
+                //
+                // ★★★ AND THE OBVIOUS REFINEMENT WAS TRIED AND MEASURED AND IT
+                // DOES NOT WORK. `Pass 203.0`, reverted.
+                //
+                // The reasoning that motivated it is genuinely appealing, so
+                // it is written down rather than left for someone to re-derive:
+                // the duotone regression above came from narrowing BLINDLY,
+                // inside `cmyk_group_rules`, with no knowledge of which
+                // channels the image actually writes. A `DecodedImage` carries
+                // `ink` — its authored CMYK, texel for texel — which is the
+                // exact analogue of the ramp used two lines up. Compute the
+                // image's reach from that, narrow only the channels it truly
+                // never touches, and the duotone should keep its three
+                // channels while a spot-plus-black image stops erasing a mark
+                // it never claimed. Same argument, one object type over.
+                //
+                // MEASURED, on the conformance patch whose check marks this
+                // was meant to restore, ablation switch proved effective
+                // (25,600 pixels changed, max change 207):
+                //
+                //   without the narrowing   mean |diff| vs Acrobat  23.90
+                //   with it                 mean |diff| vs Acrobat  28.68
+                //
+                // ⇒ A REGRESSION, not an improvement, and the marks did not
+                // come back. The asymmetry is the lesson: for a SHADING the
+                // thing being protected sits UNDER a thin mark, so handing an
+                // untouched channel back to the backdrop restores it. A photo
+                // COVERS an area, and handing back its untouched channels
+                // makes the photograph partly transparent to whatever is
+                // beneath — which is a much larger error than the one being
+                // fixed. "The same defect in a different object type" was a
+                // false premise; the ramp and the image differ in what is
+                // behind them, not in how their ink is computed.
+                //
+                // The marks on that patch need the per-spot-colorant plane,
+                // as the paragraph above said. This note exists so the next
+                // reader spends the ablation on something else.
                 if crate::overprint::names_unplatable_spot(&kind) {
                     let reach = shading
                         .ramp
