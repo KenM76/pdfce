@@ -7535,9 +7535,10 @@ the code stay reconcilable.)*
   multi-target gesture cannot build its own writes without duplicating the
   most intricate deletion logic in the crate.
 - **The mechanism.** `EditSession::coalesce_last(count, kind) -> bool`
-  (private, `crates/pdfce-core/src/edit.rs:11334`) folds the last `count`
-  entries on the undo stack into **one** entry carrying `kind`. The verb calls
-  the per-target verb N times, then folds. Routing, refusals and
+  (**`pub` since `Pass 212.0`, 2026-09-01 — was private at `Pass 168.0`**;
+  `crates/pdfce-core/src/edit.rs:12926`, verified live 2026-09-01) folds the
+  last `count` entries on the undo stack into **one** entry carrying `kind`.
+  The verb calls the per-target verb N times, then folds. Routing, refusals and
   spec-governed behaviour stay in one implementation.
 - **The fold COLLAPSES repeated objects; it does not concatenate.** `undo()`
   applies each recorded `before` walking **forward**, which is correct only
@@ -7569,6 +7570,25 @@ the code stay reconcilable.)*
 - **Current users** (2026-08-29): `cut_selection`, `cut_annotations`,
   `cut_field`, `cut_pages`, `cut_outline_item`, `cut_attachment`,
   `paste_outline_item`.
+- **★ It is now a PUBLIC primitive as well as an internal one**
+  (`Pass 212.0`, 2026-09-01, decision `117`). The crate boundary was drawn one
+  notch too tight: **a shell gesture that needs two verbs — place a push
+  button, then give it an action — cost two undo entries**, so `Ctrl+Z` took
+  the action off and left an inert button on the page. `cut_field` already
+  composes exactly this way internally, so the composition was never in
+  question — only whether it may be spelled **outside** this crate. **The
+  narrower `add_push_button_with_action` was offered and declined**: it fixes
+  one instance of a shape that recurs every time a gesture needs two verbs.
+- **The PUBLIC contract states three things the internal one never had to.**
+  **(1) Check the return.** `false` means every change was **applied** and only
+  the **grouping** failed (the stack was shorter than `count`) — disclose that
+  the gesture takes more than one undo; do not retry. **(2) `count` counts
+  commands YOU just pushed**, most recent first; **overcounting folds a
+  neighbour's edit in and nothing guards that** — it is the same
+  count-from-the-stack hazard the bullet above records, now reachable by a
+  caller this crate cannot see. **(3) Fold immediately**, before anything else
+  can push a command. `0` and `1` return `true`; `1` relabels rather than
+  no-ops (see the `count == 1` bullet above).
 
 ### 11.7 Implementation record — ONE page-tree reader: the overlay (Pass 186.0, 2026-08-31; decision 111)
 
@@ -29294,3 +29314,157 @@ minted** — `R93` gains a fifth cited instance from a sibling commit in the
 same filing (`ROADMAP.md` *Standing rules*), and two rule candidates were
 assessed and declined (*Standing-rule disposition, 360th filing*). **Standing
 rules ceiling `R239` — UNCHANGED.**
+
+---
+
+### 2026-09-01 (362nd filing, `6ed5b9b`) — decision 116: **A COLORANT'S IDENTITY IS ITS DECODED *BYTES*, NOT A LOSSY-DECODED `String` — AND THE PROJECT KEEPS `from_utf8_lossy` FOR *DISPLAY* DELIBERATELY, IN THE SAME MODULE**
+
+**The decision.** `Colorant::Named` carries **`Box<[u8]>`**, not `String`.
+`Colorant::parse` stores the lexer's already-`#xx`-decoded bytes **verbatim**.
+Comparison, hashing and any future name-keyed map operate on those bytes.
+
+**Why it is a decision and not a fix.** `String::from_utf8_lossy` maps **every
+distinct invalid byte sequence onto the same `U+FFFD`**, so two documents
+naming **two different colorants** produced the **same `Colorant`**, comparing
+**equal**. The standard forecloses the alternative in three places:
+**§8.6.6.4** makes the device test consult **only the name** (the alternate
+space and tint transform are the *fallback when that test fails*, so they are
+not identity); **§7.3.5 NOTE 4** makes names differing **in bytes** distinct
+names *even if they render identically*, and specifies **no case folding and
+no Unicode normalisation** anywhere; and UTF-8 is a **should** for *display*,
+not a rule for *equality*.
+
+**★★ THE SPLIT THIS DECISION EXISTS TO PROTECT, because it looks like an
+inconsistency and is not.** **Lossy decoding is correct for showing a name to
+an operator and never correct for deciding whether two names are the same.**
+`crates/pdfce-render/src/color.rs` therefore **still calls `from_utf8_lossy`
+on its diagnostic paths, on purpose** (verified live 2026-09-01 at
+`color.rs:1420` and `color.rs:1543`, with the rationale recorded at
+`color.rs:184` and `color.rs:201`). **A later sweep that "unifies" those two
+call sites with the identity path re-introduces the defect.** Recorded here so
+the rationale outlives the doc comment.
+
+**★ ASCII case-insensitivity in `process_channel` is a pdfce CHOICE, now
+labelled as one.** ISO 32000 defines **no** case folding for colorant names
+(corpus note `SEP-A1`). It is kept, and being ASCII-only it **cannot fold two
+distinct non-ASCII names together** — so the choice does not re-create the
+collision class this decision removes.
+
+**Timing, and it is the reusable half.** Fixed **while still harmless**:
+nothing currently keys on a colorant name, so today a collision changes no
+pixel. It stops being harmless **the moment the per-spot-colorant plane
+lands**, because a plane is a **map from name to plate** and two colliding
+names would silently composite as one colour — **a wrong picture with no
+error, no counter and no visible symptom.** ⇒ **A latent correctness bug with
+no consumer cannot be detected by any test until the consumer exists, at which
+point it is a REGRESSION rather than a known debt.** Fix it *before* the
+consumer, not with it.
+
+**Left open, deliberately, for the plane to decide:** `Box<[u8]>` vs
+`Arc<[u8]>`. `ROADMAP.md`'s *Backlog* entry recommended `Arc` on the reasoning
+*"the key is cloned per paint and never mutated"*; **`Box` does not share on
+clone**, so that per-paint clone is a copy. There is **no per-paint clone
+today**, so `Box` is correct now and the question belongs with the roster that
+will actually perform the allocation. **Cheap to change while the variant has
+one constructor.**
+
+**Consequence recorded because a decision log exists to carry it:** the
+signature change **acted as a duplicate detector** — a **verbatim inline copy**
+of `process_channel` in `authored_tints` (four arms, the same four names)
+**had already drifted**, one taking `&str` and the other bytes, and was found
+only because the original's signature moved. **A refactor that touches a
+signature is the cheapest duplicate-code sweep this project has**, and it runs
+only when someone changes a signature.
+
+**Decision ceiling moves `115` → `116`.** **Standing rules ceiling `R239` —
+UNCHANGED.**
+
+---
+
+### 2026-09-01 (362nd filing, `77f95b5`) — decision 117: **`coalesce_last` IS PUBLIC, AND THE GENERAL PRIMITIVE WAS CHOSEN OVER THE NARROW CONVENIENCE VERB THAT WAS OFFERED — PLUS: A FOUR-STATE ACTION READER, BECAUSE A THREE-STATE ONE CANNOT STAY HONEST AS COVERAGE GROWS**
+
+**Supersedes the visibility half of decision `101`** (`coalesce_last`,
+`Pass 168.0`, 2026-08-29), which recorded the primitive as **private**. That
+entry stays as filed; **body counterpart is §11.6**, updated in this filing.
+`ROADMAP.md`'s `Pass 168.0` entry carries a dated forward pointer for the same
+reason.
+
+**Decision A — `EditSession::coalesce_last` becomes `pub`
+(`crates/pdfce-core/src/edit.rs:12926`).** The crate boundary was drawn one
+notch too tight. **Placing a push button *with* an action is one operator
+gesture calling two verbs**, so it left **two** entries on the undo stack:
+`Ctrl+Z` removed the action and left an **inert button** on the page.
+`cut_field` already composes exactly this way internally (`copy_field` +
+`delete_field` + `coalesce_last`) and its own doc block makes the shell's
+argument verbatim — *"two commands is two undos for one gesture"*. **So the
+composition was never in question; only whether it may be spelled outside this
+crate.**
+
+**★★ Decision A′ — the narrower `add_push_button_with_action` was OFFERED and
+DECLINED, on the requesting shell's own reasoning: it fixes ONE INSTANCE OF A
+SHAPE THAT RECURS.** Every future gesture needing two verbs would need its own
+convenience verb, each with its own refusal surface, its own disclosure and its
+own tests — and each one is a second implementation of a composition the crate
+already performs correctly. **Exporting the primitive costs one visibility
+keyword and a contract; exporting N convenience verbs costs N maintained
+surfaces that can disagree with each other.** ⇒ **Prefer the primitive when
+the narrow verb is an instance of it.**
+
+**The public contract adds three obligations the internal caller never had**
+(§11.6 carries them in full): **check the `bool` return** — `false` means
+applied-but-not-grouped, which is a **disclosure**, not a retry; **`count`
+counts the caller's own commands**, and overcounting **folds a neighbour's edit
+in with nothing guarding it**; **fold immediately**, before anything else can
+push.
+
+**Decision B — `EditSession::button_action` answers with FOUR states, not the
+three that were requested.** `ButtonActionState` (`edit.rs:14715`,
+`#[non_exhaustive]`): `None` / `Known(ButtonAction)` / **`Unmodelled(String)`**
+/ `Foreign(String)`.
+
+**★★★ The proposed three-state shape cannot stay honest as `Known` coverage
+grows, and that is the whole argument.** `Foreign`'s contract is *"an action
+pdfce recognises and **will not author**"*. A `/SubmitForm` this reader does
+not yet decode is **not that** — **pdfce authors `/SubmitForm` happily** — so
+returning `Foreign("SubmitForm")` would tell a shell *"pdfce will not touch
+this"* about an action pdfce writes on request, and the shell would correctly
+grey a control that should have been offered. ⇒ **`Unmodelled` and `Foreign`
+differ in exactly one thing: whether REPLACING is offered**, which is the
+decision the operator is being asked to make, so it is the distinction the enum
+must carry.
+
+**The general form, recorded because it will recur:** *a three-way enum that
+folds "we cannot read it **yet**" together with "we will not write it
+**ever**" is a statement about the READER wearing a statement about the
+WRITER's clothes — and it decays every time the reader improves.* The reader's
+coverage is a moving fact; the writer's refusal list is a policy. **They do not
+belong in one variant.**
+
+**Decision B′ — the reader answers for the field's FIRST widget, and SAYS SO
+rather than reconciling.** §12.7.3.1 lets one field own widgets on several
+pages, and **nothing requires their `/A` entries to agree**. pdfce therefore
+**picks**, and discloses that it picked. **A chosen answer presented as *the*
+answer is precisely the failure this verb was created to remove** on the
+display side, so re-committing it inside the verb would be self-defeating.
+**A per-widget reader (`Widget::action`) is deliberately NOT built** pending a
+real document whose one field carries widgets with differing `/A` — filed under
+*Backlog* with that trigger. **The mirror of `R151`: not a capability with no
+caller, but a capability with no INPUT** — and the worse failure of the two,
+because an unused API can be deleted while a wrongly-shaped one has consumers.
+
+**Refusal symmetry, recorded as a contract rather than an implementation
+detail:** reading is refused on **the same footing as writing** — a
+non-push-button is `ButtonActionWrongFieldType` — so **a shell cannot learn
+through the reader about a field it would be refused permission to change.**
+
+**Test-design consequence worth carrying:** the `Foreign` fixture is
+**hand-authored**, because *a fixture built with the writer could never contain
+an action pdfce refuses to write.* **A test for a refusal cannot be built by
+the thing that refuses.** And the sabotage is precise about its blind spot:
+collapsing `Foreign` into `Unmodelled` fails the JavaScript test **and nothing
+else**, while the round-trip test **correctly stays green** — a green
+round-trip test beside a broken enum is exactly the reassurance that lets a
+collapse ship.
+
+**Decision ceiling moves `116` → `117`; next free `118`.** **Standing rules
+ceiling `R239` — UNCHANGED**, next free `R240`; no rule minted this filing.

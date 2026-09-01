@@ -84691,3 +84691,298 @@ piped to `grep -c` returned **0 prior uses** for each of `Pass 203.0` through
 `docs/FEATURES.md` and `docs/SESSION_LOG.md` modified — this filing's own
 edits — and nothing else. `python tools/check-suite-name-absent.py` exits
 **0** with the clean message, run after every edit in this filing.
+
+---
+
+## 2026-09-01 (362nd filing) — four commits filed together: `Pass 212.0` (`77f95b5`), `Pass 211.0` (`79e3974`), `Pass 210.0` (`6ed5b9b`) and `Pass 209.0` (`27154e9`) SHIPPED — ★★★★★ **THE DISPATCH NAMED THREE; `git log <last-filed>..HEAD` FOUND THE FOURTH, AND IT WAS COMMITTED IN THE SAME MINUTE AS THE FILING THAT COMMISSIONED IT** — ★★★★★ **TWO DIFFERENT SPOT COLOURS COULD COMPARE *EQUAL*, AND THE SPOT PLANE WOULD HAVE GIVEN THEM ONE PLATE — DISCHARGED ONE FILING AFTER IT WAS OPENED** — ★★★★ **A FALSIFIED CLAIM WAS ALSO IN SHIPPED `--help`: IN `clap`-DERIVE A `///` IS *SHIPPED UI*, AND THE SOURCE SAID THE CLAIM WAS GONE WHILE THE BINARY SAID OTHERWISE** — ★★★★ **A MEASURED NEGATIVE: THE ICC ENGINE DOES *NOT* CLOSE THE `CMYK`→sRGB DISPLAY GAP, AND EVERY INTENT IS WORSE IN *CHARACTER* WHILE BETTER IN MAGNITUDE** — ★★★★ **A BUTTON'S ACTION CAN NOW BE *READ*, IN FOUR STATES NOT THREE, AND `coalesce_last` IS PUBLIC** — ★★★ **A NINTH CLAIM-A SURVIVOR FOUND, IN A FILE THE DISCHARGE COMMIT HAD ALREADY EDITED**
+
+**Shipped:**
+
+- **`Pass 212.0`** (`77f95b5`) — `EditSession::button_action(fqn)`, the reader
+  that `Pass 183.1`'s writer shipped without; and `coalesce_last` made `pub`.
+  **Both open `pdfceGUI` requests closed in one Pass.**
+- **`Pass 211.0`** (`79e3974`) — two surviving copies of the falsified
+  *"`GreyAsKOnly` is Acrobat's reading"* claim corrected **in `--help` text**,
+  then trimmed a second time; plus a **measured negative** on the terminal
+  `CMYK`→sRGB display conversion. **+12 / −5, one file.**
+- **`Pass 210.0`** (`6ed5b9b`) — `Colorant::Named(String)` →
+  `Named(Box<[u8]>)`. **Discharges the 361st filing's own *Backlog* item.**
+- **`Pass 209.0`** (`27154e9`) — the engineer's discharge of the 361st
+  filing's **eleven reported `crates/` survivors** plus the wrong published
+  figure. **+91 / −28 over 6 files** (≈15 lines/file — broad and shallow, the
+  signature of a claim sweep).
+
+**Decisions made this session:**
+
+- **`116` — a colorant's identity is its decoded BYTES.** `Named(Box<[u8]>)`,
+  per §8.6.6.4 (the device test consults **only** the name), §7.3.5 NOTE 4
+  (byte-distinct names are distinct names even if they render identically, and
+  **no** case folding or normalisation is specified). **★ The split the
+  decision exists to protect:** `from_utf8_lossy` is **kept, deliberately, on
+  the diagnostic paths in the same module** — lossy is correct for *showing* a
+  name and never for *comparing* one. A later sweep that "unifies" those call
+  sites re-introduces the defect. **`Box` vs `Arc` deliberately left to the
+  plane**, which is the code that will actually clone per paint.
+- **`117` — `coalesce_last` is public, and the GENERAL primitive beat the
+  NARROW convenience verb that was offered.** `add_push_button_with_action`
+  was declined on the shell's own reasoning — *it fixes one instance of a
+  shape that recurs.* Exporting the primitive costs one keyword and a
+  contract; exporting N convenience verbs costs N surfaces that can disagree.
+  Supersedes the **visibility half** of decision `101`, which stays as filed.
+- **`117`B — four action states, not three.** `Unmodelled` was added because
+  the proposed `None`/`Known`/`Foreign` **cannot stay honest as `Known`
+  coverage grows**: a `/SubmitForm` this reader does not decode is **not**
+  `Foreign` — pdfce authors those. **The general form:** *a three-way enum
+  that folds "we cannot read it yet" together with "we will not write it
+  ever" is a statement about the READER wearing a statement about the
+  WRITER's clothes, and it decays every time the reader improves.*
+- **A per-widget action reader (`Widget::action`) was deliberately NOT
+  built**, pending a real document whose one field carries widgets with
+  differing `/A`. **The mirror of `R151`: a capability with no INPUT**, and
+  the worse of the two failures — an unused API can be deleted, a
+  wrongly-shaped one has consumers.
+- **The `CMYK`→sRGB display rewiring is NOT justified**, and the *Backlog*
+  entry that already carried the gap was **amended in place** rather than
+  duplicated. Two records of one negative result is how a negative result gets
+  re-probed.
+
+**Findings + decisions:**
+
+- **★★★★★ The dispatch named three commits; there were four.**
+  `Pass 209.0` (`27154e9`) and the 361st filing's own librarian commit
+  (`0bd4a99`) are both timestamped **10:08** — the same minute. `Pass 209.0`
+  is the **discharge of the survivors that filing reported**, so it **could not
+  appear in the filing that requested it**. This is the mirror of the previous
+  filing's `Pass 208.0`, which arrived *during* the filing and was folded in.
+  ⇒ **A filing and the work it commissions are concurrent, so "everything
+  committed before I started" is never the right closing question.**
+  `git log <last-filed-hash>..HEAD` is — and that is what found this one.
+- **★★★★★ `Pass 210.0`: two different spot colours could compare equal.**
+  `from_utf8_lossy` maps **every** distinct invalid byte sequence onto the
+  same `U+FFFD`. Harmless **today** (nothing keys on a colorant name); **a
+  wrong plate the moment the per-spot-colorant plane lands**, because a plane
+  is a map from name to plate. **Fixed while still harmless, which is the only
+  window in which it is a two-line change** — the *Backlog* entry's own thesis
+  (`R151`-shaped **in reverse**: a latent correctness bug with no consumer,
+  undetectable until the consumer exists, at which point it is a regression)
+  paid off in one commit, one filing later.
+- **★ The census now has its denominator.** The 361st filing recorded *"two
+  files"* and **explicitly declined to invent a rate**; `Pass 210.0` supplies
+  **>1 of 4,023 corpus files (>0.02 %)**. The rate is negligible **and the
+  rate was never the argument** — one collision is one wrong plate.
+- **★★★ A signature change is a duplicate detector.** A **verbatim inline
+  copy** of `process_channel` in `authored_tints` — four arms, the same four
+  names — **had already drifted** (one took `&str`, the other bytes) and was
+  found only because the original's signature moved. *A refactor that touches a
+  signature is the cheapest duplicate-code sweep this project has, and it runs
+  only when someone changes a signature.*
+- **★★★★ `Pass 211.0`: in `clap`-derive a `///` IS shipped UI.** Two copies of
+  the falsified claim lived in the `--overprint-zero-tint-scope` doc comment.
+  **Caught by running the BUILT BINARY and grepping `--help`, not by reading
+  the diff** — the source said the claim was gone, the binary said otherwise.
+  ⇒ **A new dimension for hard rule 11 clause (e): not a misspelled pattern
+  but the wrong ARTIFACT.** A UI-string sweep's file set is not the set a
+  reader would call "UI".
+- **★ And then trimmed again:** the first correction wrote the **full
+  retraction** into the help text. *An operator running `--help` wants the
+  current fact, not the project's history.*
+- **★★★★ The measured negative, and its per-channel form (hard rule 10(a)).**
+  pdfce (16,150,66) vs Acrobat (10,142,49): `(6+8+17)/3 = 10.33` mean levels
+  over **3 channels**, on **ONE colour, ONE page**, covering **27 % of that
+  page's area**. Through the document's own `/OutputIntent` (1.8 MB,
+  `prtr`/CMYK) with `iccce`: Perceptual **10.7**, MediaRelative **8.0**,
+  Saturation **10.7**, Absolute **8.3**, pdfce today **10.3**. **Best case is
+  a 2.3-level gain (~22 %) — and EVERY intent clips red to 0 where both pdfce
+  and Acrobat show non-zero.** A **change of character, not of magnitude**.
+  ⇒ **The mean-error number alone would have sold this change**, which is the
+  same trap `Pass 203.0` recorded six hours earlier from the opposite
+  direction. `CmykIntent` stays on `Calibrated`.
+- **★ Instrument note:** the profile was extracted with pdfce's own
+  `export-structure` (`Pass 194.0`) **after a hand-rolled parse failed** — the
+  object lives in an **object stream**, which that command expands. A tool
+  built two days ago for editing was the right instrument for a measurement.
+- **★★★★★ `Pass 209.0`: the fix for the halved figure is not "be more
+  careful".** The census **derived its search term from a FIXTURE FILENAME
+  with `sed`**, yielding only one of the gate's **two** needles, then reported
+  the total: full name **76**, abbreviation **40**, either **82**, overlap
+  **34**. ⇒ **Call the single source of truth (`needles()`) instead of
+  RE-DERIVING one from a sample.** *A partial match comes back looking exactly
+  like a complete one, and nothing in the output distinguishes them.*
+- **★★★★ The two denominators on record are BOTH correct, measured this
+  filing.** `git rev-list --count`: `0653a50` = **1,219** (where this role
+  measured, 361st filing), `094b31a` = **1,220** (where the engineer measured,
+  `Pass 208.0`), `27154e9` = **1,221**, `77f95b5` = **1,225**. **The numerator
+  is identical (82); only the denominator moved, because history grew between
+  the measurements.** 6.73 % vs 6.72 %. ⇒ **A denominator that advances with
+  every commit is not a stable figure — name the MEASURING COMMIT, not just
+  the count.** Recorded so a future sweep that spots the mismatch stops rather
+  than "corrects" one of them. **Hard rule 10 arriving at a case it did not
+  anticipate: both forms filed correctly and still apparently disagreeing,
+  because the world moved rather than either record.**
+- **★★ `Pass 209.0`'s own generalisation, adopted:** **an exhaustive
+  enumeration is a claim with an expiry date and no alarm.** Every listed item
+  stays correct, so the list **reads as verified** — there is nothing wrong to
+  notice. Three instances in 24 hours in one file, and `Pass 204.0` swept one
+  while `Pass 207.0` created the next. ⇒ **The sweep must look for COMPLETED
+  LISTS, not only for false sentences: a stale list has no false member, it
+  has a MISSING one, and no grep for a claim finds an absence.**
+- **★ Attribution repeated rather than softened**, from `Pass 209.0`'s own
+  message: *"Found by the librarian's cross-document sweep, not by me and not
+  by any gate."* Fourth consecutive filing in which the reported survivors came
+  from reading for meaning rather than pattern matching.
+
+**Hard-rule-11 sweep — searched for the CLAIM, not for a string:**
+
+- **★★★★ Claim A (*"`GreyAsKOnly` is Acrobat's reading"*) — a NINTH SURVIVOR,
+  in a file `Pass 209.0` had already edited.**
+  **`crates/pdfce-render/src/font/mod.rs:1078`**, the doc comment on the
+  **public builder `RenderOptions::with_overprint_zero_tint_scope`**: *"…but
+  Acrobat converts grey to K-only CMYK first and then applies the rule, so its
+  zero C, M and Y leave the backdrop alone. **Both readings are
+  defensible**…"* — **wrong twice over, the same two ways `Pass 209.0` named
+  for `settings/mod.rs`**: the Acrobat attribution (false on process geometry,
+  `Pass 206.0`) and *"Both readings are defensible"*, which **`Pass 174.5` had
+  already ruled a DIVERGENCE**. **REPORTED, NOT EDITED** — hard rule 11 scopes
+  this role to reporting inside `crates/`. **OWED TO THE ENGINEER, and cheap:
+  the corrected wording already exists verbatim in `settings/mod.rs`.**
+  ★★★★ **Why it survived: `Pass 209.0` DID edit `font/mod.rs` — at line ~853,
+  the `Default for RenderOptions` comment — and the file then LOOKED DONE. A
+  per-file survivor ledger closes on the FIRST hit in a file. A FILE IS NOT A
+  SITE.** ⇒ New checklist item: **when a file appears once in a survivor
+  table, grep that file again AFTER the fix, not before.**
+- **Claim B (*"`coalesce_last` is private"*)** — 3 sites. `ARCHITECTURE.md`
+  §11.6 **FIXED**; `ROADMAP.md`'s `Pass 168.0` entry **AMENDED with a dated
+  forward pointer, not rewritten** (append-only, hard rule 1 — the sentence
+  was true when filed); `ARCHITECTURE.md` decision `101` **not rewritten**,
+  superseded by `117`.
+- **Claim C (*"`Colorant::Named` carries a `String`"*)** — 1 site, the
+  *Backlog* entry quoting the deleted line as live code. **FIXED** (marked
+  DISCHARGED).
+- **Hits that SURVIVE and are CORRECT — recorded so the next sweep does not
+  "fix" them:** `color.rs:1420` and `color.rs:1543` (`from_utf8_lossy` on the
+  **diagnostic** paths, deliberate — decision `116`);
+  `ROADMAP.md`'s *"the test takes a `Colorant`, **not raw name bytes** … the
+  real type distinguishes `/All`"* (about the **enum**, not `Named`'s
+  **payload** — `Pass 210.0` changed the payload and left the discrimination
+  intact, and added the `/All`/`/None` control test that pins it); every other
+  `defensible` in `crates/` (`main.rs:333`, `edit.rs:8929`/`27889`,
+  `settings/mod.rs:355`/`1585`, `pageops/separation.rs:81`, `richtext.rs:85`);
+  `edit.rs:10763`/`10779`/`12904` and the `coalesce_last` history lines in
+  `ROADMAP.md`/`SESSION_LOG.md`, which describe the mechanism, not visibility.
+
+**`pdfceGUI` channel — checked and answered this session:**
+
+- **`reply_the_reader_ships_with_a_fourth_state_and_coalesce_last_is_public.md`**
+  (`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`, mtime 2026-09-01
+  11:26) **CONSUMES BOTH open requests**:
+  `request_a_buttons_action_can_be_written_and_not_read.md` (2026-09-01 04:48)
+  and `request_placing_a_button_with_an_action_costs_two_undos.md`
+  (2026-09-01 05:18). Ships in `Pass 212.0`, commit `77f95b5`.
+- The reply **explains the shape change rather than shipping the requested
+  one** — four states, not the proposed three — and **declines
+  `add_push_button_with_action` in favour of the public primitive**, on the
+  shell's own reasoning. **No open request from `pdfceGUI` is unanswered as of
+  this filing.**
+
+**`FEATURES.md` — ONE ROW ADDED, ONE ROW EDITED, and three Passes deliberately
+moved NOTHING:**
+
+- **ADDED (Forms):** *Read a push button's declared action* —
+  **`[x]` core / `[ ]` cli / `[ ]` gui / `[x]` Acrobat.** ★ **The two empty
+  boxes are NOT to be rounded up:** there is no CLI subcommand and no
+  `pdfceGUI` delivery **from this repository**; the `gui` column tracks
+  `D:\dev\pdfceGUI`, which ticks it when its panel ships. **A textbook `R151`
+  row** — a core capability no shell reaches — which is a signal, not an
+  embarrassment.
+- **EDITED (Document & pages):** *Undo/redo command log* gains a
+  `coalesce_last` clause. **No box moved** — undo/redo itself was already
+  delivered, and `pdfceGUI` has not consumed the primitive.
+- **`Pass 210.0` — no box, no row.** A latent-defect fix with **no capability
+  change**: the corrected identity is invisible until the plane exists, and
+  the plane is not built and not ticked.
+- **`Pass 211.0` — no box, no row.** A help-text correction plus a
+  measurement. **A measured negative is not a feature.**
+- **`Pass 209.0` — no box, no row.** A correction commit; its `FEATURES.md`
+  copy of Claim A was already fixed by this role in the 361st filing.
+  **Confirmed by sweep, not assumed.**
+
+**Still in flight:**
+
+- **OWED TO THE ENGINEER — one site in `crates/`, outside this role's remit:**
+  `crates/pdfce-render/src/font/mod.rs:1078`, the ninth Claim-A survivor.
+  **All eleven sites the 361st filing reported are DISCHARGED** by
+  `Pass 209.0` — verified live, including
+  `tools/check-suite-name-absent.py:177`, which now reads **82 of 1,220**.
+- **`Box<[u8]>` vs `Arc<[u8]>` for `Colorant::Named`** — the *Backlog* entry
+  recommended `Arc`; `Box` shipped. Correct today (no per-paint clone exists),
+  and **the question belongs with the plane**. Cheap while the variant has one
+  constructor.
+- **Backups: NOT CURRENT.** Newest bundle is
+  `pdfce-20260901-1019-6ed5b9b-full.bundle` (2026-09-01 10:19, by
+  `ls -lt D:/Dev/pdfce-backups/`); `git log --oneline 6ed5b9b..main | wc -l`
+  = **3 commits since**, re-measured at the **close** of this filing (it was
+  **2** at the start, before `d19d4e4` landed). It predates `Pass 211.0`,
+  `Pass 212.0` **and the v0.19.0 release commit**. **Cut a fresh one.**
+- **★★★ v0.19.0 WAS CUT MID-FILING, AS `d19d4e4`, AND IT IS COMMITTED BUT NOT
+  PUSHED AND NOT TAGGED.** At the **start** of this filing `git status --short`
+  showed `Cargo.toml` and `Cargo.lock` **modified, uncommitted**; at the
+  **close** they are committed as `d19d4e4` *"release: v0.19.0"* (+7/−7 over
+  2 files, `THIRD_PARTY_LICENSES.md` regenerated byte-identical). **Both states
+  are recorded rather than the later overwriting the earlier.** So the
+  dispatch's *"`77f95b5` or later"* resolves to **`d19d4e4`**.
+  `git rev-list --count origin/main..HEAD` = **1** and `git tag -l "v0.19*"`
+  returns **nothing** ⇒ **the release commit is unpublished and untagged.**
+  **This role did not edit `Cargo.toml`, did not push, and did not cut a tag** —
+  rule 8 reserves a release to an explicit, current operator go-ahead, and the
+  standing push authority (decision `090`, *"always push"*) covers an ordinary
+  fast-forward of `main` and **does not extend to tags**. ★ **Third mid-filing
+  race in three filings** (`Pass 208.0`, `Pass 209.0`, now the release):
+  **a filing is not a snapshot, and closing figures must be RE-MEASURED at the
+  close.**
+- **The per-spot-colorant plane** is scoped in full and awaiting an **operator
+  decision** — ten dependents. **Its one named blocker is now gone**
+  (`Pass 210.0`).
+- Colour-managing `ICCBased` **images** — scoped, not started.
+- **Operator question `(ca)`** — 82 of 1,219 (at `0653a50`) published commit
+  messages carry the term; leave / rewrite / neither. Option 3 already shipped
+  as `Pass 208.0`. **Default if unanswered: leave them.**
+
+**For next session:**
+
+1. **Fix the ninth Claim-A survivor** at `font/mod.rs:1078` — one doc comment,
+   corrected wording already exists in `settings/mod.rs`.
+2. **Cut a backup bundle** — two commits behind, and a release is landing.
+3. **The plane decision** is the operator's, and its blocker is discharged.
+4. **Answer or defer operator question `(ca)`.**
+5. **Do NOT re-probe the `CMYK`→sRGB display conversion through `iccce`** —
+   the table is in *Backlog* and in `Pass 211.0`'s entry.
+
+**Ceilings after this filing:** Pass ceiling `208.0` → **`212.0`** (new majors
+this filing: `209.0`, `210.0`, `211.0`, `212.0`); next free `209.1`…`212.1` /
+new major `213.0`. **Decisions `115` → `117`**, next free `118`. **Standing
+rules `R239` — UNCHANGED**, next free `R240` (no rule minted; the two
+candidates this filing raised — *a file is not a site* and *name the measuring
+commit* — are recorded as **sweep-checklist practice** in the entries above
+rather than minted, on the same warrant as prior declines: **neither is
+mechanically gateable, and both are commitments on this role's own reading**).
+**Operator questions `(ca)` — UNCHANGED**, next free `(cb)`.
+**Filings `361` → `362`.**
+
+**Pass-number collisions: NONE — CHECKED, not assumed.**
+`git show HEAD:docs/ROADMAP.md`, `…:docs/SESSION_LOG.md` and
+`…:docs/FEATURES.md` piped to `grep -c` returned **0 prior uses** for each of
+`Pass 209.0`, `210.0`, `211.0` and `212.0` before this filing.
+
+**Git state — CHECKED at BOTH ends of the filing, not inferred (hard rule 8).**
+
+| | `git status --short` | `origin/main..HEAD` | `rev-parse HEAD / main / origin/main` |
+|---|---|---:|---|
+| **start** | `Cargo.toml`, `Cargo.lock` modified, uncommitted | **0** | `77f95b5` / `77f95b5` / `77f95b5` |
+| **close** | `d19d4e4` committed; `docs/{ROADMAP,FEATURES,ARCHITECTURE,SESSION_LOG}.md` modified | **1** | `d19d4e4` / `d19d4e4` / **`77f95b5`** |
+
+⇒ **All four filed Passes are pushed** to `github.com/KenM76/pdfce`; **the
+v0.19.0 release commit `d19d4e4` is NOT**, and `git tag -l "v0.19*"` returns
+nothing. `python tools/check-suite-name-absent.py` exits **0** with the clean
+message, run before and after every edit in this filing.
+`docs/core-api/` was **not** touched — the engineer owns it and updated it in
+`Pass 212.0` (`check-core-api-verbs` PASS).
