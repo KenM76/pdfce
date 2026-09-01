@@ -659,8 +659,17 @@ pub fn soft_mask_plane(
     // The component check below covers it either way.
     let space = match dict.get(b"ColorSpace").map(|o| doc.resolve(o)) {
         Some(obj) => Some(
-            resolve_space(doc, obj, resources, 0, CmykIntent::Calibrated)
-                .map_err(|e| MaskRefusal::UnsupportedColorSpace(e.to_string()))?,
+            resolve_space(
+                doc,
+                obj,
+                resources,
+                0,
+                CmykIntent::Calibrated,
+                // A soft mask is luminosity or alpha, never output colour --
+                // there is nothing here to colour-manage toward a device.
+                crate::image::IccContext::unmanaged(),
+            )
+            .map_err(|e| MaskRefusal::UnsupportedColorSpace(e.to_string()))?,
         ),
         None if coded.codec == Some(Codec::Jpx) => None,
         None => return Err(MaskRefusal::Malformed("/SMask has no /ColorSpace")),

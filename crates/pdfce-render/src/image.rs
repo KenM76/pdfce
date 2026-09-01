@@ -586,6 +586,17 @@ pub struct DecodedImage {
     /// implementation of the read and is shared with the path painter so the
     /// two cannot come to disagree about the same space.
     pub overprint: Option<OverprintSource>,
+    /// Whether this image's samples were **colour-managed** through its
+    /// embedded ICC profile (`Pass 214.0`).
+    ///
+    /// ★ It exists so the disclosure counters can tell the two cases apart.
+    /// `Pass 207.0` added `icc_unmanaged_paints` and counted every `ICCBased`
+    /// image on a subtractive page, because at that point none of them COULD
+    /// be managed. Now some are — and a counter that kept reporting them as
+    /// unmanaged would be wrong in the opposite direction from the defect it
+    /// was written to fix, which is the more embarrassing half of the same
+    /// mistake.
+    pub icc_managed: bool,
     /// Divergences that still produced pixels.
     pub notes: ImageNotes,
 }
@@ -682,6 +693,12 @@ pub struct CmykTexels {
 /// [`ImageError`] — see its variants. Every one means "nothing drawn".
 /// A mask that cannot be decoded is **not** one of them: the picture is
 /// still drawn, and the shortfall is a note rather than an error.
+// EIGHT parameters, one over clippy's threshold, and the eighth is the one
+// that makes an ICC image render correctly. The alternative -- bundling the
+// existing seven into a struct -- would touch every caller and every test that
+// names them, to satisfy a count rather than a reader. The parameters are all
+// distinct types with distinct roles and none of them is a boolean.
+#[allow(clippy::too_many_arguments)]
 pub fn decode(
     doc: &DocumentView<'_>,
     dict: &Dict,
@@ -690,6 +707,7 @@ pub fn decode(
     fill: Rgb,
     origin: ImageOrigin,
     policy: RenderPolicy,
+    icc: IccContext<'_>,
 ) -> Result<DecodedImage, ImageError> {
     let width = positive_dimension(doc, dict, b"Width")?;
     let height = positive_dimension(doc, dict, b"Height")?;
@@ -766,6 +784,7 @@ pub fn decode(
         tr.colour_key,
         tr.matte.as_deref(),
         policy,
+        icc,
     )
 }
 
@@ -1103,6 +1122,10 @@ fn decode_stencil(
         pixmap,
         ink: None,
         overprint: None,
+        // A stencil mask has no colour space of its own -- it paints the
+        // fill colour through a 1-bit shape -- so there is nothing here to
+        // colour-manage and `false` is a fact rather than a default.
+        icc_managed: false,
         notes,
     })
 }
@@ -1140,6 +1163,7 @@ fn decode_sampled(
     colour_key_entry: Option<&Object>,
     matte: Option<&[f32]>,
     policy: RenderPolicy,
+    icc: IccContext<'_>,
 ) -> Result<DecodedImage, ImageError> {
     // Two independent operator choices ride in on `policy` here, and they
     // touch different halves of the loop below: `cmyk_intent` decides
@@ -1159,7 +1183,7 @@ fn decode_sampled(
         // `/ColorSpace` here is the inverted-inversion bug, and it would
         // produce wrong colour on exactly the files a producer took the
         // trouble to tag.
-        Some(obj) => resolve_space(doc, obj, resources, 0, intent)?,
+        Some(obj) => resolve_space(doc, obj, resources, 0, intent, icc)?,
         // `/ColorSpace` absent. Required for every other image (Table
         // 89: "Required for images, except those that use the JPXDecode
         // filter"), so this is malformed unless the codestream can
@@ -1282,7 +1306,9 @@ fn decode_sampled(
     // nothing for the compositor to select between.
     let op_kind: Option<crate::overprint::SourceKind> = match &space {
         Space::Indexed {
-            overprint: Some(o), ..
+            base_icc_managed: false,
+            overprint: Some(o),
+            ..
         } => Some(o.kind.clone()),
         Space::Special(cs) => match crate::overprint::classify(
             cs,
@@ -1311,7 +1337,9 @@ fn decode_sampled(
     };
     let palette_op_table: Option<&Vec<[f32; 4]>> = match &space {
         Space::Indexed {
-            overprint: Some(o), ..
+            base_icc_managed: false,
+            overprint: Some(o),
+            ..
         } => Some(&o.entries),
         _ => None,
     };
@@ -1720,6 +1748,18 @@ fn decode_sampled(
     Ok(DecodedImage {
         pixmap,
         ink,
+        // Both shapes count: a direct `ICCBased` image, and an `/Indexed`
+        // one whose BASE was managed at palette-build time. The second is the
+        // common shape in the conformance corpus, and omitting it is what made
+        // the first cut of this flag under-report.
+        icc_managed: matches!(space, Space::Icc { .. })
+            || matches!(
+                space,
+                Space::Indexed {
+                    base_icc_managed: true,
+                    ..
+                }
+            ),
         // Both halves or neither: a row-3 classification with no planes
         // behind it would let the caller compute rules and then read tints
         // that do not exist.
@@ -2065,6 +2105,18 @@ pub(crate) enum Space {
     ///
     /// `None` for every other base, where there are no colorants to keep.
     Indexed {
+        /// Whether the BASE space was colour-managed when the palette was
+        /// built (`Pass 214.0`).
+        ///
+        /// ★ Recorded here because it cannot be recovered later. This variant
+        /// keeps resolved TABLES, not the base space, so by the time anything
+        /// asks "was this image managed?" the base is gone — and an
+        /// `/Indexed` over `ICCBased` is exactly the shape the conformance
+        /// corpus uses. Without this the disclosure counter reported such an
+        /// image as UNMANAGED while its palette had in fact been converted
+        /// through the profile, which is the same blind spot `Pass 207.0`
+        /// fixed one level up, one level further in.
+        base_icc_managed: bool,
         /// The palette, resolved to sRGB — what the screen path reads.
         table: Vec<Rgb>,
         /// The same entries' `DeviceCMYK` colorants, index for index.
@@ -2101,6 +2153,37 @@ pub(crate) enum Space {
     /// step — a `Separation` runs a §7.10 function per distinct sample
     /// tuple — which is what [`TintCache`] exists to bound.
     Special(std::sync::Arc<crate::color::ColorSpace>),
+    /// `[/ICCBased stream]` where the document ALSO named an output device,
+    /// so the samples can actually be colour-managed (`Pass 214.0`).
+    ///
+    /// # Why this is a distinct variant rather than a field on the others
+    ///
+    /// [`Self::Gray`], [`Self::Rgb`] and [`Self::Cmyk`] each document
+    /// themselves as *"`ICCBased` with `N 1`/`N 3`/`N 4`"* — the profile was
+    /// parsed for its `/N` and thrown away, and every `ICCBased` image in the
+    /// corpus took the unmanaged path as a result. Widening those three
+    /// variants would have touched every match arm in this file for a case
+    /// that only arises when a bridge could be built; a separate variant
+    /// leaves all of them exactly as they were.
+    ///
+    /// ★ IT IS ONLY CONSTRUCTED WHEN A BRIDGE EXISTS. No output intent, an
+    /// unparseable profile, or a destination that is not four-component, and
+    /// resolution falls back to the device space by `/N` — today's behaviour,
+    /// bit for bit. So this variant cannot regress a file it does not apply
+    /// to.
+    ///
+    /// # What it changes, and what it deliberately does not
+    ///
+    /// [`Self::to_cmyk`] runs the transform. [`Self::to_rgb`] does **not** —
+    /// it delegates to the device fallback, so the sRGB path does not move.
+    /// That is the same split `Pass 199.2` used for path fills, and it is what
+    /// keeps the change confined to pages that composite in ink.
+    Icc {
+        /// Table 66 `/N`. Drives the sample width exactly as before.
+        n: usize,
+        /// The built source-to-`/OutputIntent` transform.
+        bridge: std::sync::Arc<crate::icc::IccBridge>,
+    },
 }
 
 impl Space {
@@ -2121,6 +2204,7 @@ impl Space {
             // so a wrong answer here shears the image rather than
             // discolouring it.
             Self::Special(cs) => cs.components(),
+            Self::Icc { n, .. } => *n,
         }
     }
 
@@ -2194,6 +2278,22 @@ impl Space {
             // of the "same" CMYK agree on screen by construction rather
             // than by two formulas being kept in step (gstate.rs docs).
             Self::Cmyk => Rgb::from_cmyk(intent, c(0), c(1), c(2), c(3)),
+            // ★ THE sRGB PATH DELIBERATELY DOES NOT MOVE. An `Icc` space
+            // renders on screen exactly as the device space its `/N` implies,
+            // which is what it did before this variant existed.
+            //
+            // Only `to_cmyk` is colour-managed. That confines the change to
+            // pages that composite in ink -- where a wrong conversion is
+            // measurably wrong against a reference -- and keeps every additive
+            // page byte-identical, including the parity fixtures that pin the
+            // quantised sRGB output. Same split `Pass 199.2` used for path
+            // fills, and for the same reason: two coexisting answers, neither
+            // derived from the other.
+            Self::Icc { n, .. } => match n {
+                1 => Rgb::from_gray(c(0)),
+                4 => Rgb::from_cmyk(intent, c(0), c(1), c(2), c(3)),
+                _ => Rgb::from_rgb(c(0), c(1), c(2)),
+            },
         }
     }
 
@@ -2252,6 +2352,23 @@ impl Space {
         match self {
             Self::Cmyk => Some([c(0), c(1), c(2), c(3)]),
             Self::Special(cs) => cs.to_cmyk(comps, diag),
+            // ★★★ THE COLOUR-MANAGED ROUTE, `Pass 214.0`.
+            //
+            // This one arm is the whole image fix, and it is one arm because
+            // BOTH image routes come through here: a direct `ICCBased` image
+            // asks per sample, and an `/Indexed` one asks once per palette
+            // entry at table-build time via the base space. Putting the
+            // transform anywhere else would have needed it in two places.
+            //
+            // Returning `Some` also flips `yields_cmyk`, which is the gate
+            // that allocates `DecodedImage::ink` -- so an ICC image starts
+            // carrying authored ink and stops being bridged through sRGB by
+            // `rgb_to_cmyk`, for the same reason and by the same mechanism a
+            // `DeviceCMYK` image did in `Pass 130.1`.
+            //
+            // `None` on a width or destination mismatch, which falls back to
+            // the unmanaged path rather than writing a wrong-width result.
+            Self::Icc { bridge, .. } => bridge.convert_components(comps),
             Self::Gray | Self::Rgb | Self::Indexed { .. } => None,
         }
     }
@@ -2344,6 +2461,58 @@ fn codestream_space(coded: &CodedImage) -> Result<Space, ImageError> {
         )),
     }
 }
+/// What an image decode needs in order to colour-manage an `ICCBased` source.
+///
+/// # Why a struct rather than two parameters
+///
+/// Because they are one dependency, not two, and separating them invites the
+/// bug. The cache decides *whether* a transform can be built; the rendering
+/// intent decides *which* transform — and a cache lookup keyed on the wrong
+/// intent returns a valid `Chain` that silently answers a different question.
+/// Standing rule `R237` is exactly that defect in a different memo, so the two
+/// travel together and cannot be passed independently.
+///
+/// `None` for the cache is the ordinary case and means "do not colour-manage",
+/// which is what every caller did before `Pass 214.0`.
+#[derive(Clone, Copy)]
+pub struct IccContext<'a> {
+    /// The page's built transforms, or `None` to decline colour management.
+    ///
+    /// PRIVATE, and that is the honest surface rather than an oversight: an
+    /// outside caller has no cache to supply — one is built per page by the
+    /// interpreter — so [`Self::unmanaged`] is the only context it could
+    /// construct anyway. Exposing the field would publish
+    /// `IccBridgeCache` for no reachable benefit.
+    cache: Option<&'a crate::icc::IccBridgeCache>,
+    /// §8.6.5.8's intent, from the GRAPHICS STATE rather than the profile —
+    /// `ri` and `/RI` override a profile's default, so reading the profile's
+    /// would make the operator's `ri` a no-op.
+    intent: pdfce_core::color::RenderingIntent,
+}
+
+impl<'a> IccContext<'a> {
+    /// Build a context that WILL colour-manage, from a page's cache.
+    ///
+    /// Crate-internal because the cache is: only the interpreter has one.
+    pub(crate) fn managed(
+        cache: &'a crate::icc::IccBridgeCache,
+        intent: pdfce_core::color::RenderingIntent,
+    ) -> Self {
+        Self {
+            cache: Some(cache),
+            intent,
+        }
+    }
+
+    /// The context that declines colour management, for callers that have no
+    /// document-level destination — tests, and the geometry-only paths.
+    pub fn unmanaged() -> Self {
+        Self {
+            cache: None,
+            intent: pdfce_core::color::RenderingIntent::RelativeColorimetric,
+        }
+    }
+}
 
 /// Resolve a `/ColorSpace` value to a [`Space`].
 ///
@@ -2364,6 +2533,7 @@ pub(crate) fn resolve_space(
     resources: &Dict,
     depth: usize,
     intent: CmykIntent,
+    icc: IccContext<'_>,
 ) -> Result<Space, ImageError> {
     if depth > MAX_COLORSPACE_DEPTH {
         return Err(ImageError::UnsupportedColorSpace(
@@ -2385,7 +2555,7 @@ pub(crate) fn resolve_space(
                     .and_then(|cs| cs.get(other))
                     .map(|o| doc.resolve(o));
                 match entry {
-                    Some(inner) => resolve_space(doc, inner, resources, depth + 1, intent),
+                    Some(inner) => resolve_space(doc, inner, resources, depth + 1, intent, icc),
                     None => Err(ImageError::UnsupportedColorSpace(format!(
                         "/{}",
                         String::from_utf8_lossy(other)
@@ -2393,7 +2563,7 @@ pub(crate) fn resolve_space(
                 }
             }
         },
-        Object::Array(items) => resolve_space_array(doc, items, resources, depth, intent),
+        Object::Array(items) => resolve_space_array(doc, items, resources, depth, intent, icc),
         _ => Err(ImageError::UnsupportedColorSpace(
             "/ColorSpace is neither a name nor an array".into(),
         )),
@@ -2407,6 +2577,7 @@ fn resolve_space_array(
     resources: &Dict,
     depth: usize,
     intent: CmykIntent,
+    icc: IccContext<'_>,
 ) -> Result<Space, ImageError> {
     let family = items
         .first()
@@ -2420,7 +2591,7 @@ fn resolve_space_array(
         // real producers emit.
         _ if items.len() == 1 => {
             let name = Object::Name(pdfce_core::object::Name(family));
-            resolve_space(doc, &name, resources, depth + 1, intent)
+            resolve_space(doc, &name, resources, depth + 1, intent, icc)
         }
         // `[/ICCBased stream]` — §8.6.5.5. pdfce does not parse ICC
         // profiles; the spec's own fallback is the stream's `/N`
@@ -2434,6 +2605,34 @@ fn resolve_space_array(
                 .and_then(|d| d.get(b"N"))
                 .map(|o| doc.resolve(o))
                 .and_then(Object::as_int);
+            // ★★★ COLOUR-MANAGE IT WHEN BOTH ENDS EXIST, `Pass 214.0`.
+            //
+            // Before this, an `ICCBased` image was collapsed to a device space
+            // by `/N` and its profile discarded -- so every ICC image in the
+            // corpus rendered UNMANAGED while the graphics-state path beside
+            // it was managed. Measured on a conformance patch that draws the
+            // same colour through the same embedded profile four ways: the two
+            // VECTOR cells landed within a level of correct and the two IMAGE
+            // cells reproduced the unmanaged answer bit-for-bit.
+            //
+            // The fallback below is untouched and still runs whenever a bridge
+            // cannot be built -- no output intent, an unparseable profile, a
+            // non-CMYK destination. So a file this does not apply to renders
+            // exactly as it did.
+            if let Some(cache) = icc.cache
+                && let Some(components) = n.and_then(|v| usize::try_from(v).ok())
+                && components == 4
+                && let Object::Stream(st) = doc.resolve(&items[1])
+                && let Some(raw) = doc.slice(st.data_span)
+                && let Ok(profile) = pdfce_core::filters::decode_stream(&st.dict, raw)
+                && let Some(bridge) =
+                    cache.get(&std::sync::Arc::from(profile), components, icc.intent)
+            {
+                return Ok(Space::Icc {
+                    n: components,
+                    bridge,
+                });
+            }
             match n {
                 Some(1) => Ok(Space::Gray),
                 Some(3) => Ok(Space::Rgb),
@@ -2451,7 +2650,7 @@ fn resolve_space_array(
         // at construction. `crate::color`'s `Indexed` answers a different
         // question (what colour is index N) and would give the row stride
         // the wrong number of components.
-        b"Indexed" | b"I" => resolve_indexed(doc, items, resources, depth, intent),
+        b"Indexed" | b"I" => resolve_indexed(doc, items, resources, depth, intent, icc),
         // Everything else `crate::color` knows how to parse — the two
         // this Pass exists for (`Separation`, `DeviceN`) and the three
         // that came free with them (`Lab`, `CalGray`, `CalRGB`).
@@ -2538,6 +2737,7 @@ fn resolve_indexed(
     resources: &Dict,
     depth: usize,
     intent: CmykIntent,
+    icc: IccContext<'_>,
 ) -> Result<Space, ImageError> {
     // The palette is built ONCE, at construction, so its conversions are
     // bounded by `hival + 1` and want no cache. The diagnostics are
@@ -2551,7 +2751,7 @@ fn resolve_indexed(
             .ok_or(ImageError::UnsupportedColorSpace(
                 "/Indexed without a base space".into(),
             ))?;
-    let base = resolve_space(doc, base_obj, resources, depth + 1, intent)?;
+    let base = resolve_space(doc, base_obj, resources, depth + 1, intent, icc)?;
     if matches!(base, Space::Indexed { .. }) {
         // §8.6.6.3: the base "shall not be … another Indexed space".
         return Err(ImageError::UnsupportedColorSpace(
@@ -2730,6 +2930,7 @@ fn resolve_indexed(
         ink_table = None;
     }
     Ok(Space::Indexed {
+        base_icc_managed: matches!(base, Space::Icc { .. }),
         table,
         ink: ink_table,
         overprint: op_kind
@@ -2824,6 +3025,7 @@ mod tests {
     fn indexed_default_decode_is_the_identity() {
         // Table 90 / §8.9.5.2 NOTE 2: [0 2ⁿ−1], so y = x.
         let space = Space::Indexed {
+            base_icc_managed: false,
             table: vec![Rgb::BLACK],
             ink: None,
             overprint: None,
@@ -2922,6 +3124,7 @@ mod tests {
     fn an_indexed_space_refuses_the_colorant_question_and_carries_a_table_instead() {
         let mut d = ColorDiagnostics::default();
         let indexed = Space::Indexed {
+            base_icc_managed: false,
             table: vec![Rgb::BLACK; 2],
             ink: Some(vec![[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]),
             overprint: None,

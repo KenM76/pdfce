@@ -7252,7 +7252,24 @@ impl Interpreter<'_> {
             }
         }
 
-        match image::decode(doc, dict, raw, resources, fill, origin, self.policy) {
+        match image::decode(
+            doc,
+            dict,
+            raw,
+            resources,
+            fill,
+            origin,
+            self.policy,
+            // Only colour-manage on a page that composites in ink. On an
+            // additive page an image's authored colorants are never read, so
+            // building a transform would cost a profile parse to produce a
+            // value nothing consumes.
+            if self.blend_space == crate::compositor::BlendSpace::Subtractive {
+                crate::image::IccContext::managed(&self.icc, self.gs.current.rendering_intent)
+            } else {
+                crate::image::IccContext::unmanaged()
+            },
+        ) {
             Ok(decoded) => {
                 // Cloned rather than moved: `ImageNotes` stopped being `Copy`
                 // in `Pass 140.2` (it now carries the decode's colour
@@ -7347,7 +7364,16 @@ impl Interpreter<'_> {
                 if self.blend_space == crate::compositor::BlendSpace::Subtractive
                     && image_source_is_iccbased(doc, dict, resources)
                 {
-                    self.diag.icc_unmanaged_paints += 1;
+                    // ★ `Pass 214.0` split this in two. It used to increment
+                    // `unmanaged` unconditionally, which was right when NO
+                    // image could be managed and became wrong in the opposite
+                    // direction the moment one could. The decoder now reports
+                    // which happened, so the counters answer their own names.
+                    if decoded.icc_managed {
+                        self.diag.icc_managed_paints += 1;
+                    } else {
+                        self.diag.icc_unmanaged_paints += 1;
+                    }
                 }
                 if self.gs.current.overprint_fill
                     && decoded.overprint.is_none()
