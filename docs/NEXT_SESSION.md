@@ -5,292 +5,223 @@ shipped, this says what to do next. **Overwrite it once acted on.**
 
 Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
-**append-only** record — `ROADMAP.md` and `SESSION_LOG.md`.
+append-only record (`ROADMAP.md`, `SESSION_LOG.md`).
 
-Written 2026-08-31, rewritten by the 357th filing after five commits shipped
-in one session: `Pass 193.0` (structure inspection/dump), `Pass 194.0`
-(editable structure round trip), `Pass 192.1` (isolated luminosity mask,
-spec-correct, no observable change), `Pass 192.0` (the Bevel-and-Emboss
-shadow-half root cause, found and fixed), `Pass 195.0` (a mixed `/DeviceN`'s
-discarded spot ink), and `Pass 196.0`/`196.1` (two false-green fixes: a new
-`suite-check.py` `CRIT?` verdict, and the CLI overprint note's corrected
-"nothing is owed there" claim). **§0's prior active/queued items
-(`Pass 193.0`, `Pass 192.0`) are both SHIPPED — nothing is currently active
-or queued from this file's own §0.** **For the ledger — Pass ceiling,
-standing-rule ceiling, decision ceiling, filing count — run
-`python tools/check-ledger-numbers.py`.** It derives all four and is the
-only thing that cannot be stale. **This role had no shell this session;
-nothing below marked "measured" or with a command attached was re-run
-here — confirm before trusting a number in this file.**
+Written **2026-09-01**, at the end of a long session that shipped **Passes
+199.2 through 221.0** and cut **v0.19.0**. Everything below was measured in
+that session with a shell; commands are given so nothing here has to be
+trusted.
 
----
+**For the ledger — rule ceiling, decision ceiling, filing count — run
+`python tools/check-ledger-numbers.py`.** As of writing: next rule **R240**,
+next decision **118**, next filing **363**.
 
-## §0 NOTHING IS CURRENTLY ACTIVE OR QUEUED FROM A PRIOR §0. See §A for candidates.
+★★ **BUT DO NOT TAKE THE PASS NUMBER FROM THAT TOOL RIGHT NOW.** It derives the
+ceiling from the **documents**, and nine commits are unfiled — so it reports a
+highest ID of **212.0** while **213.0 through 221.0 are already used in commit
+messages**:
 
-★ **Closed items are kept below as one-line verdicts rather than deleted**,
-so a reader can see they were **answered**, not dropped.
+    213.0  1f1ef21   214.0  edd521e   215.0  d5d012e
+    216.0  de3469c   217.0  643e270   218.0  4b4af37
+    219.0  f7eb4a1   220.0  407336e   221.0  faf699a
 
-### ~~`Pass 193.0` — PDF internal-structure inspection/dump~~ — **SHIPPED 2026-08-31 by `Pass 193.0` (`4ee56bb`), filed here by the 357th filing**
-
-**VERDICT: shipped**, beyond the provisional scope this file's prior
-revision recorded — `pdfce-core::structure` + `pdfce-cli dump-object`/
-`dump-structure`/`list-objects`, plus the physical layout (xref style,
-`/ObjStm` membership, incremental-revision/trailer chain, linearization)
-and a reverse-reference map. Acrobat has no machine-readable equivalent at
-all (parity-plus, per `pdfce-acrobat-librarian`). One test was found
-**silently vacuous and fixed before shipping** — it pointed at a corpus
-file with no object streams, took its skip branch, and reported `ok`
-while asserting nothing. **Full record:** `ROADMAP.md`'s `Pass 193.0`
-*Shipped* entry.
-
-### ~~`Pass 192.0` — the green Bevel-and-Emboss cell's missing shadow half~~ — **SHIPPED 2026-08-31 by `Pass 192.0` (`185500d`), filed here by the 357th filing**
-
-**VERDICT: root cause found and fixed.** A second `gs /SMask` REPLACES the
-mask in force (ISO 32000-1 Table 58) — pdfce was multiplying onto it
-instead, so a bevel's two complementary masks collapsed to ≈0 and the
-shadow vanished. Measured: cell mean-abs-diff 29.70 → 2.95 (of 18,496 px);
-pixels >30, 6,466 → 155; wrong quadrant's luminance 101.3 → 58.5 against a
-reference of 58.8. **A prior "refuted by ablation" verdict for this defect
-is corrected in the same filing** — the ablation forced a function
-(`overprint::classify`) this content's route never calls, so its null
-result was ineffective, not exculpatory; assessed as a standing-rule
-candidate and **declined** (fourth phrasing of an already-recorded idea;
-written up as a cross-project RAG finding instead). **Full record:**
-`ROADMAP.md`'s `Pass 192.0` *Shipped* entry.
+**The next free Pass is 222.0.** Once the librarian files those nine (§B), the
+tool agrees again and this warning can be deleted. Verify with
+`git log --oneline -20 | head` before minting a number.
 
 ---
 
-## §A — Candidates, ordered by my read of value. None is a commitment.
+## §0 ACTIVE — the spot-colorant plane, step 1 of ~4 landed and INERT
 
-1. **★ CHECK BOTH FeatureRequests CHANNELS FIRST.** They live outside the repo
-   so no gate can contradict a stale "it's empty":
-   - `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`
-   - `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\`
+`Pass 217.0` (`643e270`) added the carrier: `PixelCmyk::s: [f32; MAX_SPOTS]`
+with `MAX_SPOTS = 4`, threaded through the compositor, **every value pinned at
+zero**. It was proved to change nothing — the conformance sweep is byte-identical
+before and after, which is the entire point of landing it separately.
 
-   **Not re-checked by this filing — no shell available to this role this
-   session.** Last checked by the 355th filing (three answered requests
-   still sitting in `open/` with outbound replies beside them).
+**Nothing else of it exists**: no roster, no plane allocation, no deposit, no
+Table 149 spot rules, no collapse.
 
-2. **The four new *Backlog* entries filed this session**, all naming a
-   residual of `Pass 196.0`/`196.1`'s fixes:
-   - A committed test pins a known-wrong value —
-     `crates/pdfce-render/tests/grey_overprint.rs`'s third assertion,
-     re-derive once the n-channel buffer lands.
-   - A disclosure counter for "a process-space image over an already-
-     flattened spot" — `overprint_images_unsupported` should fire here and
-     reads 0.
-   - `tools/overprint_image.rs`'s CI signature table is missing the row
-     that would catch the above.
-   - Larger, unscoped: invert `tools/suite-check.py`'s default so `clean`
-     requires the patch's own text to state a criterion this harness
-     checks — needs an X-language detector first; scope with the operator.
+### Why this is the top item
 
-3. **`Pass 142.0`** — a font face outside the standard 14. The largest
-   remaining *named* feature, **de-prioritised by the consuming project's
-   own use report**, not by us: *"Synthetic is enough. Drop `142.0` down the
-   queue."* Not closed, not declined.
-   ★ `bind_font_resource` (`text_edit/addtext.rs`) is the single
-   implementation of "add a `/Font` entry"; `142.0` extends it and does not
-   write a second one. Three save paths exist — `EditSession::format_text`,
-   its form twin, and the one-shot `text_edit::set_format` (the one the CLI
-   uses); `Pass 162.0` wired two, every unit test passed, and the binary
-   printed a disclosure about a resource it had not written.
+**Seven of the ten failures the operator can see are this one thing** — `PCS
+2.0`, `3.0`, `3.1`, `4.0`, `4.1`, `8.1`, `8.01`. There is no cheap version of
+any of them individually.
 
-4. **The `text_edit` resolver residual** (`ROADMAP.md` *Backlog*).
-   `edit_text`, `format_text` and the two `preview_*` verbs still pass
-   `&self.base` to the text planner **as the object resolver**, so a `/Font`
-   created this session cannot be resolved through it. **The outcome is a
-   clean refusal, not a wrong edit**, unchanged since before `Pass 186.0`.
-   ★ **Re-size it before scheduling it** — the obvious shape is threading a
-   view through `text_edit`'s ~40 `doc: &Document` signatures, wide and
-   mechanical, in the crate's most defect-prone module.
+### The design is already scoped, do not re-derive it
 
-5. **`/AP` `/D` (the pressed appearance) and `/MK` icon/label layout**, the
-   remainder of `Pass 131.0`. ★ It is **appearance work** (`R43`'s
-   neighbourhood), not a continuation of the button-action work.
+A full scoping study ran this session. Its conclusions, all measured:
 
-6. **The n-channel (per-spot-colorant) buffer** — the only path to the print
-   suite's remaining overprint/spot FAILs. **Now a FIVE-member bucket**,
-   not four: `PCS2_020`/`030`/`031`/`040`/`081` (`PCS2_031` joined this
-   session, per `Pass 196.0`). **Operator's call; do not scope it without
-   him.**
+- **`spots: Vec<SpotPlane>` from day one, cap defaulting to 4.** Invasiveness
+  is *identical* to a fully general n-channel buffer — the cap is one
+  comparison — so a bounded first cut costs nothing later.
+- **Change surface: 18 composite call sites across 7 files.** `PixelCmyk` is
+  confined to `cmyk_buffer.rs` (19 uses) and `compositor.rs` (14).
+- **Memory decides the cap, not the census.** 20 B/px today, 36 B/px at four
+  spots; a 300 DPI Letter page with four spot planes needs **289 MiB** against
+  the 256 MiB default ceiling and would be REFUSED. So planes must be allocated
+  from a per-page **roster**, never provisioned to the maximum.
+- **Corpus census (4,023 files): 98.6% name no spot colorant at all**, 99.85%
+  name three or fewer, maximum seen anywhere is nine.
+- **Identity rule: the decoded name BYTE STRING and only that.** §8.6.6.4's
+  device test consults only the name; §7.3.5 NOTE 4 makes byte-differing names
+  distinct even if they render identically. `/None` never gets a plane; `/All`
+  is a **broadcast**, not a plane; `NChannel`'s `/Process` overrides the name
+  test. (`Colorant::Named` was changed to `Box<[u8]>` in `Pass 210.0`
+  specifically so this rule is implementable.)
+- **Smallest first increment: roster + ONE plane, path fills only.** Predicted
+  by `docs/suite-patch-reference.md` §3 to fix `PCS 3.0`'s traps at (27,68) and
+  (28,135), which are `0 0 0 .5 k` and `.5 g` **fills** over a spot backdrop.
 
-7. **`CmykIntent::Calibrated`'s cool greys** — still not ours to fix
-   (decision `064` puts the conversion in `iccce`'s domain; the operator
-   ruled the default 2026-08-28). ★ **The black end of that same table is a
-   FALSE-DEFECT TRAP** — pdfce is the *closer* answer there and `iccce` said
-   so unprompted. Read `settings/mod.rs`'s doc comment before touching
-   anything CMYK.
+### ★★ TWO HAZARDS THAT WILL NOT ANNOUNCE THEMSELVES
 
-8. **`resize_annotation`'s `/AP` `/N` overwrite gap** (`ROADMAP.md`
-   *Backlog*, filed by `Pass 191.1`) — needs the whole-document
-   `/Contents`-stream reference census `appearance_streams_owned_by`'s own
-   doc comment already names as an open bound, not merely a type test.
+1. **The OPM edition gate flips the moment a fifth plane exists.** ISO 32000-1
+   §8.6.7 disables overprint mode if the device space *"is not `DeviceCMYK`"*
+   (an identity test); ISO 32000-2 says *"does not include CMYK device
+   colourants"* (an inclusion test). **A CMYK+spot buffer is not DeviceCMYK** —
+   so under a 1.7 reading, adding one spot plane turns OPM **inert** on that
+   page, changing content that has nothing to do with spots. Both readings are
+   conformant. This needs its own setting, defaulting to the 2.0 reading so
+   today's behaviour is preserved.
+2. **§11.7.4.2 is a `shall`:** only separable, white-preserving blend modes for
+   spot colours. `Blend::apply_subtractive`'s non-separable arm complements
+   exactly three channels and is structurally CMYK-only — it **must not** be
+   extended over spot planes.
 
-9. **Five ungated derivable counts in `docs/core-api/`** (found 354th
-   filing) — scoping those is a Pass, not a filing.
+### One implementation note that is load-bearing
+
+The collapse (spot tint → CMYK via the tint transform) **must not run per
+pixel**. A tint is one scalar, so each spot's transform is a 1-D function:
+build a 256- or 1024-entry LUT per plane when the roster is fixed. Without it,
+an 8.4 Mpx page with four spots is 33.6 M function evaluations at collapse time.
 
 ---
 
-## §B — What is deliberately NOT being worked, and why
+## §A OTHER CANDIDATES, ranked by measured exposure
 
-- **`/BS` `/W` does not change a check box's or radio button's drawn border.**
-  pdfce authors it at a fixed **1.0**. That is **the artwork's existing
-  contract**, not an oversight — honouring `/BS` `/W` would alter how every
-  pdfce-authored check box already in the wild renders on its next
-  regeneration. `ROADMAP.md` *Backlog*; a decision to take with the
-  operator, not under a bug report.
-- **Rounded corners on widget artwork are ANSWERED, not owed.** `pdfceGUI`
-  checked and there is nothing to scale. A genuine toggle needs a
-  rounded-rectangle primitive first, scoped with the operator.
-- **Teaching `reflow_block`'s planner the overlay.** It is base-indexed
-  because it needs extraction provenance the staging buffer does not carry
-  — the same reason its pre-existing already-edited refusal exists. It now
-  refuses **by name** when the page set changed this session (decision
-  `111`'s one named exception). Converting it is a real feature, not a
-  cleanup.
-- **`census_dangling` will never see a field-name target.** A boundary, not
-  a bug: a name is not a reference. Do not "fix" the census by teaching it
-  names.
-- **C9 — `/StructParent` / `/OBJR` orphaned by an annotation delete.** Owed
-  since `Pass 38.5` and scoped out again: different graph, different
-  carrier, no name-string component.
-- **ce-dimension tolerance, the ISO 286 fit classes** — needs a sourced
-  class/table lookup this project does not have.
+| # | Item | Measured exposure |
+|---|---|---|
+| 1 | **`PCS 22.1`** — a Lab `L*=60` swatch renders `(35,31,32)` where Acrobat gives `(100,101,100)`. Cause NOT diagnosed; the swatch is a Lab fill with a form XObject and an ExtGState over it, so it is **not** simply the Lab conversion. Independent of everything else. | 1 patch, operator-visible |
+| 2 | **Colour-manage ICCBased IMAGES for `/N != 4`** — currently restricted to 4-component sources. See §D why. | blocked on the display conversion |
+| 3 | **`PCS 17.2`** — JPEG 2000 with an ICCBased RGB profile; `codestream_space` discards the profile the same way the image path did before `Pass 214.0`. | 1 patch |
+| 4 | Make `sh` shadings selectable objects (currently counted only). Needs clip tracking — a `sh` fills the current clip and the decomposer does not track `W`/`W*`. | 0.6% of corpus |
+| 5 | Resolve `/OC` layer visibility in the decomposer (currently counted only). Needs the catalog's `/OCProperties` default config, which the walk does not have. | **0** files with a layer OFF |
 
 ---
 
-## §C — ★★ READ BEFORE WRITING CODE. Lessons carried forward from prior sessions, plus one new one.
+## §B STATE OF THE TREE — verified 2026-09-01
 
-1. **★★★★★ NEW, this filing — AN ABLATION OF CODE OFF THE EXECUTION PATH
-   PROVES NOTHING ABOUT THAT PATH.** A prior session forced
-   `overprint::classify` unconditionally, observed no change in a bevel's
-   rendering, and recorded overprint classification as **refuted** as the
-   cause. The bevel's shadow-layer content never calls `classify` at all —
-   the ablation ran on nothing, so its silence was guaranteed by placement,
-   not evidence. The real cause (`Pass 192.0`) was a second `gs /SMask`
-   REPLACING rather than intersecting the mask in force (Table 58).
-   **Before trusting a "no change under ablation" result, prove the
-   ablated function was actually called on the input under test** — a hit
-   counter or `debug_assert!` inside it, not an inference from its general
-   presence in the binary. Declined as a numbered standing rule (fourth
-   phrasing of an already-recorded family); written to
-   `D:/dev/rag/rust/an_ablation_of_code_off_the_execution_path_proves_nothing.md`.
-
-2. **★★★★★ A GUARD WRITTEN FOR ONE CARRIER IS A CLAIM ABOUT A CLASS, AND SO
-   IS ITS ERROR MESSAGE.** `refuse_if_in_page_tree` went from three callers
-   to ten in `Pass 191.1` and its message still named only the two carriers
-   it was built for. Every existing test asserted on the error's
-   **variant**, which stayed right, so nothing caught the **text** drifting
-   away from its widened caller set. `R219`'s trigger, extended from code
-   to operator-facing strings — check a guard's *message*, not only its
-   *logic*, whenever you add a caller to it.
-
-3. **★★★★ A GREEN SUITE CAN BE *VACUOUS* RATHER THAN WEAK, AND RUNNING IT
-   HARDER WILL NEVER SAY SO.** A per-verb test suite tests verbs; a
-   property that lives *between* verbs (e.g. two edits in one session) has
-   no home in it unless something is written specifically to hold that
-   state. `crates/pdfce-core/tests/session_overlay_skew.rs` is the only
-   place in the crate with that shape. **This filing's own instance:**
-   `Pass 193.0`'s test suite had exactly this shape (a skip branch silently
-   passing on a fixture with no object streams) and it was caught pre-ship.
-
-4. **★★★ ASSERT ON THE BYTES, NOT ON THE OUTCOME. A VERB'S OUTCOME STRUCT IS
-   A READER THE VERB WRITES ITSELF.** `Pass 191.0`'s and `191.1`'s own
-   acceptance criteria are sabotage-checked over saved bytes, not outcome
-   structs, precisely because of this — an outcome struct can report success
-   while the bytes it describes were never written.
-
-5. **★★★ A MEMO'S KEY MUST BE THE WHOLE DEPENDENCY SET — AND WHERE THE
-   INPUTS CANNOT NAME A DEPENDENCY, TAKE THE KEY FROM THE WALK'S OUTPUT.**
-   `R237`'s founding shape: a memo key that cannot see a change is a stale
-   index applied to the wrong object, not a stale answer.
-
-6. **★★★ THE BASH TOOL ON THIS MACHINE STRIPS BACKSLASHES FROM QUOTED
-   HEREDOCS.** Rust string-literal line continuations and Python escape
-   sequences get eaten when source is written that way, and `cargo fmt` can
-   then flatten the gap into innocuous-looking spaces. Author such content
-   with the Write/Edit tools, never a heredoc. `tools/check-string-gaps.sh`
-   is the backstop, not the first line of defence.
-
-7. **★★★★ A `debug_assert` TELLS YOU *WHERE THE CHECK RUNS*, NEVER *WHAT THE
-   SHIPPING BUILD DOES WHEN THE PROPERTY IS FALSE* — `R238`.** Before sizing
-   any assertion, answer in writing: *panics anyway* / *returns an error* /
-   **returns `Ok` and writes wrong bytes**. Only the third is urgent, and
-   only measurement distinguishes them.
-
-8. **★★★ A GATE MINTED TO FIX A NUMBER PROTECTS THE PHRASING THAT PROMPTED
-   IT — `R239`.** A check written against one document's exact wording of a
-   fact will not catch the same fact phrased differently in a neighbouring
-   document. `docs/ROADMAP.md`'s *Update protocol*, "How a figure is
-   filed," is the project-visible half. **This filing's own instance of the
-   underlying failure mode (not `R239` itself, but its close cousin): a
-   stale FIGURE (`PCS2_031 = 1, a patch that PASSES`) survived unrevised in
-   FIVE separate documents for over a week** after the counter it was
-   drawn from changed meaning at `Pass 130.2` — found only by a
-   hard-rule-11 sweep, not by any gate.
-
-9. **A REFUSAL THAT FIRES FOR AN UNRELATED REASON IS NOT A GUARD.** Declined
-   as a project standing rule at `n = 1` (two-instance promotion bar not
-   yet met) but written to the cross-project RAG regardless:
-   `D:/dev/rag/rust/a_refusal_that_fires_for_an_unrelated_reason_is_not_a_guard.md`.
-   Mint trigger: a second instance anywhere in this project where a
-   property-harness's "clean" summary is later shown to have masked a real
-   finding because an unrelated refusal or short-circuit prevented its own
-   assertion from running on the input that would have failed it.
-
-10. **A TEST-HARNESS "CLEAN" DEFAULT CAN MASK A DETECTOR GAP, NOT JUST A
-    RENDERER BUG.** `tools/suite-check.py`'s third false-pass class
-    (`Pass 196.0`) is the same failure mode as the `REF`/`MARK?` gaps
-    before it: a patch whose criterion the harness has no detector for
-    fell through to `clean` by default, three separate times, three
-    separate fixes. The larger, unscoped fix (invert the default) is
-    §A item 2's last bullet, above — worth reading before proposing a
-    fourth patch-around.
+- `HEAD` = `faf699a`, `main` pushed, **0 unpushed**.
+- Version **0.19.0**, tag `v0.19.0` at `d19d4e4`, pushed.
+- Portable build at `D:\builds\pdfce-20260901-1146-d19d4e4`; CLI published to
+  OneDrive slot `pdfce2` (slot `pdfce1` holds 0.17.0 as the previous version).
+- **★ EIGHT code commits are unfiled** (`1f1ef21` … `407336e`, plus `faf699a`).
+  `python tools/check-commits-filed.py` lists them. **Dispatch
+  `pdfce-librarian` with each commit's full message early** — they carry the
+  measurements, and a one-line subject cannot supply them.
+- **Backups are stale**: newest bundle is at `0f379b6`. Run
+  `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
+  and `git bundle verify` it.
+- Conformance standing: **7 FAIL / 37 pass / 7 UNRESOLVED of 51**
+  (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir
+  D:/Dev/temp/acro-refs`).
 
 ---
 
-## §D — State of the tree
+## §C THINGS A NEW SESSION MUST KNOW BEFORE TOUCHING ANYTHING
 
-★ **NOT RE-MEASURED by the 357th filing — no shell available to this role
-this session, same as the 355th and 356th.** Everything below is carried
-forward and is now at least **three** filings staler than stated. Per hard
-rule 8: **run the commands, do not trust the numbers below.**
+- **Run `bash tools/run-gates.sh` FOREGROUND, with a warm cache.** Backgrounded
+  it gets killed and the SIGTERM (exit 143) looks exactly like a test failure.
+  It does not fit one 600 s window; run the pieces if it times out.
+- **Never put prose through a Bash heredoc.** Backslashes and backticks are
+  eaten silently — it produced a literal `\n` inside a format string this
+  session, and a NUL byte inside a Python source file. Use `Write`/`Edit`, and
+  `git commit -F <file>`.
+- **Stage by path. Never `git add -A`** — the repository is public and agents
+  share the working tree.
+- **A licensed conformance suite's NAME must never appear in any repo file**,
+  contents or filenames. Use opaque ids (`PCS 8.01`). The private map is at
+  `D:\Dev\pdfce-private\suite\`. `tools/check-suite-name-absent.py` enforces it
+  for the work tree **and, since `Pass 208.0`, for unpushed commit messages**.
+- **Check BOTH feature-request channels every session** —
+  `D:\Dev\FeatureRequests\pdfce_FeatureRequests\` and `…\iccce_FeatureRequests\`.
+  They are outside the repo, so no gate can contradict a stale "it's empty".
+- **`docs/core-api/` is engineer-owned and must move in the SAME Pass** as any
+  `pub` change to `EditSession`. Run `python tools/check-core-api-verbs.py`.
+- Pushing `main` is standing-authorized. **Cutting a tag/release is not** —
+  that needs an explicit, current go-ahead each time.
 
-Run these rather than trusting a sentence:
+---
 
-```
-python tools/check-ledger-numbers.py      # all four ceilings
-bash tools/run-gates.sh                   # the full sweep; it derives its
-                                          # own list, so do not memorise a count
-git log --oneline -10                     # confirm the five commits this
-                                          # filing records land in the order
-                                          # this filing assumed — NOT verified
-                                          # by this role this session
-git rev-list --count origin/main..main    # how far ahead
-ls -lt D:/Dev/pdfce-backups/               # newest bundle
-gh run list --limit 3                     # CI's colour, from GitHub
-```
+## §D ★★ MEASURED NEGATIVES — DO NOT RE-DERIVE THESE
 
-- **Unpushed-commit count: NOT ASSERTED by this filing.** The five commits
-  this filing records (`4ee56bb`, `bd2df96`, `7360696`, `185500d`,
-  `4299174`) are additional to whatever was unpushed at the 356th filing's
-  own last-measured figure, which this filing does not repeat because
-  repeating it would be stale by construction. Run `git rev-list --count
-  origin/main..main` before pushing.
-- **Backup bundle currency: NOT ASSERTED by this filing**, for the same
-  reason. Run `ls -lt D:/Dev/pdfce-backups/` and `git rev-list --count
-  <bundle-hash>..HEAD` before trusting any figure about it.
-- **Working-tree cleanliness: NOT ASSERTED by this filing** — no shell this
-  session. Re-measure and attribute before staging anything; stage by path,
-  never `git add -A`, per the standing instruction (the repository is
-  public).
-- **★ `R217` does NOT constrain pushing.** It constrains what may land **on
-  top of** an unfiled commit. Read its amendment note in `ROADMAP.md`'s
-  *Standing rules* before assuming otherwise.
-- **Pushing `main` (ordinary fast-forward) is standing-authorized** (rule 8,
-  decision `090` — *"always push"*); cutting a tag or release is **not**,
-  and neither is a force push or a non-`main` branch push. Scrub
-  `tools/check-suite-name-absent.py` green **before** pushing regardless —
-  the repository is public, so a push publishes.
-- **Read CI's colour from GitHub**, not from a sentence in a document.
+Each cost a full ablation this session. Every one looked obviously right first.
+
+1. **Do NOT colour-manage ICCBased images with `/N != 4`.** Tried; measured
+   3× and 1.8× WORSE on two patches (`20.59 → 62.51`, `17.87 → 31.50`), a net
+   conformance regression. **Why:** managing an RGB image moves it onto the INK
+   path, whose terminal CMYK→sRGB conversion is separately ~10 levels from
+   Acrobat. A CMYK image was already ink-bound so the profile is pure gain; an
+   RGB image was not, and pays more than it gains. Restricting to 4-component
+   sources keeps the win with zero regression.
+2. **Do NOT rewire the terminal CMYK→sRGB display conversion to iccce.** Probed
+   at all four intents through the document's own `/OutputIntent` profile: best
+   case mean error **8.0** against today's **10.3**, and *every* intent clips
+   red to 0 where both pdfce and Acrobat show non-zero. `CmykIntent` is already
+   on `Calibrated`, the best-evidenced of its two values. The residual ~10-level
+   offset is a known, accepted gap — **do not chase it as an ICC-source defect.**
+3. **Do NOT extend `Pass 201.0`'s shading `ink_reach` narrowing to images.**
+   Tried (`Pass 203.0`, reverted); measured `23.90 → 28.68` — a regression, and
+   the marks it targeted did not return. **Why:** a shading sits OVER a thin
+   mark, so handing an untouched channel back to the backdrop restores it; a
+   photograph COVERS an area, so handing back its untouched channels makes it
+   partly transparent to whatever is beneath. *"The same defect in a different
+   object type"* was a false premise.
+4. **`OverprintZeroTintScope`'s default is NOT "Acrobat's reading"** — measured
+   false on process geometry (Acrobat `255,255,255`, this default
+   `142,198,63`). It matches Acrobat over a SPOT backdrop and not over process
+   components, so *"toward Acrobat"* is a property of the geometry you test on.
+   **Do not flip the default alone**: it is trap-neutral (17 → 17) because it
+   corrects one cell and breaks another that passes only through a compensating
+   error. The honest fix is the literal row assignment **together with** the
+   spot plane.
+
+---
+
+## §E ONE ITEM OWED BY THE OPERATOR
+
+**82 of 1,220 commit messages in published history contain the licensed suite's
+name in plaintext**, and the repository is public. `ROADMAP.md` open question
+`(ca)` records it with three options stated neutrally. Removing them means
+rewriting published history, which project rule 8 reserves to Ken and which
+this project has direct evidence breaks every document citing a commit hash.
+
+Option 3 — extend the gate so the count cannot grow — is **DONE**
+(`Pass 208.0`). Options 1 and 2 are his.
+
+★ File contents in history are **not** affected; a `git grep` hit on
+`fixtures/synthetic/ocr/scan.pdf` is a three-byte coincidence in compressed
+data, and the gate's exclusion of binaries is documented as deliberate.
+
+---
+
+## §F THE PATTERN THIS SESSION KEPT HITTING, worth carrying forward
+
+Six separate defects had the same shape: **a counter, comment or threshold that
+could not see part of its own subject, and therefore reported a different
+question from the one its name asked.**
+
+- A trap detector with no reference control, inventing one failure.
+- The same detector rejecting a real trap for being **four pixels** too wide.
+- A disclosure counter that could see graphics-state paints but not images.
+- A gate anchored on a stale key, failing to find its target for several Passes
+  while nobody read its output.
+- Three comments asserting a spec gap did not exist, while the code beside them
+  implemented the gap correctly.
+- An object model with twelve diagnostics counters, **none** of which could
+  report unmodelled state.
+
+⇒ **When a measurement looks clean, ask what the instrument cannot see.** In
+five of the six, the operator's eyes or a reference engine found it and nothing
+internal could have. Running a detector against the *reference* — the engine
+assumed correct — is the cheapest version of that check and it is now in
+`suite-check.py`.
