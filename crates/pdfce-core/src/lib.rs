@@ -130,6 +130,7 @@ pub mod richtext;
 pub mod settings;
 pub mod signature;
 pub mod span;
+pub mod structure;
 pub mod text_edit;
 pub mod text_extract;
 pub mod text_state;

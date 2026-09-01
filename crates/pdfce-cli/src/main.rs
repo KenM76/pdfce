@@ -3183,6 +3183,106 @@ enum Command {
         pages: String,
     },
 
+    /// **Print one object's internal structure** (ISO 32000-1 §7.3).
+    ///
+    /// Shows the object exactly as pdfce parsed it, whether it sits at a byte
+    /// offset in the file or compressed inside an object stream (§7.5.7) —
+    /// which is the case `grep` cannot reach and which is why this exists.
+    ///
+    /// Indirect references are expanded to `--depth` levels. Cycles are
+    /// detected and marked rather than followed: a page's `/Parent` points back
+    /// at its `/Pages` node, so a realistic dump revisits objects immediately
+    /// and that is normal, not malformed.
+    ///
+    /// Read-only. Writes nothing, and the output is a REPORT, not PDF syntax —
+    /// do not feed it back to a parser.
+    DumpObject {
+        /// Input PDF.
+        input: PathBuf,
+        /// Object number to print.
+        #[arg(long)]
+        id: u32,
+        /// Generation number (§7.3.10). Almost always 0.
+        #[arg(long, default_value_t = 0)]
+        generation: u16,
+        /// How many levels of indirect reference to expand.
+        ///
+        /// `0` prints references as `N G R` without following them. This is
+        /// REFERENCE depth, not container nesting: a deeply nested direct
+        /// dictionary prints in full at 0, because it is all one object.
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
+        /// Whether to include stream data, and in what form.
+        ///
+        /// `decoded` runs every filter in `/Filter`; `raw` shows the bytes as
+        /// stored, which is what you want when the FILTER is under suspicion.
+        /// A stream that will not decode reports its filter error in place and
+        /// the dump continues.
+        #[arg(long, value_enum, default_value_t = StreamDump::Omit)]
+        streams: StreamDump,
+        /// Ceiling on bytes shown per stream. Truncation is always disclosed.
+        ///
+        /// Applied AFTER decoding, because the decoded size is the one that can
+        /// explode: a small stream can inflate enormously, and a ceiling on the
+        /// encoded size would not catch it.
+        #[arg(long, default_value_t = 4096)]
+        max_stream_bytes: usize,
+    },
+
+    /// **Walk and print a document's object graph** from a chosen root.
+    ///
+    /// Breadth of the walk is bounded by `--max-objects`, and hitting that
+    /// ceiling is REPORTED rather than left to look like completeness.
+    ///
+    /// Read-only.
+    DumpStructure {
+        /// Input PDF.
+        input: PathBuf,
+        /// Where to start: `catalog`, `page:<n>` (1-based), or `<num>[,<gen>]`.
+        #[arg(long, default_value = "catalog")]
+        root: String,
+        /// Ceiling on how many distinct objects the walk will print.
+        #[arg(long, default_value_t = 256)]
+        max_objects: usize,
+        /// Whether to include stream data, and in what form.
+        #[arg(long, value_enum, default_value_t = StreamDump::Omit)]
+        streams: StreamDump,
+        /// Ceiling on bytes shown per stream. Truncation is disclosed.
+        #[arg(long, default_value_t = 1024)]
+        max_stream_bytes: usize,
+    },
+
+    /// **Inventory every object, and report the file's physical layout.**
+    ///
+    /// Two things a page-level view cannot show. Per object: where it actually
+    /// lives (a byte offset, or a slot inside a named object stream), its
+    /// `/Type` and `/Subtype`, and **what references it**. Per file: the
+    /// cross-reference style (table, stream, or hybrid), which objects are
+    /// compressed inside which container, linearization, encryption, and
+    /// whether the cross-reference table had to be rebuilt by scanning.
+    ///
+    /// The reverse-reference column is the one Acrobat has no equivalent for,
+    /// and it answers the questions operators actually ask — *what still points
+    /// at this?* An object nothing references is listed under `unreferenced`;
+    /// that is **not** by itself a defect, because an incremental update leaves
+    /// superseded objects behind by design (§7.5.6).
+    ///
+    /// Read-only.
+    ListObjects {
+        /// Input PDF.
+        input: PathBuf,
+        /// Only list objects whose `/Type` matches this name (e.g. `Page`,
+        /// `Font`, `ExtGState`). Case-sensitive, as PDF names are.
+        #[arg(long)]
+        filter_type: Option<String>,
+        /// Print only the file-layout summary, not the per-object rows.
+        #[arg(long)]
+        layout_only: bool,
+        /// Also list objects nothing references.
+        #[arg(long)]
+        show_unreferenced: bool,
+    },
+
     /// List a PDF's interactive-form (AcroForm) fields (Pass 7).
     ///
     /// Prints one stable, locale-invariant line per terminal field —
@@ -7364,6 +7464,33 @@ enum Command {
 /// The DEFAULT is the one the GUI does, because this flag's documented job is
 /// to be authoritative about the GUI's behaviour, and a default that is not
 /// that makes the documentation false again the moment anyone reads it.
+/// Whether a structure dump includes stream data, and in what form.
+///
+/// The shell mirror of `pdfce_core::structure::StreamMode`. Deliberately a
+/// separate type rather than a `ValueEnum` derive on the core enum: `clap` is a
+/// GUI-adjacent concern and `pdfce-core` does not depend on it, which is the
+/// crate-separation invariant rather than a preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum StreamDump {
+    /// Report each stream's dictionary and its length; omit the data. Default.
+    Omit,
+    /// The bytes as stored, still encoded — what you want when the filter
+    /// itself is under suspicion.
+    Raw,
+    /// The bytes after every filter in `/Filter` has run.
+    Decoded,
+}
+
+impl From<StreamDump> for pdfce_core::structure::StreamMode {
+    fn from(v: StreamDump) -> Self {
+        match v {
+            StreamDump::Omit => Self::Omit,
+            StreamDump::Raw => Self::Raw,
+            StreamDump::Decoded => Self::Decoded,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum HitScope {
     /// Descend into form XObjects; never name a form itself. The GUI's
@@ -8433,6 +8560,32 @@ fn run() -> ExitCode {
             print_state,
         ),
         Command::ListAnnotations { input, pages } => cmd_list_annotations(&input, &pages),
+        Command::DumpObject {
+            input,
+            id,
+            generation,
+            depth,
+            streams,
+            max_stream_bytes,
+        } => cmd_dump_object(&input, id, generation, depth, streams, max_stream_bytes),
+        Command::DumpStructure {
+            input,
+            root,
+            max_objects,
+            streams,
+            max_stream_bytes,
+        } => cmd_dump_structure(&input, &root, max_objects, streams, max_stream_bytes),
+        Command::ListObjects {
+            input,
+            filter_type,
+            layout_only,
+            show_unreferenced,
+        } => cmd_list_objects(
+            &input,
+            filter_type.as_deref(),
+            layout_only,
+            show_unreferenced,
+        ),
         Command::ListFields {
             input,
             fillable_only,
@@ -34395,4 +34548,245 @@ fn cmd_bookmark_paste(args: &BookmarkPasteArgs<'_>) -> u8 {
         outcome.changed,
     );
     finish_edit(args.input, &outcome)
+}
+
+/// **Print one object's internal structure** (`Pass 193.0`).
+///
+/// The verb that closes the gap this Pass exists for: before it, an
+/// `/ExtGState` compressed inside an object stream was unreachable from any
+/// shipped command, and diagnosing a rendering defect that depended on one
+/// meant hand-decompressing the file in a throwaway script.
+///
+/// Read-only. Every bound is disclosed in the output rather than applied
+/// silently — see `pdfce_core::structure` for why each exists.
+fn cmd_dump_object(
+    input: &Path,
+    id: u32,
+    generation: u16,
+    depth: usize,
+    streams: StreamDump,
+    max_stream_bytes: usize,
+) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let target = pdfce_core::object::ObjId::new(id, generation);
+    let options = pdfce_core::structure::DumpOptions::default()
+        .with_depth(depth)
+        .with_streams(streams.into())
+        .with_max_stream_bytes(max_stream_bytes);
+    // The physical fact first, because it is the one the logical dump hides
+    // and the one that explains why an object was invisible to a text search.
+    let inv = pdfce_core::structure::inventory(&doc);
+    if let Some(row) = inv.objects.iter().find(|r| r.id == target) {
+        println!("% {} — {}", row.id, describe_storage(row.storage));
+        if !row.referenced_by.is_empty() {
+            let names: Vec<String> = row.referenced_by.iter().map(ToString::to_string).collect();
+            println!("% referenced by: {}", names.join(", "));
+        } else if inv.trailer_referenced.contains(&target) {
+            println!("% referenced by: the trailer");
+        } else {
+            println!("% referenced by: nothing (see `list-objects --show-unreferenced`)");
+        }
+    }
+    print!(
+        "{}",
+        pdfce_core::structure::render_object(&doc, doc.bytes(), target, &options)
+    );
+    exit::SUCCESS
+}
+
+/// **Walk and print a document's object graph** from a chosen root.
+fn cmd_dump_structure(
+    input: &Path,
+    root: &str,
+    max_objects: usize,
+    streams: StreamDump,
+    max_stream_bytes: usize,
+) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let start = match resolve_dump_root(&doc, root) {
+        Ok(id) => id,
+        Err(msg) => {
+            eprintln!("pdfce-cli: {}: {msg}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let options = pdfce_core::structure::DumpOptions::default()
+        .with_max_objects(max_objects)
+        .with_streams(streams.into())
+        .with_max_stream_bytes(max_stream_bytes);
+    println!("% walk from {start}");
+    print!(
+        "{}",
+        pdfce_core::structure::walk(&doc, doc.bytes(), start, &options)
+    );
+    exit::SUCCESS
+}
+
+/// Turn a `--root` spec into an object id.
+///
+/// Accepts `catalog`, `page:<n>` (1-based, matching how every reader numbers
+/// pages), or a bare `<num>[,<gen>]`. Errors name what was accepted rather than
+/// only what was rejected, because a rejected spec is usually a guess at the
+/// syntax.
+fn resolve_dump_root(
+    doc: &pdfce_core::document::Document,
+    spec: &str,
+) -> Result<pdfce_core::object::ObjId, String> {
+    use pdfce_core::object::ObjId;
+    let spec = spec.trim();
+    if spec.eq_ignore_ascii_case("catalog") {
+        return doc
+            .view()
+            .graph()
+            .catalog_id()
+            .ok_or_else(|| "this document has no resolvable /Root catalog".to_owned());
+    }
+    if let Some(rest) = spec.strip_prefix("page:") {
+        let n: usize = rest
+            .parse()
+            .map_err(|_| format!("`page:{rest}` — expected a 1-based page number"))?;
+        let pages = pdfce_core::page_tree::pages(doc).map_err(|e| format!("page tree: {e}"))?;
+        let idx = n
+            .checked_sub(1)
+            .ok_or_else(|| "page numbers are 1-based; `page:0` does not exist".to_owned())?;
+        return pages
+            .get(idx)
+            .map(|p| p.id)
+            .ok_or_else(|| format!("page {n} is past the end; the document has {}", pages.len()));
+    }
+    let (num, generation) = match spec.split_once(',') {
+        Some((a, b)) => (a.trim(), b.trim()),
+        None => (spec, "0"),
+    };
+    let num: u32 = num
+        .parse()
+        .map_err(|_| format!("`{spec}` — expected `catalog`, `page:<n>`, or `<num>[,<gen>]`"))?;
+    let generation: u16 = generation
+        .parse()
+        .map_err(|_| format!("`{spec}` — generation must be a number"))?;
+    Ok(ObjId::new(num, generation))
+}
+
+/// One object's storage, in the operator's terms.
+fn describe_storage(s: pdfce_core::structure::Storage) -> String {
+    use pdfce_core::structure::Storage;
+    match s {
+        Storage::AtOffset { offset, generation } => {
+            format!("at byte offset {offset} (generation {generation})")
+        }
+        Storage::InObjectStream { container, index } => format!(
+            "COMPRESSED inside object stream {container} at index {index} — this is why a text \
+             search of the file cannot find it (ISO 32000-1 §7.5.7)"
+        ),
+        Storage::Free { generation } => {
+            format!("marked FREE by the cross-reference (next generation {generation})")
+        }
+        Storage::Unindexed => "parsed, but the cross-reference table has no entry for it — \
+             expected on a recovered document, whose table was rebuilt by scanning"
+            .to_owned(),
+    }
+}
+
+/// **Inventory every object, and report the file's physical layout.**
+fn cmd_list_objects(
+    input: &Path,
+    filter_type: Option<&str>,
+    layout_only: bool,
+    show_unreferenced: bool,
+) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let layout = pdfce_core::structure::layout(&doc);
+    println!("version={}", layout.version);
+    println!("xref_style={}", layout.xref_style);
+    println!("startxref={}", layout.startxref);
+    println!("objects={}", layout.object_count);
+    println!("highest_object_number={}", layout.highest_object_number);
+    println!("linearized={}", layout.linearized);
+    println!("encrypted={}", layout.encrypted);
+    println!("object_streams={}", layout.object_streams.len());
+    for (container, members) in &layout.object_streams {
+        println!(
+            "  objstm {container}: {} object(s) {members:?}",
+            members.len()
+        );
+    }
+    if layout.suppressed_by_size > 0 {
+        // Not a curiosity: raising /Size — which creating any object does —
+        // would expose every one of these.
+        println!(
+            "suppressed_by_size={}  % the file's /Size HIDES this many cross-reference entries",
+            layout.suppressed_by_size
+        );
+    }
+    if let Some(r) = &layout.recovered {
+        println!(
+            "recovered=yes  % the cross-reference table was rebuilt by scanning; this document \
+             cannot be saved incrementally. {r}"
+        );
+    }
+
+    if layout_only {
+        return exit::SUCCESS;
+    }
+
+    let inv = pdfce_core::structure::inventory(&doc);
+    println!();
+    for row in &inv.objects {
+        if let Some(want) = filter_type
+            && row.type_name.as_deref() != Some(want)
+        {
+            continue;
+        }
+        let ty = row.type_name.as_deref().unwrap_or("-");
+        let sub = row.subtype.as_deref().unwrap_or("-");
+        let storage = match row.storage {
+            pdfce_core::structure::Storage::AtOffset { offset, .. } => format!("offset:{offset}"),
+            pdfce_core::structure::Storage::InObjectStream { container, index } => {
+                format!("objstm:{container}[{index}]")
+            }
+            pdfce_core::structure::Storage::Free { .. } => "free".to_owned(),
+            pdfce_core::structure::Storage::Unindexed => "unindexed".to_owned(),
+        };
+        let bytes = row
+            .stream_bytes
+            .map_or_else(|| "-".to_owned(), |n| n.to_string());
+        println!(
+            "{} kind={} type={ty} subtype={sub} {storage} stream_bytes={bytes} refs={}",
+            row.id,
+            row.kind,
+            row.referenced_by.len()
+        );
+    }
+
+    if show_unreferenced {
+        let orphans = inv.unreferenced();
+        println!();
+        println!(
+            "unreferenced={}  % NOT by itself a defect: an incremental update leaves superseded \
+             objects behind by design (ISO 32000-1 §7.5.6)",
+            orphans.len()
+        );
+        for id in orphans {
+            println!("  {id}");
+        }
+    }
+    exit::SUCCESS
 }
