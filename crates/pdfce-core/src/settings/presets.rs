@@ -483,6 +483,34 @@ impl RenderPreset {
     /// at. In `pdfce-cli` the invocation is the commit, so these are printed
     /// on the way past; in a GUI they belong off-canvas, beside the control,
     /// never drawn into the page.
+    ///
+    /// # What is curated, and by what rule
+    ///
+    /// This is a **curated summary**, not a dump of [`Self::entries`], and the
+    /// rule deciding what gets a sentence of its own is the entry's
+    /// [`Evidence`]:
+    ///
+    /// * an entry the preset SETS whose evidence is **a claim about the
+    ///   standard** ([`Evidence::is_a_claim_about_the_standard`] — `Sourced`
+    ///   or `Implied`) gets its `why` verbatim, because that `why` carries the
+    ///   clause citations and the sentence that keeps the claim from
+    ///   over-reaching, and a count cannot carry either;
+    /// * an entry the preset sets as **`BestEffort`** is summarised by the
+    ///   count sentence only — a count is an honest summary of a judgement;
+    /// * an entry **left alone** gets its `why`, because "the standard does
+    ///   not reach this axis" is itself a claim about the standard.
+    ///
+    /// ★ Until `Pass 241.0` the first bullet was missing: set entries had
+    /// their `why` discarded whatever their evidence, and it did not show
+    /// because until `Pass 237.0` every set entry was `BestEffort`. The
+    /// spot-colorant device model is `Implied`, and its `why` is the only
+    /// sentence anywhere telling an operator that a composite viewer will
+    /// show some areas knocked out where pdfce keeps them — a visible
+    /// divergence that reads as somebody's bug without it. `pdfceGUI` had to
+    /// read `entries()` around this function to show it (their note of
+    /// 2026-09-02), which is the boundary defect this rule closes. A consumer
+    /// that wants every `why` regardless still reads [`Self::entries`]; that
+    /// is a deliberate choice now, not a workaround.
     #[must_use]
     pub fn disclosures(&self) -> Vec<String> {
         let mut out = vec![format!(
@@ -541,24 +569,43 @@ impl RenderPreset {
         }
 
         if self.standard.output_intent_is_colorimetric() {
+            // ★ Narrowed twice. This said "pdfce does not apply it" outright;
+            // since `Pass 199.2` the destination profile IS applied to an
+            // `ICCBased` paint on an ink-compositing page, since `Pass 214.0`
+            // to `ICCBased` images, and since `Pass 240.0` to `ICCBased` RGB
+            // on every route. What remains unapplied is named exactly, so an
+            // operator can tell which of their colours the sentence is about.
             out.push(
                 "render preset: this standard guarantees a COLORIMETRIC definition of device \
-                 colour (an output intent's destination profile). pdfce does not apply it — \
-                 `cmyk_intent` selects among fixed built-in tables and is not an ICC path — so \
-                 CMYK on this page is converted by a table, not by the file's own profile. \
-                 This is a capability gap, not a mis-set value"
+                 colour (an output intent's destination profile). pdfce applies it only as the \
+                 DESTINATION for colour that arrives through an embedded ICC profile (`ICCBased` \
+                 fills, text and images on a page that composites in ink). `DeviceCMYK` content \
+                 does not go through it, and the final CMYK-to-screen conversion is a built-in \
+                 table selected by `cmyk_intent`, not an ICC path — so device CMYK on this page \
+                 is converted by a table, not by the file's own profile. This is a capability \
+                 gap, not a mis-set value"
                     .to_owned(),
             );
         }
 
         for e in &self.entries {
-            if matches!(e.action, PresetAction::LeaveAlone) {
-                out.push(format!(
+            match e.action {
+                PresetAction::LeaveAlone => out.push(format!(
                     "render preset: `{}` left alone ({}) — {}",
                     e.key.as_str(),
                     e.evidence.label(),
                     e.why
-                ));
+                )),
+                // A SET value that is a claim about the standard carries its
+                // reasoning out of the crate; a best-effort one is covered by
+                // the count sentence above. See the rustdoc for the rule.
+                _ if e.evidence.is_a_claim_about_the_standard() => out.push(format!(
+                    "render preset: `{}` set ({}) — {}",
+                    e.key.as_str(),
+                    e.evidence.label(),
+                    e.why
+                )),
+                _ => {}
             }
         }
         out
@@ -1208,6 +1255,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every value a preset SETS on the strength of a clause carries that
+    /// clause out of the crate, and every best-effort value does not.
+    ///
+    /// The first half is the boundary defect `pdfceGUI` reported on
+    /// 2026-09-02: `disclosures()` emitted a `why` only for left-alone
+    /// entries, so the spot-colorant device model's two citations — and the
+    /// sentence saying a composite viewer will show knockouts where pdfce
+    /// keeps the ink — never reached a screen. The second half pins that
+    /// the curation is a rule and not an accident: a `BestEffort` `why` is
+    /// pdfce's own judgement, and the count sentence is its honest summary.
+    #[test]
+    fn a_set_claim_about_the_standard_carries_its_why_and_a_best_effort_one_does_not() {
+        let mut claims_seen = 0;
+        let mut guesses_seen = 0;
+        for &std in RenderStandard::all() {
+            let preset = RenderPreset::for_standard(std);
+            let said = preset.disclosures().join("\n");
+            for e in preset.entries() {
+                if matches!(e.action, PresetAction::LeaveAlone) {
+                    continue;
+                }
+                if e.evidence.is_a_claim_about_the_standard() {
+                    claims_seen += 1;
+                    assert!(
+                        said.contains(e.why),
+                        "{}: `{}` is set as {} but its why never leaves the crate: {said}",
+                        std.title(),
+                        e.key.as_str(),
+                        e.evidence.label()
+                    );
+                } else {
+                    guesses_seen += 1;
+                    assert!(
+                        !said.contains(e.why),
+                        "{}: `{}` is best-effort, so its why is summarised by the count, not \
+                         quoted — if that curation was changed on purpose, change this test \
+                         and the rustdoc together: {said}",
+                        std.title(),
+                        e.key.as_str()
+                    );
+                }
+            }
+        }
+        // Both populations must exist or the test is vacuous on one side.
+        assert!(
+            claims_seen > 0,
+            "no preset sets a value on a claim about the standard"
+        );
+        assert!(guesses_seen > 0, "no preset sets a best-effort value");
     }
 
     /// Every PDF/X preset repeats the standard's own admission that more than
