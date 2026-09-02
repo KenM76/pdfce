@@ -96,6 +96,171 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 378th filing, 2026-09-02 — `Pass 237.0` (`c7a774c`) SHIPS `reorder_annotations`
+(BY ID, NOT INDEX) AND WIDENS `RenderPreset` TO A SEVENTH AXIS, PINNING
+`SimulateSeparations` FOR EVERY PDF/X LEVEL AT TIER `Implied` — NEITHER WAS
+FILED UNDER *Backlog*/*Next up* FIRST; BOTH ARRIVED AS SAME-DAY REPLIES TO TWO
+`pdfceGUI` REQUESTS. A PRE-EXISTING CLAIM IN `Pass 83.0` (`e8e9881`, far below
+in this list) IS CORRECTED IN PLACE: NEITHER HALF OF "`/Annots` ORDER IS PAINT
+ORDER AND (ABSENT `/Tabs`) ALSO TAB ORDER" IS STATED BY ANY EDITION OF THE
+STANDARD (`TAB-C2`).**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hash, date and
+substance relayed verbatim by the engineer in the dispatch prompt, not
+independently confirmed via `git show`. Two spec-corpus files cited below
+were reported as written by `pdfce-spec-librarian` the same day; not read by
+this role.
+
+### Pass 237.0 (`c7a774c`, 2026-09-02) — `EditSession::reorder_annotations`; `RenderPreset` axis 7 (`SpotColorantDeviceModel`)
+
+**Origin — not a scoped Backlog/Next-up entry.** Both halves came directly
+from two `pdfceGUI` feature requests filed the same day
+(`request_a_pages_tab_order_cannot_be_changed_at_all.md`,
+`request_do_the_standards_constrain_the_spot_colorant_device_model.md`) and
+answered the same day
+(`reply_reorder_annotations_ships_and_tabs_stays_yours_to_ask_for.md`,
+`reply_pdf_x_now_pins_the_spot_device_model_and_pdf_a_does_not.md`), all four
+in `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`. Filed here
+after the fact.
+
+#### 1. `EditSession::reorder_annotations(page_index, &[ObjId]) -> Result<AnnotsReorder, EditError>`
+
+Permutes a page's `/Annots` array — moves references only, touches no
+annotation dictionary. One undo entry (`CommandKind::ReorderAnnotations {
+count }`).
+
+- **By id, not index** — a deliberate divergence from the requesting shell's
+  own sketch (which asked for raw array indices). `page_annotations()`'s
+  indices skip null/non-dictionary entries and so diverge from raw `/Annots`
+  array indices on exactly the malformed files where a wrong guess costs
+  most.
+- **A permutation is validated, not trusted**: `AnnotsNotAPermutation {
+  missing, unknown, repeated }` names what is wrong; `AnnotsDuplicateReference`
+  refuses a malformed array that lists one object twice, rather than
+  de-duplicating it under a reorder's name.
+- **Direct-dictionary `/Annots` entries are pinned** (no id to name them by)
+  and counted (`AnnotsReorder::pinned`); the rest flow around them.
+- **Three spec `shall`s a naive permutation would silently break, honoured
+  and disclosed**:
+
+  | constraint | handling | field |
+  |---|---|---|
+  | `/TrapNet` must be the LAST `/Annots` entry (§12.5.6.21) | pinned to its slot; anywhere else → `TrapNetMustStayLast` | `trap_net_pinned` |
+  | `/AnnotStates` (Table 366) stays index-parallel to `/Annots` | permuted alongside — the one case this verb writes an annotation dict; wrong length → `AnnotStatesMismatch` | `annot_states_permuted` |
+  | a `/GoToE` target's integer `/A` indexes into `/Annots` (Table 202) | every target aimed at this page, anywhere in the document, re-indexed | `goto_e_targets_reindexed` |
+
+- **`/Tabs` is READ and REPORTED, never WRITTEN** — `AnnotsReorder::tabs:
+  PageTabs` (`Absent`/`Row`/`Column`/`Structure`/`ArrayOrder`/`WidgetOrder`/
+  `Other`, `#[non_exhaustive]`) plus `PageTabs::array_order_governs() ->
+  ArrayOrderGoverns::{Nothing, Widgets, Everything}`. **A sourced refusal,
+  not an oversight**: `/A` is PDF-2.0-only (ISO 32000-2 Table 31); PDF/UA-1
+  (ISO 14289-1 §7.18.3) *requires* `/Tabs /S` and would be pushed
+  non-conforming by an unsolicited `/A` write (Matterhorn 28-009); PDF/UA-2
+  §8.9.3.3 widens the permitted set to `A`/`W`/`S`, so a single "PDF/UA ⇒ S"
+  predicate would also be wrong; and **no edition states any fallback at all
+  for an absent `/Tabs`** — array-order tabbing is implementation practice
+  everywhere it happens, including Acrobat's own manual tab order, which
+  writes no `/Tabs` either.
+- `set_page_tabs(page, PageTabs)` — a separate, gated verb (refuse `A`/`W`
+  below PDF 2.0 and on a PDF/UA-1 file) — is **not built this Pass**; filed
+  to *Backlog* below.
+
+`pdfce-cli reorder-annotations <in> --page N --order 2,0,1 -o <out> [--mode]
+[--verify-undo]` — CLI-wired same session.
+
+#### 2. `RenderPreset` axis 7 — `PresetKey::SpotColorantDeviceModel` / `PresetAction::SpotModel`
+
+`spot_colorant_device_model` (`Pass 233.0`, `OP-A7`) predates `RenderPreset`'s
+axis grid by two Passes (`Pass 128.1`) and had never been added to it — an
+omission, not a prior decision, per the reply's own words ("nobody revisited
+the grid when the seventh axis arrived"). Fixed:
+
+- **Every PDF/X level pins `SimulateSeparations` at tier `Implied`.** Argued,
+  not sourced to a clause: ISO 15930-1 §6.3.1 exchanges print elements as
+  separation colour data for a single characterized printing condition ⇒ the
+  PDF/X target device carries the separations ⇒ on that device ISO 32000-1
+  §8.6.6.4's colorant-availability test succeeds and the spot survives
+  overprint by a `shall`. **No ISO 15930 clause requires this**, and the
+  entry's own `why` field says so — the pin exists because the axis's label
+  creates an expectation ("show me what the press will get") that leaving it
+  alone would silently defeat with whatever global override happened to be
+  set, which the reply frames as a rule-4 problem, not a conformance one.
+- **PDF/A and PDF/UA leave the axis alone** (tier `Sourced`) — every PDF/A
+  part's Scope clause excludes "operational details of rendering" (an
+  affirmative disclaimer; 0 of 129 veraPDF PDF/A-1 rules use the relevant
+  vocabulary).
+- **The pinned value equals the shipped default** (`simulate_separations`),
+  so this Pass moves zero pixels on any existing render; `apply()` reports
+  the key as changed only when it corrects a stale global override.
+- `only_sourced_cells_may_claim_to_be_sourced`'s allow-list gains exactly the
+  five new PDF/X `Implied` cells.
+- **Recorded counter-ruling**: `AlternateSpaceSubstitution` is the only value
+  with an ISO 32000-1 basis; a future edition-scoped "ISO 32000-1 strict"
+  preset, if one is ever built, is the one that should pin it instead — a
+  PDF/X preset optimises for predicting the press, not for minimal
+  non-conformance risk, and this is the one axis where those objectives
+  diverge.
+
+Decision **122** (`ARCHITECTURE.md` §12) records the general shape of this
+argument for future preset work: a key the standard does not reach still
+defaults to `LeaveAlone`, EXCEPT where the two values render visibly
+differently AND the standard's own label creates an expectation an unpinned
+control would silently defeat.
+
+#### Tests, gates, invariants
+
+16 reorder tests + 1 preset test added (17 new tests total; workspace-wide
+total not supplied this filing). `cargo test --workspace` green.
+`tools/run-gates.sh`: PASS, 31 commands, including both filing gates.
+Sabotage-verified: the permutation write, the `/AnnotStates` permutation and
+the `/GoToE` re-index each caught by a dedicated sabotage. **No `Cargo.toml`
+touched** — GUI-core separation invariant unaffected by construction (no new
+`cargo tree` run needed). Round trip: `--verify-undo` byte-identical on
+three fixtures through the CLI binary.
+
+**`docs/core-api` updated**: verb count 187 → 188, `EditError` 114 → 118,
+index counts. `tools/check-core-api-verbs.py` passes.
+
+**GUI.** The in-repo `crates/pdfce-gui` (paused, decision 058) received only
+the undo-label arm (`CommandKind::ReorderAnnotations`'s display string) — no
+wiring, consistent with the GUI pause. **`D:\dev\pdfceGUI` has NOT wired the
+drag gesture as of this filing** — per its own request it deliberately built
+no shell for the read-only list rather than a drag control that could not
+commit (its own R9).
+
+**Spec sourcing** (`pdfce-spec-librarian`, 2026-09-02, relayed — not
+independently verified by this role, no shell): new
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__annots_array_order.md`
+and `pdfua\pdfua__ref__tab_order.md`; extended
+`pdfx\pdfx__ref__conformance_and_rendering_axes.md` (axis 7, `PXC-15`..`PXC-21`),
+`pdfa\pdfa__ref__conformance_and_rendering_axes.md` (`PAR-16`..`PAR-18`),
+`iso32000__ref__subset_standard_rendering_presets.md`, and the ambiguity
+register (`TAB-A1`/`A2`/`A3`, an `OP-A7` addendum).
+
+`docs/FEATURES.md`: new *Implemented* row under *Annotations & markup*
+(reorder, core+cli, `gui [ ]`); row under *Fonts & rendering*
+(`spot_colorant_device_model`) amended in place to record the axis-7 pin;
+new *Planned* row for `set_page_tabs`.
+
+#### ★ Correction to `Pass 83.0` (`e8e9881`, 2026-08-14) — `TAB-C2`
+
+That entry's own text (below, dated 2026-08-14) asserts as settled fact that
+`/Annots` array order "is **paint order**, and (absent `/Tabs`) **also the
+tab order**." **Neither half is stated by any edition of the standard**,
+per the spec corpus's `TAB-N4` (no edition states a paint order among
+annotations — PDF Association issue #442 is open on exactly that question)
+and `TAB-N1` (no edition states any fallback for an absent `/Tabs`). Both
+are **implementation practice**, observed and widely relied on, not spec
+text — struck in place at `Pass 83.0`'s own entry, with a dated note, per
+hard rule 4 (never delete a shipped entry's claims, correct them in place).
+The empirical halves of both claims are recorded, hedged as OPEN/unmeasured,
+in `C:\personal_rag\pdf\` — see that folder's index.
+
+**Decision ceiling moves `121` → `122`; next free `123`.** **Standing rules
+ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing.
+
+---
+
 **★★ TWO COMMITS, 377th filing, 2026-09-02 — `Pass 236.0` (`e7b1b7c`) CORRECTS
 THE TWO SURVIVOR DISCLOSURES `PASS 234.0` LEFT OWED, BUT SHIPPED BUNDLED WITH
 THIS ROLE'S OWN FILING COMMIT FOR `234.0`/`235.0` — THE PROJECT'S OWN
@@ -56534,11 +56699,24 @@ instinct is to unify them**, which would break this one in the silent
 direction.
 
 **Ordering is a contract and is documented because it will surprise
-someone:** `/Annots` array order — which is **paint order**, and (absent
-`/Tabs`) **also the tab order.** It is **not** `/AcroForm` `/Fields` order,
+someone:** `/Annots` array order — which is ~~**paint order**, and (absent
+`/Tabs`) **also the tab order**~~. It is **not** `/AcroForm` `/Fields` order,
 and the two commonly differ. The requesting session's own panel
 **deliberately uses `/Fields` order** for its fill list, because that
 matches the printed form. *Two correct orders for two different questions.*
+
+> **★ CORRECTED 2026-09-02 (`Pass 237.0`, `c7a774c`, 378th filing, `TAB-C2`)
+> — NEITHER struck half is stated by any edition of the standard.** No
+> edition states a paint order among annotations at all (spec corpus
+> `TAB-N4`; PDF Association issue #442 is open on exactly this question),
+> and no edition states any fallback for an absent `/Tabs` (`TAB-N1`). Both
+> are **implementation practice**, observed and widely relied on — pdfce's
+> own `reorder_annotations` (`Pass 237.0`) reads `/Tabs` and reports it but
+> deliberately never writes one as a side effect of a permutation, for
+> exactly this reason. Kept struck rather than deleted per hard rule 4; the
+> empirical halves are recorded, hedged as open/unmeasured, in
+> `C:\personal_rag\pdf\`. Full sourcing:
+> `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__annots_array_order.md`.
 
 #### ★★ THE FINDING: THE TEST WAS AIMED AT EXACTLY THE RIGHT DEFECT AND WAS STRUCTURALLY UNABLE TO SEE IT
 
@@ -112292,6 +112470,55 @@ nothing gets forgotten, not as a commitment to build in this order.
 > measurement instead, per hard rule 4. **Two records of one negative result is
 > how a negative result gets re-probed.** **No `FEATURES.md` box moves for any
 > of the three.**
+
+> ★★★ **ONE ITEM ADDED 2026-09-02 (378th filing), `Pass 237.0`'s NAMED
+> REMAINDER — `set_page_tabs`, deliberately not built with `reorder_annotations`
+> because the operator's own question ("should a reorder also write `/Tabs`?")
+> was sourced to NO, never as a side effect.** `FEATURES.md` gains a *Planned*
+> row, unticked in all three columns.
+
+### Unscoped — ★★★ **`set_page_tabs(page, PageTabs)` — RECORD A PAGE'S TAB ORDER, THE VERB `Pass 237.0` DELIBERATELY DID NOT BUILD** — filed 2026-09-02 (378th filing, `Pass 237.0`'s named remainder)
+
+**Status: NOT STARTED. `reorder_annotations` (`Pass 237.0`, *Shipped*) reads
+`/Tabs` and reports `PageTabs`; it never writes one.** This is the verb that
+would.
+
+**Requested but explicitly not answered "yes" this Pass** — the requesting
+shell (`pdfceGUI`) asked whether a reorder should also write `/Tabs /A` as a
+disclosed side effect, and the sourced answer was **no, and never as a side
+effect**: `/A` is PDF-2.0-only (ISO 32000-2 Table 31), PDF/UA-1 requires
+`/Tabs /S` and would be pushed non-conforming by an unsolicited `/A` write
+(ISO 14289-1 §7.18.3, Matterhorn 28-009), and no edition requires a writer to
+state a tab order at all. See `Pass 237.0`'s entry, *Shipped*, and the
+correction to `Pass 83.0` filed alongside it (`TAB-C2`).
+
+**The gating a real verb needs, per the sourced answer above:**
+
+- **Refuse `PageTabs::ArrayOrder` (`/A`) below PDF 2.0.** Writing PDF
+  2.0-only syntax into an older file is a version-inconsistency the writer
+  controls and should not introduce silently.
+- **Refuse `PageTabs::ArrayOrder` and `PageTabs::WidgetOrder` (`/A`/`/W`) on
+  a file that declares PDF/UA-1 conformance.** ISO 14289-1 §7.18.3 requires
+  `/S`; either would make a conforming file non-conforming with no one
+  asking. PDF/UA-2 (ISO 14289-2 §8.9.3.3) widens the permitted set to
+  `A`/`W`/`S`, so the refusal must be **edition-gated**, not a blanket
+  "PDF/UA ⇒ refuse".
+- **`/W` is the more expressive value where it is legal** (ISO 32000-2 only)
+  — Widget order rather than raw array order — but ISO 32000-2 itself leaves
+  its exact tail behaviour contested (`TAB-A1`, spec register), so offering
+  it needs that ambiguity disclosed, not silently resolved one way.
+- **Never rewrite `/S` → `/A` (or `/W`) to make a drag "stick".** A
+  structure-tagged document's tab order is a property of the structure tree,
+  not the `/Annots` array; overwriting it to match a drag the operator
+  performed on the array would silently break accessibility conformance the
+  file already declared.
+
+**Not queued for a specific session** — build when `pdfceGUI`'s tab-order
+panel asks for the control; the read half (`PageTabs`, reported by
+`reorder_annotations`) already gives it enough to disclose the file's
+current state without this verb.
+
+---
 
 ### Unscoped — ★★★ **WIDEN `ButtonActionState::Known` TO COVER `/GoTo` AND `/SubmitForm`, WHICH TODAY ANSWER `Unmodelled`** — filed 2026-09-01 (362nd filing, `Pass 212.0`'s named remainder)
 

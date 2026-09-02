@@ -1200,3 +1200,68 @@ to the licensed ISO 32000-2 source.
 concluding anything about the standard's content. Applies to formulae, figure
 callouts and any table of variables. Companion to **4a** (glyph x-positions) and
 **4c-bis** (per-page layout pass).
+
+
+---
+
+### 4s ★★ WHEN AN ISO STANDARD IS PAYWALLED, LOOK FOR ITS **SECRETARIAT'S** FREE COMMENTARY — and read the disclaimer that comes with it (2026-09-02, ISO 15930 / PDF/X)
+
+The ISO 15930 previews reach only front matter, and `iso.org/obp` is Cloudflare-gated
+(4d does not defeat it — re-confirmed 2026-09-02: `r.jina.ai` returns **HTTP 200 with a
+201-byte body reading *"Just a moment…"***). **A third channel exists and had never been
+tried: the standard's own committee/secretariat publishes free commentary.**
+
+**Working example, now staged:**
+
+```
+https://printtechnologies.org/standards/files/pdf-x-application-notes_v4-sep06.pdf
+```
+
+**CGATS/NPES, *Application Notes for PDF/X Standards*, v4, Sept 2006, 31 pp.**
+HTTP 200, plain `curl -L -A "Mozilla/5.0"`, **no gate, no cart, no UA trick needed.**
+Written by **CGATS SC6 TF1 (PDF/X)** — *the task force that authors ISO 15930* — and
+published by **NPES**, which performs CGATS's secretariat functions.
+
+**★★ READ THE FOREWORD FOR BOTH HALVES, because they pull opposite ways:**
+
+- *"NPES is making this document publicly available at **no cost** for informational and
+  reference purposes"* ⇒ **`free_secondary_paraphrase`, quotable.**
+- *"this document has not been developed under the consensus process of ANSI, and is not
+  an ANSI consensus document. **It does not have the status of a standard or technical
+  report**"* ⇒ **nothing in it is a `shall`, however imperative its wording.** Its §2.7.1
+  says overprint settings *"**must be preserved** by applications or RIPs"* — which reads
+  exactly like a requirement and is not one.
+
+**⇒ Rule: quote the disclaimer next to the quotation, in the same corpus paragraph.**
+A committee's free commentary is excellent evidence of **intent** and is never evidence
+of **obligation**.
+
+**Where to look for the analogue on other specs** (untested, listed as leads):
+CGATS/NPES (now *PRINTING United Alliance*) for ISO 15930 and ISO 12647; the **PDF
+Association** for ISO 32000 / 19005 / 14289 (already exploited — 4m-i); **ECI** for
+Altona/colour material; **ICC** at `color.org` for ICC.1 (already `free_primary`).
+
+**Coverage traps that come with this class of source:** they are **versioned
+independently of the standard and go stale**. This one covers **PDF/X-1a:2003,
+PDF/X-2:2003 and PDF/X-3:2003 only**, there is **no v5** covering X-4 (2008/2010) or X-6
+(2020), and it still treats **PDF/X-2 (ISO 15930-5)** as live although ISO has since
+**WITHDRAWN** it. **Date-check the commentary against the standard's current edition
+before applying anything from it.**
+
+### 4t A NATIONAL-ADOPTION CATALOGUE PAGE IS **NOT** A NEW DISCOVERY CHANNEL FOR AN ITEH SAMPLE (measured negative, 2026-09-02)
+
+Item **57.9** says a recorded acquisition negative has the scope of the *method*, so
+retry with a **different channel**. Tried here for ISO 15930-7, whose sample is only
+12 pp.: the **SIST ISO 15930-7:2011** Slovenian-adoption page,
+`standards.iteh.ai/catalog/standards/sist/24125b06-…/sist-iso-15930-7-2011`.
+
+**Result: HTTP 200, 44 603 B, and `grep -o "cdn\.standards\.iteh\.ai[^\"' <>]*"` yields
+the bare hostname only — no sample link.** **Same failure mode as the ISO-adoption
+catalogue page** (`57.9`): iTeh catalogue pages of *either* flavour do not link their own
+samples. **The only working discovery route remains a web search on the SAMPLE FILENAME**
+(`ISO-15930-7-2010.pdf`), which resolves the `/samples/<num>/<hash>/` path.
+
+**⇒ Do not spend another session on national adoptions (SIST / BS / DIN / NBN) hoping for
+a deeper preview. Scope of this negative: the catalogue-page-scrape method, on both ISO
+and SIST flavours.** Untried and still open: whether a *different national body's own
+webstore* serves a deeper preview under its own domain.

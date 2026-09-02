@@ -128,3 +128,13 @@ Three things worth keeping:
 code commit waits for the filing commit to land.** If the fix cannot wait,
 commit it and dispatch BOTH in one filing — the wrong move is to push the
 second one and hope the first is still deferred.
+
+**Second occurrence, 2026-09-02 (`e7b1b7c`), recorded by the librarian and
+appended here at its request.** Pass 236.0's two `crates/` fixes were committed
+in the SAME commit as the librarian's docs-only filing of Passes 234.0/235.0,
+so `check-commits-filed.py` correctly flagged the commit as unfiled -- and it
+was pushed anyway because the command chain inspected the gate's exit code
+without consuming it. Two shapes in one act: the bundle, and a green-by-eye
+push past a red gate. **Stage a filing commit by naming only `docs/` paths;
+stage a code commit by naming only the code paths; never let one `git add`
+line cover both.**

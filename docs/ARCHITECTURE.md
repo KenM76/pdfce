@@ -29925,3 +29925,84 @@ not proposed as a new standing rule — see this role's report).
   **No new standing rule number.** Rule 8 is amended, not replaced; `R239`
   is unchanged, next free `R240`. **Ceiling moves `120` → `121`; next free
   `122`.**
+
+### 2026-09-02 (378th filing) — decision 122: **A RENDER-PRESET AXIS THE STANDARD DOES NOT REACH STILL DEFAULTS TO `LeaveAlone` — EXCEPT WHERE THE VALUES RENDER VISIBLY DIFFERENTLY AND THE STANDARD'S OWN LABEL CREATES AN EXPECTATION AN UNPINNED CONTROL WOULD SILENTLY DEFEAT; `PDF/X` NOW PINS `SpotColorantDeviceModel` AT TIER `Implied`**
+
+**(librarian filing, 378th, no shell — relayed by the engineer, `Pass 237.0`,
+`c7a774c`.)**
+
+**The gap found.** `Settings::spot_colorant_device_model`
+(`SpotColorantDeviceModel`, decision 120, `Pass 233.0`) shipped two Passes
+after `RenderPreset`'s per-standard axis grid (`Pass 128.1`) and was never
+added to it — `pdfceGUI`'s own coverage contract caught the *setting*
+(every setting needs a control) but nothing on the preset side caught the
+*axis* (every setting a standard could plausibly constrain needs a grid
+row). Found by `pdfceGUI` asking the question directly, not by an internal
+audit.
+
+**What the standards actually say — checked, not assumed.** No PDF/X
+clause (ISO 15930-1/-3/-4/-7/-9, plus a CGATS/NPES application-notes
+document) uses the relevant vocabulary (`OPM`, `simulat`, `proof`); no
+clause is even *about* this axis. Every PDF/A part's Scope clause
+excludes "operational details of rendering" as an **affirmative
+disclaimer**, not a silent gap (0 of 129 veraPDF PDF/A-1 rules touch it).
+Read narrowly, `PresetAction::LeaveAlone` (the existing, load-bearing
+design choice for an axis no clause reaches — see `ROADMAP.md`'s
+`only_sourced_cells_may_claim_to_be_sourced` discussion) is the textbook
+answer for every part of this axis, PDF/X included.
+
+**Why PDF/X is pinned anyway — the general principle this decision
+records.** The axis's two values (`simulate_separations` /
+`alternate_space_substitution`) render a spot colour under overprint
+**visibly differently** — preserved on one device model, knocked out on
+the other. A control labelled against a named standard ("ISO 15930-7")
+carries an implicit promise — *"show me what the press will get"* — that
+`LeaveAlone` does not decline to answer: it silently ships whatever global
+override the operator last set into a view they read as authoritative.
+That is a rule-4 problem (silent inference), not a conformance one, and it
+is the reason this decision exists rather than being folded into decision
+120's own entry: **`LeaveAlone`'s default is correct in general and the
+exception is narrow enough to name.**
+
+**The inference chain pinning `SimulateSeparations` at tier `Implied`
+(argued, not sourced)**: ISO 15930-1 §6.3.1 exchanges print elements as
+"CMYK data, gray scale data, or separation colour data" for a single
+characterized printing condition ⇒ the PDF/X target device **carries the
+separations** ⇒ on that device, ISO 32000-1 §8.6.6.4's colorant-
+availability test succeeds and the spot colorant survives overprint by a
+`shall` (see decision 120's §8.6.6.4 derivation) ⇒ simulating that device
+is what the preset's label promises. **No ISO 15930 clause requires
+this** and the shipped entry's own `why` field says so in the operator-
+facing text, exactly as `LeaveAlone`'s own entries state their absence of
+a clause.
+
+**Body-section update.** None in `ARCHITECTURE.md` — this project's preset
+design (axis grid, tier vocabulary, `LeaveAlone`, the
+`only_sourced_cells_may_claim_to_be_sourced` allow-list) is documented in
+`docs/core-api/01-reading-and-model.md` §8.5, not in this file; that
+document gained §8.5a "Axis 7" in the same commit. No other
+`ARCHITECTURE.md` body section states the preset design, so — as with
+decision 121 — none is edited here.
+
+**The reusable rule, for the next axis this happens to.** Before adding
+any `Settings` key that a render-fidelity standard *could* plausibly
+constrain: (1) check every reachable clause of every subset standard for
+the vocabulary, the way this Pass's sourcing did — absence is a real,
+citable finding, not a shortcut past one; (2) if no clause reaches it,
+default `LeaveAlone`, per the existing design; (3) pin only where the
+values are **visibly** different under some real document AND the axis's
+own name or the preset's own label would lead an operator to expect the
+standard to have an opinion. Two conditions, both required — a control
+whose values render identically, or whose name creates no such
+expectation, stays `LeaveAlone` even if a diagram happens to exist.
+
+**Sourcing.** Relayed by the engineer (no shell this filing):
+`crates/pdfce-core/src/settings/presets.rs` (axis 7 block, full argument in
+the source comment), `docs/core-api/01-reading-and-model.md` §8.5a;
+spec corpus `D:\Dev\Rag-Specialized\PDF_Spec\pdfx\pdfx__ref__conformance_and_rendering_axes.md`
+(axis 7, `PXC-15`..`PXC-21`) and
+`pdfa\pdfa__ref__conformance_and_rendering_axes.md` (`PAR-16`..`PAR-18`), not
+independently read by this role.
+
+**Decision ceiling moves `121` → `122`; next free `123`.** **Standing rules
+ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing.

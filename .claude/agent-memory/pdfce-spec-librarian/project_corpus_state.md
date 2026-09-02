@@ -5547,3 +5547,438 @@ AMEND — do not rewrite and do not retract.** Keep the struck wording legible, 
 which half died, and put the redirect at the **top of the superseded section**
 rather than only at the bottom of the file. **A reader who greps and lands
 mid-file must be told in the first line they read.**
+
+
+---
+
+## 68. ★★ THE **"SHOULD THE CONFORMANCE PRESET PIN THIS AXIS?"** DISPATCH — *a settings axis exists; does any subset standard require a value for it?* (2026-09-02, `spot_colorant_device_model` / `OP-A7` as **axis 7**; `pdfx__ref__conformance_and_rendering_axes.md` + `pdfa__ref__conformance_and_rendering_axes.md` + master-grid `SRP-3`…`SRP-7`)
+
+**Shape.** Item **57** built a 16-standard × 6-axis preset grid. This dispatch is its
+**sequel**: a **seventh** axis was created three hours earlier by item **67**'s `R4`
+adjudication, and `pdfce-gui` asked whether `RenderPreset::for_standard` should pin it.
+**Recognise the shape by its two halves:** *(a)* a **negative-result sweep** over a
+standards family ("does any part say anything about X?"), and *(b)* a **product
+recommendation that the sweep does not by itself determine**.
+
+### 68a. ★★★ "NO CLAUSE REACHES THIS AXIS" DOES **NOT** IMPLY "LEAVE IT UNSET" — AND THE MASTER FILE'S OWN RULE SAID IT DID
+
+`iso32000__ref__subset_standard_rendering_presets.md` `SRP-2.1`, written by me on
+2026-08-25, is categorical: ***"Refuse to set the `—` keys. A preset that sets
+`MeshPatchPadding` for PDF/X-4 … is asserting a requirement the standard does not
+make."*** **The sweep came back "no clause reaches axis 7", so `SRP-2.1` mechanically
+answers `LeaveAlone` for every preset. That answer is WRONG for PDF/X, and finding out why
+was the whole deliverable.**
+
+The six original axes are ones where **the standard's silence leaves the operator's
+expectation untouched** — nobody reads *"PDF/X-4"* on a control as a promise about mesh
+patch padding. Axis 7 is different on two counts at once:
+
+1. the two values produce **visibly different pixels on the same conforming file**
+   (a spot backdrop preserved vs knocked out), and
+2. the **label** `ISO 15930-7` carries an operator expectation — *"show me what the press
+   will get"* — that **picks between them**.
+
+⇒ `LeaveAlone` does not decline to answer; it **silently ships the operator's last global
+value into a view they will read as authoritative**. **That is a project-rule-4 failure
+(an invisible inference), not a conformance question.**
+
+**★ THE REUSABLE TEST, filed as `SRP-4`:** a preset may set a key the standard does not
+reach **only if** *(i)* the candidate values produce **visibly different output** on the
+same conforming file **AND** *(ii)* the preset's **label** creates an operator expectation
+that picks between them. **Both, or the key stays `LeaveAlone`.** Write the test down
+whenever you break your own earlier rule — the next session will otherwise read the
+exception as licence.
+
+### 68b. ★★★ THE SAME SWEEP GAVE **OPPOSITE** RECOMMENDATIONS FOR PDF/X AND PDF/A — and that split is the CHECK that the reasoning is real
+
+Both families returned "no clause reaches this axis." **PDF/X ⇒ PIN. PDF/A ⇒ DO NOT
+PIN.** The discriminator is **not how loud the silence is; it is what the LABEL
+promises**:
+
+- **PDF/X has NO Scope exclusion and its Introduction claims the opposite** — `PXC-1`,
+  ISO 15930-7:2010 Introduction, which states that all parts define requirements and
+  restrictions **on the process of rendering** (**wording is `free_iso_preview_primary`
+  ⇒ quoted only in the PRIVATE corpus, not in this public repo**). ⇒ its silence is a
+  **gap**.
+- **PDF/A's §1 Scope excludes the axis in terms**, in **every part, unchanged 2005→2020**
+  — `PAR-1`, ISO 19005-1 §1 / ISO 19005-4 §1, which exclude *operational details of
+  rendering* from the standard's application (same tier, same restriction), its own
+  Introduction disclaims visual fidelity (`PAR-5`), and **its entire method is to
+  constrain the FILE so the reader's freedom stops mattering** (`PAR-9`/`PAR-10`/
+  `PAR-13`/`PAR-14`). ⇒ its silence is a **decision**.
+
+**Generalise: grade a family's silence by asking whether the family HAS a scope exclusion
+covering the axis. An affirmative disclaimer and an unaddressed gap are different
+evidence and licence different actions.** If a sweep gives every family the same answer,
+suspect you measured the axis rather than the standards.
+
+### 68c. ★★ THE CONFORMANCE ANSWER AND THE RECOMMENDATION ARE **TWO SEPARATE DELIVERABLES** — say which tier each is
+
+The dispatch asked one question; the honest answer has two layers and they must not be
+fused:
+
+| Layer | Answer | Tier |
+|---|---|---|
+| **Does any part CONSTRAIN the axis?** | **No** — measured | `sourced` |
+| **Should the preset pin it anyway?** | **Yes for PDF/X** — on **intent**, via **ISO 15930-1 §6.3.1**, which requires print elements to be exchanged as CMYK, greyscale **or separation colour data**, prepared for a **single characterized printing condition** (clause reference; wording is `free_iso_preview_primary` and stays in the private corpus) ⇒ **the target device HAS the ink** ⇒ ISO 32000-1 §8.6.6.4 `S2` succeeds **on it** | **`implied`, one stated inference step** |
+
+**Never let the second row inherit the first row's tier.** The shipped UI must carry the
+sentence *"No ISO 15930 clause requires this."* **A `sourced` negative plus an `implied`
+positive is a completely normal result and reads as rigorous; a single fused verdict reads
+as authority the corpus does not have.**
+
+### 68d. ★★ CHECK WHETHER YOUR OWN REGISTER ALREADY TOOK THE OPPOSITE POSITION — it had, in one clause, and it needed RE-SCOPING not retraction
+
+`OP-A7`'s register entry, written **three hours earlier the same day**, already said:
+***"A 1.7-strict preset should select A"*** (`alternate_space_substitution`), on the
+**edition-floor** argument — model B has **no ISO 32000-1 basis at all**. **My PDF/X
+recommendation is B.** Two positions, same corpus, same day.
+
+**Resolution that worked, and it is the shape to reuse: RE-SCOPE, do not retract.** The
+register sentence is **sound** and loses only on **scope** — it optimises for *"which
+render could never be called non-conforming"*, while a PDF/X preset optimises for *"which
+render predicts the press"*. **Both were then given homes:** the PDF/X presets pin B; and
+**if pdfce ever ships an explicitly edition-scoped preset (`ISO 32000-1 strict` /
+`PDF 1.7 compatibility`), THAT is the one that pins A**, and it would be the only one.
+**Recorded in both files so they are not read as contradictory.** (Sibling of **66g**/
+**67g**: amend and keep the old wording legible.)
+
+### 68e. ★★★ THE `/Requirements` ROUTE — the dispatch's third question, and the answer was in the MECHANISM'S OWN CLAUSE, not in the subset standard
+
+Asked: *is there a linkage from a PDF/X-6 requirement to ISO 32000-2 Table 275's
+`SeparationSimulation` capability?* **ISO 15930-9 §6.18 *Document requirements* exists by
+TOC and its content is a GAP** — so the linkage could not be excluded by reading part 9.
+**It was excluded by reading ISO 32000-2 instead**, and that is the stronger move:
+
+**ISO 32000-2:2020 §12.11.6 + its NOTE 1** — **clause reference only; the wording is
+`licensed_primary_private_rag` and is quoted in the PRIVATE corpus at
+`pdfx__ref__conformance_and_rendering_axes.md` `PXC-19`, NOT here** (this memory
+directory is inside the **public** pdfce repo — see **66c**). **Paraphrase of the
+effect:** a document whose declared requirements cannot be met is not processed; but a
+document that **is** processed is processed **without regard** to the requirements
+outcome, and the clause's NOTE 1 states that there is **no formal connection between the
+requirement type and the operation of the associated feature**.
+
+⇒ `/Requirements [<< /S /SeparationSimulation >>]` is an **open-or-refuse gate, never a
+rendering directive** — and §12.11.3 makes even the refusal a `should`.
+⇒ **General result worth carrying: NO published PDF standard located lets a FILE pin a
+PROCESSOR's device colorant model.**
+
+**★ The method: when a subset standard's candidate clause is unreadable, go read the BASE
+standard's definition of the mechanism it would have to use.** A GAP in the subset can be
+rendered irrelevant by a `shall` in the base. Same family as **67a**'s existence rung and
+**66d**'s definition-site rule, applied to a *mechanism* rather than an entity.
+
+### 68f. ★★ A TEST SUITE'S EXPECTED RESULTS ARE EVIDENCE ABOUT THE **DEVICE**, NOT ABOUT THE RULE
+
+The dispatch asked whether a print-conformance suite's expected results (a press RIP with
+real separations) count as evidence of what PDF/X *intends* where no `shall` reaches a
+screen reader. **Yes — but the precise thing they are evidence for matters:**
+
+- On a press the colorant **exists** ⇒ §8.6.6.4 `S2` **succeeds** ⇒ the spot survives
+  overprint **by a `shall`, in both editions**. **The suite's expected result is therefore
+  not a CHOICE between the two device models at all — it is what the MANDATORY branch
+  produces on a device that has the ink.**
+- ⇒ it is strong evidence about **which device the standard targets**, and **no** evidence
+  about what a screen must do. **Using a press expected-value as a screen oracle is
+  exactly the harness defect `67f` already names.**
+- **And check the licence before citing it as more than argument:** the corpus records
+  both public PDF/X suites as **licence-unverified** (`CV-G7`/`CV-L11`) ⇒ usable in prose,
+  **must not be staged**.
+
+**Generalise: "an implementation/suite does X" is a measurement of a DEVICE-plus-MODE, and
+the device is usually the load-bearing half.** Third instance (66a, 67e, now this).
+
+### 68g. ★ A SEARCH-ENGINE SUMMARY OF A PAYWALLED STANDARD IS A **LEAD**, NOT A SOURCE — and the dispatch had pre-flagged the recall it wanted checked
+
+The dispatch said, correctly, *"I recall PDF/X-4 has text about `/OPM` and about the
+alternate space of `Separation`/`DeviceN` — **VERIFY, do not trust that recall**."*
+**Verification was attempted and NOT achieved.** Two search results returned
+confident-sounding clause text (an `OPM`-shall-be-zero rule; a *"…as specified and
+restricted by 6.4.3"* sentence) that exists **only** as LLM summarisation of paywalled
+material. **Filed as `PXR-A6` with `NEEDS VERIFICATION` and an explicit *do not assert
+§6.4.3*.**
+
+**Two things made the negative useful rather than empty:**
+
+1. **Naming the probable ANCESTOR of the recalled rule from a source the corpus DOES
+   hold**: ISO 19005-2/-3/-4 **§6.2.4.2 t2** (veraPDF) is the same `OPM`-not-1-on-
+   ICCBased-CMYK rule, and PDF/A-2 postdates X-4 by a year and already cross-references
+   ISO 15930-7 Annex A by name. ⇒ *"your recall is probably real, and here is the version
+   of it this corpus can actually cite."*
+2. **Showing it would not matter anyway** — it is a **file** rule about `OPM`; `R4` proves
+   the device colorant model is untouched by it.
+
+### 68h. Filing mechanics — FOUR corpus files + `index.md` + `LEGAL_NOTE.md`, ZERO recounts
+
+**No new `.md` file was created** (176 before and after), so **no prefix-table count, no
+totals line** — the item-**66g** promotion economics again, one tier up. Edits:
+
+1. `pdfx\...axes.md` — new dated UPDATE (`PXC-15`…`PXC-21`, `PXR-A5`…`PXR-A7`) + three
+   frontmatter fields (`keywords`, `related_files`, `source_url`);
+2. `pdfa\...axes.md` — new dated UPDATE (`PAR-16`…`PAR-18`, `PAR-A7`/`PAR-A8`) +
+   `keywords`/`related_files`;
+3. `iso32000__ref__subset_standard_rendering_presets.md` — **the master grid must gain the
+   axis or the finding is stranded** (`SRP-3`…`SRP-7`) + `keywords`/`related_files`;
+4. `iso32000__ref__ambiguity_settings_register.md` — an **ADDENDUM spliced into the
+   `OP-A7` intake block** (not a new intake — same day, same ID) + `keywords`;
+5. `index.md` — a trigger-topic row, a **search recipe (run it: 74 hits across 5 files)**,
+   and additions to the `pdfx__`/`pdfa__` prefix rows, the master-grid entry and the
+   **staged-sources table**;
+6. `LEGAL_NOTE.md` — the new source's row.
+
+**★ A NEW STAGED SOURCE COSTS TWO REGISTRATIONS, and the second is the one that gets
+missed:** `LEGAL_NOTE.md`'s *"New FREE PRIMARIES, now staged"* table **and** `index.md`'s
+`_sources\` inventory table. (Compare **57.10**'s three-places rule for a new licence
+*tier*; this is the two-places rule for a new *source*.)
+
+### 68i. The new source, and the half of its Foreword that matters most
+
+**CGATS/NPES *Application Notes for PDF/X Standards*, v4 (Sept 2006, 31 pp.)** —
+`https://printtechnologies.org/standards/files/pdf-x-application-notes_v4-sep06.pdf`,
+HTTP 200 with a browser UA, **no gate**, staged at `_sources\cgats\`. Written by **CGATS
+SC6 TF1 (PDF/X)** — *the task force that authors ISO 15930* — so it is the closest thing
+to committee commentary that is free.
+
+**★ Read the Foreword for BOTH halves.** It says NPES publishes it *"at **no cost**"*
+(⇒ quotable, `free_secondary_paraphrase`) **and** *"it **does not have the status of a
+standard or technical report**"* (⇒ **nothing in it is a `shall`, however imperative its
+wording**). Its §2.7.1 — *"overprint settings … **must be preserved** by applications or
+RIPs"* — reads exactly like a requirement and **is not one**. **Quote the disclaimer next
+to the quotation, always.**
+
+**★ And it answers a NEIGHBOURING question, not the dispatched one.** Honouring overprint
+and choosing a device colorant model are **two different decisions** — under
+`alternate_space_substitution` overprint is **fully honoured** and the spot is **still**
+knocked out, because there is no spot colorant left to act on (`R4`). **A source saying
+"honour overprint" does not choose a device model.** Watch for this: a strongly-worded
+secondary that is *adjacent* to the axis is the easiest thing to over-claim.
+
+**Coverage trap:** v4 covers **X-1a:2003 / X-2:2003 / X-3:2003 only**, there is **no v5**,
+and it still treats the since-**WITHDRAWN** PDF/X-2 as live.
+
+### 68j. Measurement notes worth reusing
+
+- **Whitespace-stripped counting (4b) over all five ISO 15930 previews at once** was the
+  right unit of work: `overprint`/`OPM`//`/OP`/`simulat`/`proof`/`SeparationSimulation`
+  ⇒ a single table, and **every `overprint` hit turned out to be inside the DEFINITION OF
+  *trapping***. **Always look at WHERE the surviving hits are** — "1 hit" and "1 hit, and
+  it is a glossary entry" are different results.
+- **TOC granularity is per-part and must be stated.** ISO 15930-**9**'s TOC is
+  **subclause-complete** ⇒ "no clause is about this" is **TOC-sourced**. ISO 15930-**7**'s,
+  **-1**'s, **-3**'s and **-4**'s are **clause-level only** ⇒ the same sentence is only
+  `implied`. **The §0 inference rule says "TOCs are complete"; that is true of the LIST
+  THEY PRINT, at the depth they print it.**
+- **veraPDF profiles are the right instrument for a PDF/A negative** (a zero over a
+  *validation profile* is evidence; a zero over a *preview* is not — 4h), **and the
+  headline number was `PDFA-1B`: 0 of 129 rules** mention any of the vocabulary.
+  **But scope it:** validators check **files**, so a zero there is a real negative about
+  **file** rules and says nothing about reader obligations. State that in the file.
+- **Reading pdfce's own source settled two facts a guess would have gotten wrong**
+  (61f/57.5 again): `SimulateSeparations` **is** the `#[default]` (⇒ the pin changes no
+  pixels — `SRP-1` survives), and `PresetAction::LeaveAlone` **already exists** (⇒ the
+  earlier "presets need a do-not-set state" recommendation shipped). **Check what the
+  caller already built before recommending it again.**
+- **Acquisition negatives re-confirmed with their scope:** `iso.org/obp` for ISO 15930-7
+  is **still Cloudflare-gated through `r.jina.ai`** (200, body *"Just a moment…"*, 201
+  bytes). A **different discovery channel** was tried per **57.9** — the **SIST ISO
+  15930-7:2011** national-adoption catalogue page — and it **links no sample**, the same
+  failure mode as the ISO catalogue page. **Two methods dead, resource not disproven.**
+
+---
+
+## 69. ★★ THE **"HERE ARE MY THREE PREMISES — VERIFY OR REFUTE EACH"** dispatch, where the verb was ALREADY SHIPPED (2026-09-02, `/Tabs` + `/Annots` array order, `iso32000__ref__annots_array_order.md` + `pdfua__ref__tab_order.md`)
+
+**Shape.** The engineer stated three premises *by name and asked to have them
+refuted*, then asked six numbered questions and a recommendation. **All three
+premises were substantially RIGHT.** The value was almost entirely in what none of
+the six questions asked about.
+
+### 69a. ★★★ THE HEADLINE CAME FROM Q5, THE ONLY OPEN-ENDED QUESTION — *"is there ANY rule that reordering `/Annots` alone could violate?"*
+
+Q1–Q4 and Q6 were closed questions about `/Tabs`. Answering them took one grep each.
+**Q5 — a "is there anything I have not thought of?" question — produced THREE `shall`s,
+NONE of them in clause 12.5, and all three unimplemented in the caller's shipped code:**
+
+| id | rule | where it hides |
+|---|---|---|
+| `TAB-S1` | a `/TrapNet` annot *"shall always be the last element in the page object's `Annots` array"* | **§12.5.6.21** — a *subtype* clause, restated in **§14.11.6.2** (prepress) |
+| `TAB-S2` | the trap network's **`/AnnotStates` is an INDEX-PARALLEL array** — *"shall be listed in the same order as the annotations in the page's `Annots` array"* | **Table 366 / Table 403**, inside a *deprecated prepress* clause |
+| `TAB-S3` | a `/GoToE` **target dictionary's `/A` may be *"the index (zero-based) of the annotation in the `Annots` array"*** | **Table 202 / Table 205**, inside an *actions* clause |
+
+**Method that found them, and it is the reusable part: grep the KEY NAME
+document-wide and read EVERY hit, including the ones in clauses you would never
+dispatch to.** `grep -n "Annots"` = **26 hits (1.7) / 28 (2.0)**. Three of them
+were ordering constraints. A sweep of *clause 12.5* — the obvious place — would
+have found **one** of the three.
+=> **Generalise: when a verb mutates a named container, the constraints on that
+container are scattered across the clauses of everything that POINTS INTO it, not
+gathered at its definition.**
+
+### 69b. ★★★ THE MOST DANGEROUS CONSTRAINT SHAPE IS **INDEX-PARALLELISM**, AND IT IS INVISIBLE FROM THE CONTAINER'S OWN CLAUSE
+
+`/AnnotStates[i]` describes `/Annots[i]`. Nothing in §7.7.3.3 or §12.5.2 hints that
+another array is keyed on `/Annots` positions. **Look for the phrase *"in the same
+order as"* whenever a permutation verb is on the table** — it is the standard's
+idiom for a parallel array, and it is the one relationship a permutation silently
+destroys while leaving every object intact and every reference resolvable.
+
+Its sibling, `TAB-S3`, is the other shape: **a stored INDEX into the container**.
+The standard's own row supplies the escape hatch — the same `/A` entry accepts a
+text string that is the annotation's **`/NM`** — so **the answer to report is not
+just "you will break this", it is "the standard already tells you what a durable
+handle looks like".**
+
+### 69c. ★★ A LATER EDITION CAN CONTRADICT **ITSELF**, IN BODY TEXT, IN TWO PLACES, WITH NO ERRATUM
+
+`/Tabs /W`: **Table 31** says pass 2 visits the rest *"using the same array
+ordering"*; **§12.5.1** says *"followed by other annotation types **in row order"***.
+Both body text. Neither a NOTE. Neither cites the other. **Errata clean on three
+channels with passing positive controls.** GitHub full-text on `Tabs`, `tab order`,
+`widget order`, `tab ordering` = **0 issues** — nobody has reported it in six years.
+
+=> **Do not assume a self-contradiction has been noticed.** And **check the
+DEFINITIONAL locus against the DESCRIPTIVE one** — a value defined in a table row
+*and* described in a bullet list is two chances to disagree. This corpus had never
+recorded an intra-edition contradiction before; every prior one was cross-edition.
+
+### 69d. ★★★ THE DISPATCH'S OWN FRAMING — *"pdfce is ABOUT TO ADD"* — WAS FALSE, AND CHECKING COST ONE GREP
+
+`EditSession::reorder_annotations` was **already shipped** (`edit.rs:23556`,
+`Pass 236.0`, same day), with a `PageTabs` enum that already modelled all five
+values. **This did not reduce the work; it CHANGED it** — from "here is what to
+build" to "here is what shipped, and here are five things in it to correct":
+
+- **`TAB-C1` a WRONG CLAUSE NUMBER in shipped doc text** — the comment cited
+  *"ISO 32000-1 §12.7.4.2"* for `/Tabs`. **§12.7.4.2 is *Button Fields* in 1.7 and
+  *Field names* in 2.0.** Neither is about `/Tabs`. (Correct: §7.7.3.3 Table 30/31 +
+  §12.5.1.)
+- **`TAB-C2` an UNSOURCED SPEC CLAIM in `ROADMAP.md`** — *"`/Annots` array order —
+  which is **paint order**, and (absent `/Tabs`) **also the tab order**"*. **Neither
+  half is in the standard** (`TAB-N4`, `TAB-N1`). **And the same crate's
+  `PageTabs::Absent` doc gets it RIGHT** (*"in practice `/Annots` order, but the
+  file does not *say* so"*) — **fifth recorded instance of two documents in this
+  project never meeting.**
+- **`TAB-C3`/`C4`** — a doc comment stating one side of `TAB-A1` as settled, and a
+  `bool` (`array_order_governs_tabbing`) that cannot express `/W`'s split.
+- **`TAB-C5`** — the three §69a `shall`s, measured absent: `AnnotStates` = **0
+  occurrences in the entire workspace**; `TrapNet` guarded only on the *delete* path.
+
+=> **ALWAYS grep the caller's crate for the verb name before accepting "about to
+add".** And **read the shipped doc comments as spec claims** — item 62j and
+`a19e54d`'s lesson generalise: *a sentence in a doc comment about a file format is
+read as a fact about the FORMAT, and leaves the crate without a citation trail.*
+
+### 69e. ★★ A CONFORMANCE STANDARD'S **NEXT PART** CAN WIDEN A RULE — SO "PDF/UA REQUIRES X" IS A **SCOPE** CLAIM
+
+Premise (c) was *"PDF/UA-1 §7.18.3 requires `/Tabs /S` on any page that has
+annotations"*. **Correct, clause number and all.** But:
+
+| | UA-1 §7.18.3 | UA-2 §8.9.3.3 |
+|---|---|---|
+| permitted | **`S` only** | **`A`, `W` or `S`** |
+| `/Tabs /A` | **FAILURE** | **PERMITTED** |
+
+=> **The premise verifies AND the generalisation of it is false.** *"Would `/Tabs /A`
+break PDF/UA?"* has **two opposite answers** depending on the part. A single
+`is_pdfua => Tabs == S` predicate is the **scope smell** from 64e/61e/54, in a new
+family. **Answer every conformance question per PART, in a table, never with one
+sentence.**
+
+### 69f. ★★★ THE FREE CC-BY DOCUMENT THAT CARRIES A PAYWALLED STANDARD'S SENTENCE VERBATIM
+
+**`_sources\pdfa_org\Well-Tagged-PDF-WTPDF-1.0.0.pdf` is CC-BY-4.0** and its
+**§8.9.3.3 has the SAME CLAUSE NUMBER and the same sentence as ISO 14289-2:2024
+§8.9.3.3** — corroborated by veraPDF shipping the identical rule text under both
+`ISO_14289_2` and `WTPDF_1_0` ids at clause `8.9.3.3`.
+**`_sources\pdfa_org\Matterhorn-Protocol-1-1.pdf` is also CC-BY-4.0** and splits
+UA-1 §7.18.3 into two quotable machine-checkable failure conditions (**28-008**
+missing / **28-009** wrong value).
+
+=> **For PDF/UA, the free-quotation route is: veraPDF profile (clause number + rule)
+-> Matterhorn (failure conditions, UA-1) -> WTPDF prose (UA-2 wording).** Three
+channels, all free, all redistributable — this is the strongest secondary sourcing
+position this corpus has for any paywalled standard. **WTPDF's prose is the one to
+paste into pdfce's MIT source**, because CC-BY survives redistribution and an ISO
+sentence does not.
+Bonus: WTPDF §8.9.3.3's **NOTE** (*"Regardless of the value of the `Tabs` entry,
+each annotation's location in the logical structure is defined by the structure
+tree"*) is a **free, quotable restatement of ISO 32000-2 §14.8.2.5.2** — a
+CC-BY document can hand you a citable version of a *different* paywalled standard's
+rule.
+
+### 69g. ★★ GRADE A "NO DEFAULT STATED" SILENCE BY COUNTING `Default value:` — AND CHECK WHETHER THE LATER EDITION **TOUCHED THE SENTENCE**
+
+`/Tabs` has no `Default value:` line. That alone is weak. What makes it a finding:
+
+- `Default value:` = **358 hits (1.7) / 418 (2.0)** document-wide, and **4 / 6
+  inside the page-object table itself**.
+- **ISO 32000-2 EDITED THAT EXACT SENTENCE** — it added *"**If present**, the values
+  shall be one of…"* — i.e. the 2020 revision **acknowledged the absent case in
+  words and still declined to say what happens.**
+
+=> **"They didn't write it" is weak; "they revised the sentence, named the gap, and
+left it" is strong.** Generalise: when grading a silence, look for whether the
+later edition **rewrote the surrounding words**.
+
+### 69h. ★ A NEGATIVE ABOUT A **CONVENTION EVERYONE RELIES ON** IS THE ONE MOST WORTH WRITING
+
+`TAB-N4`: **no edition states a paint order among annotations.** §12.5.5
+presupposes *"any previously painted annotations"* and never names the order;
+`z-order` / `painted in the order` / `drawn in the order` = **0 hits** in both.
+Corroborated by **open** PDF Association issue **#442**, with a test file on which
+**Adobe and Foxit measurably disagree**.
+
+=> **When the caller's docs assert a universal convention as a spec fact, MEASURE
+IT.** The upstream issue tracker is the cheap corroboration: a convention with an
+open "the spec does not say" issue against it is *definitively* not in the spec.
+
+### 69i. Measurement notes worth reusing
+
+- **Whitespace-stripped counting (4b) as a CROSS-EDITION IDENTITY TEST.** Seven
+  load-bearing sentences x two editions -> **all 1/1** => every §4 `shall` is
+  edition-independent and needs **no version branch** in pdfce. This turned seven
+  separate "identical in both editions" assertions into **one measured table**
+  (`§9a`). **Do this instead of writing "identical" seven times.**
+  And **say what is NOT identical**: §12.5.5's sentence has an identical *prefix*
+  and a different *tail* (blend-mode constants -> `/BM`/`ca`/`CA`).
+- **Errata negative, three channels + positive controls, ~4 commands:** errata site
+  `clause07`/`clause12` (strip tags in Python; **my first `grep -o` over the raw
+  HTML returned 0 for a string that WAS present** — grep the stripped text, not the
+  file), markup annotations on the staged PDF's specific pages, GitHub full-text on
+  **four** phrasings. **Positive control both channels** — clause12 *does* carry a
+  §12.5.1 erratum (last paragraph only), clause07 *does* carry a Table 31 erratum
+  (`Contents` row only). Those near-misses are what make the zero credible.
+- **veraPDF profile grep as a licence-safe primary for PDF/UA clause numbers.**
+  `PDFUA-1.xml` / `PDFUA-2.xml` / `WTPDF-1-0-*.xml` carry
+  `<id specification="ISO_14289_1" clause="7.18.3" testNumber="1"/>` plus the rule
+  text and the **executable test expression** (`containsAnnotations == false ||
+  Tabs == 'S'`). **The test expression is a second, independent statement of the
+  rule** — and its *absent carve-outs* are informative: 7.18.3's test has **no**
+  `/Popup` and **no** `isOutsideCropBox`/`(F & 2)` guard while its 7.18.2 and
+  7.18.4 siblings do => a real ambiguity (`PUA-TA1`) surfaced from a **diff between
+  sibling test expressions**.
+- **`xml.etree` on a veraPDF profile silently found nothing** (my `iter('rule')`
+  walk mishandled the nesting). **A plain regex-with-context scan over the raw XML
+  worked first time.** Don't parse when you are only reading.
+- **`pypdf`'s `page.get("/Annots")` can return an `IndirectObject`** — `len()` on it
+  raises. Resolve with `.get_object()` before counting. Cost one command.
+
+### 69j. Filing shape
+
+- **2 new files, 4 edited, 0 recounts wrong.** `iso32000__ref__` **24 -> 25**,
+  `pdfua__` **1 -> 2**, total **171 -> 173** content / **174 -> 176**.
+  **★ The prefix-table cells were CORRECT before this build — first time in six
+  sessions.** Recounted from disk first anyway; keep doing that.
+- Edited: `iso32000__s__12.5.2.md` (the thin one-bullet coverage became a pointer +
+  a dated UPDATE footer carrying the one `/Annots` fact that belongs there — `/NM`
+  is the permutation-immune handle), `iso32000__ref__ambiguity_settings_register.md`
+  (§11a intake + frontmatter + §12), `index.md` (prefix table x2 + total + 2
+  manifest rows + **9** trigger rows + a search-recipe block + **3** rows in the
+  spec-ambiguity table + a banner note + 4 "verifications that PASSED" bullets).
+- **All 11 search recipes RUN before filing**; ten returned non-empty and the
+  eleventh's *expected* output is eleven zeros (the PDF/A negative), which is why
+  it ships with its positive control beside it.
+- **A "verifications that PASSED" entry retires a suspicion.** I suspected the
+  *"shall not be inherited"* preamble was 2.0-only (it is prominent there). **It is
+  in both.** Recording the pass stops the next session re-opening `a19e54d`.

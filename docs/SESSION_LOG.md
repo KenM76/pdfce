@@ -86457,3 +86457,83 @@ no capability moved, no row to tick.
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (378th filing) — `Pass 237.0` (`c7a774c`) SHIPPED — `reorder_annotations` (by ID, not index) and a seventh `RenderPreset` axis pinning PDF/X to `SimulateSeparations`; neither was filed as Backlog/Next-up first, both answered same-day `pdfceGUI` requests; a standing `Pass 83.0` claim about `/Annots` ordering corrected in place (`TAB-C2`) — neither half was ever spec text
+
+**Sourcing.** No shell this filing. Commit hash, date and substance relayed
+verbatim by the engineer in the dispatch prompt, not read via `git show`.
+Two spec-corpus files cited below are reported as written by
+`pdfce-spec-librarian` the same day; not independently read.
+
+**Shipped:**
+- `Pass 237.0` (`c7a774c`) — `EditSession::reorder_annotations(page_index,
+  &[ObjId]) -> Result<AnnotsReorder, EditError>`: permutes a page's
+  `/Annots` array by object id (not raw index — `page_annotations()`'s
+  indices skip null/non-dict entries and diverge from array indices on
+  malformed files), moving references only, one undo entry. Validates the
+  permutation (`AnnotsNotAPermutation { missing, unknown, repeated }`,
+  `AnnotsDuplicateReference`), pins direct-dictionary entries and counts
+  them, and honours three spec `shall`s no prior verb touched: `/TrapNet`
+  stays last (§12.5.6.21), `/AnnotStates` (Table 366) permutes alongside,
+  and every `/GoToE` target's `/A` index is re-indexed document-wide.
+  **`/Tabs` is read and reported (`PageTabs`), never written** — `/A` is
+  PDF-2.0-only, PDF/UA-1 requires `/S`, and no edition states a fallback
+  for an absent `/Tabs` at all. CLI: `reorder-annotations`.
+- Same Pass — `RenderPreset` axis 7, `PresetKey::SpotColorantDeviceModel`.
+  `spot_colorant_device_model` (`Pass 233.0`) had never been added to the
+  preset grid (`Pass 128.1` predates it) — an omission, not a decision.
+  Now: every PDF/X level pins `simulate_separations` at tier `Implied`
+  (argued from ISO 15930-1 §6.3.1 + ISO 32000-1 §8.6.6.4; no ISO 15930
+  clause requires it); PDF/A and PDF/UA leave the axis alone (tier
+  `Sourced`, Scope-clause exclusion). Pin equals the shipped default —
+  zero pixels move on any existing render.
+- Gates: 16 reorder tests + 1 preset test, `cargo test --workspace` green,
+  `tools/run-gates.sh` PASS (31 commands). No `Cargo.toml` touched.
+  `docs/core-api` verb count 187 → 188, `EditError` 114 → 118.
+
+**Decisions made this session:**
+- **Decision 122** (`ARCHITECTURE.md` §12) — a render-preset axis the
+  standard does not reach still defaults to `LeaveAlone`, EXCEPT where the
+  values render visibly differently AND the standard's own label creates an
+  expectation an unpinned control would silently defeat. Records the
+  general shape of the axis-7 argument for future preset work.
+
+**Findings + decisions:**
+- **`TAB-C2` — a standing `ROADMAP.md` claim was never spec text.**
+  `Pass 83.0`'s entry (2026-08-14) asserted `/Annots` array order "is paint
+  order, and (absent `/Tabs`) also the tab order" as settled fact. Neither
+  half is stated by any edition of the standard (`TAB-N4`: no edition
+  states an annotation paint order at all, PDF Association issue #442 is
+  open on it; `TAB-N1`: no edition states any absent-`/Tabs` fallback).
+  Both are implementation practice, not spec — struck in place at
+  `Pass 83.0`'s own entry with a dated note, per hard rule 4.
+- `pdfceGUI`'s own tab-order request asked whether a reorder should also
+  write `/Tabs /A` as a disclosed side effect. Sourced answer: no, and
+  never as a side effect — `/A` is 2.0-only, PDF/UA-1 requires `/S`
+  (Matterhorn 28-009), PDF/UA-2 widens to `A`/`W`/`S`. `set_page_tabs`
+  filed to *Backlog* as the separate, gated verb this would need.
+
+**`docs/FEATURES.md`:** new *Implemented* row (Annotations & markup —
+reorder, core+cli, `gui [ ]`, not yet wired in `pdfceGUI`); row for
+`spot_colorant_device_model` (Fonts & rendering) amended in place to record
+the axis-7 pin; new *Planned* row for `set_page_tabs`.
+
+**`C:\personal_rag\pdf\`:** two lessons added — annotation paint order and
+absent-`/Tabs` tabbing behaviour across real viewers (OPEN/unmeasured,
+cross-referencing spec corpus `TAB-N1`/`TAB-N4`), and a veraPDF run on a
+popup-only fixture pair to close `PUA-TA1` (OPEN/unmeasured). Both
+questions are empirical, not spec-text — deliberately not asserted as
+answered.
+
+**Still in flight:**
+- `set_page_tabs(page, PageTabs)` — not started, gated on PDF-version and
+  PDF/UA-1 refusals; see `ROADMAP.md` *Backlog*.
+- `D:\dev\pdfceGUI` has not wired the reorder drag as of this filing — it
+  deliberately kept its tab-order panel read-only pending this verb.
+- The two personal_rag/pdf empirical questions above are open, not answered
+  — a future session with real-viewer access or a veraPDF run could close
+  either.
+
+**For next session:**
+- Backup/push state not independently checked by this role, no shell this
+  filing.
