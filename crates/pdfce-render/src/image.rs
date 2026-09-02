@@ -1232,7 +1232,7 @@ fn decode_sampled(
         // 89: "Required for images, except those that use the JPXDecode
         // filter"), so this is malformed unless the codestream can
         // supply it.
-        None if jpx => codestream_space(coded)?,
+        None if jpx => codestream_space(coded, icc)?,
         None => return Err(ImageError::Malformed("image has no /ColorSpace")),
     };
     let components = space.components();
@@ -1479,10 +1479,27 @@ fn decode_sampled(
     let keying = colour_key.is_some();
 
     // A `Space::Special` conversion runs the document's own function per
-    // distinct sample tuple; everything else is closed-form arithmetic and
-    // wants no cache at all. `tinting` is the loop-invariant branch, in
-    // the same spirit as `keying` above it.
-    let tinting = matches!(&space, Space::Special(_));
+    // distinct sample tuple, and the two ICC variants run a profile chain
+    // per distinct tuple (`Pass 240.0`); everything else is closed-form
+    // arithmetic and wants no cache at all. `tinting` is the loop-invariant
+    // branch, in the same spirit as `keying` above it.
+    //
+    // ★★ `Icc` and `IccRgb` are on this route for CORRECTNESS, not only for
+    // cost, and the omission of `Icc` was a shipped defect. The ink arm of
+    // the texel loop reads its colorants from `texel_cmyk` when `tinting`
+    // holds and from `last_comps` -- the RAW components -- when it does not.
+    // A direct `ICCBased` `N 4` image therefore wrote its unmanaged samples
+    // as ink under an `icc_managed: true` flag from `Pass 214.0` until this
+    // one; the bridge ran exactly once, inside the `yields_cmyk` probe, and
+    // never for a texel. (The `/Indexed` shape was unaffected: its palette
+    // is built through `to_cmyk` at table time, which is why the conformance
+    // patch that shipped the Pass looked right.) What the cache bounds is
+    // the chain evaluation, which on a 16-bit photograph would otherwise run
+    // per texel.
+    let tinting = matches!(
+        &space,
+        Space::Special(_) | Space::Icc { .. } | Space::IccRgb { .. }
+    );
     // §8.6.6.4/.5: a `/None` colorant "shall never be painted on the
     // page". The whole image is therefore transparent — NOT white.
     //
@@ -1841,11 +1858,14 @@ fn decode_sampled(
     // every non-`Special` image silent". That is **false**, and a sabotage
     // proved it: deleting the `scratch_diag` merge changes no test, because
     //
-    //   * `tint_cache` is `Some` exactly when the space is `Space::Special`
-    //     (`tinting`), so the `None` arm of the texel loop's match is reached
-    //     only by `Gray`, `Rgb`, `Cmyk` and `Indexed` — and `Space::to_rgb`
-    //     for those four is closed-form arithmetic that records nothing at
-    //     all. There is no shortfall for a non-`Special` image to report.
+    //   * `tint_cache` is `Some` exactly when the space is `Space::Special`,
+    //     `Space::Icc` or `Space::IccRgb` (`tinting`), so the `None` arm of
+    //     the texel loop's match is reached only by `Gray`, `Rgb`, `Cmyk`
+    //     and `Indexed` — and `Space::to_rgb` for those four is closed-form
+    //     arithmetic that records nothing at all. There is no shortfall for
+    //     such an image to report. (The two ICC variants record nothing
+    //     either -- a bridge that refuses falls back silently -- but they
+    //     are on the cached route for the ink arm's sake, see `tinting`.)
     //   * So `scratch_diag`'s ONLY possible contribution is the
     //     `yields_cmyk` probe, and the probe records something only in one
     //     narrow case: a `/tintTransform` that LOADS successfully and then
@@ -1873,7 +1893,7 @@ fn decode_sampled(
         // one whose BASE was managed at palette-build time. The second is the
         // common shape in the conformance corpus, and omitting it is what made
         // the first cut of this flag under-report.
-        icc_managed: matches!(space, Space::Icc { .. })
+        icc_managed: matches!(space, Space::Icc { .. } | Space::IccRgb { .. })
             || matches!(
                 space,
                 Space::Indexed {
@@ -2339,6 +2359,75 @@ pub(crate) enum Space {
         /// The built source-to-`/OutputIntent` transform.
         bridge: std::sync::Arc<crate::icc::IccBridge>,
     },
+    /// `[/ICCBased stream]` with `N 3`, colour-managed **to the screen**
+    /// through its own embedded profile (`Pass 240.0`).
+    ///
+    /// # Why a third variant, and why it is not [`Self::Icc`] with `n: 3`
+    ///
+    /// [`Self::Icc`] carries one bridge, to the document's `/OutputIntent`,
+    /// and its [`Self::to_rgb`] deliberately does not move — a CMYK image's
+    /// screen answer stays `Rgb::from_cmyk`. This variant carries **two**:
+    /// a display bridge to iccce's constructed sRGB, which is always built
+    /// and answers [`Self::to_rgb`]; and an ink bridge to the output intent,
+    /// built only when the document names one, which answers
+    /// [`Self::to_cmyk`]. On an additive page the first is the whole story.
+    /// On a subtractive page the second deposits the same ink the VECTOR
+    /// path deposits for the same colour through the same profile
+    /// (`Interpreter::authored_cmyk`, `Pass 199.2`) — which is what makes a
+    /// fill and an image of one colour land on one pixel value, and is the
+    /// conformance patch's exact pass criterion.
+    ///
+    /// ★★ ON THE "MEASURED NEGATIVE" THAT SAID NOT TO DO THIS. The 2026-09-02
+    /// hand-off (`docs/NEXT_SESSION.md` §D item 1) recorded routing an `N 3`
+    /// image onto the ink path as **3× worse**, and that number is real —
+    /// but it measured a DEFECT, not the route. Until this Pass a direct
+    /// [`Self::Icc`] image was outside the `tinting` route, so the texel
+    /// loop's ink arm wrote `last_comps` — the image's RAW components — as
+    /// C, M, Y, K. For `N 4` that was silently unmanaged ink under a
+    /// `icc_managed: true` flag; for `N 3` it was three RGB values written as
+    /// three inks, which is the 3×. The bridge's output was computed by the
+    /// `yields_cmyk` probe and never once per texel. With `Icc` and this
+    /// variant both on the cached route, the ink written IS the bridge's,
+    /// and the same image measured on the same patch lands on its vector
+    /// twin. The negative is retracted by the measurement that made it.
+    ///
+    /// # What it fixes
+    ///
+    /// A conformance patch draws one colour four ways through one embedded
+    /// RGB profile: as a vector fill and as an `/Indexed`-over-`ICCBased`
+    /// image, each in RGB and in CMYK. Before this variant the RGB IMAGE
+    /// cell fell to [`Self::Rgb`] — its profile parsed for `/N` and thrown
+    /// away — and rendered a red trap X against the vector cell's green.
+    /// The profile is deliberately not sRGB, so "reinterpret as
+    /// `DeviceRGB`" is exactly the wrong answer the patch exists to catch.
+    ///
+    /// # What is deliberately NOT managed this way
+    ///
+    /// * `N 4` on an additive page: `Rgb::from_cmyk` with the operator's
+    ///   `cmyk_intent` stays. Rewiring a CMYK→sRGB terminal conversion to a
+    ///   profile chain was measured worse (§D item 2 of the same note), and
+    ///   an embedded CMYK profile to sRGB is the same class of transform.
+    /// * `N 1`: unmeasured. A gray profile's TRC against `Rgb::from_gray`
+    ///   would move every ICC-gray image on every additive page by an
+    ///   unquantified amount, and no patch fails on it. It is a one-line
+    ///   widening of the `components == 3` test in [`resolve_space_array`] when a
+    ///   measurement asks for it.
+    ///
+    /// Only constructed when the profile parses and models; otherwise the
+    /// `/N` fallback runs exactly as before, so a file this does not apply
+    /// to renders as it did.
+    IccRgb {
+        /// The built source-to-sRGB transform. Three components in, three
+        /// encoded sRGB components out. Always present: the variant is not
+        /// constructed without it.
+        display: std::sync::Arc<crate::icc::IccBridge>,
+        /// The built source-to-`/OutputIntent` transform, when the document
+        /// named an output device. `None` on an ordinary document, where
+        /// [`Self::to_cmyk`] answers `None` and a subtractive page bridges
+        /// the managed sRGB with `rgb_to_cmyk` exactly as it does for
+        /// `DeviceRGB`.
+        ink: Option<std::sync::Arc<crate::icc::IccBridge>>,
+    },
 }
 
 impl Space {
@@ -2360,6 +2449,7 @@ impl Space {
             // discolouring it.
             Self::Special(cs) => cs.components(),
             Self::Icc { n, .. } => *n,
+            Self::IccRgb { .. } => 3,
         }
     }
 
@@ -2449,6 +2539,17 @@ impl Space {
                 4 => Rgb::from_cmyk(intent, c(0), c(1), c(2), c(3)),
                 _ => Rgb::from_rgb(c(0), c(1), c(2)),
             },
+            // ★ THE DISPLAY ROUTE (`Pass 240.0`): the profile's own answer
+            // for what these three numbers look like on an sRGB screen. The
+            // fallback is Table 66's reinterpretation, reached only if the
+            // bridge refuses the width -- which `resolve_space_array` made
+            // impossible by building it from the same `/N`.
+            //
+            // Per-texel cost is bounded by `TintCache`: `tinting` is true for
+            // this variant, so the chain runs once per DISTINCT sample tuple.
+            Self::IccRgb { display, .. } => display
+                .convert_to_rgb(comps)
+                .unwrap_or_else(|| Rgb::from_rgb(c(0), c(1), c(2))),
         }
     }
 
@@ -2524,6 +2625,11 @@ impl Space {
             // `None` on a width or destination mismatch, which falls back to
             // the unmanaged path rather than writing a wrong-width result.
             Self::Icc { bridge, .. } => bridge.convert_components(comps),
+            // The ink half of `IccRgb` (`Pass 240.0`): the output-intent
+            // bridge when the document named one, so an RGB image deposits
+            // the same managed ink its vector twin does. `None` otherwise,
+            // and then the page bridges the managed sRGB like `DeviceRGB`.
+            Self::IccRgb { ink, .. } => ink.as_ref().and_then(|b| b.convert_components(comps)),
             Self::Gray | Self::Rgb | Self::Indexed { .. } => None,
         }
     }
@@ -2569,6 +2675,30 @@ impl Space {
     }
 }
 
+/// Both bridges for a three-component profile: the display one, without
+/// which the caller does not build [`Space::IccRgb`] at all, and the ink one,
+/// which is `None` on a document with no output intent.
+///
+/// One function for the two places a profile can arrive from — the
+/// dictionary's `[/ICCBased stream]` and a JPX codestream's own `colr` box —
+/// so the two cannot come to build different pairs. The ink half rides on
+/// the same profile bytes and the same intent; `IccBridgeCache::get` refuses
+/// without a destination, so nothing is invented on an ordinary document.
+type IccRgbBridges = (
+    std::sync::Arc<crate::icc::IccBridge>,
+    Option<std::sync::Arc<crate::icc::IccBridge>>,
+);
+fn icc_rgb_bridges(
+    cache: &crate::icc::IccBridgeCache,
+    profile: &[u8],
+    intent: pdfce_core::color::RenderingIntent,
+) -> Option<IccRgbBridges> {
+    let profile: std::sync::Arc<[u8]> = std::sync::Arc::from(profile);
+    let display = cache.get_srgb(&profile, 3, intent)?;
+    let ink = cache.get(&profile, 3, intent);
+    Some((display, ink))
+}
+
 /// The colour space a JPX codestream supplies when `/ColorSpace` is
 /// absent — §7.4.9's fallback ladder, terminal rung.
 ///
@@ -2595,9 +2725,29 @@ impl Space {
 /// not device components; painting them as RGB would be a plausible-
 /// looking, entirely wrong picture). Refusing is the `fuzzy, never
 /// sneaky` outcome — nothing is drawn and the caller counts it.
-fn codestream_space(coded: &CodedImage) -> Result<Space, ImageError> {
+fn codestream_space(coded: &CodedImage, icc: IccContext<'_>) -> Result<Space, ImageError> {
     match coded.color_model {
         CodecColorModel::Gray => Ok(Space::Gray),
+        // ★ A three-channel codestream that carries its OWN ICC profile is
+        // §7.4.9's higher rung, not the `DeviceRGB` terminal one: "the colour
+        // space specifications in the JPEG2000 data shall be used", and an
+        // embedded profile IS such a specification. Managed to the screen
+        // exactly as a dictionary `[/ICCBased <N 3>]` is (`Pass 240.0`);
+        // when the profile will not model, or the caller declined
+        // management, the terminal rung below runs as before.
+        //
+        // ★ Deliberately unmeasured against the conformance suite: every
+        // JPX patch there names a `/ColorSpace`, which Table 89 makes win
+        // over the codestream, so this rung is reached by none of them.
+        // It is here because the rule is the same rule, not because a
+        // patch asked for it.
+        CodecColorModel::Rgb
+            if let Some(cache) = icc.cache
+                && let Some(profile) = coded.icc_profile.as_deref()
+                && let Some((display, ink)) = icc_rgb_bridges(cache, profile, icc.intent) =>
+        {
+            Ok(Space::IccRgb { display, ink })
+        }
         CodecColorModel::Rgb | CodecColorModel::Untransformed3 => Ok(Space::Rgb),
         CodecColorModel::Cmyk => Ok(Space::Cmyk),
         // Neither can reach here: `Bilevel` belongs to the fax codecs,
@@ -2787,6 +2937,35 @@ fn resolve_space_array(
                     n: components,
                     bridge,
                 });
+            }
+            // ★★★ AND THE DISPLAY ROUTE FOR `N 3`, `Pass 240.0`.
+            //
+            // A three-component profile goes to the SCREEN, not to the output
+            // intent -- `Space::IccRgb`'s docs carry the measurement that
+            // chose the route. Two things differ from the arm above, both
+            // deliberate:
+            //
+            //   * no `has_destination` requirement. The destination is sRGB by
+            //     construction, so this manages on an ordinary document with
+            //     no `/OutputIntent` at all -- which is where an RGB photo
+            //     tagged with a non-sRGB profile actually lives.
+            //   * the `/Indexed` base takes the same arm, because
+            //     `resolve_indexed` resolves its base through this function
+            //     and builds the palette with `to_rgb`. The conformance
+            //     patch's image is exactly that shape.
+            //
+            // The `cache` gate is kept: `IccContext::unmanaged()` means the
+            // caller declined colour management, and that is honoured on this
+            // route as on the other.
+            if let Some(cache) = icc.cache
+                && let Some(components) = n.and_then(|v| usize::try_from(v).ok())
+                && components == 3
+                && let Object::Stream(st) = doc.resolve(&items[1])
+                && let Some(raw) = doc.slice(st.data_span)
+                && let Ok(profile) = pdfce_core::filters::decode_stream(&st.dict, raw)
+                && let Some((display, ink)) = icc_rgb_bridges(cache, &profile, icc.intent)
+            {
+                return Ok(Space::IccRgb { display, ink });
             }
             match n {
                 Some(1) => Ok(Space::Gray),
@@ -3119,7 +3298,7 @@ fn resolve_indexed(
         ink_table = None;
     }
     Ok(Space::Indexed {
-        base_icc_managed: matches!(base, Space::Icc { .. }),
+        base_icc_managed: matches!(base, Space::Icc { .. } | Space::IccRgb { .. }),
         table,
         ink: ink_table,
         overprint: op_kind

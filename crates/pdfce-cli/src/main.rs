@@ -13002,11 +13002,14 @@ one that broke",
     }
     if c.icc_alternate_used > 0 || c.icc_device_fallback_used > 0 {
         eprintln!(
-            "pdfce-cli: note: {} ICCBased space(s) rendered through their /Alternate and {} \
-through the device space implied by /N — the spec's own fallback (§8.6.5.5 Table 66), not an \
-approximation pdfce invented. These spaces were NOT colour-managed — see icc_managed_paints \
-and icc_unmanaged_paints on the metrics line for how many paints on this page were — so an \
-operator matching a brand colour should not treat THESE spaces as colour-managed",
+            "pdfce-cli: note: {} ICCBased space(s) resolved to their /Alternate and {} to the \
+device space implied by /N — the spec's own fallback structure (§8.6.5.5 Table 66), not an \
+approximation pdfce invented. That is the RESOLUTION, not the paint: whether each paint was then \
+converted through its embedded profile is icc_managed_paints / icc_unmanaged_paints on the \
+metrics line. A three-component space is managed to the screen whenever its profile models, and \
+any space is managed to ink when the document names an /OutputIntent; a one- or four-component \
+space on a page without one is painted through the fallback, so an operator matching a brand \
+colour should read the two counters rather than this line",
             c.icc_alternate_used, c.icc_device_fallback_used
         );
     }

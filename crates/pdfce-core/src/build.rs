@@ -24,13 +24,18 @@
 //! # `iccce` — reported from the resolved dependency graph
 //!
 //! pdfce depends on `iccce` as of `Pass 199.2`: `iccce-profile` and
-//! `iccce-cmm`, pinned to tag `v0.3.0` in `crates/pdfce-render`. So
-//! [`BuildInfo::iccce`] carries a real answer — version, pin, resolved
-//! revision, and when that revision was committed:
+//! `iccce-cmm`, pinned in `crates/pdfce-render` — to tag `v0.3.0` until
+//! 2026-09-02, and to that tag's revision `a4d9003b` since (decision 123,
+//! at iccce's own request). So [`BuildInfo::iccce`] carries a real answer —
+//! version, pin, resolved revision, and when that revision was committed:
 //!
 //! ```text
-//!   iccce:     0.3.0 (tag v0.3.0, a4d9003b, committed 2026-09-01T08:54:36Z)
+//!   iccce:     0.3.0 (rev a4d9003b, committed 2026-09-01T08:54:36Z)
 //! ```
+//!
+//! (Under the tag pin the same line read
+//! `0.3.0 (tag v0.3.0, a4d9003b, committed …)`; a `rev` pin and its
+//! resolved revision are one number, so it is printed once.)
 //!
 //! That is all four halves of what the operator asked for on 2026-08-18:
 //! *"the build revision, date, and time for the version of iccce used"*.
@@ -106,7 +111,8 @@ pub struct BuildInfo {
     /// manifest asked for, the resolved git revision, and when that
     /// revision was committed. `not-linked` when there is none.
     ///
-    /// Example: `0.3.0 (tag v0.3.0, a4d9003b, committed 2026-09-01T08:54:36Z)`.
+    /// Example: `0.3.0 (rev a4d9003b, committed 2026-09-01T08:54:36Z)` under
+    /// a `rev` pin; `0.3.0 (tag v0.3.0, a4d9003b, committed …)` under a tag.
     ///
     /// ## ★ It reports what the WORKSPACE links, not what `pdfce-core` links
     ///

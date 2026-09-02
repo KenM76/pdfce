@@ -320,12 +320,24 @@ pub enum ColorSpace {
     /// alternate's range ("the nearest values within the range of the
     /// alternate space shall be substituted").
     ///
-    /// The one conformance requirement pdfce does **not** meet is the
-    /// reader guideline that an embedded profile of a supported ICC version
-    /// shall be processed rather than substituted. pdfce substitutes
-    /// unconditionally. That is a *known, documented, counted* deviation
-    /// ([`ColorDiagnostics::icc_alternate_used`] /
-    /// [`ColorDiagnostics::icc_device_fallback_used`]), not a silent one.
+    /// ★ **This variant's own [`Self::to_rgb`] is that reinterpretation and
+    /// nothing more** — but it is no longer the whole story, and this
+    /// paragraph used to say it was ("pdfce substitutes unconditionally").
+    /// Since `Pass 199.2` a paint in this space on a subtractive page is
+    /// converted through its embedded profile to the output intent
+    /// (`Interpreter::authored_cmyk`); since `Pass 240.0` an `N 3` paint on
+    /// ANY page is converted through it to the screen
+    /// (`Interpreter::display_managed_rgb`), and images take both routes
+    /// through `image::Space::IccRgb`. Those conversions live on the
+    /// interpreter, which holds the bridge cache and the graphics state's
+    /// intent; this type holds the profile bytes for them. What is still
+    /// substituted, and still counted by [`ColorDiagnostics::icc_alternate_used`]
+    /// / [`ColorDiagnostics::icc_device_fallback_used`]: `N 1` and `N 4`
+    /// paints on a page with no output intent, shadings and meshes in this
+    /// space, and any profile iccce cannot model. The counters tick at
+    /// RESOLUTION and say which fallback structure was built, not whether a
+    /// paint was then managed — `Diagnostics::icc_managed_paints` answers
+    /// that.
     IccBased {
         /// Table 66 `/N` — "shall be 1, 3, or 4". It is what determines how
         /// many operands `sc`/`scn` consume, which is why it is required

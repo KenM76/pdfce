@@ -315,8 +315,11 @@ pub struct Diagnostics {
     /// before comparing pdfce against another engine, because that engine may
     /// well honour it.
     pub rendering_intents_set: usize,
-    /// How many paints were converted to ink by the ICC engine rather than by
-    /// the fallback `rgb_to_cmyk` reconstruction.
+    /// How many paints were converted **through their own embedded profile**
+    /// by the ICC engine — to ink (an `ICCBased` source on a page with an
+    /// `/OutputIntent`), or to the screen (an `ICCBased` `N 3` source on any
+    /// page, `Pass 240.0`) — rather than by Table 66's reinterpretation or the
+    /// fallback `rgb_to_cmyk` reconstruction.
     ///
     /// ★ This exists to make a NULL RESULT INTERPRETABLE, which is the whole
     /// reason it was written before the fix was measured rather than after.
@@ -327,9 +330,13 @@ pub struct Diagnostics {
     /// spent a diagnostic cycle reporting an ablation as exculpatory when the
     /// disabled code simply never executed for the file under test.
     pub icc_managed_paints: usize,
-    /// Paints that reached a subtractive buffer from an `ICCBased` space that
-    /// COULD have been colour-managed but was not, because the document named
-    /// no `/OutputIntent` or a profile failed to parse.
+    /// Paints from an `ICCBased` space that were NOT converted through their
+    /// profile: an `N 4` or `N 1` source on a page with no `/OutputIntent`, or
+    /// any source whose profile failed to parse or model.
+    ///
+    /// ★ Until `Pass 240.0` an `N 3` fill on an ordinary page landed here on
+    /// every paint, because the only bridge ended at the output intent. It
+    /// now has a display bridge and counts as managed.
     ///
     /// The disclosure half of `CLAUDE.md` rule 4: an operator whose file
     /// renders through the approximate path is entitled to know it did,
@@ -3221,6 +3228,7 @@ impl Interpreter<'_> {
                     &mut self.diag.color,
                 );
                 if let Some(rgb) = initial {
+                    let rgb = self.display_managed_rgb(stroking).unwrap_or(rgb);
                     self.set_current_color(rgb, stroking);
                 }
             }
@@ -3238,6 +3246,12 @@ impl Interpreter<'_> {
                     &mut self.diag.color,
                 );
                 if let Some(rgb) = set {
+                    // ★ The display route (`Pass 240.0`): an `ICCBased` RGB
+                    // colour's SCREEN answer comes from its own profile, not
+                    // from Table 66's reinterpretation. See
+                    // `display_managed_rgb` for why this sits here and not in
+                    // `ColorState::set`.
+                    let rgb = self.display_managed_rgb(stroking).unwrap_or(rgb);
                     self.set_current_color(rgb, stroking);
                 }
             }
@@ -3570,6 +3584,89 @@ impl Interpreter<'_> {
         } else {
             self.gs.current.fill_color = rgb;
         }
+    }
+
+    /// The current paint colour of one half **through its own embedded
+    /// profile to sRGB**, when the half's space is `ICCBased` with `N 3` and
+    /// the profile models — the display twin of [`Self::authored_cmyk`]
+    /// (`Pass 240.0`).
+    ///
+    /// # Why this exists, and why it lives here
+    ///
+    /// Until this Pass an `ICCBased` RGB fill had two answers on two kinds
+    /// of page: on a subtractive page `authored_cmyk` ran it through its
+    /// profile to the output intent (`Pass 199.2`), and on an additive page
+    /// `ColorSpace::to_rgb` reinterpreted its components as `DeviceRGB`
+    /// (Table 66's fallback). The same Pass that gave IMAGES a display route
+    /// (`Space::IccRgb`) had to give fills one too, or a fill and an image of
+    /// one colour through one profile would disagree on every ordinary page
+    /// — the exact "fixing one route makes the twin look broken" shape this
+    /// project has now recorded three times.
+    ///
+    /// It is here rather than in `ColorState::set` because the bridge cache
+    /// and the graphics state's `ri` both live on the interpreter, and
+    /// `ColorSpace::to_rgb` — reached from shadings, meshes, palettes and
+    /// alternates as well as from `sc` — takes neither. Threading a cache
+    /// through twenty call sites to change one of them is how a parameter
+    /// nobody else uses gets dropped by the next refactor. The override is
+    /// applied at the two operators that write the graphics-state colour,
+    /// which is every paint that reads `fill_color`/`stroke_color`: fills,
+    /// strokes, text, Type 3 glyphs, uncoloured patterns.
+    ///
+    /// # What it does NOT cover, stated so nobody infers it
+    ///
+    /// * **Shadings and meshes** in an `ICCBased` RGB space: their colour is
+    ///   resolved inside `shading.rs`/`mesh.rs` through `ColorSpace::to_rgb`
+    ///   and stays reinterpreted. Measured exposure: 0 of 51 conformance
+    ///   patches; corpus share of ICC-RGB shadings unmeasured. Owed.
+    /// * `N 1` and `N 4`: not managed for display, for the reasons on
+    ///   [`crate::image::Space::IccRgb`].
+    /// * An `Indexed` over `ICCBased` fill: resolved through
+    ///   `indexed_entry` first, so the base's profile applies — same as
+    ///   `authored_cmyk`.
+    ///
+    /// # The intent
+    ///
+    /// Read from the graphics state at the moment the colour is SET, which
+    /// is when `sc` runs. A later `ri` does not re-resolve an already-set
+    /// colour. `authored_cmyk` reads it at paint time instead; the two can
+    /// disagree only for a stream that sets a colour, changes `ri`, and then
+    /// paints without re-setting, which no producer in the corpus does and
+    /// which §8.6.5.8 does not require either reading of.
+    ///
+    /// `None` means "no display bridge applies" and the caller keeps the
+    /// space's own answer; it is not a failure.
+    ///
+    /// ★ Nothing is COUNTED here, deliberately. `icc_managed_paints` counts
+    /// paints, and this runs at `sc` time — a colour set and never painted
+    /// would tick it. The tally is taken at paint time by
+    /// [`Self::authored_cmyk`], which asks the same question again through
+    /// [`Self::display_bridge`] and counts the answer once per paint.
+    fn display_managed_rgb(&self, stroking: bool) -> Option<Rgb> {
+        let (space, comps) = self.color.device_color(stroking)?;
+        let resolved = space.indexed_entry(comps);
+        let (space, comps) = resolved
+            .as_ref()
+            .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
+        self.display_bridge(space)?.convert_to_rgb(comps)
+    }
+
+    /// The display bridge for a space, when one applies: `ICCBased`, `N 3`,
+    /// profile present and modelled. One predicate for the two callers that
+    /// must agree — the colour override and the paint-time tally.
+    fn display_bridge(
+        &self,
+        space: &crate::color::ColorSpace,
+    ) -> Option<std::sync::Arc<crate::icc::IccBridge>> {
+        let crate::color::ColorSpace::IccBased {
+            n: 3,
+            profile: Some(src),
+            ..
+        } = space
+        else {
+            return None;
+        };
+        self.icc.get_srgb(src, 3, self.gs.current.rendering_intent)
     }
 
     /// Run `f` against the live [`TextObject`], or diagnose the §9.4.2
@@ -6025,12 +6122,25 @@ impl Interpreter<'_> {
             return Some(cmyk);
         }
         // The other half of the disclosure: an `ICCBased` space that reached
-        // here and was NOT managed. Counted whether the cause was a missing
-        // output intent, an unparseable profile, or a non-CMYK destination --
-        // the operator's question is "was my colour managed?", not "which of
-        // four internal reasons stopped it".
+        // here and was NOT managed to ink. Counted whether the cause was a
+        // missing output intent, an unparseable profile, or a non-CMYK
+        // destination -- the operator's question is "was my colour
+        // managed?", not "which of four internal reasons stopped it".
+        //
+        // ★ EXCEPT when the DISPLAY route managed it (`Pass 240.0`). An
+        // `ICCBased` `N 3` fill whose profile models was converted through
+        // that profile to sRGB at `sc` time (`display_managed_rgb`), and on
+        // an additive page that IS the colour management the operator is
+        // asking about. Its ink answer is still `None` -- an RGB colour has
+        // no authored ink and is bridged by `rgb_to_cmyk` from the managed
+        // sRGB, exactly as an `IccRgb` image is -- so this arm returns
+        // nothing new; it only stops calling a managed paint unmanaged.
         if matches!(space, crate::color::ColorSpace::IccBased { .. }) {
-            self.icc.note_unmanaged();
+            if self.display_bridge(space).is_some() {
+                self.icc.note_managed();
+            } else {
+                self.icc.note_unmanaged();
+            }
         }
         let kind = crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)?;
         // ★★ THE SPOT-ONLY FALL-THROUGH, AND WITHOUT IT A SPOT COLOUR PAINTS
@@ -7792,27 +7902,24 @@ impl Interpreter<'_> {
         // §8.9.6.2 anyway -- a stencil carries no colour for an intent to
         // govern.
         //
-        // Counted, not yet consumed: nothing converts colour by intent yet, so
-        // this contributes to the census that says WHAT THE FILE ASKED FOR.
-        // The resolution itself is tested, so the rule is pinned before the
-        // consumer exists rather than written at the same time as it.
+        // ★ CONSUMED since `Pass 240.0`. This comment used to say "counted,
+        // not yet consumed: nothing converts colour by intent yet". The image
+        // decode's ICC bridges are keyed on the intent, so the resolved value
+        // is now what an `ICCBased` image is actually converted under -- an
+        // image tagged `/Intent /Perceptual` on a page whose `ri` says
+        // otherwise gets the perceptual chain, which is what Table 89 says.
+        // The census counter is unchanged.
         let image_intent_name = match dict.get(b"Intent").map(|o| doc.resolve(o)) {
             Some(Object::Name(n)) => Some(n.as_bytes().to_vec()),
             _ => None,
         };
-        if image_intent_name.is_some() {
-            let is_mask = matches!(
-                dict.get(b"ImageMask").map(|o| doc.resolve(o)),
-                Some(Object::Boolean(true))
-            );
-            if pdfce_core::color::image_intent(
-                self.gs.current.rendering_intent,
-                image_intent_name.as_deref(),
-                is_mask,
-            ) != self.gs.current.rendering_intent
-            {
-                self.diag.rendering_intents_set += 1;
-            }
+        let image_intent = pdfce_core::color::image_intent(
+            self.gs.current.rendering_intent,
+            image_intent_name.as_deref(),
+            is_stencil,
+        );
+        if image_intent_name.is_some() && image_intent != self.gs.current.rendering_intent {
+            self.diag.rendering_intents_set += 1;
         }
 
         match image::decode(
@@ -7823,15 +7930,19 @@ impl Interpreter<'_> {
             fill,
             origin,
             self.policy,
-            // Only colour-manage on a page that composites in ink. On an
-            // additive page an image's authored colorants are never read, so
-            // building a transform would cost a profile parse to produce a
-            // value nothing consumes.
-            if self.blend_space == crate::compositor::BlendSpace::Subtractive {
-                crate::image::IccContext::managed(&self.icc, self.gs.current.rendering_intent)
-            } else {
-                crate::image::IccContext::unmanaged()
-            },
+            // ★ ALWAYS managed, since `Pass 240.0`. This read "only
+            // colour-manage on a page that composites in ink: on an additive
+            // page an image's authored colorants are never read", and that
+            // was true while the only bridge ended at the output intent. The
+            // DISPLAY bridge (`Space::IccRgb`) ends at sRGB and is exactly
+            // what an additive page consumes -- gating it on the blend space
+            // left the conformance patch's RGB image managed on its own
+            // PDF/X page and unmanaged the moment the operator chose
+            // `device_native`, measured as (0,114,54) against (138,54,12) for
+            // the same texel. The ink bridge still only builds when the
+            // document names a destination, so an additive page without one
+            // costs nothing more than before.
+            crate::image::IccContext::managed(&self.icc, image_intent),
         ) {
             Ok(decoded) => {
                 // Cloned rather than moved: `ImageNotes` stopped being `Copy`
@@ -7924,9 +8035,19 @@ impl Interpreter<'_> {
                 // variant that can carry a profile — so the render is
                 // unchanged here. What changes is that the number stops
                 // claiming otherwise.
-                if self.blend_space == crate::compositor::BlendSpace::Subtractive
-                    && image_source_is_iccbased(doc, dict, resources)
-                {
+                // ★ On EVERY page since `Pass 240.0`, not only a subtractive
+                // one: the display route manages an `N 3` image on an additive
+                // page, and a counter gated on the blend space would report
+                // that page as having no ICC images at all -- the same
+                // "different question" shape recorded two paragraphs up.
+                //
+                // And `decoded.icc_managed` is consulted FIRST: a JPX image
+                // with no `/ColorSpace` at all carries its profile in the
+                // codestream, which `image_source_is_iccbased` -- a walk of
+                // the dictionary -- cannot see. Measured on the four-ways
+                // fixture: three managed paints reported for four managed
+                // objects until this read the decoder's own answer.
+                if decoded.icc_managed || image_source_is_iccbased(doc, dict, resources) {
                     // ★ `Pass 214.0` split this in two. It used to increment
                     // `unmanaged` unconditionally, which was right when NO
                     // image could be managed and became wrong in the opposite

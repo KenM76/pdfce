@@ -269,9 +269,13 @@ fn locate_git_dir() -> Option<std::path::PathBuf> {
 ///
 /// # Output shape
 ///
-/// - `0.3.0 (tag v0.3.0, a4d9003b)` — a git dependency, the usual case.
-/// - `0.3.0 (git a4d9003b)` — a git dependency pinned by branch or rev
-///   rather than tag.
+/// - `0.3.0 (rev a4d9003b)` — a git dependency pinned to a revision, which
+///   is how iccce is pinned since 2026-09-02 (decision 123). The pin and the
+///   resolved revision are the same number, so it is printed once.
+/// - `0.3.0 (tag v0.3.0, a4d9003b)` — pinned by tag: the pin the manifest
+///   asked for, then the revision the lock resolved it to.
+/// - `0.3.0 (branch main, a4d9003b)` — pinned by branch, same shape.
+/// - `0.3.0 (git a4d9003b)` — a git dependency with no query at all.
 /// - `0.3.0 (registry)` / `0.3.0 (path)` — if it ever comes from
 ///   crates.io or a path override.
 /// - `not-linked` — no `iccce` package in the lock.
@@ -409,11 +413,21 @@ fn describe_source(source: &str) -> String {
     let pin = git
         .split_once('?')
         .and_then(|(_, query)| query.split('#').next())
-        .and_then(|query| query.split_once('='))
-        .map(|(kind, value)| format!("{kind} {value}"));
+        .and_then(|query| query.split_once('='));
     match (pin, rev.is_empty()) {
-        (Some(pin), false) => format!("{pin}, {rev}"),
-        (Some(pin), true) => pin,
+        // ★ A `rev` pin IS a revision, so printing it and then the resolved
+        // revision again is the same eight characters twice -- and before
+        // this arm the full forty-character pin was printed ahead of them,
+        // which is what the banner did from the day iccce moved from a tag
+        // to a rev (2026-09-02) until the worked examples in this file were
+        // found to disagree with the live output. One abbreviated revision,
+        // once; if the lock ever resolved a `rev` pin to a DIFFERENT
+        // revision, that would be a broken lock and worth both numbers.
+        (Some(("rev", value)), false) if value.starts_with(rev.as_str()) => {
+            format!("rev {rev}")
+        }
+        (Some((kind, value)), false) => format!("{kind} {value}, {rev}"),
+        (Some((kind, value)), true) => format!("{kind} {value}"),
         (None, false) => format!("git {rev}"),
         (None, true) => "git".to_owned(),
     }
