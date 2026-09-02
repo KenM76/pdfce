@@ -1132,6 +1132,28 @@ impl CmykBuffer {
         Some(self.spots.len() - 1)
     }
 
+    /// This page's spot colorants and their tints at one pixel, in plane
+    /// order, for the ink probe.
+    ///
+    /// The name is decoded lossily **for display only** — this is a
+    /// diagnostic line an operator reads, not an identity comparison. The
+    /// authoritative key stays the raw bytes in [`SpotPlane::colorant`];
+    /// §7.3.5 NOTE 4 makes byte-differing names distinct, and a lossy
+    /// decode maps every invalid sequence onto one `U+FFFD`. That split —
+    /// bytes to compare, lossy to show — is the same one
+    /// `crate::color::Colorant` makes and is deliberate in both.
+    pub(crate) fn spot_roster_at(&self, idx: usize) -> Vec<(String, f32)> {
+        self.spots
+            .iter()
+            .map(|plane| {
+                (
+                    String::from_utf8_lossy(&plane.colorant).into_owned(),
+                    plane.tint.get(idx).copied().unwrap_or(0.0),
+                )
+            })
+            .collect()
+    }
+
     /// How many of this page's spot colorants are painting natively.
     ///
     /// Read by the interpreter to decide whether overprint can still be

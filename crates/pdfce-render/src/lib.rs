@@ -891,16 +891,23 @@ fn probe_ink_from_buffer(
             y,
             source: InkProbeSource::OutOfRange,
             cmyk: None,
+            spots: Vec::new(),
             alpha: None,
             srgb: None,
         };
     }
-    let px = buffer.pixel((y as usize) * (width as usize) + (x as usize));
+    let idx = (y as usize) * (width as usize) + (x as usize);
+    let px = buffer.pixel(idx);
     InkProbe {
         x,
         y,
         source: InkProbeSource::CmykBuffer,
         cmyk: Some(px.c),
+        // The name comes from the buffer's roster and the tint from the
+        // pixel, zipped in plane order -- `PixelCmyk::s` is padded to
+        // `MAX_SPOTS`, so zipping against the roster drops the padding
+        // rather than reporting phantom colorants.
+        spots: buffer.spot_roster_at(idx),
         alpha: Some(px.a),
         // Filled by the caller from the finished raster; see there.
         srgb: None,
@@ -915,7 +922,7 @@ fn probe_ink_from_buffer(
 /// a max-GCR reconstruction of the output rather than a reading of a
 /// composite that never happened. `PCS3_132`'s green is the standing
 /// example of what that substitution costs (decision 098).
-const fn probe_ink_screen(x: u32, y: u32, width: u32, height: u32) -> InkProbe {
+fn probe_ink_screen(x: u32, y: u32, width: u32, height: u32) -> InkProbe {
     InkProbe {
         x,
         y,
@@ -925,6 +932,10 @@ const fn probe_ink_screen(x: u32, y: u32, width: u32, height: u32) -> InkProbe {
             InkProbeSource::ScreenSrgb
         },
         cmyk: None,
+        // A page that never held ink has no colorant planes either, and
+        // the same argument the doc above makes for `cmyk` applies: an
+        // empty roster is the truth, not a placeholder.
+        spots: Vec::new(),
         alpha: None,
         srgb: None,
     }

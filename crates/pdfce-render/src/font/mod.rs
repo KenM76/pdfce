@@ -736,7 +736,13 @@ pub enum InkProbeSource {
 ///
 /// Emitted only when [`RenderOptions::ink_probe`] is set; absent otherwise,
 /// so a caller cannot read a probe that was never asked for.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// ★ `Copy` was dropped when [`Self::spots`] landed: a page's spot roster is
+/// variable-length, so this type owns a `Vec` and cannot be bit-copied. It
+/// stays `Clone`. Recorded rather than silently changed because dropping a
+/// `Copy` impl is a breaking change for any consumer that relied on implicit
+/// copies — and there is exactly one probe per render, so nothing here is on
+/// a hot path.
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct InkProbe {
     /// The device pixel asked about, echoed back so a report line is
@@ -753,6 +759,28 @@ pub struct InkProbe {
     /// see [`RenderOptions::ink_probe`] for why this is not filled in by
     /// converting the sRGB result backwards.
     pub cmyk: Option<[f32; 4]>,
+    /// This page's SPOT colorants at the probed pixel: the colorant name
+    /// and its tint, in the buffer's plane order.
+    ///
+    /// # ★★ Why the probe was incomplete without this, and what it cost
+    ///
+    /// [`Self::cmyk`] reports **four** channels. Once a page composites a
+    /// `/Separation` or `/DeviceN` ink in its own plane, four numbers stop
+    /// being the whole ink state — and the probe went on printing them as
+    /// though they were.
+    ///
+    /// That is not a cosmetic gap. On 2026-09-02 the probe reported a trap
+    /// mark and its surround as **identical** — `c=0 m=0 y=0 k=0.500` at
+    /// both — while the rendered pixels were visibly different colours,
+    /// because the entire difference lived in a spot plane the probe could
+    /// not see. An hour went into reconciling a "clean" measurement with a
+    /// defect that was in plain sight in the PNG.
+    ///
+    /// ⇒ **An instrument that reports a fixed number of channels for a
+    /// buffer whose channel count is now variable answers a different
+    /// question from the one its name asks.** Empty on a page that names no
+    /// spot colorant, which is 98.6 % of a 4,023-file corpus.
+    pub spots: Vec<(String, f32)>,
     /// The page group's alpha at this pixel, before the media composite
     /// over white. `None` when there was no colorant buffer to read it
     /// from.

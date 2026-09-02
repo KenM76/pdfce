@@ -10707,8 +10707,29 @@ fn format_ink_probe(probe: &pdfce_render::InkProbe) -> String {
     let srgb = probe
         .srgb
         .map_or_else(|| "-".to_owned(), |c| format!("{},{},{}", c[0], c[1], c[2]));
+    // ★ SPOT PLANES, appended rather than interleaved, so the four process
+    // fields keep their exact positions and every script that parses this
+    // line by `c=`/`m=`/`y=`/`k=` keeps working. Absent entirely on a page
+    // with no spot roster -- 98.6 % of a 4,023-file corpus -- so the common
+    // line is byte-identical to what it has always been.
+    //
+    // Reported at all because a four-channel readout of a buffer whose
+    // channel count is variable answers a DIFFERENT QUESTION from the one
+    // its name asks: this probe once reported a trap mark and its surround
+    // as identical while they rendered as visibly different colours,
+    // because the whole difference lived in a plane it could not see.
+    let spots = if probe.spots.is_empty() {
+        String::new()
+    } else {
+        let inks: Vec<String> = probe
+            .spots
+            .iter()
+            .map(|(name, tint)| format!("{}={tint:.3}", sanitize_token(name)))
+            .collect();
+        format!(" spots={}", inks.join(","))
+    };
     format!(
-        "ink-probe: x={} y={} source={source} {ink} alpha={alpha} srgb={srgb}",
+        "ink-probe: x={} y={} source={source} {ink} alpha={alpha} srgb={srgb}{spots}",
         probe.x, probe.y
     )
 }
@@ -12170,7 +12191,7 @@ overprint_process_images_unsupported={}",
     // emitting placeholder zeros -- which read exactly like "no ink here",
     // the one misreading `InkProbeSource` exists to prevent. So it gets its
     // own prefixed line, which a parser can select or ignore whole.
-    if let Some(probe) = d.ink_probe {
+    if let Some(probe) = &d.ink_probe {
         println!("{}", format_ink_probe(&probe));
     }
     report_diagnostics(
