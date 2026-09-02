@@ -151,7 +151,49 @@ asked for.
 4. Re-run the conformance sweep. **This is the first step where the numbers
    are allowed to move**, and the two traps to watch are named below.
 
-### ★★★ DO NOT START BY "FIXING" THE TWO REMAINING TRAPS — read decision 119 first
+### ★★★ OPEN QUESTION `(cb)` IS ANSWERED — AND THE ANSWER KILLED THE THEORY
+
+**Measured 2026-09-02, after the operator set Acrobat's `Use Overprint
+Preview` to *Always*.** Both patches were re-captured from Acrobat with
+`tools/render-parity/acrobat_shot.ps1` — the same view-only `PrintWindow`
+mechanism that produced the original references — and compared
+**structurally**, by the count and relative positions of the green artwork
+regions, which needs no pixel alignment:
+
+| patch | green regions BEFORE | AFTER | layout |
+|---|---|---|---|
+| the failing one | 9 | 9 | **identical** |
+| a CMYK+spot overprint control | 10 | 10 | **identical** |
+
+⇒ **Turning overprint preview on changed Acrobat's render not at all.**
+
+That refutes `R1`, which decision 119 rested on. The other two candidate
+explanations are refuted too, both measured rather than argued:
+
+- **`R2` — the white object is a transparency group.** Both patches contain
+  **zero** `/Group` dictionaries, zero `/S /Transparency`, zero `/SMask`.
+- **`R3` — an `/op` overriding `/OP`.** pdfce's ExtGState handling matches
+  Table 58 exactly; the failing patch sets `/op` six times and `/OP` once, so
+  the non-stroking flag is explicit almost everywhere.
+
+★ **The weak link, stated rather than buried:** I could not independently
+confirm the preference was live in the captured process. No `overprint` value
+exists under `HKCU\Software\Adobe\...`, no preferences file mentions it,
+and nothing under `%APPDATA%\Adobe\Acrobat\` changed in the three hours
+after the operator set it — though Acrobat flushes preferences on exit, so
+that cuts both ways.
+
+★★ **And a possibility that would explain everything: the ORIGINAL references
+may already have been captured with overprint preview ON** (2026-08-18, same
+machine). Then nothing changed because nothing needed to — and Acrobat *is*
+simulating overprint and still renders white, which is a real disagreement
+with the spec reading rather than an oracle artefact.
+
+**`pdfce-spec-librarian` has been re-dispatched with all of this** and asked
+for a fourth mechanism, or an explicit retraction. **Do not act on decision
+119 until that lands** — its premise is measured false.
+
+### The prior reasoning, kept legible rather than deleted
 
 **They may not be pdfce defects at all.** `ARCHITECTURE.md` §12 **decision
 119** and `ROADMAP.md` open operator question **`(cb)`** record an
