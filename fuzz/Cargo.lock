@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-core"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "aes",
  "brotli",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-render"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "iccce-cmm",
  "iccce-profile",
