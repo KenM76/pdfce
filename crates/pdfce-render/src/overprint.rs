@@ -630,10 +630,19 @@ pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
 ///
 /// # Returns
 ///
-/// Pairs of `(colorant name bytes, tint)`, in the order the space
-/// declares its components, for every component that is a spot. Empty for
-/// every process space, which is the 98.6 % case in a 4,023-file corpus —
-/// so the allocation is skipped entirely there.
+/// Triples of `(component index, colorant name bytes, tint)`, in the order
+/// the space declares its components, for every component that is a spot.
+/// Empty for every process space, which is the 98.6 % case in a 4,023-file
+/// corpus — so the allocation is skipped entirely there.
+///
+/// ★ **The component index is returned rather than recoverable by name**,
+/// and that is not a convenience. A caller that needs it — to sample this
+/// colorant's tint curve with every OTHER component pinned at zero, per
+/// ISO 32000-2 §10.8.3 step (b) — would otherwise search the name list,
+/// and a `DeviceN` that names the same colorant twice (malformed, but
+/// nothing rejects it) would hand back the first match for both. Sampling
+/// the wrong component produces a perfectly plausible curve for the wrong
+/// ink, which is the failure mode that would never be reported as a bug.
 ///
 /// The name is borrowed from `kind`, not cloned: the caller either looks
 /// it up in an existing roster (no allocation) or hands it to
@@ -644,7 +653,7 @@ pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
 /// operands is malformed, and inventing a tint for the third would paint
 /// ink the document never asked for.
 #[must_use]
-pub fn authored_spots<'a>(kind: &'a SourceKind, comps: &[f32]) -> Vec<(&'a [u8], f32)> {
+pub fn authored_spots<'a>(kind: &'a SourceKind, comps: &[f32]) -> Vec<(usize, &'a [u8], f32)> {
     let SourceKind::SeparationOrDeviceN { names } = kind else {
         return Vec::new();
     };
@@ -655,7 +664,7 @@ pub fn authored_spots<'a>(kind: &'a SourceKind, comps: &[f32]) -> Vec<(&'a [u8],
         if let crate::color::Colorant::Named(name) = colorant
             && process_channel(name).is_none()
         {
-            out.push((&**name, tint));
+            out.push((i, &**name, tint));
         }
     }
     out
@@ -2064,7 +2073,7 @@ mod tests {
         };
         assert_eq!(
             authored_spots(&src, &[0.5]),
-            vec![(&b"PANTONE 265 C"[..], 0.5)]
+            vec![(0, &b"PANTONE 265 C"[..], 0.5)]
         );
         assert_eq!(
             authored_tints(&src, &[0.5]),
@@ -2091,7 +2100,7 @@ mod tests {
         };
         assert_eq!(
             authored_spots(&src, &[0.5, 1.0]),
-            vec![(&b"Suite Green"[..], 1.0)],
+            vec![(1, &b"Suite Green"[..], 1.0)],
             "only the component with no process channel"
         );
         assert_eq!(
@@ -2166,7 +2175,7 @@ mod tests {
         };
         assert_eq!(
             authored_spots(&src, &[1.0]),
-            vec![(&b"Blackcurrant"[..], 1.0)]
+            vec![(0, &b"Blackcurrant"[..], 1.0)]
         );
     }
 
@@ -2187,7 +2196,7 @@ mod tests {
         };
         assert_eq!(
             authored_spots(&src, &[0.25, 0.5]),
-            vec![(&b"one"[..], 0.25), (&b"two"[..], 0.5)],
+            vec![(0, &b"one"[..], 0.25), (1, &b"two"[..], 0.5)],
             "two operands, two colorants -- the third is not invented"
         );
     }

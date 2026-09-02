@@ -133,6 +133,57 @@ pub(crate) struct BrushSpec {
     pub blend: BlendMode,
     /// Whether tiny_skia anti-aliases this paint's edges.
     pub anti_alias: bool,
+    /// The paint's SPOT colorants and their tints, when the file stated
+    /// any — the half [`Self::cmyk`] structurally cannot carry.
+    ///
+    /// Empty for every process colour space, which is 98.6 % of a
+    /// 4,023-file corpus, so the common paint allocates nothing.
+    ///
+    /// # Why the LUT rides along, and why it is an `Arc`
+    ///
+    /// A spot colorant's appearance comes from its **tint transform**
+    /// (§8.6.6.4), which is a property of the colour space and is
+    /// therefore knowable only in the interpreter. The colorant buffer,
+    /// which is where the tint has to arrive, sees only a `BrushSpec`. So
+    /// the curve has to travel with the paint.
+    ///
+    /// It is sampled **once per colorant per document**, cached in the
+    /// interpreter, and shared by `Arc` — so cloning a `BrushSpec`
+    /// (which happens per paint, and again inside every knockout split)
+    /// is a refcount bump rather than 256 samples of a PostScript
+    /// calculator function. Putting a `SpotLut` here by value would
+    /// reintroduce exactly the per-paint cost the type was created to
+    /// avoid.
+    pub spots: Vec<SpotInk>,
+    /// The paint's colour as **process tints only** — the four process
+    /// channels this source actually named, with everything else zero —
+    /// for use when [`Self::spots`] are deposited into their own planes.
+    ///
+    /// # ★★ Why this is a THIRD colour field and not a refinement of `cmyk`
+    ///
+    /// [`Self::cmyk`] is the colour **flattened**: for a `/Separation` over
+    /// a `DeviceCMYK` alternate it is the tint transform's own output,
+    /// which is what `Pass 140.1` established as the right paint colour and
+    /// what makes a spot FILL and a spot IMAGE of the same tint agree.
+    ///
+    /// That is correct exactly while the spot has nowhere else to go. The
+    /// moment its tint is also deposited into a plane, the flattened value
+    /// lays the SAME INK DOWN A SECOND TIME — the collapse multiplies the
+    /// plane's contribution into a process colour that already contains it.
+    ///
+    /// Not theoretical: the first cut of the deposit did exactly this, and
+    /// `devicen_image_ink`'s agreement tests caught it as `(97, 169, 135)`
+    /// against an expected `(158, 208, 186)`. The arithmetic is decisive —
+    /// `158² / 255 = 97.9` — which is what a value multiplied by itself
+    /// looks like.
+    ///
+    /// So the two answer different questions and both are needed:
+    /// *"what does this colour flatten to"* (`cmyk`, used when no plane is
+    /// granted) and *"which process channels did this source state"*
+    /// (`process_tints`, used when every spot got one). A spot-only source
+    /// answers `[0, 0, 0, 0]` here, which is the truth: it states no
+    /// process ink at all.
+    pub process_tints: Option<[f32; 4]>,
     /// The paint's colour as **authored subtractive tints**, when the
     /// canvas it lands on composites in a subtractive space.
     ///
@@ -158,6 +209,31 @@ pub(crate) struct BrushSpec {
     /// (`DeviceCMYK 0 1 0 0` recovers as `0, 0.995, 0.409, 0.071`). The
     /// distinction is worth a branch precisely because it is not free.
     pub cmyk: Option<[f32; 4]>,
+}
+
+/// One spot colorant a paint states: its identity, its tint, and how it
+/// looks.
+///
+/// # The name is the identity, as BYTES
+///
+/// §8.6.6.4's device test consults only the colorant name, and §7.3.5
+/// NOTE 4 makes byte-differing names distinct **even if they render
+/// identically**. This is the key `CmykBuffer::spot_index` matches on, so
+/// a lossy decode here would let two different inks share one plane and
+/// composite as one colour.
+#[derive(Debug, Clone)]
+pub(crate) struct SpotInk {
+    /// The colorant name, `#xx`-decoded — the comparison form §7.3.5
+    /// specifies.
+    pub colorant: std::sync::Arc<[u8]>,
+    /// The tint the file stated, `0.0..=1.0`.
+    pub tint: f32,
+    /// This colorant alone on white paper, sampled across the tint range.
+    ///
+    /// Shared rather than owned — see [`BrushSpec::spots`]. Built by the
+    /// interpreter, which is the only place the tint transform is
+    /// reachable.
+    pub lut: std::sync::Arc<crate::cmyk_buffer::SpotLut>,
 }
 
 impl BrushSpec {
@@ -192,7 +268,27 @@ impl BrushSpec {
             // from an authored value at the point of use, which is the one
             // property the colorant buffer must be able to tell apart.
             cmyk: None,
+            // Same argument as `cmyk` above: only the interpreter knows
+            // whether a colour space named a spot colorant, and an empty
+            // vector here is the honest "this level was not told".
+            spots: Vec::new(),
+            process_tints: None,
         }
+    }
+
+    /// The same paint, carrying the spot colorants the file stated.
+    ///
+    /// Separate from [`Self::with_cmyk`] rather than folded into it
+    /// because the two halves come from different readers
+    /// (`overprint::authored_tints` and `overprint::authored_spots`) and a
+    /// source can legitimately have one and not the other: a
+    /// `/Separation` states a spot and no process tint, and a
+    /// `DeviceCMYK` states process tints and no spot.
+    #[must_use]
+    pub(crate) fn with_spots(mut self, spots: Vec<SpotInk>, process: Option<[f32; 4]>) -> Self {
+        self.spots = spots;
+        self.process_tints = process;
+        self
     }
 
     /// The same paint, carrying its authored subtractive tints.
@@ -274,6 +370,12 @@ impl BrushSpec {
                     // an authored paint to a reconstructed one inside every
                     // knockout group.
                     cmyk: self.cmyk,
+                    // Carried for the identical reason, and cheaply: the
+                    // clone is a refcount bump per colorant. Dropping them
+                    // here would make a spot fill inside a knockout group
+                    // silently lose its plane and fall back to flattening.
+                    spots: self.spots.clone(),
+                    process_tints: self.process_tints,
                 },
                 f32::from(rgba[3]) / 255.0,
             ),
@@ -576,6 +678,10 @@ impl<'a> Canvas<'a> {
                         // display list is refused outright on a subtractive
                         // page. See `PoisonReason::ColorantBuffer`.
                         cmyk: None,
+                        // Same reason, and doubly so: an image brush states
+                        // no colorants at all, spot or process.
+                        spots: Vec::new(),
+                        process_tints: None,
                     },
                     rule: FillRule::Winding,
                     ctm,

@@ -2299,6 +2299,13 @@ pub fn trace_paths(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        // Empty per stream, deliberately: a form XObject or a pattern
+        // is a separate Interpreter, and a tint transform is cheap
+        // enough to re-sample once per stream. Sharing the cache
+        // across streams would mean keying it on the SPACE as well as
+        // the name, since two streams can define different spaces
+        // under colliding colorant names.
+        spot_luts: std::cell::RefCell::new(HashMap::new()),
         icc: crate::icc::IccBridgeCache::new(output_intent_profile(doc)),
         // Geometry only — `trace_paths` records paths and
         // composites nothing, so §11.3.4 cannot apply. Additive
@@ -2391,6 +2398,13 @@ fn run_nested(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        // Empty per stream, deliberately: a form XObject or a pattern
+        // is a separate Interpreter, and a tint transform is cheap
+        // enough to re-sample once per stream. Sharing the cache
+        // across streams would mean keying it on the SPACE as well as
+        // the name, since two streams can define different spaces
+        // under colliding colorant names.
+        spot_luts: std::cell::RefCell::new(HashMap::new()),
         icc: crate::icc::IccBridgeCache::new(output_intent_profile(doc)),
         blend_space,
         path: PathBuilder::new(),
@@ -2540,6 +2554,13 @@ pub(crate) fn run_form_at_on(
         base_ctm,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
+        // Empty per stream, deliberately: a form XObject or a pattern
+        // is a separate Interpreter, and a tint transform is cheap
+        // enough to re-sample once per stream. Sharing the cache
+        // across streams would mean keying it on the SPACE as well as
+        // the name, since two streams can define different spaces
+        // under colliding colorant names.
+        spot_luts: std::cell::RefCell::new(HashMap::new()),
         icc: crate::icc::IccBridgeCache::new(output_intent_profile(doc)),
         // §12.5.5: an appearance stream with no `/Group` is a
         // NON-ISOLATED group, and a non-isolated group INHERITS
@@ -2620,6 +2641,38 @@ struct Interpreter<'a> {
     base_ctm: Transform,
     gs: GStateStack,
     diag: Diagnostics,
+    /// Sampled tint curves for this stream's spot colorants, keyed on the
+    /// colorant's raw name bytes.
+    ///
+    /// # Why a cache at all
+    ///
+    /// A tint transform is an arbitrary PDF function (§7.10) — possibly a
+    /// PostScript calculator program — and
+    /// [`crate::cmyk_buffer::SpotLut`] samples it 256 times. Without this,
+    /// **every paint** in a spot colour would re-sample it, and a drawing
+    /// that fills two thousand shapes in one ink would evaluate that
+    /// function half a million times to learn the same curve.
+    ///
+    /// # Why `RefCell` rather than `&mut self`
+    ///
+    /// `solid_authored` takes `&self` and is called from a dozen sites
+    /// that read `self.gs.current.*` in the same expression. Threading
+    /// `&mut` through would be a borrow-checker refactor of the hot paint
+    /// path for a cache, which is the wrong trade. Single-threaded by
+    /// construction — the engine takes no threads (decision recorded with
+    /// the compositor's `f32` choice) — so the runtime borrow can only be
+    /// violated by re-entering the interpreter from inside itself, which
+    /// no paint path does.
+    ///
+    /// # Why the key is BYTES
+    ///
+    /// §7.3.5 NOTE 4: names differing in bytes are distinct names even if
+    /// they render identically. A `String` key built lossily would map
+    /// every invalid sequence to one `U+FFFD` and let two inks share a
+    /// curve. Same argument as `CmykBuffer`'s plane key, and they must
+    /// agree or a paint would find one curve and deposit into a different
+    /// plane.
+    spot_luts: std::cell::RefCell<HashMap<Box<[u8]>, Arc<crate::cmyk_buffer::SpotLut>>>,
     /// §11.3.4's **blending colour space**, for the group this stream is
     /// the contents of.
     ///
@@ -5871,10 +5924,128 @@ impl Interpreter<'_> {
             self.gs.current.fill_color
         };
         let spec = BrushSpec::solid(colour, alpha, blend);
-        match self.authored_cmyk(stroking) {
+        let spec = match self.authored_cmyk(stroking) {
             Some(cmyk) => spec.with_cmyk(cmyk),
             None => spec,
+        };
+        let spots = self.authored_spot_inks(stroking);
+        if spots.is_empty() {
+            spec
+        } else {
+            // The PROCESS half, which is what the paint must use instead of
+            // the flattened `cmyk` when these spots reach their own planes.
+            // See `BrushSpec::process_tints`.
+            spec.with_spots(spots, self.process_tints_only(stroking))
         }
+    }
+
+    /// The four process tints this source states, with everything it does
+    /// not name left at zero.
+    ///
+    /// This is Table 149's question, and it is deliberately NOT
+    /// [`Self::authored_cmyk`]'s: that one answers *"what does this colour
+    /// flatten to"* and hands back a `/Separation`'s tint transform output,
+    /// which already CONTAINS the spot's ink. Using it alongside a spot
+    /// plane deposits the same ink twice -- see `BrushSpec::process_tints`
+    /// for the measurement that caught it.
+    fn process_tints_only(&self, stroking: bool) -> Option<[f32; 4]> {
+        let (space, comps) = self.color.device_color(stroking)?;
+        let kind = crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)?;
+        crate::overprint::authored_tints(&kind, comps)
+    }
+
+    /// The SPOT colorants this half of the graphics state states, each with
+    /// its tint and its sampled appearance.
+    ///
+    /// Empty for every process colour space — 98.6 % of a 4,023-file
+    /// corpus — and the early return means such a paint allocates nothing
+    /// and evaluates nothing.
+    ///
+    /// # What "appearance" means here, and the clause it comes from
+    ///
+    /// ISO 32000-2 §10.8.3 step (b) says to convert each separation over
+    /// *"a background matte of all white"*. So each curve is **this
+    /// colorant alone**: every other component of the space is held at
+    /// `0.0` while this one sweeps `0.0..=1.0`. That is what makes step
+    /// (c)'s multiply the right combining operation downstream — each
+    /// sample is a transmittance through one ink.
+    ///
+    /// For a `Separation` that is trivially the whole space. For a
+    /// `DeviceN [/Black <spot>]` it means the spot's curve is sampled with
+    /// Black pinned at zero, which is the point: Black has its own process
+    /// channel and must not be baked into the spot's appearance as well,
+    /// or it would be laid down twice.
+    ///
+    /// # A scratch diagnostics sink, deliberately
+    ///
+    /// [`crate::color::ColorSpace::to_rgb`] counts what it could not
+    /// evaluate. Sampling a curve 256 times would push 256 identical
+    /// events into the page's real counters and make a per-page number
+    /// report a per-sample one — a counter that answers a different
+    /// question from the one its name asks. The scratch sink is discarded;
+    /// a transform that will not evaluate is disclosed by the curve coming
+    /// back white (see [`crate::cmyk_buffer::SpotLut::transparent`]), not
+    /// by inflating a count.
+    fn authored_spot_inks(&self, stroking: bool) -> Vec<crate::canvas::SpotInk> {
+        let Some((space, comps)) = self.color.device_color(stroking) else {
+            return Vec::new();
+        };
+        let Some(kind) =
+            crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)
+        else {
+            return Vec::new();
+        };
+        // The cheap pre-test, so a process space never reaches the rest.
+        if !crate::overprint::names_a_spot_colorant(&kind) {
+            return Vec::new();
+        }
+
+        let arity = comps.len();
+        let mut out = Vec::new();
+        for (component, name, tint) in crate::overprint::authored_spots(&kind, comps) {
+            // `component` is the index in the SPACE's declaration order,
+            // handed back by `authored_spots` precisely so this does not
+            // have to search by name -- see that function's docs.
+            let lut = self.spot_lut_for(name, space, component, arity);
+            out.push(crate::canvas::SpotInk {
+                colorant: Arc::from(name),
+                tint,
+                lut,
+            });
+        }
+        out
+    }
+
+    /// This colorant's tint curve, sampled once per stream and shared.
+    ///
+    /// See [`Self::spot_luts`] for why the cache exists and why it is a
+    /// `RefCell`.
+    fn spot_lut_for(
+        &self,
+        name: &[u8],
+        space: &crate::color::ColorSpace,
+        component: usize,
+        arity: usize,
+    ) -> Arc<crate::cmyk_buffer::SpotLut> {
+        if let Some(found) = self.spot_luts.borrow().get(name) {
+            return Arc::clone(found);
+        }
+        let intent = self.policy.cmyk_intent;
+        let built = Arc::new(crate::cmyk_buffer::SpotLut::build(|t| {
+            let mut probe = vec![0.0_f32; arity.max(component + 1)];
+            if let Some(slot) = probe.get_mut(component) {
+                *slot = t;
+            }
+            // Discarded on purpose -- see `authored_spot_inks`.
+            let mut scratch = crate::color::ColorDiagnostics::default();
+            space
+                .to_rgb(&probe, intent, &mut scratch)
+                .map_or([1.0, 1.0, 1.0], |rgb| [rgb.r, rgb.g, rgb.b])
+        }));
+        self.spot_luts
+            .borrow_mut()
+            .insert(name.into(), Arc::clone(&built));
+        built
     }
 
     /// Paint one path with `CompatibleOverprint` instead of `Normal`.
@@ -6227,6 +6398,13 @@ impl Interpreter<'_> {
                 &coverage,
                 region,
                 source,
+                // ★ A non-separable blend does not carry spot ink, and
+                // that is §11.7.4.2 rather than an omission: only
+                // SEPARABLE, white-preserving modes may be applied to a
+                // spot colour. `blend_spots` degrades this mode to Normal
+                // on any plane that already holds ink; supplying a source
+                // tint here would paint through a mode the clause forbids.
+                [0.0; crate::compositor::MAX_SPOTS],
                 alpha.clamp(0.0, 1.0),
                 crate::compositor::Blend::NonSeparable(mode),
             );

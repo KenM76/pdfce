@@ -241,15 +241,75 @@ pub(crate) fn paint_solid_into_cmyk(
             // counter used to be incremented only on the image path, which made
             // this doc comment's own promise ("every such paint is counted")
             // false for every solid fill.
-            let bridged = brush.cmyk.is_none();
-            let colour = brush.cmyk.unwrap_or_else(|| {
-                crate::overprint::rgb_to_cmyk(
+            // ★★ SPOT PLANES ARE ALL-OR-NOTHING FOR ONE PAINT, and that is
+            // a correctness rule rather than a simplification.
+            //
+            // A spot colorant's ink can arrive by exactly one of two
+            // routes: through its own plane, or flattened into the process
+            // channels by its tint transform. **Both routes at once lays
+            // the ink down twice.** That is not theoretical -- it is what
+            // the first cut of this did, and `devicen_image_ink`'s
+            // fill-versus-image agreement tests caught it immediately:
+            // a `Separation` fill rendered `(97, 169, 135)` where the same
+            // authored tint through the image path gave `(158, 208, 186)`,
+            // a mean difference of 50 levels.
+            //
+            // So if EVERY spot this paint names got a plane, the process
+            // colour must come from the authored tints -- which name only
+            // the process components, and are all-zero for a spot-only
+            // source -- and never from the flattened RGB. If ANY spot was
+            // refused a plane (roster cap or byte ceiling), the paint keeps
+            // today's flattening ENTIRELY and deposits nothing: a partial
+            // split would double-count the ones that got planes while the
+            // flattening still carries all of them.
+            let mut spots = [0.0_f32; crate::compositor::MAX_SPOTS];
+            let mut all_planed = true;
+            for ink in &brush.spots {
+                // The closure builds the 256-sample curve and runs ONLY on
+                // the first allocation of this colorant on this page.
+                match buf.spot_index(&ink.colorant, || (*ink.lut).clone()) {
+                    Some(plane) => {
+                        if let Some(slot) = spots.get_mut(plane) {
+                            *slot = ink.tint;
+                        }
+                    }
+                    None => all_planed = false,
+                }
+            }
+            // A deposit also needs somewhere honest for the PROCESS half to
+            // come from. Without `process_tints` the only process colour
+            // available is the flattened one, which already contains the
+            // spot's ink -- so depositing on top of it would double it.
+            let deposit = !brush.spots.is_empty() && all_planed && brush.process_tints.is_some();
+            if !deposit {
+                spots = [0.0_f32; crate::compositor::MAX_SPOTS];
+            }
+            // `bridged` answers "was this paint's colour AUTHORED or
+            // reconstructed from quantised RGB". A deposited spot is
+            // authored by definition -- its tint came from the file and its
+            // curve from the file's own tint transform -- so it is not
+            // bridged even though `cmyk` may be `None` (a spot-only source
+            // states no process tint, which is what that `None` means).
+            let bridged = brush.cmyk.is_none() && !deposit;
+            let colour = match (deposit, brush.process_tints, brush.cmyk) {
+                // Depositing: the process channels carry only what this
+                // source NAMED. For a spot-only source that is all zeros,
+                // which is the truth -- its entire contribution is in its
+                // plane.
+                (true, Some(process), _) => process,
+                // Not depositing: the flattened colour, exactly as before
+                // this Pass. `Pass 140.1` established that a `/Separation`
+                // over a `DeviceCMYK` alternate must paint its tint
+                // transform's own output, which is what makes a spot fill
+                // and a spot image of the same tint agree.
+                (_, _, Some(cmyk)) => cmyk,
+                (_, _, None) => crate::overprint::rgb_to_cmyk(
                     f32::from(rgba[0]) / 255.0,
                     f32::from(rgba[1]) / 255.0,
                     f32::from(rgba[2]) / 255.0,
-                )
-            });
-            let painted = buf.composite_mask(&cov, region, colour, alpha, blend);
+                ),
+            };
+            let painted = buf.composite_mask(&cov, region, colour, spots, alpha, blend);
             if bridged {
                 buf.record_bridged_solid(painted);
             }

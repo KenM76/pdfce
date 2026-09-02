@@ -1322,6 +1322,8 @@ mod tests {
                 blend: BlendMode::SourceOver,
                 anti_alias: true,
                 cmyk: None,
+                spots: Vec::new(),
+                process_tints: None,
             },
             rule: FillRule::Winding,
             ctm: Transform::identity(),

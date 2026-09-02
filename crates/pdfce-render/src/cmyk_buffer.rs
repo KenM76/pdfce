@@ -1180,6 +1180,7 @@ impl CmykBuffer {
         coverage: &Mask,
         region: (u32, u32, u32, u32),
         colour: [Chan; 4],
+        spots: [Chan; crate::compositor::MAX_SPOTS],
         alpha: Chan,
         blend: Blend,
     ) -> u32 {
@@ -1277,7 +1278,12 @@ impl CmykBuffer {
                 // wrong exactly where the clause exists.
                 let source = PixelCmyk {
                     c: colour,
-                    s: [0.0; crate::compositor::MAX_SPOTS],
+                    // Indices here are plane indices in THIS buffer's
+                    // roster, resolved by the caller through
+                    // `spot_index`. Entries past the roster stay 0.0,
+                    // which is "no ink" and is the correct value for a
+                    // colorant this page has not named.
+                    s: spots,
                     a: alpha * c,
                 };
                 if self.composite_at(idx, source, c, blend) {
@@ -1620,7 +1626,19 @@ impl CmykBuffer {
                 }
                 let after = PixelCmyk {
                     c: mixed,
-                    s: [0.0; crate::compositor::MAX_SPOTS],
+                    // ★★ TABLE 149's SPOT RULE: a source that does not NAME a
+                    // colorant leaves that colorant to the backdrop. This
+                    // path's source states process tints only, so every spot
+                    // plane is preserved untouched.
+                    //
+                    // This built a fresh `[0.0; MAX_SPOTS]` until the deposit
+                    // landed, which was harmless while no plane ever held ink
+                    // and became a defect the instant one did: an overprinting
+                    // grey WIPED the spot backdrop it was supposed to preserve.
+                    // Caught by `grey_overprint`'s four preservation tests --
+                    // the sibling `composite_overprint_varying` was already
+                    // correct by construction because it starts from `before`.
+                    s: before.s,
                     a: t.mul_add(1.0 - before.a, before.a),
                 };
                 if after != before {
@@ -2482,7 +2500,14 @@ mod tests {
     fn paint_all(b: &mut CmykBuffer, c: [Chan; 4], alpha: Chan, blend: Blend) {
         let (w, h) = (b.width, b.height);
         let m = full_mask(w, h);
-        b.composite_mask(&m, (0, 0, w, h), c, alpha, blend);
+        b.composite_mask(
+            &m,
+            (0, 0, w, h),
+            c,
+            [0.0; crate::compositor::MAX_SPOTS],
+            alpha,
+            blend,
+        );
     }
 
     /// ★★ The one dimension mismatch in this file whose consequence is
@@ -2711,7 +2736,14 @@ mod tests {
         // round trip returned `(0, 0.995, 0.409, 0.071)`.
         let mut b = CmykBuffer::new(2, 2, CmykIntent::default(), None).unwrap();
         let m = full_mask(2, 2);
-        b.composite_mask(&m, (0, 0, 2, 2), [0.0, 1.0, 0.0, 0.0], 1.0, Blend::Normal);
+        b.composite_mask(
+            &m,
+            (0, 0, 2, 2),
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0; crate::compositor::MAX_SPOTS],
+            1.0,
+            Blend::Normal,
+        );
         assert_eq!(b.pixel(0).c, [0.0, 1.0, 0.0, 0.0]);
         assert_eq!(b.pixel(0).a, 1.0);
     }
@@ -2725,7 +2757,14 @@ mod tests {
         let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         let mut m = Mask::new(1, 1).unwrap();
         m.data_mut()[0] = 128;
-        b.composite_mask(&m, (0, 0, 1, 1), [0.0, 1.0, 0.0, 0.0], 1.0, Blend::Normal);
+        b.composite_mask(
+            &m,
+            (0, 0, 1, 1),
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0; crate::compositor::MAX_SPOTS],
+            1.0,
+            Blend::Normal,
+        );
         let px = b.pixel(0);
         assert!(
             (px.a - 128.0 / 255.0).abs() < 1e-6,
@@ -2751,11 +2790,19 @@ mod tests {
         // the claim `Pass 97.1e` actually makes.
         let mut b = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
         let m = full_mask(1, 1);
-        b.composite_mask(&m, (0, 0, 1, 1), [0.0, 0.0, 0.0, 1.0], 1.0, Blend::Normal);
+        b.composite_mask(
+            &m,
+            (0, 0, 1, 1),
+            [0.0, 0.0, 0.0, 1.0],
+            [0.0; crate::compositor::MAX_SPOTS],
+            1.0,
+            Blend::Normal,
+        );
         b.composite_mask(
             &m,
             (0, 0, 1, 1),
             [0.0, 1.0, 0.0, 0.0],
+            [0.0; crate::compositor::MAX_SPOTS],
             1.0,
             Blend::Difference,
         );
@@ -2873,8 +2920,22 @@ mod tests {
 
         // The ordinary group, for contrast.
         let mut plain = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
-        plain.composite_mask(&full, (0, 0, 1, 1), cyan, 0.5, Blend::Normal);
-        plain.composite_mask(&full, (0, 0, 1, 1), magenta, 0.5, Blend::Normal);
+        plain.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            cyan,
+            [0.0; crate::compositor::MAX_SPOTS],
+            0.5,
+            Blend::Normal,
+        );
+        plain.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            magenta,
+            [0.0; crate::compositor::MAX_SPOTS],
+            0.5,
+            Blend::Normal,
+        );
 
         // The knockout group over the same (transparent) backdrop.
         let backdrop = CmykBuffer::new(1, 1, CmykIntent::default(), None).unwrap();
@@ -2882,8 +2943,22 @@ mod tests {
             .unwrap()
             .into_knockout(&backdrop)
             .unwrap();
-        ko.composite_mask(&full, (0, 0, 1, 1), cyan, 0.5, Blend::Normal);
-        ko.composite_mask(&full, (0, 0, 1, 1), magenta, 0.5, Blend::Normal);
+        ko.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            cyan,
+            [0.0; crate::compositor::MAX_SPOTS],
+            0.5,
+            Blend::Normal,
+        );
+        ko.composite_mask(
+            &full,
+            (0, 0, 1, 1),
+            magenta,
+            [0.0; crate::compositor::MAX_SPOTS],
+            0.5,
+            Blend::Normal,
+        );
         let ko = ko.finish_knockout();
 
         assert!(
@@ -2935,6 +3010,7 @@ mod tests {
             &full,
             (0, 0, 1, 1),
             [0.0, 0.0, 1.0, 0.0],
+            [0.0; crate::compositor::MAX_SPOTS],
             1.0,
             Blend::Normal,
         );
@@ -2945,6 +3021,7 @@ mod tests {
             &full,
             (0, 0, 1, 1),
             [0.0, 1.0, 0.0, 0.0],
+            [0.0; crate::compositor::MAX_SPOTS],
             1.0,
             Blend::Difference,
         );
@@ -2985,6 +3062,7 @@ mod tests {
             &full,
             (0, 0, 1, 1),
             [1.0, 0.0, 0.0, 0.0],
+            [0.0; crate::compositor::MAX_SPOTS],
             0.5,
             Blend::Normal,
         );
