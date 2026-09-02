@@ -280,7 +280,7 @@ dependencies = [
 [[package]]
 name = "iccce-cmm"
 version = "0.3.0"
-source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+source = "git+https://github.com/KenM76/iccce.git?rev=a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
 dependencies = [
  "iccce-color",
  "iccce-profile",
@@ -289,12 +289,12 @@ dependencies = [
 [[package]]
 name = "iccce-color"
 version = "0.3.0"
-source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+source = "git+https://github.com/KenM76/iccce.git?rev=a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
 
 [[package]]
 name = "iccce-profile"
 version = "0.3.0"
-source = "git+https://github.com/KenM76/iccce.git?tag=v0.3.0#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
+source = "git+https://github.com/KenM76/iccce.git?rev=a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3#a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"
 
 [[package]]
 name = "inout"
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-core"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "aes",
  "brotli",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "pdfce-render"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "iccce-cmm",
  "iccce-profile",
