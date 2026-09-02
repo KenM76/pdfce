@@ -96,6 +96,121 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 370th filing, 2026-09-02 — `Pass 229.0` (`f97c15b`).**
+
+**Sourcing (hard rule 8).** No shell this filing. The full commit body was
+supplied verbatim as a scratch file (`D:\Dev\pdfce\.librarian-229.txt`) by
+the engineer, not read via `git log` directly. Every claim naming a live-code
+location was independently cross-checked by `Read`/`Grep`:
+`composite_overprint`'s signature (`crates/pdfce-render/src/cmyk_buffer.rs:1588-1596`)
+now takes `spots: [Option<Chan>; crate::compositor::MAX_SPOTS]`, and its
+in-line comment (`:1628-1641`) states, verbatim, the fix and the defect it
+replaced — *"a colorant the source NAMES is painted; one it does not name is
+left to the backdrop"* — with the paint block itself (`:1642-1650`) applying
+the same `t`-weighted blend the process channels get two blocks up, `None`
+passing through unchanged. The doc comment on the first new unit test
+(`:3440-3446`) quotes the exact refusal text the commit message cites —
+*"the real fix is the per-colorant buffer, filed and not reachable from
+here"* — confirming the lifted refusal was written into the code itself, not
+only reported. Both new tests exist and match the described sabotage-verified
+behaviour: `overprint_paints_a_spot_the_source_names_and_preserves_one_it_does_not`
+(`:3448-3501`, a backdrop carrying BOTH inks so "preserved" and "painted"
+cannot both read as "unchanged") and `a_spot_painted_under_overprint_honours_partial_alpha`
+(`:3506-3534`, half alpha over no ink lands half the tint). No `Cargo.toml`
+change mentioned or found on inspection, so GUI-core separation is not
+implicated. Round-trip/minimal-diff is not implicated — the change is
+paint-time compositing arithmetic, not document-writing code. **Not
+independently re-measured this filing**: the conformance-sweep totals
+(7/37/7, unchanged) and the "`composite_overprint` runs 29 times on `PCS
+3.0`, every one zero spot inks" probe figure are the engineer's own,
+relayed rather than re-run — no shell this filing, flagged per hard rule 8.
+
+### Pass 229.0 (`f97c15b`, 2026-09-02) — the spot-colorant plane, step 3c of ~4: the OVERPRINT PATH'S OWN DEPOSIT — a spot colorant under overprint can now be PAINTED, not only preserved
+
+**Lifts a refusal that documented itself.** `interpret.rs`'s overprint path
+carried, verbatim: *"the paint marks nothing in the four process planes …
+The real fix is the per-colorant buffer, filed and not reachable from
+here."* Table 149 puts every component of a spot-only source in the *not
+named in source space* column, which under `OP true` is the backdrop — with
+four process planes and nowhere else to go, an overprinting spot could only
+be **preserved**, never **painted**. The buffer it names is reachable now.
+
+`composite_overprint` takes `[Option<Chan>; MAX_SPOTS]`: `Some(tint)` for a
+colorant the source names — painted, with the same coverage-and-alpha
+weighting the process channels get — and `None` for every other, which
+passes through to the backdrop. That is Table 149's rule on both sides
+rather than only the preserving side. A colorant refused a plane stays
+`None`, so it keeps being preserved rather than painted — the same
+conservative direction, and the one that cannot knock anything out.
+
+**Backdrop preservation is unchanged, deliberately.** The comment block
+above the call records that three readings were measured on the conformance
+corpus (preserve the backdrop **4** failures, ink union **6**, paint the
+flattened tint **8**) and that two of them break the patches which exist to
+check a white overprinting spot does not knock out what is under it.
+Nothing here re-opens that.
+
+**★★ MEASURED: the conformance sweep does not move, and that is REPORTED
+rather than dressed up.** 7 FAIL / 37 pass / 7 UNRESOLVED — identical to
+`Pass 228.0`; no patch improves and none regresses. **Because the corpus
+does not exercise this path at all.** Probed with a temporary counter on
+the real binary: `composite_overprint` runs **29 times on `PCS 3.0`** and
+**every one has zero spot inks** — that patch's own spot fill is not
+overprinting, so it reaches `Pass 228.0`'s ordinary deposit path instead
+(its overprinting foregrounds, `0 0 0 .5 k` and `.5 g`, name no spot
+colorant). This Pass ships code the suite cannot reach, and says so —
+shipping it on "the numbers did not move" would have been shipping it
+untested.
+
+**What was verified instead: two unit tests, both sabotage-verified**
+(disabling the paint arm fails both and nothing else) — a source that
+names a colorant paints it while a colorant it does not name is left at
+the backdrop's own tint, with both inks present in the backdrop so
+"preserved" and "painted" cannot both read as "unchanged"; and partial
+alpha lands partial tint, so a spot edge is not hard where every other
+edge in the renderer is soft.
+
+**★ A probe that lied first, worth one line.** The first probe run
+reported **zero** calls, which read as *"this path is never reached"* and
+would have retired the whole Pass. It was a bad CLI flag — `--out` where
+the argument is `--output` — so the command errored and rendered nothing;
+`grep` over an error message finds no matches, which looks exactly like a
+clean negative result. The count only became trustworthy after reading the
+command's raw output instead of a filtered view of it. Recorded as a
+**seventh instance** in the existing "an absent trace proves nothing"
+family (`D:\dev\rag\rust\an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`) —
+one link earlier than the sixth instance, at the `process` link itself —
+rather than a new mint.
+
+**Still not deposited:** images (`composite_srgb`, the CMYK-image path) and
+knockout groups, whose initial backdrop is built from four planes — both
+step 4. `PCS 3.0`'s three traps are unchanged, and their cause is now
+**narrower** than the prior handoff stated: the deposit reaches its
+backdrop correctly (probed: Black at 0.5 in the process channels, the spot
+at full tint in its own plane), so whatever remains is downstream of the
+deposit rather than in it.
+
+**Tests:** full workspace suite green (two new tests above), `cargo clippy
+-D warnings` clean (engineer's report, not independently re-run — no shell
+this filing). **Invariant checks:** GUI-core separation not implicated (no
+`Cargo.toml` change); round-trip/minimal-diff not implicated (compositing
+arithmetic only). **Packaging smoke test:** not applicable — no packaging
+change.
+
+**`docs/FEATURES.md`: no box ticked, three rows corrected in place.**
+Rendering did not change on anything measurable this Pass (the capability
+this closes is not yet reachable by any suite patch), so no box moves —
+but the 369th filing's own narrowing that `composite_overprint` "still
+cannot deposit a spot tint of its own" is now stale, and was found in
+**three** places by sweeping for the claim rather than the string (hard
+rule 11(e)): the *Subtractive (colorant) compositing buffer* row's "the
+OVERPRINT paint path … still flatten[s] every spot colorant" clause; the
+*Overprint SIMULATION* row's "`composite_overprint` still cannot deposit
+one of its own" clause; and the *Per-colorant (n-channel) compositing
+buffer* *Planned* row's own second "WORDING CORRECTED" amendment, which
+said the same. All three struck and dated `Pass 229.0`/370th filing rather
+than silently edited.
+
 **★ ONE COMMIT, 369th filing, 2026-09-02 — `Pass 228.0` (`9a18510`).**
 
 **Sourcing (hard rule 8).** No shell this filing. The full commit body was

@@ -85705,3 +85705,108 @@ silently edited.
   and `docs/NEXT_SESSION.md` §C.
 - Backup/push state: not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (370th filing) — `Pass 229.0` (`f97c15b`) SHIPPED — the spot-colorant plane, step 3c of ~4: the overprint path's OWN deposit, closing the refusal `Pass 228.0` left standing; the conformance sweep does NOT move and is reported flat rather than dressed up; a probe that lied caught at the `process` link, filed as a 7th dated instance; `R217`'s push-pairing fix from the 369th filing produced its first clean push
+
+**Sourcing.** No shell this filing. The commit body was supplied verbatim as
+a scratch file (`.librarian-229.txt`) by the engineer, not read via `git
+log`. Every claim naming a live-code location was independently
+cross-checked by `Read`/`Grep` — `composite_overprint`'s new `spots:
+[Option<Chan>; MAX_SPOTS]` parameter and its in-line comment
+(`crates/pdfce-render/src/cmyk_buffer.rs:1588-1650`) match the commit
+message's description verbatim, and the doc comment on the first new unit
+test (`:3440-3446`) quotes the exact refusal text the commit cites. See the
+filing header in `ROADMAP.md`'s *Shipped* section for the full citation
+list.
+
+**Shipped:**
+
+- **`Pass 229.0`** (`f97c15b`) — the spot-colorant plane, step 3c: the
+  overprint path's own deposit. `composite_overprint` now paints a
+  colorant the overprinting source itself names into its own plane (same
+  coverage-and-alpha weighting the process channels get) and passes every
+  colorant it does not name through to the backdrop unchanged — Table
+  149's spot row honoured on both sides, closing a refusal `interpret.rs`
+  had carried in its own comment: *"the real fix is the per-colorant
+  buffer, filed and not reachable from here."* Backdrop preservation for
+  the adjacent, already-decided case is unchanged and deliberately not
+  re-opened. **Measured: conformance sweep unchanged at 7 FAIL / 37 pass /
+  7 UNRESOLVED**, identical to `Pass 228.0` — the corpus does not exercise
+  this path at all (`composite_overprint` probed at 29 calls on `PCS 3.0`,
+  every one zero spot inks; that patch's own spot fill is not
+  overprinting). Verified instead by two sabotage-verified unit tests. No
+  regressions: full workspace tests green, clippy clean (engineer's
+  report, not independently re-run this filing).
+
+**Decisions made this session:** none — no crate boundary, library choice
+or invariant redefinition; `ARCHITECTURE.md` §12 not touched.
+
+**Findings + decisions:**
+
+- **A Pass shipped on a suite that cannot reach it, reported as such
+  rather than dressed up.** The honest shape: a temporary counter proved
+  the path is unreached by the corpus BEFORE the Pass was filed, so the
+  claim of correctness rests on two sabotage-verified unit tests, named in
+  the filing, not on a moved suite total. Recorded here because the
+  alternative — filing on "the numbers held" without saying why — reads as
+  a null result when it is actually an untested-by-the-suite result, a
+  different fact.
+- **A refusal that documented itself got lifted.** `interpret.rs`'s
+  overprint path carried a comment naming exactly what would close it —
+  "the per-colorant buffer, filed and not reachable from here" — and this
+  Pass is that buffer becoming reachable. Worth recording as the good case
+  of a self-documenting gap: the comment told the next session precisely
+  what to build, and it built precisely that.
+- **A probe that lied, caught one link earlier in the chain than the
+  project's existing family covers.** The first probe run reported zero
+  calls (`--out` instead of `--output`, so `clap` rejected the argument and
+  the binary never entered the render path) and would have retired the
+  whole Pass as untested. Filed as a **seventh dated instance** in
+  `D:\dev\rag\rust\an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`
+  (amendment, not a new file, per hard rule 4) — one link earlier than the
+  sixth instance's "absence of an experiment": there the process ran and
+  the path had no trace; here the process never reached the path at all.
+  New cheap-validation item added to that file: check a driven command's
+  exit code / raw stderr before trusting a zero-match grep against its
+  output.
+- **`PCS 3.0`'s remaining cause is now narrower than the 369th filing's
+  handoff stated.** Probed directly: the deposit reaches its backdrop
+  correctly (Black at 0.5 in the process channels, the spot at full tint
+  in its own plane), so whatever produces the three traps is downstream of
+  the deposit, not in it. `docs/NEXT_SESSION.md` updated to match by the
+  engineer (per the dispatch), noted here so the ledger and the handoff
+  agree.
+- **`R217`'s push-pairing fix (369th filing's fourth amendment note) had
+  its first clean application.** `Pass 228.0` and its filing were pushed
+  TOGETHER in one `git push` (`fd4b752..41ae241`) and produced exactly ONE
+  CI run, on the tip — no separate run on the bare code commit, no false
+  red. Corroborating evidence, not a new finding; `R217` itself unchanged.
+
+**`docs/FEATURES.md`: no box ticked, three rows corrected in place rather
+than left stale.** Rendering did not change on anything measurable this
+Pass — the capability it closes is not yet reachable by any suite
+patch — so no box moves, but the 369th filing's own narrowing ("`composite_
+overprint` still cannot deposit a spot tint of its own") was found stale in
+**three** places by sweeping for the claim rather than the string (hard
+rule 11(e)): the *Subtractive (colorant) compositing buffer* row, the
+*Overprint SIMULATION* row, and the *Per-colorant (n-channel) compositing
+buffer* *Planned* row's own second "WORDING CORRECTED" amendment. All
+three struck and dated rather than silently edited.
+
+**Still in flight / open:**
+
+- **Step 4 — images (`composite_srgb`) and knockout groups still flatten
+  every spot colorant entirely.** This is now the only remaining scope on
+  the per-colorant-buffer arc.
+- **`PCS 3.0`'s three traps are unchanged**, cause narrowed to
+  "downstream of the deposit," not yet diagnosed.
+- **`D:` operational state — still OPEN**, carried forward, not
+  re-measured this filing (no shell).
+
+**For next session:**
+
+- Step 4 (images + knockout groups) is the scoped next task on this arc.
+- Diagnosing `PCS 3.0`'s actual remaining cause, now that the deposit
+  itself is confirmed correct, is a smaller, separable side task.
+- Backup/push state: not independently checked by this role, no shell this
+  filing.
