@@ -85103,3 +85103,118 @@ existing reasoning rather than adding a new decision.)
   + `/DA`-colour amendments), the `/ICCBased` colour-space row under *Fonts
   & rendering* (image management), and two new rows under *Vector objects*
   (recolour; selectable-object diagnostics).
+
+## 2026-09-01 (364th filing) — `Pass 222.0` (`aab4ad1`) + `Pass 223.0` (`b543759`) SHIPPED — a link's destination can now be READ, and `--version` no longer denies a dependency the compiler can prove is linked
+
+**Sourcing.** This role had no shell this filing. Both commits' full
+bodies were supplied verbatim as scratch files by the engineer (not read
+via `git log`); every file/line/symbol claim was additionally
+cross-checked against live source by `Read`/`Grep` — see the filing
+header in `ROADMAP.md`'s *Shipped* section for the full citation list.
+
+**Shipped:**
+
+- **`Pass 222.0`** (`aab4ad1`) — `outline::DestinationReader`, a
+  reusable §12.3.2 destination-carrier resolver shared by outline items,
+  links and widgets; `annot::page_link_destinations` /
+  `Annotation::destination`; `pdfce-cli list-links`. Closes pdfceGUI's
+  request (a dead-looking table of contents — links carried an action
+  *name* but no reachable destination). `links_without_destination` is
+  counted, never skipped. 5 new synthetic fixtures, one of which
+  (`broken-links.pdf`) first shipped with a hand-numbered object-id
+  collision that silently deleted the fourth annotation it claimed to
+  test — found by running the CLI against it and counting lines, not by
+  a failing test.
+- **`Pass 223.0`** (`b543759`) — `pdfce-cli --version`'s `iccce` line had
+  read `not-linked-yet` for six days after `Pass 199.2` actually linked
+  it; the detector waited on `DEP_ICCCE_PROVENANCE`, an env var Cargo
+  sets only for a dependency declaring a `links` key, which `iccce` does
+  not declare. Now reports version/tag/revision/commit-date from the
+  resolved `Cargo.lock` plus Cargo's own bare git mirror, guarded by a
+  test that cannot compile unless `iccce` is actually linked (so the
+  compiler enforces the test's premise, not the test itself). Closes two
+  360th-filing Backlog entries (the false `--version` claim, and
+  `docs/DEPENDENCIES.md` missing `iccce-profile`/`iccce-cmm`).
+
+**Decisions made this session:** none minted. The engineer offered a
+candidate standing rule (*"a detector that waits on a signal its subject
+never emits is indistinguishable from a subject that has not arrived"*)
+and left the mint/decline call to this role. **Declined** — `R192`
+("a gate/detector states what it cannot see") already generalises this
+exact shape and has many prior instances; the defect's own
+classification is `R180`'s canonical shape (an accurate disclosure
+falsified by a later improvement to the thing it describes), cited by
+name in the commit message itself. A third number for the same
+observation would fragment rather than consolidate the existing
+"instrument cannot see" family. Both numbers cited in `Pass 223.0`'s
+`ROADMAP.md` entry instead of a new one.
+
+**Findings + decisions:**
+
+- **A fixture generator is code, and a fixture that quietly tests less
+  than it claims never goes red** (`Pass 222.0`) — `broken-links.pdf`'s
+  first cut collided a hand-numbered object id with a real annotation,
+  silently dropping the fourth of four claimed cases; the tests shared
+  the wrong assumption and nothing failed.
+- **The mechanism a detector waits for can be the wrong mechanism even
+  after the fact it's detecting becomes true** (`Pass 223.0`) —
+  `iccce_provenance()`'s doc comment correctly promised it would begin
+  reporting "the moment that becomes true," and the moment came and
+  nothing happened, because Cargo's `links`-key signal was never the
+  signal `iccce`'s own dependency declaration would ever emit.
+- **A test that needs the compiler to enforce its own premise cannot
+  live in the crate that doesn't carry the premise** (`Pass 223.0`) — the
+  version-banner test lives in `pdfce-render`, not `pdfce-core`, because
+  only `pdfce-render` actually depends on `iccce`; a test in `pdfce-core`
+  reading `Cargo.lock` to check the same fact the build script reads
+  would be circular.
+
+**Also this filing, not a Pass — three items from the engineer's brief:**
+
+- Three baked-in string-literal gaps inherited from `Pass 221.0`
+  (`crates/pdfce-core/src/vartext.rs` ×2,
+  `crates/pdfce-core/tests/vector_model.rs` ×1) were fixed inside commit
+  `aab4ad1` itself. `tools/check-string-gaps.sh` was RED on arrival at
+  the start of this session; the gaps were **not** in the `v0.19.0` tag.
+  Third recurrence of the backslash-eating-heredoc hazard this Bash tool
+  produces. **Cross-reference, not a duplicate**: the existing *Backlog*
+  entry *"`tools/check-string-gaps.sh` is not in the release path, and a
+  gap it catches SHIPPED in `v0.18.0`"* (filed 360th filing, from
+  `Pass 201.0`) already tracks the release-path gap this is the third
+  instance of.
+- `tools/run-gates.sh` was launched once with an explicit background
+  flag and was killed mid-run — `docs/NEXT_SESSION.md` §C already warns
+  about this; recorded here so the warning keeps its evidence.
+- A `cargo test --workspace` failure inside a gate sweep was resource
+  starvation from the killed run's leftover processes, not a real
+  failure — it passed clean re-run alone. The known "a starved test run
+  looks exactly like a broken one" shape.
+
+**Still in flight / open:**
+
+- **iccce's channel holds two inbound replies pdfce has NOT yet acted
+  on**, dated 2026-09-01:
+  `reply_depend_on_a_pinned_rev_and_the_four_intent_rules_are_accepted.md`
+  and
+  `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`.
+  Recorded as **open** — this role has not read either in full; the
+  engineer's next session should.
+- Both pdfce FeatureRequests channels were checked this session: one
+  genuinely new request (the link-destination one, now answered by
+  `Pass 222.0`); two others that looked open were already answered by
+  replies filed earlier the same day.
+
+**For next session:**
+
+- Confirm `python tools/check-ledger-numbers.py` and
+  `python tools/check-commits-filed.py` report clean for `Pass 222.0`/
+  `223.0` (not independently re-run here — no shell).
+- Backup/git state: **not verifiable from here — no shell.** `git
+  status`, `git log <last-filed>..HEAD`, and backup-bundle currency
+  under `D:\Dev\pdfce-backups\` need the engineer's own check.
+- `FEATURES.md` rows changed this filing: new row under *Annotations &
+  markup* ("Resolve a link annotation's destination"); the *Build
+  provenance stamp* row under *Shell & UX* corrected in place; the
+  *Planned*-section "`iccce` revision/date/time…" row retired (folded
+  into the corrected *Implemented* row).
+- Read and act on the two unread iccce replies named above.

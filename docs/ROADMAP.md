@@ -115,6 +115,254 @@ of it was written here.
 
 ---
 
+**★★ TWO COMMITS FILED TOGETHER, 364th filing, 2026-09-01 — `Pass 222.0`
+(`aab4ad1`) then `Pass 223.0` (`b543759`), filed below in reverse-
+chronological order (223.0 first).**
+
+**Sourcing (hard rule 8).** This role had no shell this filing. Both
+commits' FULL bodies — hash, author-date, subject, complete message —
+were supplied verbatim in two scratch files by the engineer, not read via
+`git log` directly; the content is a complete dump, not a one-line
+subject, so every claim below is drawn from the commit's own prose.
+Every claim naming a specific file/line/symbol was additionally
+cross-checked against LIVE SOURCE by `Read`/`Grep` this filing:
+`outline::DestinationReader` (`outline.rs:1620`, methods at `:1691`,
+`:1758`), `annot::page_link_destinations`/`PageLinks`/`LinkDestination`/
+`links_without_destination` (`annot.rs:852`/`:776`/`:737`/`:791`,
+increment at `:897`), `list-links` (`main.rs:13055`),
+`iccce_provenance`/`DEP_ICCCE_PROVENANCE`/`not-linked`/`not-linked-yet`
+(`build.rs:32,38,71,140,236,256,261,277,285,288,290,294,331`),
+`docs/DEPENDENCIES.md`'s new `iccce-profile`/`iccce-cmm` rows
+(`:81-82,174`), `crates/pdfce-render/tests/version_banner_names_iccce.rs`
+(exists), and `fixtures/synthetic/links/` (five `.pdf` files +
+`PROVENANCE.md`, confirmed present). Neither commit touches a
+`Cargo.toml` (no dependency change mentioned in either full body, none
+found on inspection of the touched files), so the GUI-core-separation
+invariant is not implicated by this filing and `cargo tree` was not run
+to re-confirm an unchanged fact — flagged rather than asserted, per hard
+rule 8. Both Passes are read-only/reporting additions (a resolver plus a
+CLI subcommand; a version-banner string), so the round-trip/minimal-diff
+invariant is likewise not implicated — neither writes a document.
+
+---
+
+### Pass 223.0 (`b543759`, 2026-09-01) — `--version` denied a dependency the compiler can prove is linked
+
+**The defect.** `pdfce-cli --version` had printed `iccce: not-linked-yet
+(integration pending -- Pass 97.x; see ARCHITECTURE.md decision 064)`
+for six days after `Pass 199.2` (`3194f1b`) added `iccce-profile` and
+`iccce-cmm` to `crates/pdfce-render/Cargo.toml`. Filed as an *Unscoped*
+Backlog entry the 360th filing (**`Pass 101.1`'s own trigger firing**);
+this Pass closes it. A false claim in the one output surface whose
+entire purpose is to be believed without checking — an **`R180`**
+instance in its purest shape (an accurate disclosure falsified by a
+later improvement to the very thing it describes), named as such in the
+commit message itself.
+
+**Why it did not self-correct — the transferable half.**
+`iccce_provenance()` read `DEP_ICCCE_PROVENANCE`, an environment
+variable Cargo sets only for a dependency that declares a `links` key in
+its manifest. `iccce` declares none. The function's own doc comment
+promised *"this begins reporting the moment that becomes true"* — the
+moment came and nothing happened, because the mechanism it was waiting
+for was not the mechanism that arrived. The structural half: `iccce` is
+`pdfce-render`'s dependency, and the build script that stamps the banner
+runs for `pdfce-core`, which does not depend on it and never will.
+
+★ The shape stated generally: *a detector that waits on a signal its
+subject never emits is, from outside, indistinguishable from a subject
+that has not arrived.* Offered by the engineer as a candidate standing
+rule, with the judgment call left to this role — **declined as a new
+rule this filing**, see below.
+
+**What it reports now.**
+
+    iccce:     0.3.0 (tag v0.3.0, a4d9003b, committed 2026-09-01T08:54:36Z)
+
+All four halves the operator asked for on 2026-08-18 (version, pin,
+resolved revision, commit date). Version/pin/revision come from the
+resolved workspace `Cargo.lock`; the commit date is looked up by that
+revision in Cargo's own bare git mirror under `$CARGO_HOME/git/db` — a
+legitimate source distinct from reading a sibling `D:\Dev\iccce`
+checkout's `git describe`, which the old prose correctly warned against
+(answers *"which iccce is on this machine,"* not *"which iccce is in
+this binary"*). `Cargo.lock` is the resolved graph rustc is about to
+compile; the git-mirror lookup is keyed BY that revision, used as a
+lookup table rather than as a source of truth about what is linked. A
+disagreement between the two `iccce-*` crates' resolved revisions is
+**surfaced, not resolved** — picking a winner would hide a real defect
+in the one place built to report it.
+
+**The test, and why it lives in `pdfce-render` not `pdfce-core`.**
+`crates/pdfce-render/tests/version_banner_names_iccce.rs`. A test
+reading `Cargo.lock` to check the build script's own source of truth
+would be circular — green if both were wrong together. So the test
+names an `iccce_profile` type in its own body: the file cannot compile
+unless `iccce` is actually a dependency of that crate, so by the time
+the assertion runs, the COMPILER has already enforced the premise the
+test needs. `pdfce-core` could not host this test — that structural gap
+(build script in one crate, dependency in another) is what let the
+defect live for six days. Sabotage-verified, asserted to have applied:
+forcing the lock-file lookup to `None` fails the test on `not-linked`.
+Deliberately does **not** assert the version or revision content, which
+would go red on every routine dependency bump — a test that trains
+people to edit it rather than read it.
+
+**Also shipped, same commit.** `not-linked-yet` becomes `not-linked`,
+and the branch's meaning changes from "integration pending" to "this
+build links `pdfce-core` alone" — it now fires only outside the
+workspace, where the absence is real and permanent. Three doc comments
+that explained the pending state (`crates/pdfce-core/build.rs`,
+`crates/pdfce-core/src/build.rs`) were rewritten rather than deleted,
+keeping the prior wording legible.
+
+`docs/DEPENDENCIES.md` gained `iccce-profile` and `iccce-cmm` — closes
+the adjacent 360th-filing Backlog entry (*"`docs/DEPENDENCIES.md` was
+NOT updated when `iccce` landed, and `ARCHITECTURE.md` §9 requires
+it"*). It notes what the generated `THIRD_PARTY_LICENSES.md` structurally
+cannot: `iccce` is the one dependency whose *why* is an architectural
+decision (064, 115) rather than a utility choice, and it sits in
+`pdfce-render` because colour management is a rendering concern.
+`PRIOR_ART.md` already recorded the boundary (rule 13 satisfied);
+`THIRD_PARTY_LICENSES.md` already listed all three crates as MIT —
+verified this filing (`docs/DEPENDENCIES.md:81-82,174`).
+
+**Standing-rule judgment call.** Checked the two-occurrence promotion
+bar against `R180` and the existing "instrument cannot see" material
+before deciding. **Declined a new rule.** `R192` ("a gate/detector
+states what it cannot see") already generalises this exact pattern and
+has accumulated well over a dozen instances across this roadmap; the
+defect's own classification — an accurate disclosure falsified by a
+later improvement to the very thing it describes — is `R180`'s
+canonical shape, and the commit message cites `R180` by name unprompted.
+Minting a third number for the same underlying observation would
+fragment, not consolidate, the "instrument cannot see" family this
+project already tracks under `R192`. Both existing numbers are cited in
+this entry instead of a new one.
+
+**Verification.** Sabotage-verified test (above), green. `docs/
+DEPENDENCIES.md` and `THIRD_PARTY_LICENSES.md` cross-checked mutually
+consistent this filing. No `Cargo.toml` change — GUI-core-separation and
+round-trip invariants not implicated (see filing header above); `cargo
+tree` not independently re-run (no shell).
+
+**`FEATURES.md`:** row "Build provenance stamp" (*Implemented → Shell &
+UX*) corrected in place — the `iccce` line is no longer flagged wrong.
+The *Planned*-section row *"`iccce` revision/date/time in pdfce's
+version output"* is **retired** — the capability it described has now
+shipped in full and is covered by the corrected *Implemented* row; a
+*Planned* row and an *Implemented* row both describing the same
+now-shipped fact would drift the moment either is next edited alone.
+
+---
+
+### Pass 222.0 (`aab4ad1`, 2026-09-01) — a link knew its action's NAME and refused to say where it went
+
+Closes pdfceGUI's request
+`request_a_links_destination_cannot_be_read_so_a_table_of_contents_is_dead.md`
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`); the engineer's
+reply is filed beside it as
+`reply_link_destinations_ship_and_your_widget_note_was_the_right_call.md`.
+ISO 32000-1 §12.5.6.5 (Table 173) link annotations now resolve to
+§12.3.2 destinations, in core and in the CLI.
+
+**The gap, as pdfceGUI reported it.** `annot::Annotation` modelled a
+`/Link` as `subtype`, `rect`, `action_type = Some(b"GoTo")` and nothing
+else — `annot.rs:470` states that decision explicitly, reasoned for
+`list-annotations`, whose whole job is printing a token (*"the type is
+the whole disclosure"*). That reasoning is wrong for a viewer, whose
+whole job with a `GoTo` is to PERFORM it: the shell could render a hand
+cursor over a box that, on click, could do nothing, so under its own R9
+it rendered **no** link affordance at all, and a clickable table of
+contents was dead — the operator noticed on his own What's-New PDF.
+There was no public destination parser to point at an arbitrary `/D` —
+`outline.rs` walked `/Outlines` only, and its resolution (both
+§12.3.2.3 namespaces, the `<< /D … >>` wrapper tolerance, the cycle
+guard `MAX_DEST_HOPS`) was entirely private.
+
+**What shipped.** `outline::DestinationReader` (`outline.rs:1620`) — a
+reusable resolver over ANY destination-carrier dictionary. Three
+unrelated-looking objects carry the identical `/Dest`-or-`/A` pair with
+identical precedence rules: an outline item (Table 153), a `/Link`
+(Table 173) and a `/Widget` (Table 188) — one resolver rather than the
+drift hazard of two, which `outline.rs`'s own header already warns about
+between itself and `pageops::references`. Methods, verified live:
+`new`/`page_tree_error`/`named_destination_count` (`:1691`)/
+`destination`/`destination_with_diagnostics` (`:1758`).
+
+`annot::page_link_destinations` (`annot.rs:852`) → `PageLinks` (`:776`)
+of `LinkDestination` (`:737`) — rect and destination together, hit-test
+plus navigate in one call. `Annotation::destination` (`annot.rs:622`) —
+the one-shot the request literally asked for, resolving a `/Widget`
+pushbutton's `/A` too. `pdfce-cli list-links` (`main.rs:13055`) — five
+distinct `dest=` tokens plus a summary line.
+
+**Three design calls worth the words.**
+
+- **A type, not the free function that was requested.** The proposed
+  `fn link_destination(&self, graph) -> Option<Destination>` would have
+  rebuilt two O(document) tables — the page-object map and both
+  flattened namespaces — on EVERY call; a page of 200 links would have
+  walked the page tree 200 times, surfacing months later as *"links are
+  slow"* with no obvious cause the consuming project could see from
+  outside.
+- **A batch form that was not requested, and it is the primary one.**
+  `Annotation::destination` needs `Annotation::id`, so a dictionary
+  written directly into `/Annots` (legal, rare, tolerated by
+  `page_annotations`) returns `None` — a `None` meaning "could not read"
+  landing in the same slot as a `None` meaning "carries no destination."
+  `page_link_destinations` resolves dictionaries in place and has no
+  such blind spot.
+- **`links_without_destination` is counted, never skipped**
+  (`annot.rs:791`, incremented at `:897`) — a link with neither `/Dest`
+  nor `/A` is clickable and can do nothing; skipped, a page whose links
+  are ALL broken looks identical to a page with none, and those call for
+  opposite operator messages. Same argument for the CLI's summary line
+  printing when both counts are zero. `action_type`'s contract is
+  untouched — the four non-`Page` variants stay distinct, since
+  collapsing them into "no link here" would report a document full of
+  working links as empty, and collapsing them into a page jump would
+  lie.
+
+**Fixtures — and one that tested less than it claimed.**
+`fixtures/synthetic/links/` — five files (`broken-links.pdf`,
+`goto-actions.pdf`, `named-links.pdf`, `no-links.pdf`,
+`non-navigation-links.pdf`) plus `PROVENANCE.md`, confirmed present this
+filing — generated by `tools/gen-link-fixtures.py`. Every one is
+multi-page and no link targets page 1, since a resolver's likeliest
+defect is a defaulted `0` page index and a fixture pointing at page 1
+would pass against an implementation that resolved nothing.
+`non-navigation-links.pdf` deliberately defines its `/GoToR`'s
+destination name in its OWN name tree — §12.6.4.3 puts a remote name in
+the target file's namespace, so a resolver consulting the local one
+produces a confident wrong local jump, a failure a fixture without the
+collision cannot detect.
+
+★ The first cut of `broken-links.pdf` hand-numbered its "not a page"
+object `9`, colliding with the fourth annotation's own object number —
+the annotation was overwritten and silently vanished from `/Annots`,
+and the file exercised three cases while its docstring claimed four,
+with nothing failing (the tests shared the wrong assumption). Found by
+running `pdfce-cli list-links` against it and counting output lines. A
+fixture generator is code, and a fixture that quietly tests less than it
+claims never goes red.
+
+**Verification.** 7 core unit tests, 8 CLI black-box tests, green. Two
+sabotage runs, each asserted to have applied: removing the
+`links_without_destination` increment and disabling the `/Link` subtype
+filter each fail exactly one test and nothing else.
+`docs/core-api/01-reading-and-model.md` §12.4 rewritten in the same
+Pass — it told a consuming project to read raw dicts and implement
+fit-style parsing itself, now obsolete; `index.md` counts updated;
+`check-core-api-verbs.py` passes.
+
+**`FEATURES.md`:** new row under *Annotations & markup* — "Resolve a
+link annotation's destination," core `[x]`, cli `[x]` (`list-links`),
+gui `[ ]`. **Not rounded up** — pdfceGUI has the request and estimated
+it at under a day, but has NOT shipped it.
+
+---
+
 ### Pass 221.0 (`faf699a`, 2026-09-01) — a form field's unmodellable `/DA` colour was aliased onto "no colour", and painted black into the saved document
 
 **The defect.** `crates/pdfce-core/src/vartext.rs`'s `/DA` parser handled
@@ -111190,6 +111438,11 @@ comments are what will re-close this wrongly if only the counter is added.
 
 ### Unscoped — ★★★ **THE `--version` BANNER STILL SAYS `iccce: not-linked-yet` AND pdfce NOW LINKS `iccce`: A FALSE CLAIM IN SHIPPED, OPERATOR-VISIBLE OUTPUT** — filed 2026-09-01 (360th filing, `Pass 199.2`'s unswept consequence) — **`Pass 101.1`'s OWN TRIGGER HAS FIRED**
 
+**★★★ CLOSED by `Pass 223.0` (`b543759`, 2026-09-01, 364th filing) — see
+*Shipped*, above. The banner now reads `iccce: 0.3.0 (tag v0.3.0,
+a4d9003b, committed 2026-09-01T08:54:36Z)`.** Kept legible below rather
+than deleted, per this file's own convention for a superseded entry.
+
 `Pass 199.2` (`3194f1b`, *Shipped*) added `iccce-profile` and `iccce-cmm` to
 `crates/pdfce-render/Cargo.toml` as git dependencies pinned to tag `v0.3.0`.
 **Verified live this filing**, `crates/pdfce-core/build.rs:234-250`:
@@ -111227,6 +111480,11 @@ ticking a box** — the reporting is still not built.
 ---
 
 ### Unscoped — **`docs/DEPENDENCIES.md` was NOT updated when `iccce` landed, and `ARCHITECTURE.md` §9 requires it** — filed 2026-09-01 (360th filing)
+
+**★★★ CLOSED by `Pass 223.0` (`b543759`, 2026-09-01, 364th filing) — see
+*Shipped*, above. `docs/DEPENDENCIES.md` now lists `iccce-profile` and
+`iccce-cmm` (`:81-82,174`).** Kept legible below rather than deleted, per
+this file's own convention for a superseded entry.
 
 `git show --stat 3194f1b` (read this filing) shows
 `THIRD_PARTY_LICENSES.md` regenerated and **`docs/DEPENDENCIES.md`
