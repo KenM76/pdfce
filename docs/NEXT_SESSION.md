@@ -25,9 +25,14 @@ Pass is 233.0.** Verify with `git log --oneline -10` before minting one.
 ## §0 ACTIVE — the spot-colorant plane, step 4: **IMAGES, SHADINGS, KNOCKOUT GROUPS**
 
 Steps 1–3 are in and the pixels have moved: corpus-wide traps **19 → 12**
-across the arc. What remains is the paint routes that still flatten — and
-`Pass 231.0`'s probe extension has since **printed** that they do, rather
-than leaving it an inference.
+across the arc. What remains is the paint routes that still flatten —
+images, shadings and knockout groups.
+
+★ **But NOT for the two patches still failing.** Both contain zero images,
+zero shadings, zero patterns and zero form XObjects; every mark in them is a
+path fill or text. Step 4 cannot move them. Pick a different patch to
+measure step 4 against, or accept that its first cut is verified by unit
+tests alone — see the correction under `PCS 3.0` below.
 
 | step | Pass | commit | state |
 |---|---|---|---|
@@ -235,10 +240,26 @@ do not spend a Pass on either.
   **worse**, so it is not the setting's fault either way.
 - **`PCS 3.0` at `(434,136)`** renders the X green on a grey surround. Two
   nearly-identical greens sit inside the box — `(82,115,37)` and
-  `(76,117,31)` — which `Pass 231.0`'s probe extension has since explained:
-  **the same visible green is reached by two different routes**, one through
-  a spot plane and one through the old flattening. That is step 4's subject,
-  and it is worth fixing regardless of how `(cb)` is answered.
+  `(76,117,31)`.
+
+  ★★ **I CLAIMED THIS WAS A MISSED DEPOSIT AND IT IS NOT. Correction,
+  2026-09-02, same day.** `Pass 231.0`'s probe showed one pixel with the
+  green in its spot plane and another with the green in process CMYK, and I
+  concluded *"some paints deposit and some still flatten"* — in a commit
+  message and here. **Measured since: both patches contain ZERO images, ZERO
+  shadings, ZERO patterns and ZERO form XObjects.** Every mark is a path fill
+  or text, so there is no un-deposited paint route to blame.
+
+  The real explanation is the patch's own design. Suite Green's tint
+  transform is `C1 = [0.5, 0, 1, 0]`, and the patch's other backdrop is
+  painted `0.5 0 1 0.5 k` — **the same colour in process ink**. The two
+  column groups are *"over spot"* and *"over CMYK"*, deliberately identical
+  to the eye so that overprint's different treatment of them is the only
+  thing that can distinguish them. Two routes to one colour is the
+  **fixture**, not a defect.
+
+  ⇒ **Step 4 (images, shadings, knockout groups) is still worth doing, but it
+  is NOT what these two patches need.** Nothing in them can exercise it.
 
 ### ★★ THE TARGET IS NARROWER NOW — MEASURED 2026-09-02, do not start over
 
