@@ -1651,12 +1651,35 @@ impl CmykBuffer {
                 for i in 0..4 {
                     mixed[i] = t.mul_add(out[i] - before.c[i], before.c[i]);
                 }
-                // ★★ TABLE 149's SPOT RULE, both halves.
+                // ★★ TABLE 149's SPOT RULE — and the DERIVATION below was wrong until
+                // 2026-09-02, though the behaviour was right.
                 //
-                // A colorant the source NAMES is painted; one it does not
-                // name is left to the backdrop. `spots[i]` carries exactly
-                // that distinction — `Some(tint)` for a plane this source
-                // states, `None` for every other, which passes through.
+                // **§11.7.3 is the governing sentence**, and it is stronger
+                // than the "named / not named" framing this comment used to
+                // carry: *"every object paints every existing colour
+                // component, both process and spot. Where no value has been
+                // explicitly specified for a given component … a subtractive
+                // tint value of 0.0 shall be assumed."*
+                //
+                // So a source does not fail to address a spot colorant — it
+                // paints it, at tint `0.0`. Overprint's only job is deciding
+                // whether that `0.0` is written (`OP false`) or replaced by
+                // the backdrop (`OP true`). For "any process colour space ×
+                // spot colorant" the `OP true` answer is `c_b` in **both**
+                // overprint-mode columns, unconditionally — 1.7 Tables
+                // 148/149 and 2.0 Table 146 agree, with no edition delta.
+                //
+                // ★ *"not named in source space"* is the **`Separation` /
+                // `DeviceN` rows'** phrasing. Lifting it onto a process-source
+                // row reaches the right cell by a route the tables do not
+                // take, which is the kind of comment that survives a rewrite
+                // and misleads the next reader. Adjudicated against the
+                // primaries by `pdfce-spec-librarian`, 2026-09-02; see
+                // `iso32000__s__8.6.7.md`'s `UPDATE 2026-09-02`.
+                //
+                // `spots[i]` carries the distinction this function needs:
+                // `Some(tint)` where the source stated one, `None` where it
+                // did not and the backdrop therefore stands.
                 //
                 // The `None` half built a fresh `[0.0; MAX_SPOTS]` until the
                 // deposit landed. Harmless while no plane ever held ink; a

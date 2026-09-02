@@ -5293,6 +5293,18 @@ impl Interpreter<'_> {
         // the source space says, and this is the second time a shortcut
         // written for four channels has been falsified by a fifth.
         //
+        // ★ The DERIVATION in this comment was corrected 2026-09-02. It read
+        // *"a `DeviceCMYK` source does not NAME the page's spot colorant, and
+        // Table 149 puts an unnamed colorant at the backdrop"* — which
+        // reaches the right conclusion by the wrong route. §11.7.3: every
+        // object paints every component, spot included, and one the source
+        // did not specify is painted at tint `0.0`. The row that governs
+        // here ("any process colour space × spot colorant") answers `c_b`
+        // under `OP true` **unconditionally**, in both mode columns; there is
+        // no name test on it. *"Not named in source space"* is the
+        // `Separation`/`DeviceN` rows' phrasing. Adjudicated against the
+        // primaries by `pdfce-spec-librarian`; see `iso32000__s__8.6.7.md`.
+        //
         // Every arm below asks *"does this source leave any of the four
         // PROCESS channels to the backdrop?"* — and answers `false` for a
         // `DeviceCMYK` source at `OPM 0`, correctly, because such a source
@@ -6324,6 +6336,12 @@ impl Interpreter<'_> {
         // the paint marked nothing in the four process planes and the mark
         // simply was not there.
         //
+        // ★ That phrasing is correct HERE and only here: this is the
+        // `Separation`/`DeviceN` row, which is the one the standard actually
+        // words that way. The same words were wrongly lifted onto a
+        // process-source row elsewhere in this file and were corrected
+        // 2026-09-02 — see `overprint_would_change`.
+        //
         // The comment block above records that as measured-best-of-three and
         // says, in as many words, *"the real fix is the per-colorant buffer,
         // filed and not reachable from here."* It is reachable now. The
@@ -6332,11 +6350,12 @@ impl Interpreter<'_> {
         // colorant now lands in its own plane instead of nowhere.
         let spot_inks = self.authored_spot_inks(stroking);
         if let Some(buf) = canvas.cmyk_mut() {
-            // `None` means "this source does not name that colorant", which
-            // Table 149 answers with the backdrop. A colorant refused a
-            // plane stays `None` and therefore keeps being preserved rather
-            // than painted -- the same conservative direction the refusal
-            // above chose, and the one that cannot knock anything out.
+            // `None` means "this source stated no tint for that colorant",
+            // which §11.7.3 makes an implicit `0.0` and which `OP true`
+            // replaces with the backdrop. A colorant refused a plane stays
+            // `None` and therefore keeps being preserved rather than painted
+            // -- the same conservative direction the refusal above chose, and
+            // the one that cannot knock anything out.
             let mut spots: [Option<f32>; crate::compositor::MAX_SPOTS] =
                 [None; crate::compositor::MAX_SPOTS];
             for ink in &spot_inks {
