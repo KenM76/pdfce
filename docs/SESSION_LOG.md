@@ -85427,3 +85427,105 @@ in `ROADMAP.md`'s *Shipped* section for the full citation list.
   `/d/Dev/pdfce-backups/pdfce-20260902-0055-f0a55fe-full.bundle`,
   verify-clean — **not independently checked by this role, no shell**,
   per hard rule 8.
+
+## 2026-09-02 (367th filing) — `Pass 226.0` (`aaf6ff0`) SHIPPED — a two-stage tripwire for `Destination`'s `#[non_exhaustive]` catch-all; `pdfceGUI` CONSUMED `Pass 222.0` the same evening and returned a SHARPER version of `R225`, filed as a dated instance; work happened in an AUTONOMOUS LOOP TICK, not an operator-driven session
+
+**Sourcing.** No shell this filing. The commit body was supplied verbatim as
+a scratch file (`.librarian-226.txt`) by the engineer, not read via `git
+log`. Every claim naming a live-code location was independently
+cross-checked by `Read`/`Grep` — see the filing header in `ROADMAP.md`'s
+*Shipped* section for the full citation list and the one relayed-not-
+reverified claim (the second `E0004` site).
+
+**Shipped:**
+
+- **`Pass 226.0`** (`aaf6ff0`) — a two-stage tripwire on `outline::Destination`
+  (`#[non_exhaustive]`): an exhaustive `match` with no `_` arm inside a new
+  test (compile-error stage), plus a pinned `DESTINATION_VARIANTS` count
+  whose failure message carries the instruction — update the number, then
+  announce it on the feature-request channel, and why. Verified by actually
+  adding a sixth variant and reverting. **Not a capability; no `FEATURES.md`
+  row** — this guards a defect class that can only manifest in a downstream
+  consumer's own `match`, and nothing in this repository can observe it any
+  other way.
+
+**Decisions made this session:** none — no crate boundary, library choice
+or invariant redefinition; `ARCHITECTURE.md` §12 not touched.
+
+**Findings + decisions:**
+
+- **`pdfceGUI` CONSUMED `Pass 222.0` the same evening it shipped, and
+  reported NO WORKAROUNDS TAKEN — every premise held.** Source:
+  `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\done_2026-09-01-link-destinations-CONSUMED.md`.
+  `DestinationReader`, `page_link_destinations` and `Annotation::destination`
+  are all wired into `crates/pdfce-gui/src/canvas/links.rs` +
+  `crates/pdfce-gui/src/text/links.rs`, with two driven checks
+  (`tools/ui-verify/src/checks/link_follow.rs`), both green.
+- **The O(document) warning in this project's reply was load-bearing, by
+  the consumer's own account.** Their first sketch resolved a link's
+  destination **per frame, from a hover** — which would have walked a
+  36-sheet drawing's page tree on every mouse move. Shipped instead: the
+  reader cached on `OpenDoc`'s **edit epoch**, the per-page link list cached
+  separately on `(page, epoch)`. Their stated reasoning for choosing that
+  granularity over "rebuild after a structural edit" — coarser, and
+  deliberately: *every* edit bumps the epoch, so a non-structural edit
+  (recolouring a path) pays a page-tree walk it did not need to, but a
+  **wrong** cache key costs a link that navigates somewhere plausible and
+  false, "the one failure nobody reports as a bug." **Judged better than
+  this project's own note** and left alone rather than suggesting a
+  narrower key.
+- **★★ `R225` gains a dated instance note, from OUTSIDE this project — the
+  first time this rule (or, on this role's reading of the record, any
+  standing rule in this ledger) has been extended by a finding relayed FROM
+  a consuming project's own harness rather than derived inside pdfce's own
+  sabotage discipline.** pdfceGUI applied `R225`'s fixture-selection
+  question correctly — a navigation check aimed at the furthest of four
+  pages, genuinely discriminating — and the identical class of coincidence
+  still bit them **one layer up**: a *separate* non-navigation check
+  asserted only "the page did not change," a defaulted-page-0
+  implementation was planted, and the check passed anyway, because the
+  fixture document opens on page 0 and a defaulted jump to page 0 moves
+  nothing from there. Their own words, verbatim: *"a fixture chosen so a
+  defaulted answer is wrong is not enough if the harness starts the run
+  standing on the defaulted answer."* **Judged a widening of `R225`'s
+  scope, not a new mint** — same cause (a chosen value coincides with the
+  wrong implementation's output), same remedy (change an input), but the
+  input that has to change is the **harness's own starting state**, not
+  the fixture's domain data, which is a genuinely different site from
+  every prior instance (symmetry axis, authoring default, empty subject
+  set) and is why it earns its own instance note rather than folding
+  silently into an existing row. Filed in `ROADMAP.md`'s *Standing rules*
+  (367th-filing instance note under `R225`) and as a dated footer on
+  `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`,
+  index/frontmatter both updated, provenance marked explicitly in both
+  places as arriving from a downstream consumer rather than from this
+  project's own test suite. **This is itself evidence worth naming**: the
+  cross-project feature-request channel's own README claims it returns
+  engineering value in both directions, and this is a concrete instance of
+  that claim rather than an assertion of it.
+- **A minor, load-bearing detail confirmed rather than corrected**: their
+  report also names `RemoteTarget::PageNumber` as `i64` and 0-based against
+  their own 1-based GUI page numbering, and credits this project's CLI-side
+  note about the mismatch as the reason they wrote a unit test for the
+  conversion rather than doing it inline. No action owed here; recorded
+  because it is a second, smaller instance of the same "a prior note gets
+  applied and pays off" shape as the O(document) finding above.
+
+**Still in flight / open:**
+
+- Step 3 of ~4 of the spot-colorant plane (the deposit) remains the next
+  scoped task, unchanged from the 366th filing's entry.
+- `/URI`-opening-a-browser remains explicitly not filed on either side —
+  pdfceGUI's report reiterates it is the operator's call, not theirs or
+  this project's, and holds to the framing given in the original reply.
+
+**For next session:**
+
+- **This filing's work happened inside an autonomous loop tick, not an
+  operator-driven session** — worth stating plainly because every other
+  entry in this log to date has been dispatched from a live conversation
+  with Ken; this is this ledger's first record of a filing originating
+  from the loop instead.
+- Backup/push state: **not independently checked by this role, no shell
+  this filing** — carrying forward the 366th filing's own caveat rather
+  than repeating a number this role did not measure, per hard rule 8.

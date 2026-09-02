@@ -96,6 +96,74 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 367th filing, 2026-09-02 — `Pass 226.0` (`aaf6ff0`).**
+
+**Sourcing (hard rule 8).** No shell this filing. The full commit body was
+supplied verbatim as a scratch file (`D:\Dev\pdfce\.librarian-226.txt`) by
+the engineer, not read via `git log` directly. Every claim naming a live-code
+location was independently cross-checked by `Read`/`Grep`: `Destination`'s
+`#[non_exhaustive]` (`outline.rs:398,422`), the tripwire test
+`variant_count_is_pinned_so_a_new_one_cannot_ship_unannounced`
+(`outline.rs:3180–3211`), `DESTINATION_VARIANTS: usize = 5`
+(`outline.rs:228`), and the doc comment that quotes pdfceGUI's own paragraph
+verbatim (`outline.rs:412–415`, *"rather be told when a sixth variant ships
+than discover it as a mis-worded sentence"*). **One claim relayed, not
+independently re-derived:** the commit message's *"two E0004s, one of them a
+second exhaustive match elsewhere in the crate"* — this filing located and
+confirmed the first (the test itself) but did not hunt down and re-verify
+the second compile-error site; flagged per hard rule 8 rather than presented
+as checked. No `Cargo.toml` change in the commit message and none found on
+inspection, so GUI-core separation is not implicated. No document-writing
+code touched — the change is a test and a doc comment — so round-trip/
+minimal-diff is not implicated either.
+
+### Pass 226.0 (`aaf6ff0`, 2026-09-02) — a sixth `Destination` variant would silently inherit a consumer's wrong sentence; a two-stage tripwire, shipped at pdfceGUI's explicit (non-)request
+
+**Not a capability — no `FEATURES.md` row.** This ships nothing a caller can
+do; it is a guard against a defect class that can only manifest in a
+*different* repository. Filed here because the ledger discipline (hard rule
+1) applies to every Shipped Pass regardless of shape.
+
+**The defect class.** `outline::Destination` is `#[non_exhaustive]` by
+design (`Pass 103.x`-era decision — Table 153 has entries this project does
+not yet model), which means every downstream `match` a consumer writes
+**must** carry a catch-all arm. That is normally the point of the attribute:
+a new variant does not break the consumer's *build*. The cost side of that
+same property is that a new variant **does not need to break anything to be
+wrong** — it lands silently in the catch-all and inherits whatever sentence
+was written for a different case entirely. pdfceGUI's catch-all currently
+reads *"this link has no destination at all"*, which would become an
+actively false statement about, say, a future `Destination::EmbeddedFile`
+variant. No compiler warning, no lint and no gate on either side of the
+repository boundary can observe that — the defect is invisible from inside
+`pdfce-core`'s own workspace by construction.
+
+**The mechanism, verified by actually adding a sixth variant and reverting.**
+Two stages:
+
+1. An **exhaustive** match with no `_` arm inside the new test, over all
+   five current variants. Adding a sixth variant makes this **fail to
+   compile** — the loudest half of the tripwire, and the one that cannot be
+   silently outrun.
+2. A pinned `DESTINATION_VARIANTS` count whose assertion failure message
+   **is** the instruction: update the number, then announce the change on
+   the feature-request channel (`D:\Dev\FeatureRequests\pdfce_FeatureRequests\`),
+   and *why* the announcement matters, quoted from pdfceGUI's own words.
+
+**The test asserts nothing about correctness, and says so in its own doc
+comment.** Changing the pinned number is one line and is explicitly *not* a
+failure of the tripwire — it is the tripwire doing its job. What the
+mechanism buys is that the line gets edited by someone who has just read,
+in the failure text itself, why it exists — not someone silently bumping a
+constant to make a red build green.
+
+**Provenance.** Requested by pdfceGUI, verbatim, in the CONSUMED section of
+`done_2026-09-01-link-destinations-CONSUMED.md`: *"Not a request; a note
+that the wildcard exists and that we would rather be told when a sixth
+variant ships than discover it as a mis-worded sentence."* — filed the same
+evening they finished wiring `Pass 222.0`'s destination-resolution surface.
+Reply: `reply_the_sixth_variant_now_trips_a_wire_and_your_harness_finding_is_better_than_mine.md`.
+
 **★ ONE COMMIT, 366th filing, 2026-09-01 — `Pass 225.0` (`16eaaa2`).**
 
 **Sourcing (hard rule 8).** This role had no shell this filing. The full
@@ -135231,6 +135299,81 @@ same cause (hashes exist only at commit time), two different failure modes.
   `D:/dev/rag/rust/a_copy_verb_is_judged_on_values_it_did_not_choose_so_a_default_valued_fixture_cannot_test_it.md`,
   cross-referenced both directions with
   `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`.
+
+  **★★ DATED INSTANCE NOTE — 2026-09-02 (367th filing), from a CONSUMING
+  PROJECT'S HARNESS, NOT FROM A SABOTAGE RUN INSIDE THIS REPOSITORY: THE
+  FIXTURE CAN BE PERFECTLY DISCRIMINATING AND THE CHECK STILL CANNOT FAIL,
+  IF THE HARNESS BEGINS THE RUN ALREADY STANDING ON THE WRONG ANSWER. NO
+  RE-MINT; NO NEW CAUSE; CEILING STAYS `R239`, NEXT FREE `R240`.**
+
+  ★ **Provenance, stated explicitly because it is itself the finding worth
+  keeping:** this instance did not come from pdfce's own sabotage discipline.
+  It came from `pdfceGUI` applying the fixture-choice half of `R225`
+  (received from this project by reply, not independently re-derived) to
+  its own destination-navigation test, and hitting a **second, independent**
+  way for the same class of coincidence to hide a live defect — verbatim
+  from `done_2026-09-01-link-destinations-CONSUMED.md`:
+
+  > *"a fixture chosen so a defaulted answer is wrong is not enough if the
+  > harness starts the run standing on the defaulted answer."*
+
+  **What happened.** pdfceGUI aimed its navigation check at the link
+  targeting the furthest page of four — correctly applying `R225`'s own
+  question (*"on this fixture, what would the wrong implementation
+  produce?"*) to the *domain* input, the destination. That fixture was
+  genuinely discriminating. A **second**, separate check — asserting a
+  **non-navigating** link truly does not navigate — asserted only *"the page
+  did not change."* They planted the plausible wrong implementation (every
+  destination variant resolved through a defaulted page-`0` fallback), and
+  **the check passed anyway**, because the fixture document happens to
+  *open* on page 0, and a defaulted jump to page 0 moves nothing from
+  there. Fixed by zooming in before the check runs, so the view starts
+  nowhere near any value a default could produce, and asserting page, zoom
+  **and** scroll offset together, not page alone.
+
+  **Why this is not already covered by the existing table, and is not a
+  fixture problem at all.** Every prior `R225` instance — including
+  instances 4b (a fixture on the transform's own symmetry axis) and 7/8 (a
+  fixture at the code's own authoring default) — is a coincidence **in the
+  domain data the operation acts on**. This coincidence is in **the
+  harness's own starting state** — a property of the *check*, not of the
+  *input to the function under test*. The two are independent choices: a
+  fixture can be perfectly chosen (as it was here) and the check can still
+  be blind, because *"did the output change from the harness's initial
+  position"* is a different question from *"is the output correct,"* and
+  the two only coincide when the initial position is itself a value the
+  wrong implementation could produce. **The remedy is `R225`'s own — change
+  an input — but the input that has to change is the harness's starting
+  state, not the fixture's domain content**, which is why this is filed as
+  a widening of the family's *scope* rather than a new cause.
+
+  **The general form, added to the degenerate-value table's intent
+  alongside 4b's symmetry-axis widening and 7/8's authoring-default
+  widening:** *a check's own initial/starting state is itself a value that
+  can coincide with a plausible wrong answer, independent of how
+  discriminating the fixture's domain data is.* Practical form: before
+  trusting a "no change occurred" or "returned to baseline" assertion,
+  ask what the harness's state was **before** the operation ran, and
+  whether that starting state is itself a value the defaulted/degenerate
+  wrong answer would also produce. If it is, move the starting state away
+  from that value (here: zoom in first) rather than trusting the fixture
+  alone to carry the whole discrimination.
+
+  **Cross-project half filed as a dated footer, not a new file** — per hard
+  rule 4 (edit, don't duplicate) — to
+  `D:/dev/rag/rust/a_sabotage_can_only_be_as_discriminating_as_the_fixture_it_runs_on.md`,
+  because this is the same family the file already tracks (instances 4b,
+  5, 7, 8), widened to a new site (the harness's own state) rather than a
+  new file with its own name. **Marked in that footer as arriving from a
+  downstream consumer of pdfce, not from pdfce's own test suite** — worth
+  keeping distinct because it is direct evidence the cross-project
+  feature-request channel returns engineering value in both directions,
+  not only requests.
+
+  **Instance count now 9** (8 inside pdfce + 1 relayed from a consumer
+  applying the same rule). **No `ARCHITECTURE.md` body-section
+  counterpart** — this is a test-methodology finding, not a crate boundary,
+  invariant or library choice.
 
 - **R226 — A DEFERRED GATE MUST BE RE-RUN WITH THE FLAG THAT RESOLVES THE
   DEFERRAL BEFORE THE SESSION ENDS, OR THE DEFERRAL NEVER RESOLVES.** Minted
