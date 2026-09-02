@@ -13,9 +13,9 @@ commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
 run `python tools/check-ledger-numbers.py`.** As of writing it reports
-highest Pass **227.0**, next rule **R240**, next decision **119**, next
-filing **369**. The tool and the commit log AGREE — every code commit is
-filed, so the next free Pass is **228.0** with no caveat.
+highest Pass **229.0**, next rule **R240**, next decision **119**, next
+filing **371**. The tool and the commit log AGREE — every code commit is
+filed, so the next free Pass is **230.0** with no caveat.
 
 ---
 
@@ -29,7 +29,9 @@ This is where the first pixel moves. Steps 1 and 2 are in and both were
 | 1 — the `PixelCmyk::s` carrier | 217.0 | `643e270` | in, inert |
 | 2 — storage, allocation, blending, collapse | 225.0 | `16eaaa2` | in, inert |
 | 3a — the spot-tint READER | 227.0 | `983b438` | in, inert |
-| **3b — the DEPOSIT + Table 149's spot rule** | — | — | **next** |
+| 3b — the DEPOSIT (ordinary paint path) | 228.0 | `9a18510` | **in, PCS 2.0 7→4 traps** |
+| 3c — the deposit under OVERPRINT | 229.0 | `f97c15b` | in; suite cannot reach it, unit-tested |
+| **4 — images, shadings, knockout groups** | — | — | **next** |
 | 4 — images, shadings, knockout groups | — | — | later |
 
 ### Why this is the top item
@@ -143,7 +145,39 @@ asked for.
 4. Re-run the conformance sweep. **This is the first step where the numbers
    are allowed to move**, and the two traps to watch are named below.
 
-### The measured target, already attributed — do not re-diagnose it
+### ★★ THE TARGET IS NARROWER NOW — MEASURED 2026-09-02, do not start over
+
+`Passes 228.0`/`229.0` shipped the deposit. `PCS 2.0` went **7 traps → 4**.
+`PCS 3.0` is unchanged at 3, and the cause is no longer "no spot plane" —
+here is what was measured on the shipped binary rather than reasoned:
+
+- **The deposit reaches `PCS 3.0`'s backdrop correctly.** Probed with a
+  temporary counter: 12 paints arrive with Black at `0.5` in the process
+  channels and the spot at full tint in its own plane. That half works.
+- **At the reported trap centres the X and its surround are now
+  IDENTICAL** — `--probe-ink` gives `c=0 m=0 y=0 k=0.500` and
+  `srgb=82,115,37` at both `(27,68)` and a neighbour 13 px away. The patch
+  reference records these as `0 0 0 0.500` against `0.443 0 0.885 0.500`
+  **before** this work, so that specific divergence is gone.
+- **But a grey `(147,149,152)` region persists next to the green
+  `(82,115,37)`.** That grey is 50 % K over white with **no spot ink at
+  all** — so somewhere in those cells the green backdrop is absent rather
+  than merely knocked out.
+
+⇒ **Next step is to map cells to content-stream rectangles** and find which
+fill is landing without the plane. `docs/suite-patch-reference.md` §3 has
+the 12-cell layout (a–f `OPM 0`, g–l `OPM 1`). The remaining suspects, in
+order: the `sh`/pattern paths and the IMAGE path, neither of which
+deposits; and knockout groups, whose initial backdrop is built from four
+planes and drops spot ink.
+
+★ `--probe-ink` reports the four PROCESS channels only — it does **not**
+show a spot plane's tint. So "the ink is identical" from that probe means
+identical *process* ink, and the sRGB is the only place the plane shows
+up. A spot-plane read-out on that probe would have saved an hour here and
+is worth adding.
+
+### The original attribution, still true as far as it goes
 
 `PCS 3.0`, traps at device `(27, 68)` and `(28, 135)`, both
 `0 0 0 .5 k` and `.5 g` **fills**. `docs/suite-patch-reference.md` §3 carries
