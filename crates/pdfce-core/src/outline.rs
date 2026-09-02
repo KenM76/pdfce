@@ -217,6 +217,16 @@ use crate::textstring::decode_text_string;
 /// drops the ancestors that were read.
 pub const MAX_OUTLINE_DEPTH: usize = 32;
 
+/// How many variants [`Destination`] has, pinned so that adding one cannot
+/// ship without the consuming shells being told.
+///
+/// Not part of the public API surface in any meaningful sense — it exists
+/// for `variant_count_is_pinned_so_a_new_one_cannot_ship_unannounced`,
+/// whose doc comment explains why a tripwire is the only mechanism
+/// available for this particular hazard.
+#[cfg(test)]
+const DESTINATION_VARIANTS: usize = 5;
+
 /// Maximum hops followed while chasing a destination through names and
 /// `/D` wrappers before giving up.
 ///
@@ -374,13 +384,40 @@ impl OutlineItem {
     }
 }
 
-/// Where a bookmark points (§12.3.2, §12.6.4.2, §12.6.4.3).
+/// Where a bookmark — or a `/Link`, or a `/Widget` pushbutton — points
+/// (§12.3.2, §12.6.4.2, §12.6.4.3).
 ///
 /// The variants are ordered by how much pdfce could determine, from
 /// "fully resolved" to "recognised but not a navigation at all". Every
 /// variant except [`Destination::Page`] represents something the
 /// operator may need told about, which is why none of them is folded
 /// into a `None`.
+///
+/// # ★★ ADDING A VARIANT IS A CONSUMER-VISIBLE EVENT — announce it
+///
+/// This is `#[non_exhaustive]`, so a downstream `match` **must** carry a
+/// catch-all, and that catch-all is a sentence describing whatever lands
+/// in it. A new variant therefore does not break a consumer's build — it
+/// silently acquires that consumer's existing wording, which was written
+/// about a different thing.
+///
+/// This is not hypothetical. `pdfceGUI` reported it on 2026-09-01, in its
+/// own words, after wiring [`crate::annot::page_link_destinations`]:
+///
+/// > *"our `match` needs a catch-all, and a catch-all is exactly the shape
+/// > that produces the defect your reply warns about. Ours says 'this link
+/// > has no destination at all' rather than navigating — but the next
+/// > variant you add will silently land there and be described wrongly.
+/// > Not a request; a note that the wildcard exists and that we would
+/// > rather be told when a sixth variant ships than discover it as a
+/// > mis-worded sentence."*
+///
+/// ⇒ **If you add a variant, say so on the feature-request channel**
+/// (`D:\Dev\FeatureRequests\pdfce_FeatureRequests\`) in the same Pass.
+/// `variant_count_is_pinned_so_a_new_one_cannot_ship_unannounced` in this
+/// module's tests will fail first and repeat the instruction; it exists
+/// only to make sure the obligation is *reached*, since nothing else in
+/// this workspace can observe a downstream `match` arm.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum Destination {
@@ -3117,6 +3154,60 @@ mod tests {
         assert!(!outline.diagnostics.root_count_disagreement);
         // But the tree is still reported as unfaithful, via the cycle.
         assert!(!outline.diagnostics.is_faithful());
+    }
+
+    /// Would catch: a sixth [`Destination`] variant shipping without the
+    /// consuming shells being told.
+    ///
+    /// # ★★ This test asserts NOTHING about correctness, deliberately
+    ///
+    /// It is a **tripwire**, not a check. The count it pins carries no
+    /// meaning; changing it is not a failure and the fix is one line. What
+    /// it buys is that the line gets edited by somebody who has just read
+    /// why it exists.
+    ///
+    /// The problem it guards is invisible from inside this workspace.
+    /// [`Destination`] is `#[non_exhaustive]`, so a downstream `match`
+    /// carries a catch-all, and a new variant lands there **without
+    /// breaking that consumer's build** — it silently inherits a sentence
+    /// written about something else. `pdfceGUI`'s catch-all currently
+    /// reads *"this link has no destination at all"*, which would be an
+    /// actively false statement about, say, an embedded-file target.
+    ///
+    /// No compiler warning, no gate and no test in this repository can see
+    /// that. The only mechanism available is to make the *addition* stop
+    /// and say something, which is what this does.
+    #[test]
+    fn variant_count_is_pinned_so_a_new_one_cannot_ship_unannounced() {
+        // Exhaustive on purpose -- no `_` arm. Adding a variant makes this
+        // match fail to compile, which is the loudest half of the tripwire;
+        // the count below is the half that carries the instruction.
+        let probe = Destination::Named { name: Vec::new() };
+        let count = match probe {
+            Destination::Page { .. } => 1,
+            Destination::UnmappedPage { .. } => 2,
+            Destination::Named { .. } => 3,
+            Destination::Remote { .. } => 4,
+            Destination::NonNavigation { .. } => 5,
+        };
+        assert_eq!(
+            count, 3,
+            "this arm's own number, so the match above cannot be reduced to a stub"
+        );
+        assert_eq!(
+            DESTINATION_VARIANTS, 5,
+            "A Destination variant was added or removed.\n\
+             \n\
+             Update this number -- and then ANNOUNCE IT on the feature-request\n\
+             channel at D:\\Dev\\FeatureRequests\\pdfce_FeatureRequests\\.\n\
+             \n\
+             Destination is #[non_exhaustive], so every downstream match has a\n\
+             catch-all. A new variant does NOT break their build -- it lands in\n\
+             that catch-all and inherits a sentence written about something\n\
+             else. pdfceGUI's currently reads \"this link has no destination at\n\
+             all\". Nothing in this repository can observe that, which is why\n\
+             this tripwire exists."
+        );
     }
 
     /// Would catch: a name-tree value that wraps a **go-to action**
