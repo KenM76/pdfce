@@ -96,6 +96,152 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ TWO COMMITS, 376th filing, 2026-09-02 — `Pass 234.0` (`a0c6587`) CORRECTS
+TWO STALE SPOT-COLORANT DISCLOSURES, FOUR PASSES AFTER `225.0`/`228.0`/`229.0`/
+`230.0` FALSIFIED THEM — THE SECOND `R180` INSTANCE THIS SESSION — AND
+CORRECTS THE ENGINEER'S OWN 374th-FILING NOTE ABOUT THE IMAGES/SHADINGS
+TARGET; `Pass 235.0` (`5528366`) IS THE `check-public-fns-documented` GATE
+(BUILT BY `Pass 224.0`, TWO HOURS EARLIER) CATCHING ITS OWN AUTHOR REPEAT THE
+EXACT DOC-SPLICE DEFECT IT WAS BUILT TO CATCH, PLUS A CORRECT
+`string-gap-exempt` USE; A FIFTH RECURRENCE OF "RUN THE SUITE, DON'T
+HAND-PICK" RECORDED AGAINST `R209`; AND THIS LIBRARIAN FOUND TWO FURTHER
+SURVIVORS OF THE STALE CLAIM `a0c6587` DID NOT TOUCH.**
+
+**Sourcing (hard rule 8).** No shell this filing. Both commit bodies supplied
+verbatim as a scratch file (`D:\Dev\pdfce\.librarian-two.txt`, 97 lines,
+`####`-delimited) by the engineer, not read via `git log`. Independently
+cross-checked by `Read`/`Grep` against live source rather than taken on the
+commit text alone — all six sites `a0c6587`'s own message claims, verified
+present and correctly scoped:
+
+- `crates/pdfce-cli/src/main.rs:12435` — the `cmyk_buffer_engaged` operator
+  note, now reading *"a spot colorant painted by a PATH FILL now has a plane
+  of its own… What still has no plane is a spot painted by an IMAGE or a
+  SHADING"*, with an explicit *"this sentence read '…still has no plane of
+  its own' until 2026-09-02"* self-dated correction inline.
+- `crates/pdfce-render/src/interpret.rs:7992-7996` — the image-overprint
+  refusal note, correctly scoped to *"the IMAGE path does not yet deposit
+  into a spot plane… A path FILL in the same space does keep its plane"*.
+- `crates/pdfce-cli/src/main.rs:352` and `:358` — the two CLI metric-table
+  doc rows (`overprint_process_images_unsupported`,
+  `overprint_images_unsupported`), each carrying an inline
+  *"(Said '…' until 2026-09-02; planes exist since `Pass 225.0`; it is the
+  image path that still lacks one.)"* correction.
+- `crates/pdfce-render/src/interpret.rs:342` and `:5033` — the two render-side
+  doc comments, each carrying the equivalent inline correction.
+
+**★ TWO FURTHER SURVIVORS FOUND BY THIS ROLE, NOT AMONG THE SIX AND NOT FIXED
+BY `a0c6587` — reported as owed, not corrected here (`crates/` is outside this
+role's remit per its own charter).** Both carry the **identical, unscoped**
+claim *"a SPOT colorant has no plane of its own… flattened through its tint
+transform… cannot be left standing the way a press leaves it"*, unconditional
+on `cmyk_buffer_engaged`, where the six corrected sites above all now
+narrow to *path fill has a plane; image/shading do not*:
+
+- `crates/pdfce-render/src/interpret.rs:479-483` — the `OverprintDiagnostics`
+  struct's own general doc comment (on `overprint_requested`), still reading
+  *"the four PROCESS colorants survive, but a SPOT colorant has no plane of
+  its own and is flattened through its tint transform"*, unconditionally.
+- `crates/pdfce-cli/src/main.rs:12130-12134` — a source `//` comment sitting
+  directly above the same `eprintln!` call the six-site fix corrected two
+  branches of, carrying the same unscoped sentence, unfixed.
+
+This is hard rule 11's own shape recurring on the very commit that most
+carefully practised it: `a0c6587`'s message enumerates six sites by count and
+both are genuine additional instances of the claim it was correcting,
+missed by a search keyed on the same wording rather than the same meaning.
+Neither is disputed as stale — both predate `Pass 225.0` exactly as the six
+did, and neither was scoped when the six were.
+
+**`docs/FEATURES.md`: not touched, either Pass.** Both are disclosure/doc
+corrections and a process-tooling fix — no capability moved, no row exists to
+tick.
+
+### Pass 234.0 (`a0c6587`, 2026-09-02) — the engine told the operator it has no spot planes, four Passes after it got them
+
+**The stale claim, in shipped output.** Rendering a spot-colour patch had
+printed, verbatim, *"a SPOT colorant still has no plane of its own"* and,
+on the deferred-operator line, *"pdfce has no plane for a spot colorant, so
+Table 149's preservation cannot run"*. Both true when written; both false
+since `Pass 225.0` gave the buffer per-colorant planes and `Passes 228.0`/
+`229.0`/`230.0` wired a path fill's deposit, refusal-path deposit and
+overprint routing into them. Neither sentence noticed — `R180`'s shape
+again, and the **second** instance this session, after the `--version`
+banner denying `iccce` (`Pass 223.0`).
+
+**The correction is a narrowing, not a deletion.** The claim is now scoped:
+planes exist and a path fill deposits into them; the IMAGE and SHADING paths
+do not. Every corrected site states which half is which and carries the
+date it stopped being flatly true, so the next reader sees the claim moved
+rather than assumes it was always this careful.
+
+**How it was found — not by review, not by a gate.** The engineer was
+looking for a conformance patch to exercise the IMAGE half of the spot work,
+ran two failing patches to check whether their traps sat in image regions —
+and the engine's own disclosure answered the question *and* revealed itself
+as stale in the same output. `overprint_images_unsupported=1` on both
+patches names the gap exactly.
+
+**★ Also corrects the engineer's own note from the 374th-filing window.**
+That note recorded step 4 (images/shadings) as *"cannot be measured on the
+failing patches"* — true of the two patches examined then, **false of the
+other two failing spot patches**, which carry 3 images + 2 shadings and 2
+images + 1 shading respectively, and whose `overprint_images_unsupported=1`
+names the gap exactly. Step 4 has a real, measurable target now.
+
+### Pass 235.0 (`5528366`, 2026-09-02) — two gates catching the engineer, and a process gap catching itself
+
+**Fix 1 — a doc comment welded to its neighbour, by the same engineer who
+wrote the detector two hours earlier.** `check-public-fns-documented.py`
+(`Pass 224.0`, this same session) reported
+`ui_text.rs::setting_grey_overprint_title` undocumented. Its own failure
+message says to check whether the comment went missing rather than never
+existing, and it had: splicing five new functions above that anchor left
+its doc block attached to the first new function, so that one opened by
+describing a different function entirely. Identical shape to the
+`mark_dirty`/`set_pixel` weld that motivated the gate
+(`D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`'s
+third footer) — the gate was built for exactly this defect and caught it in
+its own author's hands two hours later. `rustfmt` and `clippy` were both
+content. **Verified corrected**: `crates/pdfce-gui/src/ui_text.rs:2571-2576`
+now opens with *"The §8.6.7 zero-tint scope, in the operator's terms"*,
+correctly describing `setting_grey_overprint_title` rather than a neighbour.
+
+**Fix 2 — a deliberate column alignment, correctly exempted, not a defect.**
+`check-string-gaps.sh` flagged the column-aligned option/description layout
+written into `settings.txt`'s explanatory comment. Not a lost line
+continuation — the run of spaces IS the column — so it took the documented
+`string-gap-exempt:` marker with the reason inline, which is what that
+escape hatch exists for. Verified:
+`crates/pdfce-core/src/settings/mod.rs:2791-2792`.
+
+**★★ The process failure, and it is the shortest gap yet.** Four gates were
+hand-picked and run before pushing; neither of the two above was among them.
+This is `R209`'s own subject — *"all gates green" names a set, and the set
+somebody runs is not the set CI runs* — recurring not as a CI/local
+disagreement this time but as a **local subset masquerading as a local
+sweep**, with `tools/run-gates.sh` sitting on disk unrun. **Fifth recurrence
+of this exact lesson in one session**, and the fourth had been recorded in
+the engineer's own words two commits earlier in this same session (the
+sixth `R217` amendment note, `Pass 233.0`'s own filing) — recording a lesson
+did not prevent its immediate repetition, which is the argument for
+mechanism over memory rather than for writing the lesson down harder.
+
+**Gates re-run in full before this fix shipped**: `tools/run-gates.sh`
+green on all 31 commands at `5528366`, engineer-reported, not re-run by
+this role (no shell this filing).
+
+**Standing-rule disposition.** `R209`'s core text and clause (e) already
+obligate exactly what was skipped here — *"quote `N of M` from
+`run-gates.sh`, not from a hand count"* and the runner's own founding
+argument (*"a sweep that omits a gate is indistinguishable from a green
+one"*) — so no wording gap exists to amend. Recorded as a further instance
+under `R209`, below, rather than a new clause: the rule was correct and
+unread, not incomplete. **Ceiling unaffected: rules `R239`, next free
+`R240`.**
+
+---
+
 **★ ONE COMMIT, 375th filing, 2026-09-02 — `Pass 233.0` (`047a6d8`) SHIPS
 `OP-A7` / `spot_colorant_device_model`, THE SETTING DECISION 120 SPECIFIED,
 CLOSING THAT DECISION'S OWN `IN PROGRESS` IMPLEMENTATION-STATUS NOTE; A SIXTH
@@ -130140,6 +130286,33 @@ and
   already ruled that a further instance in that shape is **evidence for
   `R180`, not a new family member**.
 
+  **★ FURTHER INSTANCE (2026-09-01, `b543759`, `Pass 223.0`, 364th filing,
+  backfilled to this catalog 2026-09-02, 376th filing) — `pdfce-cli
+  --version` DENIED A DEPENDENCY THE COMPILER COULD PROVE WAS LINKED.** The
+  banner printed `iccce: not-linked-yet (integration pending -- Pass 97.x;
+  see ARCHITECTURE.md decision 064)` for six days after `Pass 199.2`
+  (`3194f1b`) added `iccce-profile`/`iccce-cmm` to
+  `crates/pdfce-render/Cargo.toml` — an accurate sentence falsified by the
+  very dependency landing it was written to anticipate, and named in its
+  own Shipped entry as *"an `R180` instance in its purest shape"* without
+  the catalog bullet this note now supplies. Never appended here at the
+  time; closing that gap on discovery rather than leaving two open ends.
+
+  **★ FURTHER INSTANCE (2026-09-02, `a0c6587`, `Pass 234.0`, 376th filing) —
+  SIX SITES, SAME SENTENCE, SAME SESSION AS THE INSTANCE ABOVE.** *"A SPOT
+  colorant still has no plane of its own"* and *"pdfce has no plane for a
+  spot colorant, so Table 149's preservation cannot run"* — true when
+  written, false since `Pass 225.0` gave the compositor per-colorant planes
+  and `Passes 228.0`/`229.0`/`230.0` wired a path fill's deposit into them.
+  **The second instance in one session**, and the corrected sites are
+  narrowings rather than deletions (planes exist for a path fill; the
+  image/shading paths still lack one), each dated inline. **Two further,
+  unscoped copies of the identical sentence were found by `pdfce-librarian`
+  at `crates/pdfce-render/src/interpret.rs:479-483` and
+  `crates/pdfce-cli/src/main.rs:12130-12134`, NOT touched by `a0c6587` and
+  still stale** — see the `Pass 234.0`/`235.0` Shipped entry (top of
+  *Shipped*) for the full account. Flagged as owed, not corrected here.
+
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate
   that can diverge from it in either direction (2026-08-10, `c46a6ce`;
@@ -132909,6 +133082,34 @@ same cause (hashes exist only at commit time), two different failure modes.
   > the drift this project spent the week avoiding** — the `R220` precedent,
   > argued at length in the 296th filing. **Ceiling does NOT move. Rules stay
   > at `R223`, next free `R224`.**
+
+  > **★★ FURTHER INSTANCE, 2026-09-02, 376th filing (`Pass 235.0`, `5528366`)
+  > — A HAND-PICKED FOUR-GATE SUBSET, RUN AND GREEN, READ AS A SWEEP; THE TWO
+  > OMITTED GATES WERE THE TWO THAT WOULD HAVE CAUGHT THE SESSION'S OWN TWO
+  > DEFECTS. NO NEW CLAUSE — THE RULE ALREADY SAYS THIS; RECORDED BECAUSE
+  > SAYING IT AGAIN DID NOT WORK.**
+  >
+  > `check-public-fns-documented.py` (caught a doc-comment weld) and
+  > `check-string-gaps.sh` (caught, then correctly cleared, a deliberate
+  > column alignment) were both **omitted** from a four-gate hand-picked run
+  > before push. `tools/run-gates.sh` — the mechanical remedy this rule's
+  > clause (e) already shipped — sat on disk, unrun. **Fifth recurrence of
+  > "run the suite, don't retype a subset" in one session**; the fourth had
+  > been recorded, in the engineer's own words, **two commits earlier in
+  > this same session** (`R217`'s sixth amendment note, `Pass 233.0`'s own
+  > filing). Writing the lesson down did not prevent repeating it inside the
+  > same working session — evidence for *mechanism over memory* as the
+  > actual fix, not for a sharper sentence.
+  >
+  > **No wording gap to close.** `R209`'s core text (*"name the set you
+  > mean"*) and clause (e)'s own founding line — *"a sweep that omits a gate
+  > is indistinguishable from a green one"* — already describe this exact
+  > failure precisely; a hand-picked four is a sweep that omitted fifteen
+  > without saying so. **Declined to mint or amend**: the rule was correct
+  > and unconsulted, which is a compliance gap, not a rule gap — the same
+  > finding `R217`'s third amendment note reached for a different rule
+  > the same week (*"reported as defective three times and corrected zero
+  > times"*). **Ceiling unaffected: rules `R239`, next free `R240`.**
 
   **Ceiling moves `R208` → `R209`; next free `R210`.**
 

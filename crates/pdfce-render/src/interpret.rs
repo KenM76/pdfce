@@ -477,10 +477,17 @@ pub struct Diagnostics {
     /// PDF/X files, so a PDF/X-4 document's EXPECTED appearance includes it.
     ///
     /// **What is still missing**, and why this counter is not a success
-    /// measure: the four PROCESS colorants survive, but a SPOT colorant has
-    /// no plane of its own and is flattened through its tint transform, so
-    /// it cannot be left standing the way a press leaves it. That is the
-    /// per-colorant buffer, filed and not built.
+    /// measure: the four PROCESS colorants survive, and since `Pass 228.0` a
+    /// spot colorant painted by a PATH FILL keeps a plane of its own and is
+    /// left standing the way a press leaves it — but a spot painted by an
+    /// IMAGE or a SHADING still flattens through its tint transform and
+    /// cannot be. That half is owed.
+    ///
+    /// ★ Said "a SPOT colorant has no plane of its own" unconditionally
+    /// until 2026-09-02, and survived the sweep that narrowed six sibling
+    /// sites the same day — found by `pdfce-librarian` reading live source
+    /// rather than by the grep, which matched on a phrasing this site does
+    /// not use. A sweep is only as good as its spelling.
     ///
     /// ★ **This paragraph has now been wrong about images TWICE, in
     /// opposite directions, and the second is worth more than the first.**

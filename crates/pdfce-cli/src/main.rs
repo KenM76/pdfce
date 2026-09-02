@@ -12128,10 +12128,17 @@ overprint_process_images_unsupported={}",
         // same numbers four lines up). Third occurrence of the shape;
         // recorded because a stale comment is the half nobody re-reads.
         //
-        // What IS still approximate: the four PROCESS colorants are
-        // preserved, but a SPOT colorant has no plane of its own and goes
-        // through its tint transform, so it cannot be left standing the
-        // way a press leaves it. That is the `Pass 97.1` colorant buffer.
+        // What IS still approximate, and it is NARROWER since `Pass 228.0`:
+        // the four PROCESS colorants are preserved, and a spot colorant
+        // painted by a PATH FILL now keeps a plane of its own. A spot
+        // painted by an IMAGE or a SHADING still goes through its tint
+        // transform and cannot be left standing the way a press leaves it.
+        //
+        // ★ FOURTH occurrence of the stale-comment shape this block already
+        // names three of: said "a SPOT colorant has no plane of its own"
+        // unconditionally until 2026-09-02, and survived that day's sweep of
+        // six sibling sites because the grep matched a phrasing this one
+        // does not use.
         d.overprint_requested,
         d.overprint_mode1_requested,
         // The subset that is a REAL difference: `overprint_requested` is

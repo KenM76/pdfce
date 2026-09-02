@@ -86314,3 +86314,83 @@ exposes an equivalent device-model choice).
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (376th filing) — `Pass 234.0` (`a0c6587`) + `Pass 235.0` (`5528366`) SHIPPED — a stale spot-colorant disclosure corrected for the SECOND time this session (two more survivors found by this role, not fixed by `a0c6587`); the `check-public-fns-documented` gate caught its own author two hours after it shipped; a FIFTH recorded recurrence of "run the suite, don't hand-pick" filed against `R209`; two `D:\dev\rag\rust\` files amended
+
+**Sourcing.** No shell this filing. Both commit bodies relayed verbatim as a
+scratch file (`D:\Dev\pdfce\.librarian-two.txt`, 97 lines) by the engineer,
+not read via `git log`. Independently cross-checked against live source by
+`Read`/`Grep` before filing — see `ROADMAP.md`'s `Pass 234.0`/`235.0` entry
+(top of *Shipped*) for the full span list.
+
+**Shipped:**
+- `Pass 234.0` (`a0c6587`) — six sites corrected: the operator was told, in
+  two forms, that a spot colorant has no plane of its own, four Passes after
+  `Pass 225.0` gave the compositor per-colorant planes. Narrowed, not
+  deleted: a path fill deposits into its plane; the IMAGE and SHADING paths
+  still flatten. Also corrects the engineer's own 374th-filing note that
+  step 4 (images/shadings) "cannot be measured on the failing patches" —
+  false of two of the four failing spot patches, which carry real image/
+  shading counts and name the gap by `overprint_images_unsupported=1`.
+- `Pass 235.0` (`5528366`) — two fixes caught by gates rather than review:
+  a doc-comment weld in `ui_text.rs` (`check-public-fns-documented.py`,
+  built two hours earlier in the same session, catching its own author);
+  a correctly-exempted deliberate column alignment in the settings-file
+  writer (`check-string-gaps.sh` + `string-gap-exempt:`).
+
+**Decisions made this session:** none — both Passes are disclosure/doc/
+process corrections, no architectural decision implicated.
+
+**Findings + decisions:**
+- **★ Two further survivors of `Pass 234.0`'s own stale claim, found by this
+  role, not among the six `a0c6587` fixed.**
+  `crates/pdfce-render/src/interpret.rs:479-483` (the `OverprintDiagnostics`
+  struct's general doc comment) and `crates/pdfce-cli/src/main.rs:12130-12134`
+  (a source `//` comment above the same `eprintln!` call the six-site fix
+  corrected two branches of) both still carry the identical, unscoped
+  sentence — *"a SPOT colorant has no plane of its own… cannot be left
+  standing the way a press leaves it"* — with no narrowing to path-fill vs.
+  image/shading. Flagged as owed; not corrected here (`crates/` is outside
+  this role's remit). Added to the `R180` catalog entry, below.
+- **`R180` catalog backfilled with two further instances** (Standing rules,
+  `docs/ROADMAP.md`): `Pass 223.0`'s `--version`/`iccce` denial (364th
+  filing — named in its own Shipped entry as an R180 instance but never
+  appended to the catalog bullet list until now) and `Pass 234.0` itself,
+  including the two survivors above.
+- **A fifth recorded recurrence, in one session, of "run the suite, don't
+  hand-pick a subset."** Four gates were hand-picked and run before the
+  push that shipped `Pass 235.0`; neither `check-public-fns-documented.py`
+  nor `check-string-gaps.sh` — the two that would have caught that same
+  session's own two defects — was among them. The fourth recurrence had
+  been recorded, in the engineer's own words, two commits earlier in the
+  same session (`R217`'s sixth amendment note, `Pass 233.0`'s filing).
+  **No wording gap found to amend** — `R209`'s core text and clause (e)
+  already obligate exactly this; recorded as a further instance under
+  `R209` (Standing rules) rather than a new clause, and escalated to
+  `D:\dev\rag\rust\the_local_gate_sweep_is_a_subset_of_ci_and_nothing_compares_the_two.md`
+  (new amendment) as the stronger, cross-project argument for mechanism
+  over memory: a lesson recorded two commits earlier did not survive two
+  more commits.
+- **`D:\dev\rag\rust\a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`**
+  gained a fourth dated footer — same file, same mechanism as the third
+  (`Pass 224.0`), this time the gate's own author committing the defect
+  it was built to catch, two hours after shipping it.
+- **Gates re-run in full** (`tools/run-gates.sh`, 31 commands, green at
+  `5528366`) — engineer-reported, not re-run by this role, no shell this
+  filing.
+
+**`docs/FEATURES.md`:** not touched — both Passes are disclosure/doc/process
+corrections, no capability moved, no row to tick.
+
+**Still in flight:**
+- The two survivor sites above (`interpret.rs:479-483`,
+  `main.rs:12130-12134`) — owed, not fixed.
+- Step 4 of the spot-plane arc (images + knockout groups) — unchanged,
+  still open, now with a confirmed measurable target (two failing patches
+  carrying real image/shading counts).
+- The `docs/suite-patch-reference.md` per-device-model-qualifier check
+  decision 120 flagged — still not verified by this role.
+
+**For next session:**
+- Backup/push state not independently checked by this role, no shell this
+  filing.
