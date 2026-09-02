@@ -85218,3 +85218,87 @@ observation would fragment rather than consolidate the existing
   *Planned*-section "`iccce` revision/date/time…" row retired (folded
   into the corrected *Implemented* row).
 - Read and act on the two unread iccce replies named above.
+
+## 2026-09-01 (365th filing) — `Pass 224.0` (`f01e15e`) SHIPPED — a doc comment welded to its neighbour shipped a WRONG description, silently; `main` pushed to `origin/main`
+
+**Sourcing.** This role had no shell this filing. The full commit body was
+supplied verbatim as a scratch file (`.librarian-224.txt`) by the engineer,
+not read via `git log`; every file/line/symbol claim was additionally
+cross-checked against live source by `Read`/`Grep` — see the filing header
+in `ROADMAP.md`'s *Shipped* section for the full citation list.
+
+**Shipped:**
+
+- **`Pass 224.0`** (`f01e15e`) — new gate `tools/check-public-fns-documented.py`
+  + baseline `tools/public-fns-undocumented-baseline.txt` (73 entries, DEBT
+  not an allowlist), wired into `.github/workflows/ci.yml` and
+  `check-ci-parity.py`'s LOCAL map. Fixed the three worst violations:
+  `outline::read_outline` (headline entry point, cited by name in
+  `docs/core-api/`, explained only in its module header), and
+  `cmyk_buffer::set_pixel` / `cmyk_buffer::mark_dirty` (a doc block welded
+  onto its neighbour, shipping `mark_dirty` with `set_pixel`'s first
+  sentence and leaving `set_pixel` with none). Measured: 3,377 public
+  functions scanned, 75 undocumented (2.2%). Adding the gate made
+  `check-ci-job-names.py` go red (`audits` job declared "20 checks", ran
+  21) — corrected in the same commit.
+
+**Decisions made this session:** none minted. Declined a fourth standing
+rule for the block-boundary editing-hazard family (`check-string-gaps.sh`,
+`R230`'s `clap`-derive branch, now this) — same reasoning the immediately
+preceding filing applied to `R180`/`R192`: a fresh number for the same
+underlying observation fragments a family rather than consolidating it.
+`R227` and `R230` cited by name in `Pass 224.0`'s `ROADMAP.md` entry
+instead. Escalated the finding to `D:\dev\rag\rust\` as a third dated
+footer on the existing rustdoc/`clap` derivation file (and its
+`index.md` bullet) rather than to `C:\personal_rag\claude_code\` — the
+two prior siblings of this exact mechanism already live there, filed as a
+property of editing Rust `///` doc comments specifically, not of Claude
+Code tooling generally.
+
+**Findings + decisions:**
+
+- **The observable symptom of a silently corrupted doc block is an
+  UNDOCUMENTED NEIGHBOUR, not the corrupted block itself** (`Pass 224.0`)
+  — a gate cannot tell which of two welded blocks is wrong, but it CAN
+  tell that one went missing, which for a contiguous weld is the same
+  event. Generalises past doc comments: for any pair of adjacent records
+  where one can silently absorb the other's content, the enforceable
+  signal is the neighbour's now-empty slot, not the absorbing record's
+  wrongness.
+  `D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`
+  (third footer, 2026-09-01).
+  - Existing Backlog entry *"`check-string-gaps.sh` is not in the release
+    path…"* (360th filing) checked and does **not** cover this — it tracks
+    one gate's absence from the tag checklist, a different concern, and
+    `check-public-fns-documented.py` ships already wired into CI.
+- **A count baked into a job's own name is a claim the next gate you add
+  can falsify** (`Pass 224.0`) — `check-ci-job-names.py` caught its own
+  mesh growing by one. No new finding filed; already `R213`/`R232`'s
+  shape, applied to a job name rather than to prose.
+
+**Still in flight / open:**
+
+- The two unread iccce channel replies noted in the 364th filing's entry
+  above remain unread by this role.
+- `docs/FEATURES.md` deliberately **not** touched this filing — `Pass
+  224.0` is tooling (a CI gate), not a capability; no row exists or was
+  created.
+
+**For next session:**
+
+- **`main` pushed to `origin/main` at `9d43079`** — 0 unpushed at the time
+  of the push, `f01e15e` included. Standing-authorized per `CLAUDE.md`
+  rule 8 / decision 090 ("always push"); no go-ahead sought, correctly —
+  an ordinary fast-forward push of `main`, not a tag/release/force-push.
+  **This role did not verify this figure itself (no shell this filing) —
+  relayed from the engineer's report per hard rule 8, flagged as relayed
+  rather than checked.**
+- `tools/run-gates.sh` reported **30 of 31 green** at that point, the one
+  failure being `check-commits-filed.py` naming `f01e15e` itself — the
+  expected state between a code commit and its filing commit, now closed
+  by this filing.
+- Confirm `python tools/check-ledger-numbers.py` and
+  `python tools/check-commits-filed.py` report fully clean post-filing
+  (not independently re-run here — no shell).
+- Read and act on the two unread iccce replies (carried forward from the
+  364th filing).

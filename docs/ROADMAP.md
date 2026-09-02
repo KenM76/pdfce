@@ -146,6 +146,148 @@ invariant is likewise not implicated — neither writes a document.
 
 ---
 
+**★ ONE COMMIT, 365th filing, 2026-09-01 — `Pass 224.0` (`f01e15e`).**
+
+**Sourcing (hard rule 8).** This role had no shell this filing. The full
+commit body was supplied verbatim as a scratch file
+(`D:\Dev\pdfce\.librarian-224.txt`) by the engineer, not read via `git log`
+directly. Every file/line/symbol claim naming a specific location was
+additionally cross-checked against LIVE SOURCE by `Read`/`Grep` this
+filing: `tools/check-public-fns-documented.py` (exists, exit codes 0/1/2 at
+lines 79-85, UTF-8 stream reconfiguration at lines 100-103, its own doc
+comment naming the `cmyk_buffer.rs` weld verbatim at lines 2-45),
+`tools/public-fns-undocumented-baseline.txt`'s wiring at
+`.github/workflows/ci.yml:554` and `tools/check-ci-parity.py:120`,
+`crates/pdfce-core/src/outline.rs:1468-1473` (`read_outline`'s new doc
+comment, confirming the "explanation lived only in the module header"
+claim), and `.github/workflows/ci.yml:312` (`name: repository audits (21
+checks)`, confirming the count correction from 20). No `Cargo.toml` change
+mentioned or found on inspection, so GUI-core-separation is not implicated
+and `cargo tree` was not re-run to confirm an unchanged fact — flagged, per
+hard rule 8. This Pass adds tooling only (a gate script + a baseline file);
+it writes no document, so round-trip/minimal-diff is not implicated either.
+
+### Pass 224.0 (`f01e15e`, 2026-09-01) — a doc comment welded to its neighbour ships a WRONG description, silently
+
+**The defect.** `crates/pdfce-render/src/cmyk_buffer.rs`'s `mark_dirty`
+carried a doc block that opened *"Write one pixel, clamping into range"* —
+`set_pixel`'s subject, not its own — with `set_pixel` itself left
+**completely undocumented** forty lines below. Two doc blocks had been
+fused into one with no blank-line seam, so `clippy::doc_lazy_continuation`
+(which exists for exactly the blank-line variant of this trap) could not
+see it, `rustfmt` and `clippy -D warnings` were both content, and a `git
+diff` review reads correct — the block moved, it did not visibly lose its
+subject.
+
+**Third member of a family this machine keeps producing, not a first
+sighting.** `check-string-gaps.sh` (a lost backslash line-continuation —
+Backlog, filed 360th filing from `Pass 201.0`), `tools/check-cli-help-leads.py`
+/ standing rule **`R230`** (a `///` paragraph spliced above a `clap`-derive
+variant's own lead-in, shipping a wrong `--help` summary for a *different*
+command), and now this. All three: this machine's editing tools eat or weld
+structure at block boundaries, and none of the three is visible in a diff —
+each needed its own detector.
+
+**The detection technique, and why it is genuinely new despite the family
+being three deep.** Neither prior sibling's approach transfers to an
+arbitrary `pub fn`'s doc comment: the rustdoc-index branch explicitly
+declined a gate (*"deciding which paragraph should be an item's summary
+requires knowing what the item is for"*), and `R230`'s gate depends on a
+`clap`-specific house style (every subcommand opens with a bold lead-in)
+that plain Rust functions don't have. **The finding that makes a gate
+possible here: the observable symptom of a silently corrupted doc block is
+an UNDOCUMENTED NEIGHBOUR.** The gate cannot tell you the surviving block is
+wrong — it can tell you a block went missing, which for a contiguous weld
+is the same event.
+
+**Measured before built.** 3,377 public functions scanned, **75 with no
+doc comment (2.2%)**. Two of the 75 were the `cmyk_buffer.rs` weld. A
+third, `outline::read_outline`, is the headline entry point of its module
+and is cited by name in `docs/core-api/` (a separate project builds
+against it), but its explanation lived only in the module header — the
+same shape stated generally in its own new doc comment: *"the absence is
+invisible to a reader who already knows the subject."* All three fixed
+inline; the other 73 filed to `tools/public-fns-undocumented-baseline.txt`,
+which is **debt, not an allowlist** — its own header says so, entries carry
+no line numbers (a line-numbered baseline is a merge-conflict generator),
+adding to it is a violation not a suppression, and a stale row (naming
+something that no longer exists) is exit code **2**, distinct from exit
+code **1** (an undocumented function outside the baseline). The baseline's
+header instruction matters more than its list: *before writing a doc
+comment for any row, check whether it went missing rather than never
+existing* — read the item above it first.
+
+**Verification.** Both failure paths sabotage-verified, each asserted to
+have applied: an undocumented `pub fn` added → exit 1, named, baseline
+extension refused; a stale baseline row → exit 2. Wired into
+`.github/workflows/ci.yml` (which `run-gates.sh` derives its list from, so
+local and CI cannot diverge) and registered in `check-ci-parity.py`'s LOCAL
+map (`R209` — a CI job with no local runner is unobserved, not passing —
+discharged at mint time). The gate reconfigures both stdout and stderr to
+UTF-8 from the start, the established fix in this directory, applied here
+before a crash was seen on either stream rather than after (`check-commits-
+filed.py` had to learn this fix twice).
+
+**★ The gate mesh caught its own addition.** Adding the new job made
+`check-ci-job-names.py` go red: the `audits` job's own name declared *"(20
+checks)"* and, with the new gate, ran 21. Corrected in the same commit
+(confirmed live: `.github/workflows/ci.yml:312` now reads *"repository
+audits (21 checks)"*). Worth recording as the gate mesh working exactly as
+designed — a count baked into a name is a claim, and adding a gate is
+precisely the event that falsifies one (same shape as `R213`/`R232`'s
+"a figure copied where no gate reads it" family, applied to a job's own
+name rather than to prose).
+
+**Standing-rule judgment call.** Checked the two-occurrence promotion bar
+— already cleared by this family's first two members — against minting a
+fourth number alongside `R227` (*a source-scanning check must read to a
+syntactic boundary*) and `R230` (*a `clap`-derive `///` block's bold
+lead-in must be the first line*). **Declined.** The root cause is
+identical across all three (this machine eats/welds structure at doc-block
+boundaries) and the detection technique, while genuinely new, generalises
+past doc comments entirely (*for any pair of adjacent records where one
+can silently absorb the other's content, the enforceable signal is the
+neighbour's now-empty slot, not the absorbing record's wrongness*) — which
+makes it better placed as a dated footer on the existing derivation than as
+a fourth pdfce-specific rule number. Same call this project already made
+for a different family the immediately preceding filing (`R180`/`R192`,
+`Pass 223.0`): a fresh number for the same underlying observation
+fragments rather than consolidates. `ARCHITECTURE.md` §10 was checked and
+declined as a home — it is the fuzzing/attacker-influenced-bytes section,
+not a tooling-hazard section, and repurposing it would be a worse fit than
+the existing Rust-ecosystem RAG this family already lives in.
+
+**Escalated to `D:\dev\rag\rust\`, not `C:\personal_rag\claude_code\`.**
+The engineer flagged the latter as a candidate home for the
+backslash/heredoc/block-boundary hazard, reasoning it is a property of the
+*tooling* rather than of PDF or of Rust. Judgment call: **declined** — the
+two prior siblings of this exact family (the rustdoc-summary trap and its
+`clap`-derive branch) already live in
+`D:/dev/rag/rust/a_doc_block_inserted_above_the_summary_line_buries_it_and_every_gate_passes.md`,
+filed there specifically because the mechanism is a property of editing
+Rust `///` doc comments (rustdoc/clippy/rustfmt's blind spots), not of
+Claude Code tooling generally — `personal_rag/claude_code` is scoped to
+hooks/skills/MCP/Windows-path gotchas, a different subject. Splitting this
+occurrence into a second tree would fragment the very family the sweep
+exists to consolidate. Added as a third dated footer to that file and to
+its `D:\dev\rag\rust\index.md` entry, both this filing.
+
+**Existing Backlog entry checked, does not cover this.** The *Unscoped —
+"`tools/check-string-gaps.sh` is not in the release path…"* entry (filed
+360th filing) tracks a different concern — one specific gate's absence
+from the tag/release checklist — not the block-boundary hazard family
+itself, and `check-public-fns-documented.py` is wired directly into CI
+(unlike the release-path gap that entry describes), so no cross-edit made.
+
+**`FEATURES.md`.** Not touched. This Pass ships tooling (a CI gate), not a
+capability — no *Implemented*/*Planned* row exists or was created for it,
+per the engineer's own framing of the dispatch. No "engineering gates /
+project health" row exists in `FEATURES.md` today; inventing one for a
+single gate would be starting a category this filing has no mandate to
+open.
+
+---
+
 ### Pass 223.0 (`b543759`, 2026-09-01) — `--version` denied a dependency the compiler can prove is linked
 
 **The defect.** `pdfce-cli --version` had printed `iccce: not-linked-yet
