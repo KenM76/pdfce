@@ -39,10 +39,17 @@ tell you the surviving block is wrong; it can tell you a block went
 missing, which is the same event.
 
 Same family as `check-string-gaps.sh` (a lost backslash continuation) and
-`check-cli-help-nonempty.py` (a `///` that IS the shipped `--help`): this
-machine's editing tools eat structure at block boundaries, repeatedly, and
-each variant needs its own detector because none of them is visible in a
-diff.
+`check-cli-help-leads.py` (a `///` whose FIRST line is the shipped `--help`
+summary, so a paragraph spliced above it buries the summary): this machine's
+editing tools eat structure at block boundaries, repeatedly, and each
+variant needs its own detector because none of them is visible in a diff.
+
+★ That sibling was cited here as `check-cli-help-nonempty.py` -- a file that
+does not exist -- for the length of one commit. Caught by a reading agent,
+not by any gate, because no gate checks whether a doc comment's cross-
+reference resolves. Left recorded rather than quietly corrected: a citation
+is a claim, and this one was written from memory of what the gate does
+rather than from its filename.
 
 WHAT COUNTS AS DOCUMENTED
 -------------------------

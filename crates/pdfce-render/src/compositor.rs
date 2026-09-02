@@ -422,7 +422,17 @@ fn blend_separable(mode: Blend, cb: f32, cs: f32) -> f32 {
         }
         Blend::Difference => (cb - cs).abs(),
         Blend::Exclusion => (cb * cs).mul_add(-2.0, cb + cs),
-        // Unreachable through `Blend::apply`; see the Panics note.
+        // Unreachable through `Blend::apply`, and also through
+        // `blend_spots`, which screens `NonSeparable` out before this is
+        // called (§11.7.4.2). See the Panics note.
+        //
+        // ★ Answering `cs` rather than panicking makes this arm a SECOND,
+        // accidental enforcement of §11.7.4.2 -- `cs` is exactly what
+        // `Normal` would give. Established by sabotage, not by reading:
+        // removing `blend_spots`'s guard leaves behaviour unchanged
+        // because of this line. It is not the guarantee, it merely
+        // coincides with it, and the two are documented separately so a
+        // change to either does not silently take the other with it.
         Blend::Normal | Blend::NonSeparable(_) => cs,
     }
 }
@@ -687,15 +697,93 @@ pub fn composite_element_cmyk(backdrop: PixelCmyk, source: PixelCmyk, blend: Ble
         }
         m
     };
+    let blended_s = blend_spots(blend, backdrop, source, ab);
     let mut c = [0.0_f32; 4];
     for i in 0..4 {
         c[i] = w.mul_add(blended[i] - backdrop.c[i], backdrop.c[i]);
     }
-    PixelCmyk {
-        c,
-        s: [0.0; MAX_SPOTS],
-        a: ai,
+    let mut sp = [0.0_f32; MAX_SPOTS];
+    for i in 0..MAX_SPOTS {
+        sp[i] = w.mul_add(blended_s[i] - backdrop.s[i], backdrop.s[i]);
     }
+    PixelCmyk { c, s: sp, a: ai }
+}
+
+/// §11.3.6's blend-and-mix step applied to the SPOT colorant planes.
+///
+/// Structurally identical to what [`composite_element_cmyk`] does for the
+/// four process channels — `C_s' = (1 - α_b) × C_s + α_b × B(C_b, C_s)`,
+/// per §11.3.6 — with one substitution that is a `shall`, not a choice.
+///
+/// # ★★ §11.7.4.2: a spot colorant takes SEPARABLE blend modes only
+///
+/// The clause is normative and unambiguous: only **separable,
+/// white-preserving** blend modes may be applied to a spot colour. A
+/// non-separable mode (`Hue`, `Saturation`, `Color`, `Luminosity`) is
+/// therefore **degraded to `Normal`** on every spot plane, while the four
+/// process channels still get it.
+///
+/// That asymmetry is deliberate and is not an approximation. It is what the
+/// standard requires, and the implementation reason reinforces it:
+/// [`Blend::apply_subtractive`]'s non-separable arm complements exactly
+/// three channels, treats the fourth as black, and hands the triple to a
+/// **CIE-derived** hue/saturation/luminosity computation. That computation
+/// is defined on a colour, not on an arbitrary ink coverage. There is no
+/// meaning to the "hue" of a `PANTONE 265 C` plane, so the function cannot
+/// be extended over spot planes even if the clause permitted it — the arm
+/// is structurally CMYK-only.
+///
+/// ## ★ This guard is the SECOND enforcement, not the only one — measured
+///
+/// Deleting the `NonSeparable` arm from the test below changes **nothing
+/// observable**, and that was established by sabotage rather than assumed:
+/// the test for it still passed with the guard removed.
+///
+/// The reason is that [`blend_separable`]'s own final arm already answers
+/// `cs` for `Blend::NonSeparable(_)`, so a non-separable mode reaching the
+/// per-channel loop would come back as the source tint anyway — which is
+/// `Normal`, which is the required behaviour. The two mechanisms agree.
+///
+/// It is kept regardless, for two reasons that survive the redundancy:
+///
+/// 1. It states the clause **at the branch the clause governs**, where the
+///    next reader of this function will look for it. `blend_separable`'s
+///    fallback is documented as a panic-avoidance measure, not as a
+///    conformance rule, and relying on it would make §11.7.4.2's
+///    enforcement an accident of an unrelated function's error handling.
+/// 2. It keeps `blend_separable`'s own *"unreachable through
+///    `Blend::apply`"* note true of this path too. Without the guard, the
+///    spot loop would be a live caller of an arm labelled unreachable.
+///
+/// ⇒ **The test below asserts the observable contract, which is right, and
+/// cannot distinguish which mechanism delivered it. Do not read a green run
+/// as proof that this guard is load-bearing.**
+///
+/// # Why `ab <= 0.0` short-circuits to the source
+///
+/// Same reason as the process path: §11.3.6's mix weight is the backdrop
+/// alpha, so a fully transparent backdrop contributes nothing and `B` need
+/// not be evaluated at all. Skipping it is not merely faster — several
+/// separable functions are undefined-ish at the extremes and this keeps
+/// them off a path whose result is known.
+#[must_use]
+fn blend_spots(blend: Blend, backdrop: PixelCmyk, source: PixelCmyk, ab: f32) -> [f32; MAX_SPOTS] {
+    // `NonSeparable` joins `Normal` here, per §11.7.4.2 above. Matched
+    // explicitly rather than folded into the `is_normal()` test so that the
+    // clause is visible at the branch it governs.
+    if blend.is_normal() || matches!(blend, Blend::NonSeparable(_)) || ab <= 0.0 {
+        return source.s;
+    }
+    let mut out = [0.0_f32; MAX_SPOTS];
+    for ((slot, &cb), &cs) in out.iter_mut().zip(backdrop.s.iter()).zip(source.s.iter()) {
+        // The `1.0 - x` pairs convert ink coverage to the additive
+        // colour value Table 136's functions are written in, exactly as
+        // `apply_subtractive` does for the process channels. A spot plane
+        // is subtractive in the same sense: 0.0 is no ink.
+        let b = 1.0 - blend_separable(blend, 1.0 - cb, 1.0 - cs);
+        *slot = ab.mul_add(b - cs, cs);
+    }
+    out
 }
 
 /// **§11.4.8's element-compositing formula for a KNOCKOUT group.**

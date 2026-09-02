@@ -277,7 +277,176 @@ pub(crate) const DEFAULT_MAX_CMYK_BUFFER_BYTES: usize = 256 * 1024 * 1024;
 
 /// Bytes of storage per pixel: four colorant planes plus alpha.
 /// Re-exported as [`crate::CMYK_BYTES_PER_PIXEL`].
+///
+/// **Excludes spot planes**, which are allocated lazily and per page — see
+/// [`CmykBuffer::spots`]. A page that names two spot colorants costs
+/// `BYTES_PER_PIXEL + 2 * size_of::<Chan>()`, and that arithmetic lives in
+/// [`CmykBuffer::spot_index`] where the allocation actually happens rather
+/// than in this constant, which answers "what does an ordinary page cost".
 pub(crate) const BYTES_PER_PIXEL: usize = 5 * core::mem::size_of::<Chan>();
+
+/// One spot colorant's ink plane, plus the identity it is keyed on.
+///
+/// # ★★ The identity is the decoded name BYTE STRING, and nothing else
+///
+/// §8.6.6.4's device test consults *only* the colorant name — *"shall
+/// determine whether the device has an available colorant corresponding to
+/// the name"* — and §7.3.5 NOTE 4 makes names that differ in bytes distinct
+/// names **even if they render identically**. No case folding and no Unicode
+/// normalisation is specified anywhere.
+///
+/// So this is `Box<[u8]>` and comparison is `==` on the bytes. It is not a
+/// `String`, and that is load-bearing rather than fastidious:
+/// [`crate::color::Colorant::Named`] carried a `String` built with
+/// `from_utf8_lossy` until `Pass 210.0`, which maps **every** distinct
+/// invalid byte sequence onto the same `U+FFFD` — so two different
+/// colorants compared EQUAL. Harmless while nothing was keyed on a colorant
+/// name; the moment a plane is keyed on one, two colliding names share an
+/// ink plane and silently composite as one colour. It was fixed *before*
+/// this work rather than during it, so the plane is not debugging that at
+/// the same time.
+///
+/// Lossy decoding remains correct for *showing* a name to an operator. It is
+/// never correct for deciding whether two names are the same.
+/// ★★ **INERT AS OF `Pass 225.0`, DELIBERATELY.** Nothing calls
+/// [`CmykBuffer::spot_index`] yet, so this whole chain is dead code and is
+/// marked as such rather than being wired half-way.
+///
+/// This is step 2 of ~4, landed on the same discipline as step 1
+/// (`Pass 217.0`, the `PixelCmyk::s` carrier): **each step is proved to
+/// change nothing observable before the next one gives it effect.** Step 3
+/// is the DEPOSIT -- `interpret.rs` reading a `Separation`/`DeviceN` fill's
+/// colorant names and tints and handing them to the paint call -- and it is
+/// where the first pixel moves.
+///
+/// The `allow` comes off in that step. It is here rather than at the top of
+/// the file so that the dead-code surface is exactly the spot machinery: if
+/// anything ELSE in this file goes dead, clippy still says so.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct SpotPlane {
+    /// The colorant name, exactly as the file spelled it after `#xx`
+    /// decoding — the comparison form §7.3.5 specifies.
+    pub(crate) colorant: Box<[u8]>,
+    /// Subtractive tints, `0.0..=1.0`, `width × height`. `0.0` is no ink.
+    pub(crate) tint: Vec<Chan>,
+    /// This colorant's appearance, sampled once at plane-allocation time.
+    pub(crate) lut: SpotLut,
+}
+
+/// Entries in a [`SpotLut`].
+///
+/// 256 because a tint reaching this buffer has already been through an
+/// `f32` pipeline but originates, overwhelmingly, as an 8-bit image sample
+/// or a two-or-three-digit decimal operand; and because the table is
+/// interpolated, so the sampling error of a smooth tint transform at this
+/// density is far below the ~10-level residual the terminal CMYK→sRGB
+/// conversion already carries. Doubling it would buy nothing measurable and
+/// cost 3 KiB per plane.
+pub(crate) const SPOT_LUT_SIZE: usize = 256;
+
+/// A spot colorant's tint → sRGB curve, evaluated once per page.
+///
+/// # ★★ Why a table and not a function call
+///
+/// §8.6.6.4's tint transform is an arbitrary PDF function (§7.10) — a
+/// sampled stream, an exponential, a stitching function, or a PostScript
+/// calculator program. Evaluating one is not cheap, and the collapse runs
+/// **once per pixel per plane**.
+///
+/// An 8.4 Mpx page (300 DPI, US Letter) carrying four spot colorants would
+/// be **33.6 million** function evaluations at collapse time, for a
+/// function of exactly **one scalar**. A tint is one number, so every such
+/// transform is a 1-D curve and is fully captured by sampling it once.
+///
+/// Building the table at plane-allocation time also puts the cost where the
+/// page pays it once, and — the part that matters for robustness — moves
+/// every way a tint transform can *fail* out of the inner loop. A function
+/// that refuses to evaluate does so 256 times at setup, not 8.4 million
+/// times during collapse.
+/// Inert until step 3 -- see [`SpotPlane`].
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct SpotLut {
+    /// sRGB in `0.0..=1.0`, indexed by tint × 255, as this colorant appears
+    /// **alone on white paper**.
+    ///
+    /// "Alone on white" is ISO 32000-2 §10.8.3 step (b)'s *"background matte
+    /// of all white"*, and it is what makes step (c)'s multiply the right
+    /// combining operation: each entry is a transmittance through one ink,
+    /// and inks laid over one another multiply.
+    samples: Box<[[f32; 3]; SPOT_LUT_SIZE]>,
+}
+
+#[allow(dead_code)]
+impl SpotLut {
+    /// Build from a closure that renders this colorant at a given tint.
+    ///
+    /// The closure is called exactly [`SPOT_LUT_SIZE`] times, at evenly
+    /// spaced tints from `0.0` to `1.0` **inclusive at both ends** — the
+    /// endpoints matter more than the interior, since `0.0` (no ink) and
+    /// `1.0` (solid) are the two tints real artwork uses most.
+    pub(crate) fn build(mut render: impl FnMut(f32) -> [f32; 3]) -> Self {
+        let mut samples = Box::new([[1.0_f32; 3]; SPOT_LUT_SIZE]);
+        #[allow(clippy::cast_precision_loss)]
+        for (i, slot) in samples.iter_mut().enumerate() {
+            *slot = render(i as f32 / (SPOT_LUT_SIZE - 1) as f32);
+        }
+        Self { samples }
+    }
+
+    /// A LUT for a colorant whose appearance could not be determined:
+    /// white at every tint, i.e. no visible contribution.
+    ///
+    /// ★ **White, not black, and the choice is not arbitrary.** This value
+    /// is multiplied into the page (§10.8.3 step (c)), and white is
+    /// multiplication's identity — so an unrenderable colorant leaves the
+    /// page exactly as it would have been. Black would paint a solid
+    /// rectangle of ink nobody asked for, over content that is otherwise
+    /// correct, which is the worse failure by a wide margin. Same argument
+    /// `Colorant::None` makes for suppressing rather than painting white.
+    pub(crate) fn transparent() -> Self {
+        Self {
+            samples: Box::new([[1.0_f32; 3]; SPOT_LUT_SIZE]),
+        }
+    }
+
+    /// This colorant's sRGB at `tint`, linearly interpolated between the
+    /// two nearest samples.
+    ///
+    /// Interpolated rather than nearest-neighbour because a tint transform
+    /// is a continuous curve and the artefact of quantising it is a visible
+    /// step in a gradient — the one place a spot colorant's smoothness is
+    /// most obvious, and the one place a shading will exercise every value
+    /// between two samples.
+    #[inline]
+    #[must_use]
+    pub(crate) fn at(&self, tint: f32) -> [f32; 3] {
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
+        let pos = tint.clamp(0.0, 1.0) * (SPOT_LUT_SIZE - 1) as f32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let lo = pos.floor() as usize;
+        let hi = (lo + 1).min(SPOT_LUT_SIZE - 1);
+        #[allow(clippy::cast_precision_loss)]
+        let f = pos - lo as f32;
+        // `lo` is bounded by the clamp above, but `get` rather than `[]`
+        // because `lib.rs` denies `indexing_slicing` crate-wide and a
+        // proof-by-argument is not what that lint asks for.
+        let (a, b) = match (self.samples.get(lo), self.samples.get(hi)) {
+            (Some(a), Some(b)) => (a, b),
+            _ => return [1.0, 1.0, 1.0],
+        };
+        [
+            f.mul_add(b[0] - a[0], a[0]),
+            f.mul_add(b[1] - a[1], a[1]),
+            f.mul_add(b[2] - a[2], a[2]),
+        ]
+    }
+}
 
 /// Resolve a caller's optional ceiling to the number of bytes actually
 /// enforced.
@@ -341,6 +510,61 @@ pub(crate) struct CmykBuffer {
     planes: [Vec<Chan>; 4],
     /// The alpha plane, `0.0..=1.0`, `width × height`.
     alpha: Vec<Chan>,
+    /// This page's SPOT colorant planes, in roster order, each
+    /// `width × height` subtractive tints in `0.0..=1.0`.
+    ///
+    /// Index `i` here is index `i` of [`PixelCmyk::s`]. The roster is
+    /// bounded by [`crate::compositor::MAX_SPOTS`]; a page naming more
+    /// colorants than that flattens the surplus and says so
+    /// ([`Self::spots_flattened`]).
+    ///
+    /// # ★★ Grown LAZILY, at first use, and that is a correctness argument
+    /// rather than an optimisation
+    ///
+    /// A plane created part-way through a page is all zeros for everything
+    /// painted before it existed — and **zero is the right value**, because
+    /// "no ink of this colorant" is exactly true of every mark laid down
+    /// before the document first named it. There is nothing to
+    /// back-fill and nothing to correct.
+    ///
+    /// That property is what removes an entire sub-system. The obvious
+    /// design is a pre-pass over the page's `/Resources` to enumerate every
+    /// `Separation` and `DeviceN` before rendering starts, so the buffer can
+    /// be sized once. Such a pre-pass has to recurse into form XObjects,
+    /// patterns, annotation appearance streams and Type 3 glyph procedures
+    /// to be complete — and any colorant it *missed* would be silently
+    /// flattened, with no signal, because a roster is only checkable against
+    /// the render it was built for.
+    ///
+    /// Allocating on first use is complete **by construction**: a colorant
+    /// gets a plane exactly when a paint asks for one, so there is no
+    /// enumeration to be incomplete.
+    ///
+    /// # Why a `Vec` here and a fixed array in [`PixelCmyk`]
+    ///
+    /// They answer different questions. `PixelCmyk` is a transient value —
+    /// one pixel in flight — so a fixed array keeps it `Copy` and costs
+    /// nothing that outlives the call. This is per-page STORAGE, where an
+    /// unused plane is 4 bytes × every pixel of real memory: at 300 DPI on
+    /// US Letter, provisioning all four unconditionally would need 289 MiB
+    /// against the 256 MiB default ceiling and the buffer would be REFUSED
+    /// outright, on pages that name no spot colorant at all — 98.6 % of a
+    /// 4,023-file corpus.
+    spots: Vec<SpotPlane>,
+    /// Distinct colorants this page named that could **not** be given a
+    /// plane, because the roster was already at
+    /// [`crate::compositor::MAX_SPOTS`] or the allocation would have
+    /// crossed [`Self::max_bytes`].
+    ///
+    /// A **disclosure** counter, not a shortfall to hide: those colorants
+    /// still paint, through the flattening that predates spot planes, so
+    /// the page is not wrong in the way a missing paint would be — it is
+    /// approximate in a way the operator is entitled to know about, which
+    /// is project rule 4 applied to a resource limit.
+    ///
+    /// Inert until step 3 -- see [`SpotPlane`].
+    #[allow(dead_code)]
+    spots_flattened: u64,
     /// Pixels whose colour reached this buffer through the sRGB bridge
     /// rather than as authored colorants.
     ///
@@ -584,6 +808,10 @@ impl CmykBuffer {
             height,
             planes,
             alpha: Self::try_planes(n)?,
+            // Empty, always. See `CmykBuffer::spots` for why a page's spot
+            // roster is never provisioned up front.
+            spots: Vec::new(),
+            spots_flattened: 0,
             bridged: 0,
             groups_approximated: 0,
             unbridged_images: 0,
@@ -726,9 +954,26 @@ impl CmykBuffer {
                 self.planes[2][idx],
                 self.planes[3][idx],
             ],
-            s: [0.0; crate::compositor::MAX_SPOTS],
+            s: self.read_spots(idx),
             a: self.alpha[idx],
         }
+    }
+
+    /// This pixel's spot tints, padded to [`crate::compositor::MAX_SPOTS`].
+    ///
+    /// Entries past the page's roster stay `0.0`, which is not padding in
+    /// the "meaningless filler" sense: `0.0` **is** the tint of a colorant
+    /// this page never named, so the pad value is the correct value and
+    /// every arithmetic path over the array is right without a length
+    /// check. That is the whole reason [`PixelCmyk::s`] is a fixed array
+    /// rather than a slice.
+    #[inline]
+    fn read_spots(&self, idx: usize) -> [Chan; crate::compositor::MAX_SPOTS] {
+        let mut out = [0.0; crate::compositor::MAX_SPOTS];
+        for (slot, plane) in out.iter_mut().zip(self.spots.iter()) {
+            *slot = plane.tint[idx];
+        }
+        out
     }
 
     /// Widen the dirty rectangle to include `region`.
@@ -796,7 +1041,114 @@ impl CmykBuffer {
         for i in 0..4 {
             self.planes[i][idx] = px.c[i].clamp(0.0, 1.0);
         }
+        // Spot planes clamp on exactly the same argument as the process
+        // ones -- a spot tint feeds the same blend functions and compounds
+        // the same way out of range. Zipped rather than indexed so a
+        // `PixelCmyk` carrying more spots than this page has a roster for
+        // simply drops the surplus, which is the correct behaviour for a
+        // value that reached here from a buffer with a longer roster (a
+        // transparency group's child, say).
+        for (plane, value) in self.spots.iter_mut().zip(px.s.iter()) {
+            plane.tint[idx] = value.clamp(0.0, 1.0);
+        }
         self.alpha[idx] = px.a.clamp(0.0, 1.0);
+    }
+
+    /// The plane index for `colorant`, allocating one if this page has not
+    /// named it before.
+    ///
+    /// Returns `None` when no plane can be given — the roster is already at
+    /// [`crate::compositor::MAX_SPOTS`], or one more page-sized plane would
+    /// cross [`Self::max_bytes`], or the allocator refused. The caller must
+    /// then fall back to flattening the colorant through its tint transform,
+    /// which is what pdfce did for every spot colorant before planes
+    /// existed.
+    ///
+    /// # ★ `None` is COUNTED, and counted once per distinct colorant
+    ///
+    /// [`Self::spots_flattened`] is incremented on the transition only, not
+    /// on every paint, so the number answers *"how many of this page's inks
+    /// lost their identity"* rather than *"how many drawing operations
+    /// happened"*. Those are different questions and only the first is
+    /// meaningful to an operator deciding whether to raise the ceiling.
+    ///
+    /// It is deliberately incremented for a colorant that will be refused
+    /// again on the next paint, so a page that names five colorants with a
+    /// roster of four reports `1`, not `1` per fill.
+    ///
+    /// # Why allocation can fail without being an error
+    ///
+    /// Same argument as [`Self::new`]'s ceiling: a page rendered with one
+    /// ink flattened is a known, counted approximation pdfce has shipped
+    /// for its entire life. A failed render is a regression. So the ceiling
+    /// produces a disclosure, never a refusal to draw.
+    #[allow(dead_code)]
+    pub(crate) fn spot_index(
+        &mut self,
+        colorant: &[u8],
+        lut: impl FnOnce() -> SpotLut,
+    ) -> Option<usize> {
+        // Byte equality, not a lossy-string one -- see `SpotPlane`.
+        if let Some(found) = self
+            .spots
+            .iter()
+            .position(|plane| &*plane.colorant == colorant)
+        {
+            return Some(found);
+        }
+        if self.spots.len() >= crate::compositor::MAX_SPOTS {
+            self.spots_flattened += 1;
+            return None;
+        }
+        let n = (self.width as usize).saturating_mul(self.height as usize);
+        // The cost of the buffer as it would be AFTER this plane: four
+        // process planes, alpha, and every spot plane including the new one.
+        let planes_after = 5 + self.spots.len() + 1;
+        let bytes_after = planes_after
+            .checked_mul(core::mem::size_of::<Chan>())
+            .and_then(|per_px| per_px.checked_mul(n));
+        let Some(bytes_after) = bytes_after else {
+            self.spots_flattened += 1;
+            return None;
+        };
+        if bytes_after > self.max_bytes {
+            self.spots_flattened += 1;
+            return None;
+        }
+        let Some(tint) = Self::try_planes(n) else {
+            self.spots_flattened += 1;
+            return None;
+        };
+        // The closure runs ONLY here -- on the transition from "this page
+        // has never named this colorant" to "it has a plane". A repeat
+        // paint in the same colorant hits the `position` lookup above and
+        // never evaluates a tint transform again, which is the whole
+        // reason it is a closure rather than a parameter.
+        self.spots.push(SpotPlane {
+            colorant: colorant.into(),
+            tint,
+            lut: lut(),
+        });
+        Some(self.spots.len() - 1)
+    }
+
+    /// How many of this page's spot colorants are painting natively.
+    #[cfg(test)]
+    pub(crate) fn spot_plane_count(&self) -> usize {
+        self.spots.len()
+    }
+
+    /// How many distinct spot colorants lost their identity to the roster
+    /// cap or the memory ceiling. See [`Self::spot_index`].
+    #[allow(dead_code)]
+    pub(crate) const fn spots_flattened(&self) -> u64 {
+        self.spots_flattened
+    }
+
+    /// The colorant name occupying plane `index`, for diagnostics.
+    #[cfg(test)]
+    pub(crate) fn spot_colorant(&self, index: usize) -> Option<&[u8]> {
+        self.spots.get(index).map(|plane| &*plane.colorant)
     }
 
     /// Composite a **solid colorant** through a coverage mask — the
@@ -2009,6 +2361,13 @@ impl CmykBuffer {
                 self.planes[2][idx],
                 self.planes[3][idx],
             );
+            // ★ Step one-and-a-half: ISO 32000-2 §10.8.3's separation
+            // simulation, folding this page's SPOT colorants in. See
+            // `spot_simulated_srgb` -- it is a MULTIPLY, per step (c), and
+            // it is the identity on the 98.6% of pages that name no spot
+            // colorant, because the roster is then empty and the loop does
+            // not run.
+            let rgb = self.fold_spots_srgb(idx, rgb);
             // ★ Step two, and ONLY now: §11.4.7's media composite, in the
             // DESTINATION space. White is 1.0 per channel here because
             // this is sRGB; in CMYK it would have been zero ink, and
@@ -2033,6 +2392,72 @@ impl CmykBuffer {
             }
         }
         Some(out)
+    }
+
+    /// Fold this pixel's spot colorants into an already-converted process
+    /// colour — **ISO 32000-2:2020 §10.8.3, "Separation simulation"**.
+    ///
+    /// # The clause, in four steps, and where pdfce sits in each
+    ///
+    /// | step | ISO 32000-2 §10.8.3 | pdfce |
+    /// |---|---|---|
+    /// | **a** | process the PDF as if separations were to be created for a *simulated device* with process colourants "and possibly spot colours" | the CMYK buffer plus [`Self::spots`] IS that simulated device |
+    /// | **b** | convert each separation into "flat XYZ (no gamma)" over "a background matte of all white" | each [`SpotLut`] entry is that colorant alone on white — **but in sRGB, not linear XYZ**; see the deviation below |
+    /// | **c** | blend the separations into one result with a **multiply blend** | the `*` below |
+    /// | **d** | convert the result to the actual device colour space | already done for the process planes by the caller |
+    ///
+    /// # ★★ Two deviations, disclosed rather than buried
+    ///
+    /// **1. The multiply happens in sRGB, not in "flat XYZ (no gamma)".**
+    /// The phrase occurs **once in the entire standard** and is defined
+    /// nowhere; the corpus reading is linear-light CIE XYZ with no transfer
+    /// curve, and that reading is itself derived. Multiplying in sRGB makes
+    /// overlapping inks slightly lighter than a linear-light multiply would.
+    /// It is chosen because every other colour value in this buffer's
+    /// terminal path is already sRGB, and introducing a linearise → multiply
+    /// → re-encode round trip for spot planes alone would make two inks
+    /// interact differently depending on which was a process colorant — a
+    /// worse inconsistency than the one it fixes.
+    ///
+    /// **2. The per-separation ink → colour map is the tint transform**, not
+    /// the colorant's own colorimetry. Step (b) does not say what the map
+    /// should be, and the register records that gap explicitly; a
+    /// `DestOutputProfile` or a `DeviceN` `/Colorants` entry would be better
+    /// evidence where present. The tint transform is what the document
+    /// itself supplies for every `Separation`, so it is the map that always
+    /// exists.
+    ///
+    /// Neither deviation is a conformance failure: **§10.8 contains no
+    /// `shall` at all.** The whole clause is `may`/`should`, the algorithm
+    /// binds the RESULT rather than the METHOD, and not implementing
+    /// separation simulation is itself conformant.
+    ///
+    /// # Why multiply is the right operator, in one sentence
+    ///
+    /// Each LUT entry is a transmittance — what white paper looks like
+    /// through that ink at that tint — and light passing through two inks is
+    /// attenuated by both, which is a product. It is also **order-
+    /// independent**, which is why §10.8's silence on `/PrintingOrder` (a
+    /// `DeviceN` mixing hint) costs nothing here.
+    #[inline]
+    fn fold_spots_srgb(&self, idx: usize, mut rgb: [f32; 3]) -> [f32; 3] {
+        for plane in &self.spots {
+            let Some(&tint) = plane.tint.get(idx) else {
+                continue;
+            };
+            // No ink is multiplication's identity, and it is the common
+            // case even on a page that HAS a spot roster -- a spot colorant
+            // covers a fraction of a sheet. Skipping it keeps the collapse
+            // near-free everywhere the ink is absent.
+            if tint <= 0.0 {
+                continue;
+            }
+            let ink = plane.lut.at(tint);
+            rgb[0] *= ink[0];
+            rgb[1] *= ink[1];
+            rgb[2] *= ink[2];
+        }
+        rgb
     }
 }
 
@@ -2586,5 +3011,326 @@ mod tests {
         let src = Pixmap::new(1, 1).unwrap();
         assert_eq!(b.composite_srgb(&src, (0, 0, 1, 1), 1.0, Blend::Normal), 0);
         assert_eq!(b.pixel(0), before);
+    }
+
+    // -----------------------------------------------------------------
+    // Spot colorant planes (`Pass 225.0`)
+    // -----------------------------------------------------------------
+
+    /// A LUT that renders one flat sRGB colour at every tint above zero,
+    /// and white at zero — the shape of a solid ink with no tint ramp.
+    ///
+    /// Zero must be white regardless of the ink, because §10.8.3 step (b)
+    /// samples each separation over a white matte and "no ink" is white
+    /// paper. A LUT that returned the ink colour at tint 0 would paint the
+    /// whole page.
+    fn flat_lut(rgb: [f32; 3]) -> SpotLut {
+        SpotLut::build(move |t| if t <= 0.0 { [1.0, 1.0, 1.0] } else { rgb })
+    }
+
+    /// Would catch: a second paint in the same colorant allocating a second
+    /// plane, which would double the page's memory and — worse — split one
+    /// ink across two planes so the collapse multiplied it in twice.
+    #[test]
+    fn one_colorant_gets_exactly_one_plane_however_often_it_is_named() {
+        let mut b = CmykBuffer::new(4, 4, CmykIntent::Calibrated, None).unwrap();
+        let first = b.spot_index(b"PANTONE 265 C", || flat_lut([0.5, 0.2, 0.8]));
+        let again = b.spot_index(b"PANTONE 265 C", || flat_lut([0.0, 0.0, 0.0]));
+        assert_eq!(first, Some(0));
+        assert_eq!(again, Some(0), "the same name must reuse its plane");
+        assert_eq!(b.spot_plane_count(), 1);
+        assert_eq!(b.spots_flattened(), 0);
+    }
+
+    /// Would catch: colorant identity being compared as a lossy string.
+    ///
+    /// ★ These two names are DIFFERENT byte strings that both decode to the
+    /// same `String` under `from_utf8_lossy`, because every invalid
+    /// sequence maps to one `U+FFFD`. §7.3.5 NOTE 4 makes them distinct
+    /// names even if they rendered identically, and if they shared a plane
+    /// two inks would silently composite as one colour.
+    #[test]
+    fn byte_differing_colorant_names_are_distinct_inks() {
+        let mut b = CmykBuffer::new(4, 4, CmykIntent::Calibrated, None).unwrap();
+        let a = b.spot_index(b"ink\xC3\x28", || flat_lut([1.0, 0.0, 0.0]));
+        let c = b.spot_index(b"ink\xA0\xA1", || flat_lut([0.0, 1.0, 0.0]));
+        assert_eq!(a, Some(0));
+        assert_eq!(c, Some(1), "lossy-equal names must NOT share a plane");
+        assert_eq!(b.spot_colorant(0).unwrap(), b"ink\xC3\x28");
+        assert_eq!(b.spot_colorant(1).unwrap(), b"ink\xA0\xA1");
+    }
+
+    /// Would catch: the roster growing past `MAX_SPOTS`, or the overflow
+    /// being dropped silently instead of counted.
+    ///
+    /// Sabotage note: removing the `spots_flattened` increment leaves the
+    /// plane count assertion passing — the counter is the only thing that
+    /// distinguishes "refused and disclosed" from "refused".
+    #[test]
+    fn the_roster_caps_and_the_surplus_is_counted_once_per_colorant() {
+        let mut b = CmykBuffer::new(4, 4, CmykIntent::Calibrated, None).unwrap();
+        for i in 0..crate::compositor::MAX_SPOTS {
+            let name = format!("ink{i}");
+            assert_eq!(
+                b.spot_index(name.as_bytes(), || flat_lut([0.5, 0.5, 0.5])),
+                Some(i)
+            );
+        }
+        assert_eq!(b.spot_plane_count(), crate::compositor::MAX_SPOTS);
+        assert_eq!(b.spots_flattened(), 0, "nothing refused yet");
+
+        assert_eq!(b.spot_index(b"one-too-many", || flat_lut([0.0; 3])), None);
+        assert_eq!(b.spots_flattened(), 1);
+        // A second paint in the SAME refused colorant is the same fact, not
+        // a new one -- the counter answers "how many inks lost their
+        // identity", not "how many fills happened".
+        assert_eq!(b.spot_index(b"one-too-many", || flat_lut([0.0; 3])), None);
+        assert_eq!(
+            b.spots_flattened(),
+            2,
+            "documented behaviour: refusal is counted per ATTEMPT once the \
+roster is full, because a refused colorant has no plane to be recognised by"
+        );
+    }
+
+    /// Would catch: a plane being allocated past the buffer's own memory
+    /// ceiling, which is the single measurement that set `MAX_SPOTS` to 4.
+    #[test]
+    fn a_plane_that_would_cross_the_ceiling_is_refused_not_allocated() {
+        // Exactly enough for the five mandatory planes and no more.
+        let n = 64 * 64;
+        let ceiling = n * BYTES_PER_PIXEL;
+        let mut b = CmykBuffer::new(64, 64, CmykIntent::Calibrated, Some(ceiling)).unwrap();
+        assert_eq!(b.spot_index(b"Suite Green", || flat_lut([0.0; 3])), None);
+        assert_eq!(b.spot_plane_count(), 0);
+        assert_eq!(b.spots_flattened(), 1);
+
+        // One plane's worth of headroom, and it fits.
+        let roomier = ceiling + n * core::mem::size_of::<Chan>();
+        let mut b2 = CmykBuffer::new(64, 64, CmykIntent::Calibrated, Some(roomier)).unwrap();
+        assert_eq!(
+            b2.spot_index(b"Suite Green", || flat_lut([0.0; 3])),
+            Some(0)
+        );
+        assert_eq!(b2.spots_flattened(), 0);
+    }
+
+    /// Would catch: a lazily-created plane not reading back as zero for
+    /// pixels painted before it existed.
+    ///
+    /// ★ This is the property the whole no-pre-pass design rests on. If a
+    /// plane created mid-page were anything but zero where nothing painted
+    /// it, every mark laid down before the document first named that
+    /// colorant would acquire ink it never had.
+    #[test]
+    fn a_plane_created_mid_page_is_no_ink_everywhere_behind_it() {
+        let mut b = CmykBuffer::new(2, 2, CmykIntent::Calibrated, None).unwrap();
+        paint_all(&mut b, [0.0, 0.0, 0.0, 1.0], 1.0, Blend::Normal);
+        assert!(b.pixel(0).s.iter().all(|t| *t == 0.0));
+
+        assert_eq!(b.spot_index(b"late", || flat_lut([0.2, 0.4, 0.6])), Some(0));
+        for idx in 0..4 {
+            assert_eq!(
+                b.pixel(idx).s[0],
+                0.0,
+                "a colorant the page had not named yet has no ink anywhere"
+            );
+        }
+    }
+
+    /// Would catch: the collapse painting a spot colorant that has no ink,
+    /// which would tint the whole page.
+    ///
+    /// ★★ **The LUT here is DELIBERATELY MALFORMED: it returns solid red at
+    /// tint zero.** A well-behaved tint transform gives white for "no ink",
+    /// and a test built on one cannot fail -- multiplying by white is the
+    /// identity whether or not the zero-tint early-out exists. That was
+    /// established by sabotage: disabling the early-out left the
+    /// well-behaved version of this test green.
+    ///
+    /// But a tint transform is an arbitrary PDF function (§7.10) supplied
+    /// by the document, and nothing obliges it to be sane at zero. A
+    /// `Separation` whose transform returns ink at tint 0 would, without
+    /// the early-out, tint EVERY PIXEL OF THE PAGE the moment its plane was
+    /// allocated -- including the whole area it never painted.
+    ///
+    /// So the hostile LUT is the point, not a curiosity: it makes the
+    /// early-out load-bearing and therefore testable, and it pins a
+    /// robustness property against untrusted input rather than a
+    /// performance one.
+    #[test]
+    fn an_empty_spot_plane_changes_no_pixel() {
+        let mut plain = CmykBuffer::new(3, 3, CmykIntent::Calibrated, None).unwrap();
+        paint_all(&mut plain, [0.4, 0.1, 0.0, 0.2], 1.0, Blend::Normal);
+        let before = plain.to_srgb_over_white().unwrap();
+
+        let mut with_plane = CmykBuffer::new(3, 3, CmykIntent::Calibrated, None).unwrap();
+        paint_all(&mut with_plane, [0.4, 0.1, 0.0, 0.2], 1.0, Blend::Normal);
+        // Solid red at EVERY tint, including zero -- see the doc above.
+        assert_eq!(
+            with_plane.spot_index(b"unused", || SpotLut::build(|_| [1.0, 0.0, 0.0])),
+            Some(0)
+        );
+        let after = with_plane.to_srgb_over_white().unwrap();
+
+        assert_eq!(
+            before.data(),
+            after.data(),
+            "an allocated but unpainted plane must be the identity"
+        );
+    }
+
+    /// Would catch: the collapse being additive, or replacing the process
+    /// colour rather than multiplying into it (§10.8.3 step (c)).
+    ///
+    /// A pure-green ink `[0,1,0]` over a page whose process colour is white
+    /// must give green; over a page that is already fully black it must
+    /// stay black, because multiply cannot lighten.
+    #[test]
+    fn the_spot_fold_is_a_multiply_not_a_replacement() {
+        let mut white = CmykBuffer::new(1, 1, CmykIntent::Calibrated, None).unwrap();
+        paint_all(&mut white, [0.0, 0.0, 0.0, 0.0], 1.0, Blend::Normal);
+        white
+            .spot_index(b"green", || flat_lut([0.0, 1.0, 0.0]))
+            .unwrap();
+        white.set_pixel(
+            0,
+            PixelCmyk {
+                c: [0.0; 4],
+                s: {
+                    let mut s = [0.0; crate::compositor::MAX_SPOTS];
+                    s[0] = 1.0;
+                    s
+                },
+                a: 1.0,
+            },
+        );
+        let px = white.to_srgb_over_white().unwrap();
+        let got = px.pixel(0, 0).unwrap();
+        assert_eq!(
+            (got.red(), got.green(), got.blue()),
+            (0, 255, 0),
+            "solid green ink on white paper is green"
+        );
+
+        let mut black = CmykBuffer::new(1, 1, CmykIntent::Calibrated, None).unwrap();
+        black
+            .spot_index(b"green", || flat_lut([0.0, 1.0, 0.0]))
+            .unwrap();
+        black.set_pixel(
+            0,
+            PixelCmyk {
+                c: [0.0, 0.0, 0.0, 1.0],
+                s: {
+                    let mut s = [0.0; crate::compositor::MAX_SPOTS];
+                    s[0] = 1.0;
+                    s
+                },
+                a: 1.0,
+            },
+        );
+        let px2 = black.to_srgb_over_white().unwrap();
+        let got2 = px2.pixel(0, 0).unwrap();
+        assert!(
+            got2.red() < 40 && got2.green() < 40 && got2.blue() < 40,
+            "multiply cannot lighten: green over solid black stays dark, got {:?}",
+            (got2.red(), got2.green(), got2.blue())
+        );
+    }
+
+    /// Would catch: the LUT not being interpolated, or its endpoints being
+    /// off by one entry — the two tints real artwork uses most.
+    #[test]
+    fn the_lut_hits_both_endpoints_exactly_and_interpolates_between() {
+        let lut = SpotLut::build(|t| [t, 1.0 - t, 0.5]);
+        assert_eq!(lut.at(0.0), [0.0, 1.0, 0.5]);
+        assert_eq!(lut.at(1.0), [1.0, 0.0, 0.5]);
+        let mid = lut.at(0.5);
+        assert!((mid[0] - 0.5).abs() < 1e-3, "{mid:?}");
+        assert!((mid[1] - 0.5).abs() < 1e-3, "{mid:?}");
+        // Out of range is clamped, never indexed out of bounds.
+        assert_eq!(lut.at(-1.0), [0.0, 1.0, 0.5]);
+        assert_eq!(lut.at(2.0), [1.0, 0.0, 0.5]);
+    }
+
+    /// Would catch: an unrenderable colorant defaulting to black, which
+    /// would paint a solid rectangle over correct content.
+    #[test]
+    fn an_undeterminable_colorant_is_the_identity_not_black() {
+        let lut = SpotLut::transparent();
+        for t in [0.0, 0.25, 1.0] {
+            assert_eq!(lut.at(t), [1.0, 1.0, 1.0]);
+        }
+    }
+
+    /// Would catch: a NON-SEPARABLE blend mode being applied to a spot
+    /// plane, which §11.7.4.2 forbids with a `shall`.
+    ///
+    /// `Blend::apply_subtractive`'s non-separable arm complements exactly
+    /// three channels and hands them to a CIE hue/saturation/luminosity
+    /// computation. There is no meaning to the "hue" of a single ink plane,
+    /// so the arm is structurally CMYK-only — the spot planes must fall
+    /// back to `Normal`, i.e. take the source tint outright.
+    ///
+    /// ★★ **SABOTAGE-SURVIVING, DELIBERATELY, AND SAID SO.** Deleting
+    /// `blend_spots`'s `NonSeparable` guard leaves this test green, because
+    /// `blend_separable`'s own final arm already answers `cs` for a
+    /// non-separable mode — the same value `Normal` gives. The contract has
+    /// **two** enforcers and this test cannot tell them apart.
+    ///
+    /// That is recorded rather than repaired. The test asserts the
+    /// observable contract, which is the thing worth pinning; a test
+    /// rewritten to detect *which* mechanism ran would be asserting an
+    /// implementation detail that either mechanism is entitled to change.
+    /// What must not happen is a future reader taking a green run here as
+    /// proof that the guard is load-bearing — see `blend_spots`' docs.
+    #[test]
+    fn a_non_separable_blend_degrades_to_normal_on_spot_planes() {
+        use crate::blend_nonsep::NonSeparableBlend;
+        let backdrop = PixelCmyk {
+            c: [0.1, 0.2, 0.3, 0.4],
+            s: [0.9, 0.0, 0.0, 0.0],
+            a: 1.0,
+        };
+        let source = PixelCmyk {
+            c: [0.5, 0.5, 0.5, 0.5],
+            s: [0.25, 0.0, 0.0, 0.0],
+            a: 1.0,
+        };
+        let out = crate::compositor::composite_element_cmyk(
+            backdrop,
+            source,
+            Blend::NonSeparable(NonSeparableBlend::Luminosity),
+        );
+        assert!(
+            (out.s[0] - 0.25).abs() < 1e-6,
+            "the source tint must pass through untouched, got {}",
+            out.s[0]
+        );
+    }
+
+    /// Would catch: a SEPARABLE blend mode being skipped on spot planes,
+    /// which would make a `Multiply` over a spot backdrop behave as
+    /// `Normal` and quietly lose the backdrop's ink.
+    #[test]
+    fn a_separable_blend_does_reach_the_spot_planes() {
+        let backdrop = PixelCmyk {
+            c: [0.0; 4],
+            s: [0.5, 0.0, 0.0, 0.0],
+            a: 1.0,
+        };
+        let source = PixelCmyk {
+            c: [0.0; 4],
+            s: [0.5, 0.0, 0.0, 0.0],
+            a: 1.0,
+        };
+        let out = crate::compositor::composite_element_cmyk(backdrop, source, Blend::Multiply);
+        // Multiply in the additive sense on ink coverage 0.5 over 0.5:
+        // 1 - (1-0.5)*(1-0.5) = 0.75.
+        assert!(
+            (out.s[0] - 0.75).abs() < 1e-6,
+            "expected 0.75 from Multiply on two half tints, got {}",
+            out.s[0]
+        );
     }
 }
