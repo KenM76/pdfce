@@ -87,3 +87,4 @@
 - [Fan out agents in parallel](feedback_fan_out_agents_in_parallel.md) — Ken 2026-08-31: independent reads/audits go out in ONE message; serialise only writes to the same file
 - [Rotate, don't tunnel](feedback_rotate_dont_tunnel.md) — Ken 2026-08-31: work queued independent defects in rotation or parallel; zero-progress-after-hours is the failure mode he's guarding against
 - [Write overwrites — check the verb](feedback_write_overwrites_check_the_verb.md) — "updated" not "created" is the only warning; it ate three committed tests and a fixture generator, and a green suite hid it
+- [Repo-scoped gates run before every PUSH](feedback_repo_scoped_gates_run_before_every_push.md) — I published a licensed name to the public repo; standing push authority removed the pause that used to catch it
