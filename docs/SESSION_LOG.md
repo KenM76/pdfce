@@ -84986,3 +84986,120 @@ nothing. `python tools/check-suite-name-absent.py` exits **0** with the clean
 message, run before and after every edit in this filing.
 `docs/core-api/` was **not** touched — the engineer owns it and updated it in
 `Pass 212.0` (`check-core-api-verbs` PASS).
+
+---
+
+## 2026-09-01 (363rd filing) — nine commits filed together: `Pass 213.0` through `Pass 221.0` SHIPPED — ★★★★ **A FORM FIELD'S UNMODELLABLE `/DA` COLOUR WAS PAINTED BLACK INTO THE SAVED DOCUMENT, ALIASED ONTO "NO COLOUR"** — ★★★★ **VECTOR PAGE OBJECTS CAN NOW BE RECOLOURED, AND `pdfceGUI` SHIPPED THE CONTROL THE SAME DAY** — ★★★ **`gs` HAD NO ARM AT ALL, AND THE MEASURED EXPOSURE WAS `/Font`, NOT THE `/LW` THE BUG REPORT NAMED** — ★★★ **A TRAP FOUR PIXELS TOO WIDE WAS SCORED A PASS** — ★★ **A NINTH SURVIVOR OF THE FALSIFIED `GreyAsKOnly`-IS-ACROBAT CLAIM, IN A FILE ITS OWN SWEEP HAD ALREADY EDITED ONCE**
+
+**Sourcing note.** This role had no shell this filing. `python
+tools/check-commits-filed.py`'s report (nine hashes, relayed by the
+dispatch) and `docs/NEXT_SESSION.md` §B (engineer-owned, read only) both
+name the same nine commits against the same nine Pass numbers; every
+factual claim below was independently cross-checked against live source
+(`Read`/`Grep`) rather than taken from either document's word alone, per
+hard rule 8's discipline extended to "what I was told" as well as "what I
+infer."
+
+**Shipped:**
+
+- **`Pass 213.0`** (`1f1ef21`) — `tools/deploy-onedrive.py`'s `_empty_slot`
+  → `copytree` gap (`dirs_exist_ok=True`), found cutting `v0.19.0`; plus a
+  ninth surviving copy of the falsified *"GreyAsKOnly is Acrobat's
+  reading"* claim, in `font/mod.rs`, missed by `Pass 209.0`'s own sweep of
+  the same file at a different function.
+- **`Pass 214.0`** (`edd521e`) — `ICCBased` images colour-managed for
+  4-component (CMYK) sources; RGB/Gray tried and measured 3×/1.8× worse,
+  refused by name rather than left as an unexamined gap.
+- **`Pass 215.0`** (`d5d012e`) — auto-sized form-field text now tracks the
+  field's own box (measured off Acrobat's own appearances), replacing a
+  flat 12 pt every auto-sized field in a document used to get.
+- **`Pass 216.0`** (`de3469c`) — `tools/suite-check.py`'s `EDGE_MAX` trap
+  bound (90 → 160, calibrated against all 51 Acrobat reference renders)
+  after a 94×94, plainly-visible trap scored a clean PASS at 90.
+- **`Pass 217.0`** (`643e270`) — the spot-colorant plane carrier
+  (`PixelCmyk::s`), pinned at zero, proved inert; step 1 of ~4, design for
+  the rest pre-scoped in `docs/NEXT_SESSION.md` §0.
+- **`Pass 218.0`** (`4b4af37`) — `PathPaint` (Default/Device/Other) replaces
+  a lossy `Rgb` on every decomposed path, plus `paths_with_undecoded_colour`
+  — the decomposer's version of a fix `pdfce-render` already shipped
+  2026-08-10 for the same defect.
+- **`Pass 219.0`** (`f7eb4a1`) — `EditSession::set_object_paint`: recolour a
+  vector object's fill/stroke, refusing a spot ink by name; shipped in
+  `pdfceGUI` the same day, and building its reader first caught a
+  copy/paste bug that was writing wrong colours into saved files.
+- **`Pass 220.0`** (`407336e`) — `gs` (ExtGState) given its first arm in the
+  decomposer at all (`/LW`/`/Font`/`/ca`), plus `paths_invisible_by_alpha`.
+- **`Pass 221.0`** (`faf699a`) — a `/DA` colour pdfce cannot model is no
+  longer aliased onto "no colour" (which already meant "paint black") —
+  now a disclosed narrowing; plus `shadings_unmodelled`/`oc_sections`.
+
+**Decisions made this session:** none minted — no commit in this batch
+cited a new architectural decision number, and nothing surfaced in the
+source that reads as an undocumented one. (`Pass 219.0`'s declined
+`add_push_button_with_action`-style narrow verb reuses decision `117`'s
+existing reasoning rather than adding a new decision.)
+
+**Findings + decisions:**
+
+- **The same false claim can survive a sweep that DID touch its file** — a
+  per-file ledger that closes on the first hit cannot see a second site in
+  the same file. `Pass 213.0`'s ninth survivor is the second time this
+  project has hit that shape in as many filings; the checklist addition
+  ("grep the file again after the fix, not before") is recorded in the
+  Pass's own `ROADMAP.md` entry rather than a new standing rule, on the
+  same grounds prior sweep-practice additions were declined mechanical
+  gates.
+- **A calibrated threshold is a claim about every specimen, not the one it
+  was calibrated on** (`Pass 216.0`) — `EDGE_MAX = 90` was right for a
+  38×38 trap and silently wrong for a 94×94 one; the fix used a reference
+  control (Acrobat's own renders) rather than a second guess.
+- **The bug report and the measured exposure were different objects**
+  (`Pass 220.0`) — a stroke-selection complaint led to a `gs` fix whose
+  corpus-measured impact is mostly on `/Font`-set text objects (115
+  occurrences vs. 0 for `/LW` in the 300-file sample), because the
+  decomposer had no `gs` arm for either.
+- **A reader built before its writer audited the writer's neighbours**
+  (`Pass 219.0`) — building the colour DISPLAY surfaced that the
+  colour-*setting* code elsewhere (copy/paste) had been writing a stale,
+  wrong `rg` into saved documents. Recorded by `pdfceGUI` as the general
+  form: a control's need to show a value is a question about whether the
+  value is right.
+- **A measured negative is worth exactly as much as a measured positive**
+  (`Pass 214.0`) — extending ICC image management to RGB/Gray sources was
+  tried, regressed two patches 3×/1.8×, and the restriction to CMYK is now
+  on record as measured-correct rather than an unexplained partial.
+
+**Still in flight:**
+
+- `docs/NEXT_SESSION.md` §0's spot-colorant plane (`Pass 217.0` was step 1
+  of ~4) — roster + one plane + path fills only is the scoped next
+  increment, predicted to fix `PCS 3.0`'s two traps.
+- `docs/NEXT_SESSION.md` §A's ranked remainder: `PCS 22.1`'s undiagnosed Lab
+  swatch, JPEG 2000 ICCBased RGB profiles, `sh` shadings as selectable
+  objects, `/OC` layer-visibility resolution in the decomposer.
+- `docs/NEXT_SESSION.md` §E's operator-owed item: 82 of 1,220 published
+  commit messages name the licensed conformance suite in plaintext
+  (`ROADMAP.md` open question `(ca)`) — unchanged this filing, not this
+  role's to resolve.
+- The Pass-number-ceiling warning at the top of `docs/NEXT_SESSION.md`
+  (§0's preamble) is now stale — this filing is exactly what retires it —
+  but this role does not edit that file (engineer-owned); flagged here for
+  the engineer to delete on next read.
+
+**For next session:**
+
+- `python tools/check-ledger-numbers.py` should now agree with commit
+  history: Pass ceiling `221.0`, next free major `222.0`. **Not verified
+  by this role — no shell this filing** (hard rule 8); the engineer should
+  confirm before minting `222.0`.
+- `python tools/check-commits-filed.py` should report clean (the nine
+  hashes above are now cited in `ROADMAP.md`/`SESSION_LOG.md`) — also not
+  independently re-run here; engineer to confirm.
+- Backup/git state: **not verifiable from here — no shell.** `git status`,
+  `git log <last-filed>..HEAD`, and backup-bundle currency under
+  `D:\Dev\pdfce-backups\` all need the engineer's own check before either
+  is asserted.
+- `FEATURES.md` rows changed this filing: row 233 (Fill fields — auto-size
+  + `/DA`-colour amendments), the `/ICCBased` colour-space row under *Fonts
+  & rendering* (image management), and two new rows under *Vector objects*
+  (recolour; selectable-object diagnostics).

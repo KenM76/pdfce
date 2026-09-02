@@ -96,6 +96,510 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★★ NINE COMMITS FILED TOGETHER, 363rd filing, 2026-09-01 — `Pass 213.0`
+THROUGH `Pass 221.0`, ALL FOUND UNFILED BY `tools/check-commits-filed.py`.**
+In chronological (shipping) order: `Pass 213.0` (`1f1ef21`), `Pass 214.0`
+(`edd521e`), `Pass 215.0` (`d5d012e`), `Pass 216.0` (`de3469c`), `Pass 217.0`
+(`643e270`), `Pass 218.0` (`4b4af37`), `Pass 219.0` (`f7eb4a1`), `Pass 220.0`
+(`407336e`), `Pass 221.0` (`faf699a`) — filed below in reverse-chronological
+order (221.0 first), matching this section's own convention.
+
+**Sourcing (hard rule 8).** This role had no shell available this filing.
+Full commit bodies were **not** read via `git log`; every claim below —
+file, line, function, measurement, test name — was cross-checked against
+LIVE SOURCE by `Read`/`Grep` at the cited location, not inferred from the
+one-line subjects alone. `docs/NEXT_SESSION.md` §B (engineer-owned, read
+only, not edited by this role) independently names the same nine hashes
+against the same nine Pass numbers, corroborating the mapping before any
+of it was written here.
+
+---
+
+### Pass 221.0 (`faf699a`, 2026-09-01) — a form field's unmodellable `/DA` colour was aliased onto "no colour", and painted black into the saved document
+
+**The defect.** `crates/pdfce-core/src/vartext.rs`'s `/DA` parser handled
+`g G rg RG k K` and swallowed everything else — `cs CS sc scn SC SCN` — in a
+bare `_ => {}` arm, so a field whose default appearance named a
+`/Separation`, `/DeviceN`, `/ICCBased`, `/Indexed` or `/Lab` colour came back
+`color: None`. But `None` already meant something: "the `/DA` sets no
+colour, so §8.6.8's default black applies." An *unmodellable* colour and
+*no* colour were therefore indistinguishable, and every field with a
+spot-coloured `/DA` was silently painted black **into the generated `/AP`,
+written into the document** — unlike the sibling defects this same session
+found in the vector model (`Pass 218.0`), this one writes the wrong value
+into the file rather than merely reporting it wrong.
+
+**The fix.** `VarTextAppearance` gained `color_unmodelled: bool` (parse-time)
+and `da_colour_unmodelled` (carried onto the generated appearance), set
+whenever `cs`/`CS` selects a space this parser cannot represent — including
+a bare `cs` with no `scn`, since §8.6.8 makes *selecting* a space also set
+its initial colour. Three tests pin the distinction (`vartext.rs` `mod
+tests`): a spot `/DA` sets `color: None` **and** `color_unmodelled: true`; a
+genuinely bare `/DA` sets both `None`/`false`; a device `/DA` is unaffected
+in both fields.
+
+**Disclosure (rule 4).** `crates/pdfce-cli/src/main.rs:18537-18551`
+(`regenerate-appearances`) now prints, per field: *"the field's default
+appearance names a colour space pdfce cannot emit (Separation/DeviceN/
+ICCBased/Indexed/Lab), so this appearance was generated in BLACK — a
+narrowing, not the colour the file asked for."* Off-canvas, on the way past,
+per rule 4's CLI half.
+
+**Same commit, decomposer diagnostics (a different file, the same theme —
+an object model reporting what it does not know rather than staying
+silent).** `crates/pdfce-core/src/vector/decompose.rs`'s
+`PageObjects::diagnostics` gained two counters, both counting a mismatch
+between what the canvas paints and what the selectable-object list
+contains, neither one repaired:
+- `shadings_unmodelled` — `sh` operators, which this model produces **no
+  object** for; the renderer paints them and the object list says nothing,
+  so an operator who cannot click a visible gradient has no way to tell
+  "unmodelled" from "I missed it."
+- `oc_sections` — marked-content sections tagged `/OC` (optional content,
+  i.e. layers); the model does not resolve layer visibility, so content on
+  a layer switched off is listed and selectable while the renderer
+  correctly withholds it. Measured rare — 0.6% of a 500-file corpus sample
+  carry `/OC` at all, and **none** had a layer off by default — so counting
+  rather than filtering was chosen as the honest interim; filtering needs
+  the catalog's `/OCProperties` default configuration, which this walk does
+  not have.
+
+**Consumer.** `pdfceGUI` flagged both new counters as an item it now owns
+(its Objects panel lists what the model reports, so it will list things the
+canvas does not draw): *"Filed on our side; no ask attached until we have
+measured how it presents."*
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\done_2026-09-01-recolour-CONSUMED.md`
+§3).
+
+**`FEATURES.md`:** row 233 ("Fill fields") amended for the `/DA`-colour
+disclosure, in the same edit as `Pass 215.0`'s auto-size fix (one sentence,
+replaced once, per the file's own convention). The two new decomposer
+counters are folded into the new diagnostics row filed under `Pass 218.0`
+below, alongside `Pass 220.0`'s `paths_invisible_by_alpha` — all four are
+the same `PageObjects::diagnostics` mechanism.
+
+---
+
+### Pass 220.0 (`407336e`, 2026-09-01) — `gs` had no arm at all in the object-selection decomposer, and the exposure was not where the bug report pointed
+
+**The defect.** `crates/pdfce-core/src/vector/decompose.rs` had **zero**
+handling for the `gs` (ExtGState) operator — `/LW`, `/Font`, `/ca` set
+inside an `/ExtGState` never reached the selectable-object model. The
+immediately visible symptom is line width: a stale `line_width` feeds
+`vector::hit::stroke_half_width`, which widens the stroke-proximity hit
+band, so a wrong width means *"the operator clicks a visible line and
+nothing selects"* — a symptom this project had already had reported once,
+from a different cause (`MarqueeMode::Enclosed`/page-edge geometry).
+
+**Where the exposure actually was, measured rather than assumed.** A
+corpus sample of 300 of 4,023 files found `/ExtGState` in 11% of files, and
+*within those*, `/Font` is the most common entry by a wide margin — 115
+occurrences against 59 `/CA`, 27 `/BM`, and **zero** `/LW`. The bug report
+was about stroke selection; the measured exposure was mostly text objects
+getting the wrong bounding box from a stale font size — the identical
+click-selects-nothing symptom, one object kind over, and the one nobody had
+reported yet.
+
+**The fix.** A new `ext_gstate(&self, name: &[u8]) -> Option<ExtGStateParams>`
+method on the decomposer's font-resolver trait (`decompose.rs:1611`) — living
+there because it needs exactly the document view and current resource
+dictionary that resolver already holds, avoiding a fourth parameter threaded
+through ~50 `decompose*` call sites. **Defaulted to `None`**, so every
+existing implementor (`NoFonts`, fuzz targets) keeps compiling unchanged and
+only `DocumentFonts` — the one every real page decomposition uses — overrides
+it, meaning the fix reaches production callers with zero call sites changed.
+`ExtGStateParams` deliberately carries only four fields (`line_width`, `font`,
+plus fill/stroke alpha): the ones that change a value the model already
+exposes or a claim it already makes. Table 58's other twenty-odd entries
+(`/D`, `/BM`, `/SMask`, `/LC`, `/LJ`, `/ML`, `/RI`, `/OP`, `/op`, `/OPM`) are
+deliberately unmodelled — "an unread gap is not a defect."
+
+**New diagnostic, same commit:** `paths_invisible_by_alpha` — paths a
+`gs`-set `/ca 0` makes invisible, yet still reported as ordinary painted
+objects. Counted, not corrected: the object genuinely is in the content
+stream and a shell may legitimately want to select it; what was missing was
+any way to *know* why an apparently empty click selects something.
+
+**Tests:** `crates/pdfce-core/tests/vector_model.rs`, new section *"Pass
+220.0 — `gs` (ExtGState). The operator had NO arm at all"* —
+`a_line_width_set_by_an_extgstate_reaches_the_model` (fixture deliberately
+sets `2 w` before the `gs`, so the stale-2.0 answer is distinguishable from
+both the correct `/LW 7.5` and the §8.4.3.2 initial-1.0 answer a
+never-applied fixture would also produce) plus a `/Font`-size sibling.
+
+**`FEATURES.md`:** no row change — a correctness fix within the already-`[x]`
+"Select objects" capability (row 177); `paths_invisible_by_alpha` is
+disclosed via the new diagnostics row filed under `Pass 218.0` below.
+
+---
+
+### Pass 219.0 (`f7eb4a1`, 2026-09-01) — vector page objects can now be recoloured, and a spot ink is refused BY NAME rather than silently destroyed
+
+**Why this did not exist.** Every colour verb pdfce had coloured an
+annotation, a ce dimension, a redaction mark or a text run. A line, a
+rectangle, a polygon, a CAD drawing's every stroke: readable, selectable,
+movable, deletable — and not recolourable. Operator's own words, quoted
+in the doc comment: *"I don't see where I am able to edit the color of
+text, vectors, etc."* — text worked; vectors had nothing for a control to
+call.
+
+**New core verb**, `EditSession::set_object_paint(page_index,
+object_indices, fill: Option<Rgb>, stroke: Option<Rgb>) ->
+Result<PaintOutcome, EditError>` (`crates/pdfce-core/src/edit.rs:10838`).
+`fill`/`stroke` are independent — `None` leaves that channel alone; a call
+with neither is a no-op that still reports what it *would have* refused, so
+a shell can drive a control's enabled state without editing anything.
+
+**The mechanism — wrap, never rewrite.**
+`crates/pdfce-core/src/vector/edit.rs`'s `plan_recolour` (line 1077) wraps
+each target object's own bytes in `q <colour ops> … Q`, exactly as
+`plan_transform_many` wraps a `cm`. Colour is graphics state, not a path
+property — the operators that set it (`rg`, `k`, `scn`…) sit *before*
+construction and are routinely shared (one `0 0 1 RG` commonly governs
+every stroke on a CAD sheet), so rewriting the inherited operand would
+recolour every other object sharing it, silently, and the operator would
+have selected one line and changed a thousand. The wrap confines the
+change to exactly the objects picked, keeps the edit trivially invertible,
+and leaves every other byte on the page verbatim (`ARCHITECTURE.md` §5
+minimal-diff). The planner does no policy — refusing a spot ink is the
+*session's* job, because the session is what holds `PathPaint` and must
+report the refusal by name; a planner that silently skipped objects would
+make "nine of twelve changed" unreportable.
+
+**What it refuses, and why refusing beats converting.** An object whose
+paint is `PathPaint::Other` (`/Separation`, `/DeviceN`, `/ICCBased`,
+`/Indexed`, `/Lab`) is left alone and named in `PaintOutcome::refused`. A
+CAD sheet's strokes are frequently named spot inks and the operator's own
+drawings are printed — writing `DeviceRGB` over a named ink would look
+right on screen and **destroy the plate**, invisibly, the worst combination
+available. Only the channel being *changed* can trigger a refusal:
+recolouring the fill of an object whose stroke is a spot ink is legitimate
+and must not be blocked by the channel nobody touched. Patterns refuse
+separately (§8.7.3 — no colour at all, a different kind of refusal from an
+undecodable ink).
+
+**Declined alternative, recorded so it is not re-proposed.** A narrower
+`add_push_button_with_action`-style bundled verb was offered and declined,
+on the same reasoning `Pass 212.0`/decision `117` used for `coalesce_last`:
+it fixes one instance of a shape (two verbs needed for one gesture) that
+recurs.
+
+**Shipped in `pdfceGUI` the same day.** Properties ▸ Colour on a single
+selected path: Fill/Line swatches. `PathPaint::Other` draws **no swatch** —
+the ink's name stands in its place: *"PANTONE 300 — a named ink. pdfce
+will not overwrite it with a screen colour, because that would look right
+here and change what prints."* Multi-object selection is deliberately not
+offered yet (no honest starting value when members disagree).
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\done_2026-09-01-recolour-CONSUMED.md`
+§1)
+
+**A defect found by building the READER first.** Building `page_objects`
+(the display half) before the writer surfaced that copying/pasting a
+spot-coloured path was **synthesising an `rg` from a stale device colour and
+writing it into the saved document** — pdfceGUI's own audit note: *"the
+consequence was not a missing feature but WRONG PIXELS."* Recorded as the
+general form: *a control's need to display a value is a question about
+whether the value is right, and asking it audits the producer* (§2 of the
+same consumed-request note).
+
+**`FEATURES.md`:** new row under *Vector objects* — `[x]` core / `[ ]` cli
+(no `pdfce-cli` subcommand exists for this verb, grepped and confirmed
+absent) / `[x]` gui (per the pdfceGUI ship note above) / `?` Acrobat (no
+parity claim sourced this filing — dispatch `pdfce-acrobat-librarian` if an
+exact comparison is wanted).
+
+---
+
+### Pass 218.0 (`4b4af37`, 2026-09-01) — the vector object model had no idea what colour a spot-inked path is, and two routes shipped to fix that: the representation and the disclosure
+
+**The defect.** The decomposer's graphics-state tracker
+(`crates/pdfce-core/src/vector/decompose.rs`) handled only the device
+colour operators (`g G rg RG k K`) and had no arm for `cs CS sc scn SC
+SCN`. A path painted in a `/Separation`, `/DeviceN`, `/ICCBased`,
+`/Indexed`, `/Lab` or pattern space therefore **inherited whatever the last
+device operator had set** — a stale, silently wrong colour, with no value
+meaning "I do not know." `pdfce-render` had this exact bug and fixed it
+2026-08-10, recording that the consequence "was not a missing feature but
+WRONG PIXELS" — the decomposer never received that fix until now, three
+weeks later.
+
+**Route 1 — the representation.** New `PathPaint` enum
+(`decompose.rs:924`) replaces the bare `Rgb` `fill_color`/`stroke_color`:
+`Default` (§8.6.8's initial black — nobody chose it, distinct from
+somebody choosing black), `Device { space, comps, rgb }` (fully modelled,
+resolved sRGB), and `Other { space, comps, pattern }` (a space this
+decomposition does not decode — components and space name kept as the file
+wrote them; `.rgb()` returns `None` rather than a swatch). Mirrors a model
+`crate::text_edit::FillState` already had for TEXT (`Default`/`Device`/
+`Other`) — "one half of this crate had the honest model and the other half
+had a lossy one, and nothing connected them."
+
+**Why `Other` does not resolve the colour:** resolving a `/Separation`
+needs its tint transform, and that machinery lives in `pdfce-render`, which
+`pdfce-core` cannot depend on (GUI-core separation boundary,
+`ARCHITECTURE.md` §3) — duplicating it here would be a second colour-space
+implementation, the exact defect class this type removes. It also is not
+needed for the job: a shell asking "may I recolour this?" needs to know the
+paint is a named spot ink, not what it looks like — showing a named ink is
+more useful than a swatch, and infinitely more useful than a wrong swatch.
+
+**Route 2 — the disclosure.** New `paths_with_undecoded_colour: usize`
+diagnostic counter. `PageObjects::diagnostics` had **twelve counters and
+not one of them could report unmodelled graphics state** before this Pass —
+a non-zero value now means `fill_color`/`stroke_color` are best-effort and
+`fill_paint`/`stroke_paint` are the honest answer.
+
+**Tests (`decompose.rs` `mod tests`, "colour spaces (Pass 218.0)"):**
+`a_separation_painted_path_does_not_report_the_previous_device_colour` —
+fixture deliberately paints a red `rg` rectangle first, so the stale-colour
+bug (which would report red) is distinguishable from the honest
+black-initial-value case that a plausible-but-wrong fix would also produce;
+`a_pattern_fill_is_distinguished_from_an_undecodable_colour`;
+`a_device_fill_agrees_with_the_legacy_rgb_field`.
+
+**Downstream correctness fix, same commit:** `crates/pdfce-core/src/vector/clip.rs:1881`
+— a comment had asserted a graceful degradation that never actually ran;
+`PathPaint` now lets that case be *detected*, so the honest response (emit
+nothing rather than a fabricated colour) replaced the false comment.
+
+**`FEATURES.md`:** new row under *Vector objects*, folding in this Pass's
+`paths_with_undecoded_colour`, `Pass 220.0`'s `paths_invisible_by_alpha` and
+`Pass 221.0`'s `shadings_unmodelled`/`oc_sections` — all four are the same
+`PageObjects::diagnostics` mechanism, same theme (the model disagreeing
+with the canvas, now sayable): `[x]` core / `[ ]` cli (grepped, none of the
+four counter names appear anywhere in `pdfce-cli`) / `[ ]` gui (per
+pdfceGUI's own note: "filed on our side; no ask attached until we have
+measured how it presents" — not yet reachable) / `—` Acrobat (an internal
+diagnostic, not a user-facing capability to compare).
+
+---
+
+### Pass 217.0 (`643e270`, 2026-09-01) — the spot-colorant plane, step 1 of ~4: the carrier exists and PROVABLY changes nothing
+
+**Scope, stated up front so it is not mistaken for more.** This lands
+`PixelCmyk::s: [f32; MAX_SPOTS]` (`MAX_SPOTS = 4`,
+`crates/pdfce-render/src/compositor.rs:607`), threaded through the
+compositor, **every value pinned at zero**. Nothing else of the feature
+exists yet: no roster, no plane allocation, no deposit, no Table 149 spot
+rules, no collapse. It was landed separately and proved inert — the
+conformance sweep is byte-identical before and after — deliberately, so the
+carrier and the behaviour it will eventually carry are two commits with two
+different risk profiles.
+
+**Why this is the top remaining item** (per the engineer's own scoping
+study, `docs/NEXT_SESSION.md` §0, run this session): seven of the ten
+operator-visible conformance-suite failures trace to this one gap (`PCS
+2.0`/`3.0`/`3.1`/`4.0`/`4.1`/`8.1`/`8.01`), and none has a cheap individual
+fix.
+
+**Design already scoped, recorded so a future session does not redo the
+study:** `spots: Vec<SpotPlane>` from day one rather than a fixed array,
+because the invasiveness of a bounded vs. fully general n-channel buffer is
+identical (the cap is one comparison) — 18 composite call sites across 7
+files change either way. Memory decides the cap, not the corpus census: 20
+B/px today rises to 36 B/px at four spots, and a 300 DPI Letter page with
+four full-resolution spot planes would need 289 MiB against the 256 MiB
+default ceiling — so planes must come from a per-page roster, never be
+pre-provisioned to the maximum. Corpus census (4,023 files): 98.6% name no
+spot colorant at all, 99.85% name three or fewer, nine is the most seen
+anywhere. Colorant identity is the decoded name byte string and only that
+(§8.6.6.4/§7.3.5 NOTE 4) — `Colorant::Named` was changed to `Box<[u8]>`
+specifically to make this rule implementable (`Pass 210.0`).
+
+**Two hazards flagged for the increment that actually deposits ink, so
+they do not surprise that Pass:** (1) the OPM overprint-mode edition gate
+reads differently between ISO 32000-1 (`DeviceCMYK` identity test) and ISO
+32000-2 (CMYK-inclusion test) the moment a fifth colour plane exists —
+needs its own setting; (2) §11.7.4.2 restricts non-separable blend modes to
+CMYK-only, and `Blend::apply_subtractive`'s non-separable arm must not be
+extended over spot planes.
+
+**`FEATURES.md`:** no row — inert infrastructure with nothing yet
+observable to tick, per the Pass's own stated scope.
+
+---
+
+### Pass 216.0 (`de3469c`, 2026-09-01) — a trap four pixels too wide was scored as a PASS, and the operator's eyes beat the instrument
+
+**The defect.** `tools/suite-check.py`'s trap detector rejected any
+candidate mark wider than `EDGE_MAX = 90` px, calibrated on one specimen
+(`PCS 16.0`'s 38×38 traps, with 90 chosen as "generous" headroom). `PCS
+22.1`'s trap is **94×94** — a light X on a dark swatch, plainly visible to
+the operator, scoring 0.563 fill and passing every other test — and was
+rejected for being four pixels too wide. The harness reported that patch a
+clean PASS.
+
+**Why the bound was wrong in general, not just on this specimen.** "A
+threshold calibrated on one specimen is a claim about every specimen." The
+fill and diagonal tests already in the detector are what actually
+discriminate a trap from a glyph or a swatch; the size bound excluded
+nothing except traps that happened to be large.
+
+**The fix, calibrated by reference control rather than by taste.**
+`EDGE_MAX` raised from 90 to **160** (`tools/suite-check.py:244`), chosen as
+the largest value that does not start inventing failures when run against
+all 51 Acrobat reference renders (the ground truth for "a correct engine
+trips nothing"): 90/120/160 all trip 2 already-known-TRAP patches on the
+Acrobat reference; 200 trips a third — too loose. 160 is the ceiling before
+the harness starts accusing the oracle.
+
+**Measured effect of the surrounding `--reference-dir` work landed the same
+commit** (per-item form beside the total, hard rule 10): with
+`--reference-dir` (calibrating against a known-good engine's own renders of
+the same patches, rather than a pass/fail threshold with no ground truth) —
+without: **5 FAIL, 30 pass, 16 UNRESOLVED of 51**; with: **5 FAIL, 35 pass,
+11 UNRESOLVED of 51**. Five patches move from "the instrument cannot say"
+to a real verdict.
+
+**`FEATURES.md`:** no row — internal tooling, not a shipped pdfce
+capability.
+
+---
+
+### Pass 215.0 (`d5d012e`, 2026-09-01) — an auto-sized form field now fills at the size its own box implies, not a flat 12 pt for every field in the document
+
+**The defect.** §12.7.3.3 mandates auto-size (`/DA` `0 Tf`) as "a function
+of the height of the annotation rectangle" but gives no formula.
+`crates/pdfce-core/src/vartext.rs`'s `auto_size` divided by a **leading**
+constant and clamped to `AUTOSIZE_MAX = 12.0` — so every auto-sized field
+in a document came out at 12 pt regardless of its box. An operator filling
+a shipping form saw pdfce's rows at two-thirds the size of the row Acrobat
+had filled on the same sheet, and header fields that would have overflowed
+a 13 pt box. Two distinct errors: the clamp (made every answer identical)
+and the divisor (leading is not the quantity that decides whether glyphs
+fit a box).
+
+**The fix — measured, not guessed.** New `auto_fit(font, rect_w, rect_h,
+text) -> AutoFit` (`vartext.rs:424`). The height step is **measured** off
+real Acrobat-authored appearances in an operator's own file: `candidate =
+(rect_height − 2×1pt) / font_bbox_height_em`, where Helvetica's
+`/FontBBox` gives `1156/1000 = 1.156 em` — two Acrobat fields whose boxes
+differ by a factor of two both land on that ratio to three figures (1.1565,
+1.1615), which is what makes it a measurement rather than a fitted
+constant. The width step (shrink to fit if the candidate overflows) is
+**assumed**, and stated as such — required for correctness but not what the
+reference file's Acrobat appearances actually did.
+
+**A measured gap left honestly open rather than closed with a fabricated
+number.** Acrobat's own reference file writes *two* `Tf` operators per
+appearance, the second consistently ~1.165× smaller (three measured ratios:
+1.1668, 1.1624, 1.1656) — but the obvious "it's a width fit" explanation is
+measured **false** on this file: neither string was close to its box's
+usable width (*"TC-10 Wheel Chocks"* needs 200.5 pt in a 253.4 pt usable
+width; `TR4177` needs 34 pt in 177 pt), and a true width fit would vary with
+string length, not hold to 0.4% across three very different strings. So
+pdfce lands ~16% larger than Acrobat — a large improvement on a flat 12 pt,
+explicitly **not a match** — and the doc comment states plainly that
+inventing a matching 1.165 divisor "would bake a number nobody can defend
+into the appearance of every form pdfce fills."
+
+**Test rewritten, not just re-passed, to pin the property rather than the
+bug.** The old test asserted every auto-size lands in `[4, 12]`, which
+cannot notice that 12 is wrong. `auto_size_tracks_the_box_rather_than_a_constant`
+now asserts a box twice as tall gets a substantially larger size (`s_tall >
+s_short * 1.5`), and pins the ratio to Helvetica's own `/FontBBox`, not a
+magic number.
+
+**Disclosure (rule 4), pre-existing plumbing that now tells the truth.**
+`pdfce-cli`'s `regenerate-appearances` already prints `"pdfce-cli: field
+{name:?}: auto-sized to {sz:.3} pt ({why})"` per field
+(`crates/pdfce-cli/src/main.rs:18535`), `{why}` naming the reviewable-
+heuristic reasoning (§12.7.3.3 mandates no formula).
+
+**`FEATURES.md`:** row 233 ("Fill fields — text, check box, radio, choice…")
+amended in place, folding in `Pass 221.0`'s `/DA`-colour disclosure in the
+same edit, per the file's replace-don't-append convention.
+
+---
+
+### Pass 214.0 (`edd521e`, 2026-09-01) — `ICCBased` IMAGES are colour-managed now, and the RGB half was measured and explicitly refused
+
+**The defect.** `crates/pdfce-render/src/image.rs`'s `resolve_space`
+collapsed every `[/ICCBased stream]` to a device space by the stream's `/N`
+fallback and discarded the embedded profile — so an `ICCBased` image
+rendered unmanaged while the graphics-state paint path beside it (already
+ICC-managed since `Pass 199.2`) was correct. Measured on a conformance
+patch drawing the same colour through the same embedded profile four ways:
+the two VECTOR cells landed within one level of correct; the two IMAGE
+cells reproduced the unmanaged answer bit for bit.
+
+**The counter was blind to its own defect.** `icc_managed_paints`/
+`icc_unmanaged_paints` (`crates/pdfce-render/src/interpret.rs:7340`) are
+both incremented inside `authored_cmyk`, the graphics-state paint path
+only — an `ICCBased` image never went through it, so the metrics line
+reported `icc_unmanaged_paints=0` on a page where half the ICC content was
+silently unmanaged. "Zero meant 'nothing was left unmanaged'; it actually
+meant 'the engine never saw this page.'"
+
+**The fix.** `interpret.rs`'s image path now increments the correct
+counter conditionally on what the decoder actually reports
+(`decoded.icc_managed`), splitting a previously-unconditional `unmanaged`
+increment in two. `image.rs`'s `resolve_space` (line 2608) builds an ICC
+bridge when **both ends exist** — an output-intent profile on the page AND
+a usable embedded source profile — restricted to **4-component (CMYK)
+sources only**.
+
+**Measured negative, not an omission: RGB/Gray images were tried and
+REJECTED.** Extending the same bridge to non-4-component (`/N != 4`) images
+was tried and measured **3× and 1.8× worse** on two patches (`20.59 →
+62.51`, `17.87 → 31.50`) — a net conformance regression. Why: managing an
+RGB image moves it onto the subtractive ink-compositing path, whose
+terminal CMYK→sRGB conversion is separately ~10 levels from Acrobat; a
+CMYK image was already ink-bound so the profile is pure gain, but an RGB
+image was not and pays more than it gains. The 4-component restriction is
+therefore the measured-correct boundary, not an unfinished edge.
+
+**`FEATURES.md`:** row 380 (the existing `/ICCBased` colour-space row under
+*Fonts & rendering*) rewritten in place — was "An ICCBased IMAGE is NOT
+colour-managed — at all"; now states CMYK images ARE managed as of this
+Pass, RGB/Gray remain unmanaged **by measurement**, not omission. Row stays
+`◐` core (still partial — the RGB gap remains, deliberately), `[x]` cli
+(the counter pair), `[ ]` gui.
+
+---
+
+### Pass 213.0 (`1f1ef21`, 2026-09-01) — the OneDrive deploy died on its own documented assumption, and a ninth survivor of a falsified claim was found in a file its own sweep had already "closed"
+
+**Half 1 — `tools/deploy-onedrive.py`.** Cutting `v0.19.0`, the deploy died
+with `FileExistsError: ... \pdfce2\models`, **after** `_empty_slot` had
+already run — precisely the half-emptied, untrustworthy slot state that
+helper's own docstring warns about, but reached through the **copy** step,
+not the **removal** step, so the raise-rather-than-continue guard built for
+that failure never fired. Root cause: `shutil.copytree(src, dst)` (no
+`dirs_exist_ok`) was written when `_empty_slot`'s own docs already asserted
+that "the payload copy recreates or overwrites" any empty subdirectories
+`_empty_slot` deliberately leaves behind — a claim that was never true of
+`copytree`, which refuses an existing destination outright. The `models/`
+payload directory (the largest, ~12 MB of OCR models) was added to
+`PAYLOAD` after that comment was written, and was the first directory
+entry to expose the gap. Fix: `dirs_exist_ok=True`
+(`tools/deploy-onedrive.py:325`). New standing lesson recorded in the
+module's own comment: "a comment asserting what a later line does is a
+claim about that line, and nothing checks it."
+
+**Half 2 — a ninth survivor, `crates/pdfce-render/src/font/mod.rs:1078`.**
+The 362nd filing's hard-rule-11 sweep (`Pass 209.0`) found `font/mod.rs`'s
+`RenderOptions::with_overprint_zero_tint_scope` doc comment still asserting
+*"Acrobat converts grey to K-only CMYK first… Both readings are
+defensible"* — wrong twice over (the Acrobat attribution was falsified on
+process geometry by `Pass 206.0`; "both readings are defensible" was
+already overruled as a deliberate *divergence* by `Pass 174.5`). **Why it
+survived NINE separate sweeps of the same false claim:** `Pass 209.0`'s
+eight-copy sweep *did* edit `font/mod.rs` — at a different function, ~225
+lines away — and a per-file ledger that closes on the first hit in a file
+cannot see a second site in the same file. **"A file is not a site."**
+Fixed here: the comment now states the corrected history (`Pass 174.5`
+ruled divergence; `Pass 206.0` measured that the default matches Acrobat
+only over a spot backdrop, not over process components) and records
+explicitly how it survived, as a checklist addition for the next sweep —
+"when a file appears once in a survivor table, grep that file again after
+the fix, not before."
+
+**`FEATURES.md`:** no row — a deploy-tooling fix and a doc-comment
+correction, neither a capability change.
+
+---
+
 **★★★ FOUR PASSES FILED TOGETHER, 362nd filing, 2026-09-01 — AND THE
 DISPATCH NAMED THREE.** `Pass 212.0` (`77f95b5`), `Pass 211.0` (`79e3974`),
 `Pass 210.0` (`6ed5b9b`) and `Pass 209.0` (`27154e9`), in that
