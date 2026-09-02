@@ -156,47 +156,74 @@ asked for.
 4. Re-run the conformance sweep. **This is the first step where the numbers
    are allowed to move**, and the two traps to watch are named below.
 
-### ★★★ OPEN QUESTION `(cb)` IS ANSWERED — AND THE ANSWER KILLED THE THEORY
+### ★★★ RESOLVED — BOTH RENDERS CONFORM. It is a DEVICE MODEL, not a defect
 
-**Measured 2026-09-02, after the operator set Acrobat's `Use Overprint
-Preview` to *Always*.** Both patches were re-captured from Acrobat with
-`tools/render-parity/acrobat_shot.ps1` — the same view-only `PrintWindow`
-mechanism that produced the original references — and compared
-**structurally**, by the count and relative positions of the green artwork
-regions, which needs no pixel alignment:
+**Second spec adjudication, 2026-09-02** (`iso32000__s__8.6.7.md`,
+`UPDATE 2026-09-02 (SECOND FILING)` §H–§P). The first verdict's *outcome*
+stands — **do not change pdfce** — but its reasoning was wrong and is struck
+there. The mechanism nobody had proposed is `R4`, and it is a `shall`:
 
-| patch | green regions BEFORE | AFTER | layout |
+> §8.6.6.4, both editions: at the moment a `Separation` space is set, a reader
+> **shall determine whether the device has an available colorant** of that
+> name. **If it does not**, it *"shall arrange for subsequent painting
+> operations to be performed in an alternate colour space."*
+
+**That substitution happens before §8.6.7 is ever consulted.** On a device
+with no such colorant the backdrop is never a spot on the page at all — the
+tint transform has already made it process ink — so the white object lands on
+Table 148's *"any process colour space × PROCESS colorant"* row, which is
+**paint source in all three columns**. Source `0 0 0 0` ⇒ **white, with
+overprint fully simulated and fully honoured.** The *spot colorant* row the
+first verdict rested on is never selected.
+
+⇒ **Two conforming device models, and pdfce chose one:**
+
+| model | reached by | result | conforms under |
 |---|---|---|---|
-| the failing one | 9 | 9 | **identical** |
-| a CMYK+spot overprint control | 10 | 10 | **identical** |
+| **A** alternate-space substitution | §8.6.6.4's `shall` | spot knocked out — **white** | **both editions** |
+| **B** separation simulation (pdfce) | 2.0 §10.8.3, a **`may`** | spot preserved — **green** | **2.0 only** |
 
-⇒ **Turning overprint preview on changed Acrobat's render not at all.**
+★ Note the asymmetry honestly: **pdfce's branch has no ISO 32000-1 basis at
+all.** §8.6.6.4 NOTE 7 and §10.8.3 both rank it *better under overprint*, but
+*"pdfce is on the recommended branch of an optional 2.0 feature"* is a
+different claim from *"pdfce is the conforming one"*, and the first filing
+made the second.
 
-That refutes `R1`, which decision 119 rested on. The other two candidate
-explanations are refuted too, both measured rather than argued:
+### ★★ MY REFUTATION OF `R1` WAS INCONCLUSIVE — MY INSTRUMENT WAS BLIND
 
-- **`R2` — the white object is a transparency group.** Both patches contain
-  **zero** `/Group` dictionaries, zero `/S /Transparency`, zero `/SMask`.
-- **`R3` — an `/op` overriding `/OP`.** pdfce's ExtGState handling matches
-  Table 58 exactly; the failing patch sets `/op` six times and `/OP` once, so
-  the non-stroking flag is explicit almost everywhere.
+I reported that turning on Acrobat's overprint preview *"changed the render
+not at all"*, from a count of connected green regions. **That count cannot
+detect the change it was testing for.** Filling a white hole inside a green
+cell with green does not alter the region count — an annulus and a filled
+disc are both one component. `9 → 9` is consistent with **both** outcomes.
 
-★ **The weak link, stated rather than buried:** I could not independently
-confirm the preference was live in the captured process. No `overprint` value
-exists under `HKCU\Software\Adobe\...`, no preferences file mentions it,
-and nothing under `%APPDATA%\Adobe\Acrobat\` changed in the three hours
-after the operator set it — though Acrobat flushes preferences on exit, so
-that cuts both ways.
+The control failed too, and that should have stopped me: a CMYK-plus-spot
+overprint patch is exactly what the preference exists to change, so a control
+that does not move is a control that did not control.
 
-★★ **And a possibility that would explain everything: the ORIGINAL references
-may already have been captured with overprint preview ON** (2026-08-18, same
-machine). Then nothing changed because nothing needed to — and Acrobat *is*
-simulating overprint and still renders white, which is a real disagreement
-with the spec reading rather than an oracle artefact.
+A third attempt — green area as a fraction of the artwork bounding box — was
+also contaminated: the mask catches Acrobat's own UI accent greens, so the
+two bounding boxes cover different content.
 
-**`pdfce-spec-librarian` has been re-dispatched with all of this** and asked
-for a fourth mechanism, or an explicit retraction. **Do not act on decision
-119 until that lands** — its premise is measured false.
+**Three instruments, none able to see the subject.** The measurement line was
+abandoned rather than continued, because `R4` makes it moot: under model A
+Acrobat renders white with the preference **on or off**.
+
+⇒ **If anyone re-opens this, measure THE PIXEL at the cell, not regions or
+areas, with a control whose pixel is known to move.** And check the patch's
+`/OPM`: under model A the affected components are process, where `OPM 1`
+differs from `OPM 0` for row 1 only — if it is `OPM 1`, Acrobat's white is
+tier-(c) evidence that it takes the LITERAL reading of `OP-A5`, which
+contradicts what the corpus currently assumes. That belongs in
+`C:\personal_rag\pdf\`.
+
+### ★ HARNESS CONSEQUENCE, and it is the most actionable thing here
+
+**Acrobat cannot be an oracle for any spot-overprint cell unless it is
+confirmed to be in separation-simulation mode.** A fixture that hard-codes
+one absolute expected RGB encodes an unstated device assumption and will fail
+correct code when the oracle drifts. Expected values for these cells must be
+stated **per device model**.
 
 ### The prior reasoning, kept legible rather than deleted
 
