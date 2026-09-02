@@ -85906,3 +85906,123 @@ overprint path at `OPM 0`/mode 0; none makes one.
   of it landed and will report only what a future filing's dispatch relays.
 - Backup/push state: not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (372nd filing) — `Pass 231.0` (`36291a1`) SHIPPED — the ink probe reported four channels for a buffer that now has more; a SPEC ADJUDICATION inverts the remaining conformance work: pdfce's overprint-preserved spot render is likely CONFORMING, and Acrobat's white reference is likely the unsimulated one; decision 119 minted; open operator question `(cb)`; first `personal_rag/pdf` lesson since 2026-08-30
+
+**Sourcing.** No shell this filing. `Pass 231.0`'s commit body supplied
+verbatim as a scratch file (`.librarian-231.txt`, 63 lines) by the engineer;
+independently cross-checked against live source (`crates/pdfce-render/src/font/mod.rs:739-783`,
+`crates/pdfce-cli/src/main.rs:10710-10730`) rather than trusted on the
+commit text alone. The spec-adjudication finding was relayed by the
+engineer from a `pdfce-spec-librarian` dispatch; the cited spec-RAG files
+(`iso32000__s__8.6.7.md` UPDATE 2026-09-02 §A–§G,
+`iso32000__ref__spot_colour_overprint.md`) were read directly by this role
+before decision 119 was drafted, not taken on the engineer's characterisation
+alone.
+
+**Shipped:**
+
+- **`Pass 231.0`** (`36291a1`) — `--probe-ink` gains `spots=<name>=<tint>,…`.
+  The probe read the colorant buffer before the sRGB conversion but kept
+  printing a fixed four channels after `Pass 225.0` made that buffer's
+  channel count variable, so it reported a trap mark and its surround as
+  **identical** (`c=0 m=0 y=0 k=0.500` both) while they rendered as visibly
+  different colours — about an hour lost reconciling a "clean" reading with
+  a defect plainly visible in the PNG. Its first three probes found the
+  same green produced two different ways on one page (deposited into a
+  spot plane vs. flattened into CMYK), confirming an inference that had
+  stood unconfirmed. `InkProbe` drops `Copy` (variable-length `Vec`,
+  documented rather than silently changed — breaking-change discipline,
+  rule 10). See `ROADMAP.md`'s *Shipped* entry for full sourcing.
+  **`docs/FEATURES.md`: one row corrected** (*Probe the ink at a pixel*
+  now names the `spots=` field).
+
+**Decisions made this session:**
+
+- **Decision 119** (`ARCHITECTURE.md` §12): **Table 148/149 (1.7) / Table
+  146 (2.0) are determinate for "any process colour space × spot
+  colorant"** — `OP true` means preserve, in both overprint-mode columns,
+  in both editions. **pdfce's overprint-preserved-spot render is the
+  CONFORMING one.** This inverts the working premise of a dispatch that
+  went out asking "what makes Acrobat's white right" — it came back
+  showing pdfce's green is right and Acrobat's white most likely comes
+  from `Use Overprint Preview` defaulting to `Only for PDF/X files`
+  (§8.6.7: an implementation not simulating overprint shall **ignore**
+  `/OP`, which lands the cell in the `OP false` column). **Not yet
+  independently falsified** — nobody has re-rendered the cell with the
+  preference forced to `Always`. A second spec-sanctioned white route
+  (the object being a `/Group`, Table 149's bottom row) also needs ruling
+  out independently. **Explicit standing instruction carried into the
+  decision: do NOT "fix" pdfce to match the white** — it would contradict
+  five sourced 1.7 provisions (four in 2.0) and would break the
+  `Separation`/`DeviceN` rows through the same code path, the same shape
+  of scope error already corrected once in `OP-A5` (2026-08-31).
+
+**Findings + decisions:**
+
+- **pdfce's own code comment reaches the right cell by a wrong stated
+  reason.** The internal paraphrase — *"a colorant not named in the source
+  colour space is left to the backdrop under `OP true`"* — belongs to the
+  `Separation`/`DeviceN` rows only; on a process-source row (`DeviceGray`,
+  `DeviceRGB`, `DeviceCMYK`, `ICCBased`) the test is unconditional per
+  §11.7.3, which states every object paints every component, process and
+  spot, with unspecified components taking subtractive tint 0.0. **Fix the
+  comment, not the code** — recommended as a same-session or
+  next-session small doc-only fix (see report below), **not** minted as a
+  Backlog Pass; there is no behaviour to scope and no acceptance criteria
+  a Pass entry would add over "grep the paraphrase, correct the wording,
+  one commit."
+- **A corpus-extraction hazard, filed in the spec RAG, worth carrying
+  here as a methodology note**: `pdftotext -layout` silently drops ISO
+  32000-2 Table 146's cell values in this row (`CambriaMath` math-italic
+  glyphs render as empty strings), so a naive `grep` of extracted text
+  would read as "2.0 deleted the row" — false. Recovered by a positional
+  `pdfminer` `LTChar` pass. Filed in the spec RAG (extraction routes
+  4a/4c-bis), not duplicated here — it is a corpus-tooling finding, not a
+  PDF-domain empirical one, so `personal_rag/pdf` was judged the wrong
+  home for it.
+- **§F of the spec-RAG update explicitly directed the empirical half
+  elsewhere** — *"Acrobat with `Use Overprint Preview` = `Only for PDF/X
+  files` renders this cell white" is a real-world producer/consumer
+  behaviour finding, files in `personal_rag/pdf`, not the spec corpus.*
+  Followed: `C:\personal_rag\pdf\lesson_20260902_acrobats_overprint_preview_defaults_to_pdfx_only_so_op_true_renders_as_op_false.md`,
+  cross-referencing the spec RAG and decision 119. First `personal_rag/pdf`
+  lesson since 2026-08-30 (a gap this role notes rather than explains —
+  no PDF-domain finding crossed this desk in the intervening filings).
+
+**Still in flight / open:**
+
+- **Open operator question `(cb)`** minted (`ROADMAP.md`): will the
+  operator set Acrobat's `Use Overprint Preview` to `Always` and
+  re-generate the reference renders this project measures against?
+  Default if unanswered: the two remaining traps (`PCS 3.0`, `PCS 4.0`)
+  stay open and **undiagnosed further as pdfce defects** rather than
+  being "fixed" toward a possibly-wrong oracle.
+  - **This role's report also asked `docs/NEXT_SESSION.md`'s own §0 to be
+    corrected** — that file is engineer-owned per its own header (rule:
+    this role does not edit it) — because its "WHERE THE TWO REMAINING
+    TRAPS ACTUALLY ARE" section currently reads as though both are
+    confirmed pdfce-side defects to diagnose further. See this filing's
+    report to the engineer for the exact wording requested.
+- **The comment-paraphrase fix** (`crates/pdfce-render/src/`, at least one
+  doc comment and one test message) is a small, actionable, doc-only
+  correction — recommended as a quick fix, explicitly **not** filed as a
+  Backlog Pass (no behaviour change, no scoping needed).
+- **Step 4 of the spot-plane arc (images, shadings, knockout groups)** —
+  unchanged, still the only remaining scope item on that arc, per the
+  370th/371st filings.
+
+**For next session:**
+
+- Re-generate the Acrobat reference renders with `Use Overprint Preview`
+  forced to `Always`, if/when the operator answers `(cb)`, and re-measure
+  `PCS 3.0`/`PCS 4.0` before doing any further compositing diagnosis on
+  either.
+- Fix the code-comment paraphrase in `crates/pdfce-render/src/` (grep the
+  wording, not the string, per hard rule 11(e) — check whether it recurs
+  in a test message or a second comment site before calling it a one-line
+  fix).
+- Step 4 (images + knockout groups) remains the scoped next task on the
+  spot-plane arc.
+- Backup/push state: not independently checked by this role, no shell this
+  filing.

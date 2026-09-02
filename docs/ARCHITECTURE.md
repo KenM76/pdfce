@@ -29571,3 +29571,91 @@ LUT returning solid red at zero.
 ceiling `R239` — UNCHANGED**, next free `R240`; no rule minted this filing
 (`R225` gains two further dated instances, recorded in `ROADMAP.md`'s
 `Pass 225.0` entry rather than here).
+
+### 2026-09-02 (372nd filing) — decision 119: **TABLE 148/149 (1.7) / TABLE 146 (2.0) ARE DETERMINATE FOR "ANY PROCESS COLOUR SPACE × SPOT COLORANT": `OP true` MEANS PRESERVE, IN BOTH OVERPRINT-MODE COLUMNS, IN BOTH EDITIONS — pdfce'S RENDER IS THE CONFORMING ONE, AND A DIVERGENCE FROM AN ACROBAT REFERENCE RENDER ON THIS CELL IS NOT EVIDENCE OF A pdfce DEFECT**
+
+**Context.** A print-conformance patch cell: a spot-colorant backdrop
+(`/Separation` over `/DeviceCMYK`), a white `DeviceGray` object (`1 g`, i.e.
+CMYK `0 0 0 0`) painted over it with `/OP true`. **Acrobat's reference render
+shows pure white (spot knocked out); pdfce renders the spot green,
+`(142,198,63)` (spot preserved).** This was dispatched to
+`pdfce-spec-librarian` on the working premise that pdfce's render was the
+defect. **It came back against that premise.**
+
+**The verdict (`iso32000__s__8.6.7.md` UPDATE 2026-09-02, §A).** There is no
+reading of either edition under which `OP true` erases an unnamed spot
+colorant on a process-space source. Six independent supports converge on the
+same cell (§B): §8.6.7's own prose (*"anything previously painted in other
+colorants is left undisturbed"*), §11.7.3 (*"every object paints every
+existing colour component, both process and spot… unspecified components take
+an additive value of 1.0"* — the `DeviceCMYK`/`ICCBased`-source case is the
+clause's own worked example), Table 148 (1.7 only — 2.0 deletes the table,
+not the rule), Table 149 (1.7) / Table 146 (2.0) — verified **verbatim**
+against both source PDFs, character-identical on this row — §11.7.4.5 NOTE 1
+(*"there is no difference in the treatment of spot colour components"*
+between the opaque and transparent imaging models), and the fact that `OPM 0`
+and `OPM 1` are **identical** on this row (the zero-tint carve-out that
+distinguishes them exists only in row 1's `DeviceCMYK`-direct cell). **No
+edition delta.** ⇒ **pdfce's green is the conforming render.**
+
+**The internal paraphrase pdfce carries — *"a colorant not named in the
+source colour space is left to the backdrop under `OP true`"* — reaches the
+correct cell by a WRONG ROUTE (§C).** That phrasing belongs to the
+`Separation`/`DeviceN` rows only, where "named in source space" separates the
+one spot the space names from every other spot. On a **process**-source row
+the test is unconditional — §11.7.3 says a `DeviceGray`/`DeviceCMYK`/etc.
+source paints **every** spot colorant, with subtractive tint 0.0, and
+overprint decides only whether that 0.0 is written (`OP false`) or replaced
+by the backdrop (`OP true`). There is no "cannot address" category the
+paraphrase implies. **Action: fix the comment in `crates/pdfce-render/src/`
+that carries this paraphrase (at least one doc comment and one test message
+use it); the code itself is correct and untouched by this decision.**
+
+**Why Acrobat shows white anyway — two spec-sanctioned routes, neither of
+which touches the overprint rule (§E).** The most likely: **Acrobat is not
+simulating overprint for this file at all.** §8.6.7 (both editions):
+*"If overprinting is not supported, the value of the overprint parameter
+shall be ignored"* — ignoring `/OP` puts the cell in the **`OP false`**
+column (*paint 0.0* / `c_s`), which erases the spot and yields exactly the
+measured white. **Acrobat's `Use Overprint Preview` preference (Page
+Display) defaults to `Only for PDF/X files`**; a patch not recognised as
+PDF/X renders with overprint off by default. Falsifiable and not yet
+falsified: set the preference to `Always` and re-render the same cell — if it
+turns green, the route is confirmed and no pdfce code needs to change. A
+second, independently-sourced route (§E `R2`) — the white object being a
+`/Group`, or under a non-`Normal` blend mode, or a combined fill+stroke —
+would also reach white by Table 149's bottom row (*"a group (not an
+elementary object)"* × *"all colour components"* = `c_s` in **all three**
+columns, `OP true` included) and needs checking independently of `R1`.
+
+**Explicit, and binding on any future session that revisits this cell: do
+NOT "fix" pdfce to match the white.** Doing so would contradict five sourced
+1.7 provisions (four in 2.0) and would break the `Separation`/`DeviceN` rows
+through the same code path — the same shape of scope error already corrected
+once in `OP-A5` (2026-08-31). If `R1` is confirmed, the correct downstream
+action is regenerating the Acrobat reference renders with Overprint Preview
+forced on, not editing `overprint.rs`.
+
+**Consequence for the conformance ledger.** The two remaining traps on
+`PCS 3.0`/`PCS 4.0` (`ROADMAP.md`, 371st filing) were being treated as
+confirmed pdfce defects. At least the spot-preservation half of that reading
+is now suspect — **an operator action (re-generate the Acrobat oracle with
+`Use Overprint Preview` = `Always`) is owed before either trap is diagnosed
+further as a pdfce-side bug.** See `ROADMAP.md` open operator question
+**(cb)**.
+
+**Sourcing.** `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md`,
+UPDATE 2026-09-02, §A–§G (verdict, six supports, the crux-question rejection,
+four candidate readings answered, the two white-routes table, scope-of-
+evidence notes, and the sourcing/extraction method — including that
+`pdftotext -layout` silently drops 2.0 Table 146's cell values, recovered by
+a positional `pdfminer` pass); `iso32000__ref__spot_colour_overprint.md`
+(`OP-N3`, promoted from a settled-row note to the sourced answer to this
+dispatch); `iso32000__ref__ambiguity_settings_register.md` (register entry).
+The empirical half (Acrobat's own preference default and its rendering
+consequence) is filed separately, per the spec RAG's own §F instruction not
+to hold real-world viewer behaviour in the standards corpus:
+`C:\personal_rag\pdf\lesson_20260902_acrobats_overprint_preview_defaults_to_pdfx_only_so_op_true_renders_as_op_false.md`.
+
+**Decision ceiling moves `118` → `119`; next free `120`.** **Standing rules
+ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing.

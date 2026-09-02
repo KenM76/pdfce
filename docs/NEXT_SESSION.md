@@ -13,16 +13,21 @@ commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
 run `python tools/check-ledger-numbers.py`.** As of writing it reports
-highest Pass **229.0**, next rule **R240**, next decision **119**, next
-filing **371**. The tool and the commit log AGREE — every code commit is
-filed, so the next free Pass is **230.0** with no caveat.
+highest Pass **231.0**, next rule **R240**, next decision **120**, next
+filing **373**.
+
+⚠️ **`Pass 232.0` is committed (`86b83f4`) and NOT YET FILED**, so the tool
+reports 231.0 while 232.0 is already used in a commit message. **The next free
+Pass is 233.0.** Verify with `git log --oneline -10` before minting one.
 
 ---
 
-## §0 ACTIVE — the spot-colorant plane, step 3 of ~4: **THE DEPOSIT**
+## §0 ACTIVE — the spot-colorant plane, step 4: **IMAGES, SHADINGS, KNOCKOUT GROUPS**
 
-This is where the first pixel moves. Steps 1 and 2 are in and both were
-**proved to change nothing**; step 3 is what gives them effect.
+Steps 1–3 are in and the pixels have moved: corpus-wide traps **19 → 12**
+across the arc. What remains is the paint routes that still flatten — and
+`Pass 231.0`'s probe extension has since **printed** that they do, rather
+than leaving it an inference.
 
 | step | Pass | commit | state |
 |---|---|---|---|
@@ -31,8 +36,9 @@ This is where the first pixel moves. Steps 1 and 2 are in and both were
 | 3a — the spot-tint READER | 227.0 | `983b438` | in, inert |
 | 3b — the DEPOSIT (ordinary paint path) | 228.0 | `9a18510` | **in, PCS 2.0 7→4 traps** |
 | 3c — the deposit under OVERPRINT | 229.0 | `f97c15b` | in; suite cannot reach it, unit-tested |
+| 3d — the ROUTING fix | 230.0 | `2cf325c` | **in, PCS 3.0 and 4.0 each 3→1 traps** |
+| — the probe can now SEE spot planes | 231.0 | `36291a1` | in; found two routes to one colour |
 | **4 — images, shadings, knockout groups** | — | — | **next** |
-| 4 — images, shadings, knockout groups | — | — | later |
 
 ### Why this is the top item
 
@@ -145,24 +151,52 @@ asked for.
 4. Re-run the conformance sweep. **This is the first step where the numbers
    are allowed to move**, and the two traps to watch are named below.
 
-### ★★ WHERE THE TWO REMAINING TRAPS ACTUALLY ARE — measured 2026-09-02
+### ★★★ DO NOT START BY "FIXING" THE TWO REMAINING TRAPS — read decision 119 first
 
-After `Pass 230.0` each of `PCS 3.0` and `PCS 4.0` is down to **one** trap,
-and they are **different defects**, not one:
+**They may not be pdfce defects at all.** `ARCHITECTURE.md` §12 **decision
+119** and `ROADMAP.md` open operator question **`(cb)`** record an
+adjudication by `pdfce-spec-librarian` against the ISO primaries, 2026-09-02,
+and it went against the assumption this section used to state:
+
+- For *"any process colour space × spot colorant"*, 1.7 Tables 148/149 and
+  2.0 Table 146 **all** answer `c_b` — **do not paint** — under `OP true`, in
+  **both** overprint-mode columns. No edition delta.
+- §11.7.3: *"every object paints every existing colour component, both
+  process and spot … a subtractive tint value of 0.0 shall be assumed"* for
+  anything unspecified. There is no "cannot address" category, so the
+  preserve/knock-out question is **not** a name test on a process source.
+- ⇒ **pdfce's spot-preserving render is the CONFORMING one.** The reference
+  engine's white is most plausibly produced with **overprint simulation off**
+  — Acrobat's `Use Overprint Preview` defaults to *"Only for PDF/X files"* —
+  which §8.6.7 explicitly sanctions: an implementation that does not support
+  overprinting *"shall ignore"* the parameter, putting the cell in the
+  `OP false` column, whose answer is paint `0.0` → white.
+
+★★ **The spec librarian's explicit instruction: do NOT change pdfce to match
+the white.** It would contradict five sourced provisions and would break the
+`Separation`/`DeviceN` rows through the same code path — the same scope error
+that had to be corrected on 2026-08-31.
+
+**The owed action is the OPERATOR's**, and it is question `(cb)`: set
+Acrobat's Overprint Preview to *Always*, re-generate
+`D:/Dev/temp/acro-refs/`, and re-run `tools/suite-check.py`. If the cells turn
+green, both traps were an oracle artefact and the corpus standing improves
+without a line of code.
+
+**Until that is answered, treat both as UNRESOLVED rather than FAILING**, and
+do not spend a Pass on either.
+
+### What was measured about them anyway, which stays useful
 
 - **`PCS 4.0` at `(440,137)`** renders `(142,198,63)` on a white surround.
-  That is the `OverprintZeroTintScope` value named in §D item 4 — and §D now
-  records that flipping the scope makes things **worse**, so this trap is not
-  the setting's fault. It is a real remaining defect on process geometry.
-- **`PCS 3.0` at `(434,136)`** renders the X **green** on a **grey** surround,
-  where the reference shows the whole cell neutral grey. So a paint is
-  depositing spot ink into a cell whose backdrop is CMYK. Per
-  `docs/suite-patch-reference.md` §3's truth table that cell is *"50 % Sep/Black
-  over CMYK"* — and `/Separation /Black` names a PROCESS colorant, which
-  `authored_spots` excludes, so it should deposit **nothing**.
-  ★ Two nearly-identical greens are present inside the box —
-  `(82,115,37)` and `(76,117,31)`, 630 px and 616 px — which suggests two
-  overlapping composites rather than one paint. Start there.
+  §D item 4 records that flipping `OverprintZeroTintScope` makes things
+  **worse**, so it is not the setting's fault either way.
+- **`PCS 3.0` at `(434,136)`** renders the X green on a grey surround. Two
+  nearly-identical greens sit inside the box — `(82,115,37)` and
+  `(76,117,31)` — which `Pass 231.0`'s probe extension has since explained:
+  **the same visible green is reached by two different routes**, one through
+  a spot plane and one through the old flattening. That is step 4's subject,
+  and it is worth fixing regardless of how `(cb)` is answered.
 
 ### ★★ THE TARGET IS NARROWER NOW — MEASURED 2026-09-02, do not start over
 

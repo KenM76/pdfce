@@ -1154,3 +1154,49 @@ channel only for the message; report a mismatch as a corpus defect.** Cost: ~40 
    (iii) API searches by key name *and* phenomenon. **Always include a positive
    control in the annotation sweep** — "zero hits" from a broken script and "zero
    hits" from a clean clause look identical.
+
+---
+
+## 4r. ★★★ A TABLE WHOSE **LABELS** EXTRACT BUT WHOSE **VALUES** ARE BLANK IS A **SYMBOL-FONT** PROBLEM, NOT A DELETION (2026-09-02, ISO 32000-2 Table 146)
+
+**Symptom.** `pdftotext -layout` on ISO 32000-2 §11.7.4.5 produced a table with
+every row label present and **every cell value missing**:
+
+```
+Any process colour Process colour
+space (including component
+other cases of
+DeviceCMYK)          Spot colourant      (= 0.0)
+```
+
+**Cause.** The `c_b` / `c_s` cell values are set in **`CambriaMath`** using
+**Unicode Mathematical Alphanumeric Symbols** (U+1D400 block, e.g. U+1D469) with
+subscript runs. They extract as empty or as unmappable characters.
+
+**★ WHY THIS IS DANGEROUS, NOT MERELY ANNOYING.** The natural cross-edition
+probe is *"grep the value; is it still there?"* Here that returns **0 hits**, and
+the honest-looking conclusion — ***"ISO 32000-2 deleted this row"*** — is
+**FALSE**. The row is present and **identical to 1.7**. This is the standing
+"1→0 count" caution with the **glyphs**, not the sentence, as the casualty.
+
+**Recipe.**
+
+1. Locate the physical PDF page: split the `pdftotext` output on `\f` and index.
+2. `pdfminer.high_level.extract_pages(SRC, page_numbers=[n-1])`, walk `LTChar`.
+3. Bucket by `round(ch.y0 / 3.0)` (merges sub/superscripts into the baseline row),
+   sort each bucket by `ch.x0`, join. Print `x0` of the first glyph so columns are
+   identifiable, and the `fontname` set — **`CambriaMath` in the font set is the
+   tell**.
+4. **Write to a UTF-8 FILE, never to the console** — U+1D469 raises
+   `UnicodeEncodeError` on Windows `cp1252`.
+5. `unicodedata.normalize('NFKC', ch)` folds math italics to ASCII for reading.
+
+Working script kept at `D:/Dev/Rag-Specialized/PDF_Spec/tools/recover_table_cells_positionally.py` -- in the
+PRIVATE spec RAG, not beside this file. It was originally written into
+pdfce's agent-memory, which is a public repository, while hard-coding a path
+to the licensed ISO 32000-2 source.
+
+**Generalise:** blank cells + intact labels ⇒ suspect a math/symbol font before
+concluding anything about the standard's content. Applies to formulae, figure
+callouts and any table of variables. Companion to **4a** (glyph x-positions) and
+**4c-bis** (per-page layout pass).

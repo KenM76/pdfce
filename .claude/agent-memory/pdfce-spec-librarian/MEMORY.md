@@ -11,8 +11,10 @@
 | "get me spec S" / a URL 403s / text extracts wrong | extraction 4a–4q; **4d** (`r.jina.ai`), **4h** (iTeh ISO previews), **4m-i** (Wayback `if_/`), **4m-ii** (etsi.org UA gate) |
 | a table extracts misaligned, split, or fused with a neighbour | extraction **4i** (caption-index-then-slice), **4c-bis** (per-page `pdfminer` layout pass) |
 | a phrase/term count is going into a file | extraction **4b** (whitespace-stripped counting — a raw `grep -c` on a multi-word phrase is a lower bound) |
+| **a TABLE's labels extract but its VALUES are blank** | extraction **4r** — **symbol font (`CambriaMath`), NOT a deletion**; grepping the value returns 0 hits and "the row was deleted" is the false conclusion |
 | a formula, figure or annex looks empty or scrambled | extraction **4a**/**4a-bis**/**4a-sexies** (glyph x-positions, path-drawn symbols), **4c**/**4f** (the figure is a raster) |
 | "is this amended? is there an erratum?" | extraction **4j**/**4k**/**4n**; corpus **63d** (three channels + a positive control) |
+| **"what makes the OTHER implementation right? — here are its pixels"** | corpus **66** (whole item). **66a: THE ORACLE IS A HYPOTHESIS TOO — ask what MODE the reference viewer was in (Acrobat's `Use Overprint Preview` defaults to *Only for PDF/X files*), and name the one-minute falsification. 66d: read the clause that DEFINES the objects, not only the one that USES them. 66e: if the rule is determinate but the pixels disagree, the answer IS a ranked list of ways the rule was not REACHED.** |
 | **"which of these two readings is right? — I narrowed it to one clause"** | corpus **64** (whole item). **64a: transcribe the clause's EXAMPLEs and its summary TABLE — an omitted EXAMPLE is what makes a determinate clause look ambiguous. 64e: grep the ambiguity register FIRST — the question may be a setting pdfce already shipped.** 64c: also answer whether the rule is even REACHED |
 | "does feature F apply inside context C?" | corpus **64d** — three places: C's own clause, a whole-document co-occurrence count, and **C's entry-RESET list read as a CLOSED set** (absence from it = affirmative inheritance) |
 | "the spec is silent on X" | corpus **62c** (an erratum can answer it), **63a** (grade the silence by counting the sentence elsewhere), **63b** (grep the feature name document-wide) |
@@ -29,6 +31,8 @@
 
 - **Bash heredocs break on spec punctuation at file size.** Use `Write` for corpus files and for any multi-line script, then run it.
 - **A cross-edition table shift proven over a RANGE is a measurement with a DOMAIN, not a rule.** `−1` through Table 70, **`−2` by Table 89 and Table 145** — the offset GROWS down the document. Corpus **65f**.
+- **A deleted TABLE whose rule survives verbatim in prose is a RESTATEMENT removed, not a rule removed** (2.0 deleted Table 148; §8.6.7's prose is word-for-word identical across editions and carries the opaque model alone). Say which of the two you measured. Corpus **66f**.
+- **A re-dispatch of an ALREADY-ANSWERED question is still worth real work if it carries a new measurement — PROMOTE the existing entry, don't write a parallel one.** A promotion costs 4 edits and **zero recounts**; a new file costs 5 and moves count cells. Corpus **66b**, **66g**.
 - **A 1→0 phrase count proves the SENTENCE was deleted, never that the RULE was.** 2.0 relocated a rule to another clause in different words while a corpus file wrote "and nothing replaces it" — and its OWN §0 cross-referenced the sibling holding the answer (4th instance of the stranded-finding failure). Before writing "nothing replaces it", grep the CONCEPT in the target edition. Corpus **65g**.
 - **A clause number is not a key across editions** (1.7 §12.6.4.10 = Hide, 2.0 §12.6.4.10 = Movie). Neither is a table number. Corpus **63c**, **52**, **62h**.
 - **A scope-exclusion banner is an untested claim about material its author deliberately did not read.** Corpus **58**.

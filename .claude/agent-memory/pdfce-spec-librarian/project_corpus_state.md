@@ -5211,3 +5211,157 @@ suspected cause, check whether the clause even REACHES the code path** (item 64c
 - **The ambiguity register took four edits**: two new §5 SETTING rows, one §7 out-of-band row, and the clause-10 gap row that had
   named §8.6.5.8 as *"still uningested"*.
 - **`Write` the Python patch script, then run it** — the bash heredoc died on this session's punctuation on the first attempt, again.
+
+---
+
+## 66. ★★ THE **"WHAT MAKES THE OTHER IMPLEMENTATION RIGHT?"** DISPATCH — *a measured Acrobat-vs-pdfce divergence, presented with Acrobat as the ORACLE* (2026-09-02, white `DeviceGray` over a spot colorant under `/OP true`, `iso32000__s__8.6.7.md` UPDATE 2026-09-02)
+
+**Shape.** Excellent dispatch: real measured pixels on both sides, the tint
+transform given, four candidate readings pre-enumerated, and an explicit
+invitation to ingest if the corpus was silent. **But its framing embedded a
+premise — *"So what makes Acrobat right?"* — and the premise was FALSE.** The
+standard is determinate and says the OPPOSITE of the oracle. **pdfce was already
+correct.**
+
+### 66a. ★★★ WHEN A DISPATCH NAMES A REFERENCE IMPLEMENTATION AS THE ORACLE, **THE ORACLE IS A HYPOTHESIS TOO**
+
+Item **61f**/**62** say to treat a dispatch's claim about *pdfce's own code* as a
+hypothesis. **This extends it: a claim about ACROBAT is equally a hypothesis** —
+and it is the more dangerous one, because "Acrobat does X" arrives feeling like a
+measurement rather than an interpretation. It *is* a measurement of pixels; it is
+**not** a measurement of *what Acrobat was asked to do*.
+
+Here: Acrobat's **`Use Overprint Preview` preference defaults to *Only for
+PDF/X files***. On a non-PDF/X file Acrobat **ignores `/OP` entirely** — which
+§8.6.7 expressly licenses (*"If overprinting is not supported, the value of the
+overprint parameter **shall be ignored**"*) — putting the render in the
+**`OP false`** column, which says *"Paint 0.0"* ⇒ spot erased ⇒ **exactly the
+measured pure white**. **The divergence is very likely a VIEWER-MODE artefact,
+not a spec disagreement.**
+
+⇒ **Before accepting "implementation I renders X, so the spec must permit X",
+ask what MODE I was in.** Every serious PDF consumer has preference-gated
+rendering (overprint preview, colour management, output simulation, annotation
+display). **The deliverable included a one-step falsification the engineer can
+run in a minute** (*set Overprint Preview = Always, re-measure*) — **name the
+cheap experiment rather than only rendering a verdict.**
+
+### 66b. ★★ THE DISPATCH'S OWN QUESTION WAS **ALREADY A NAMED CORPUS ENTRY**, WRITTEN FOUR DAYS EARLIER — SECOND INSTANCE
+
+`OP-N3` (filed 2026-08-29 in `iso32000__s__8.6.7.md` §E) states this exact row
+and **explicitly predicted that a grey-over-spot patch is useless for
+discriminating `OP-A5`**, because the plain **overprint parameter** does the work
+there, not overprint **mode**. **This is the same failure as item 64e** (`OP-A5`
+was a shipped pdfce setting the engineer walked into without recognising).
+
+**Carry forward, now twice-confirmed:** grep the corpus — **register AND the
+clause file's own dated UPDATE sections** — for the dispatched question before
+answering it. One `rg "Any process colour space"` surfaced four files instantly.
+**The right deliverable then changes shape:** not *"here is what the spec says"*
+but *"this is `OP-N3`, filed four days ago, and here is the NEW fact your
+dispatch adds"* — which was the Acrobat oracle. **A re-dispatch of an answered
+question is still worth real work if it carries a new measurement; promote the
+existing entry rather than writing a parallel one.**
+
+### 66c. ★★★ `pdftotext` **SILENTLY DROPPED** ISO 32000-2 TABLE 146's CELL VALUES — AND A GREP WOULD HAVE READ THE ROW AS DELETED
+
+The single most reusable extraction finding of the session. 2.0's Table 146
+renders `c_b`/`c_s` in **`CambriaMath`** using **Unicode Mathematical
+Alphanumeric** codepoints (U+1D400 block) with subscripts. `pdftotext -layout`
+emitted the **row labels** and **empty cells**:
+
+```
+Any process colour Process colour
+space (including component
+other cases of
+DeviceCMYK)          Spot colourant      (= 0.0)
+```
+
+**Every value is gone**, leaving only the stray `(= 0.0)`. A reader checking
+"did 2.0 change this row?" by grepping for `c_b` would find **nothing** and could
+write *"2.0 deleted the row"* — a **1→0 count meaning nothing**, exactly the
+standing caution's failure mode in a new disguise (**the glyphs, not the
+sentence, were the casualty**).
+
+**Recovered** with a `pdfminer` `LTChar` pass over the two table pages, bucketing
+by `round(ch.y0/3)` and sorting by `x0`, which reconstructed all 9 rows:
+`Any process colour space × Spot colourant = Cs(=0.0) | Cb | Cb` — **identical
+to 1.7**. **Two console gotchas:** the glyphs raise `UnicodeEncodeError` on the
+`cp1252` Windows console (write to a UTF-8 **file**, do not print), and
+`unicodedata.normalize('NFKC', ch)` folds the math italics to ASCII for reading.
+
+⇒ **Add to the extraction toolbox: when a TABLE's labels extract but its VALUES
+are blank, suspect a math/symbol font, not a deletion.** Script:
+`D:/Dev/Rag-Specialized/PDF_Spec/tools/recover_table_cells_positionally.py` (moved there 2026-09-02: it was left in pdfce's
+agent-memory, which is a PUBLIC repo, and it hard-codes a path to the
+licensed 2.0 source).
+
+### 66d. ★★ THE CRUX WAS A DISTINCTION THE STANDARD **EXPLICITLY REJECTS** — AND THE REFUTING SENTENCE WAS ONE CLAUSE UPSTREAM OF THE ONE DISPATCHED
+
+The dispatch's sharpest question: *does the standard distinguish "colorant not
+**named** in the source space" from "colorant the source space **cannot
+address**"?* It framed this as the crux, and it was — but the answer is **no, and
+in terms**, in **§11.7.3** (one subclause **before** §11.7.4, which the dispatch
+had correctly narrowed to):
+
+> *"In effect, every object paints **every existing colour component, both
+> process and spot**. Where no value has been explicitly specified for a given
+> component in a given object, an additive value of 1.0 (or a **subtractive tint
+> value of 0.0**) shall be assumed."*
+
+⇒ **There is no "cannot address" category.** A `DeviceGray` source **does** paint
+the spot — with tint 0.0. Overprint decides only whether that 0.0 is **written**
+(`OP false`) or **replaced by c_b** (`OP true`).
+
+⇒ **Generalise: when a dispatch asks whether the standard draws distinction D,
+read the clause that DEFINES the objects D is about, not only the clause that
+USES them.** §11.7.4 applies a partition that §11.7.3 establishes; the definition
+site is where a "does the spec distinguish X from Y?" question is answered.
+**Same family as 64a (EXAMPLEs) and 61a/64a (the summary table) — the answer is
+adjacent to the dispatched sentence, not inside it.**
+
+Corollary found the same way: pdfce's internal paraphrase (*"a colorant not named
+in the source colour space is left to the backdrop"*) **lifts a phrase out of the
+`Separation`/`DeviceN` rows**, where *"named in source space"* is the operative
+test, and applies it to a **process**-source row where the test is unconditional.
+**It reaches the correct cell by a wrong route** ⇒ *"fix the comment, not the
+code"* — a genuinely useful thing to be able to tell an engineer.
+
+### 66e. ★ THE REACHABILITY LADDER AGAIN (64c), NOW AS THE **WHOLE** ANSWER
+
+64c said: when a dispatch names a compositing rule, also answer whether the rule
+is **reached**. Here the rule was determinate, **so the entire divergence had to
+live upstream**, and enumerating the upstream gates *was* the deliverable:
+**`R1`** overprint not simulated (→ the `OP false` column); **`R2`** the object is
+a **group**, so the tables' bottom row reverts `CompatibleOverprint` to `Normal`
+*"with no consideration of the overprint and overprint mode parameters"*;
+**`R3`** an `/op` in the same ExtGState dict overriding `/OP` for a **nonstroking**
+paint (Table 58's asymmetric rule + `OP-A3`).
+
+⇒ **When the dispatched rule turns out determinate AND the measurement
+contradicts it, the answer is necessarily a list of ways the rule was not
+reached. Rank them by likelihood and attach a falsification to each.**
+
+### 66f. Grading the supports by edition, again — and a deletion that removes a RESTATEMENT, not a rule
+
+Six supports; **five hold in 1.7, four in 2.0**. The one loss is `OPSP-3`
+(**Table 148**, the opaque-model table, which 2.0 **deleted outright**). **That is
+not a weakening**: §8.6.7's prose (`OPSP-1`) is **word-for-word identical across
+editions** and carries the opaque model alone in 2.0. ⇒ **A deleted table whose
+rule survives verbatim in prose is a restatement removed, not a rule removed** —
+the mirror image of the standing caution (a deleted *sentence* whose *rule*
+survives elsewhere). **State which of the two you measured.**
+
+### 66g. Filing mechanics — a PROMOTION, not a new file, so no count cell moves
+
+Chose a **dated UPDATE to the existing `OP-N3` home** over a new
+`iso32000__ref__*` file, per hard rule 7 (don't duplicate). **Consequence worth
+remembering: a promotion costs FOUR edits and ZERO recounts** — the clause file's
+UPDATE + its frontmatter `keywords`, the consolidator's `OP-N3` row, `index.md`'s
+`OP-N3` row, and the register's `OP-A5` §5.19 note. **No prefix-table count, no
+totals line, no manifest row** (contrast 61h/64h's five-edit new-file path).
+**Prefer promotion when the corpus already names the finding.**
+
+Post-EC3 errata checked with a **positive control** (63d): the clause-11 errata
+page listed **11.3.5 / 11.4.8 / 11.6.5.2 / 11.6.6** and **nothing** for 11.7.x ⇒
+the negative is measured, not un-searched.

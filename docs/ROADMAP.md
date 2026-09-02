@@ -96,6 +96,84 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 372nd filing, 2026-09-02 — `Pass 231.0` (`36291a1`).**
+
+**Sourcing (hard rule 8).** No shell this filing. Full commit body supplied
+verbatim as a scratch file (`D:\Dev\pdfce\.librarian-231.txt`, 63 lines) by
+the engineer, not read via `git log`. Independently cross-checked by
+`Read`/`Grep`: `InkProbe::spots: Vec<(String, f32)>`
+(`crates/pdfce-render/src/font/mod.rs:747`, doc comment `:762-783`) carries
+the same trap-mark measurement the commit quotes verbatim — `c=0 m=0 y=0
+k=0.500` identical at mark and surround while the pixels rendered visibly
+different colours — and the same "answers a different question from the one
+its name asks" framing. The type's own doc comment (`:739-744`) records
+`InkProbe` dropping `Copy` for the reason the commit states: a variable-length
+spot roster forces `Vec` ownership, which cannot be bit-copied; `Clone` is
+kept, and the drop is called out because removing a `Copy` impl is a breaking
+API change (rule 10) even though there is exactly one probe per render. CLI
+formatting (`crates/pdfce-cli/src/main.rs:10710-10730`) appends `
+spots=<name>=<tint>,…` strictly after the stable `c=`/`m=`/`y=`/`k=` fields
+(never interleaved) and emits nothing when `probe.spots` is empty — matching
+the commit's stated 98.6 % figure for pages with no spot roster. No
+`Cargo.toml` change found or mentioned — GUI-core separation not implicated.
+Round-trip/minimal-diff not implicated — diagnostic output only, no
+document-writing code touched. **Not independently re-measured this filing**:
+the "roughly an hour lost" cost figure and the three-probe green finding are
+the engineer's own account, relayed rather than re-run — no shell this
+filing, flagged per hard rule 8.
+
+### Pass 231.0 (`36291a1`, 2026-09-02) — the ink probe reported four channels for a buffer that now has more; its first three probes found the same green painted two different ways on one page
+
+**The defect, and why it is one and not a feature request.** `--probe-ink`
+exists to read the colorant buffer **immediately before** the sRGB
+conversion, so a colour error can be split into its compositing half and its
+conversion half. Since `Pass 225.0` that buffer carries a **variable**
+channel count — the probe kept printing four. Measured cost, 2026-09-02: the
+probe reported a trap mark and its surround as **identical**
+(`c=0 m=0 y=0 k=0.500` at both) while the rendered pixels differed visibly —
+the entire difference lived in a plane the instrument could not see. About an
+hour went into reconciling a "clean" reading against a defect plainly visible
+in the PNG. ⇒ **An instrument that reports a fixed channel count for a
+buffer whose channel count is variable answers a different question from the
+one its name asks — and answers it in the most misleading possible way, by
+looking complete.**
+
+**★ What its first three probes found.** Three pixels on one page, all
+rendering the identical green: two carrying zero process ink and full tint in
+the spot plane (deposited), one carrying the flattened green in CMYK with an
+empty spot plane (bridged). **The same visible colour, produced two different
+ways on the same page.** That some paints deposit into the plane and some
+still flatten was an inference before this line printed it — images,
+shadings and knockout groups are step 4 of the arc, still unshipped — and it
+reframes two near-identical greens seen earlier in a neighbouring patch as
+two routes with marginally different arithmetic rather than one route with an
+artefact.
+
+**Shape of the output.** Appended, never interleaved: the four process
+fields keep their exact positions, so any parser reading this line by
+`c=`/`m=`/`y=`/`k=` is unaffected. Omitted entirely when the page has no spot
+roster — 98.6 % of a 4,023-file corpus — so the common line stays
+byte-identical to what it has always printed. The colorant name is decoded
+**lossily, for display only**: the authoritative key stays the raw bytes
+(§7.3.5 NOTE 4 makes byte-differing names distinct), and every invalid
+sequence maps onto one `U+FFFD`. Bytes to compare, lossy text to show — the
+same split `crate::color::Colorant` already makes.
+
+**`InkProbe` is no longer `Copy`.** A spot roster is variable-length, so the
+struct now owns a `Vec`. Stays `Clone`. Called out rather than slipped in,
+because dropping a `Copy` impl is a breaking change for any consumer relying
+on implicit copies — and there is exactly one probe per render, so nothing
+here is on a hot path.
+
+**Tests:** engineer's report, not independently re-run — no shell this
+filing. **Invariant checks:** GUI-core separation not implicated (no
+`Cargo.toml` change); round-trip/minimal-diff not implicated (diagnostic
+output only). **Packaging smoke test:** not applicable — no packaging change.
+
+**`docs/FEATURES.md`: one row corrected in place.** *Probe the ink at a
+pixel* said the probe reports "the four CMYK colorant tints" only; corrected
+in this filing to name the new `spots=` field.
+
 **★ ONE COMMIT, 371st filing, 2026-09-02 — `Pass 230.0` (`2cf325c`).**
 
 **Sourcing (hard rule 8).** No shell this filing. The full commit body was
@@ -119395,6 +119473,63 @@ name and say NOT BUILT YET) must be updated in the same Pass —
 shape, not the schedule.** No Pass ID assigned.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**★★★ NEW 2026-09-02 (372nd filing) — ONE QUESTION, AND IT NEEDS AN ACROBAT
+INSTALL THIS ROLE HAS NO ACCESS TO. Operator-question ceiling moves
+`(ca)` → `(cb)`, next free `(cc)`:**
+
+- **(cb) Two of the print-conformance suite's remaining traps (`PCS 3.0`,
+  `PCS 4.0`) were being diagnosed as pdfce compositing defects. A spec
+  adjudication (decision **119**, `ARCHITECTURE.md` §12) found that on at
+  least one measured cell, pdfce's render is the CONFORMING one and
+  Acrobat's own reference render is most likely produced with overprint
+  simulation OFF by default. Will you set Acrobat's `Use Overprint Preview`
+  preference (Page Display settings) to `Always` and re-generate the
+  reference renders this project measures against?** *Default if
+  unanswered:* **the two traps stay open, undiagnosed further, and are NOT
+  treated as confirmed pdfce defects** — spending engineering time
+  "fixing" pdfce to match a white that five sourced spec provisions say is
+  wrong would very likely regress the `Separation`/`DeviceN` rows through
+  the identical code path (the same shape of error already corrected once
+  in `OP-A5`, 2026-08-31).
+
+  **What prompted it.** A print-conformance patch cell: a white
+  `DeviceGray` object (`1 g`, `/OP true`) painted over a spot-colorant
+  backdrop. Acrobat's reference render shows pure white (spot knocked
+  out); pdfce renders the spot green, `(142,198,63)` (spot preserved). Six
+  independent spec supports across both ISO 32000 editions agree pdfce's
+  render is correct — see decision 119 and
+  `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md` (UPDATE
+  2026-09-02, §A–§G) for the full derivation.
+
+  **Why this is likely, not certain.** Acrobat's `Use Overprint Preview`
+  preference defaults to `Only for PDF/X files`; §8.6.7 (both editions)
+  says an implementation that does not support/enable overprinting shall
+  **ignore** the parameter, which routes the paint to the `OP false`
+  column — "paint 0.0" — i.e. the measured white. This is the best-
+  supported hypothesis (needs no unusual file structure, matches Acrobat's
+  documented default) but is **not yet independently confirmed** — nobody
+  in this project has re-rendered the cell with the preference flipped.
+
+  **What each answer buys.** **Re-generate the references**: if the trap
+  disappears, both `PCS 3.0` and `PCS 4.0` may turn out to already be
+  passing or much closer to it, and the conformance ledger's "FAIL" count
+  needs re-reading rather than re-diagnosing. **Leave the current
+  references and diagnose anyway**: any further engineering time spent on
+  these two traps risks chasing a discrepancy in the oracle, not the
+  renderer — explicitly the failure mode decision 119 warns against.
+  **Neither** (defer indefinitely): the two traps stay in the "cause not
+  yet diagnosed" bucket in `NEXT_SESSION.md` rather than being promoted to
+  "confirmed defect, fix scheduled."
+
+  **Scope note.** This is *not* a licence or destructive-history question
+  like the neighbouring `(bv)`–`(ca)` entries — it needs an operator who
+  has Acrobat installed and can change a viewer preference, which is
+  outside what any agent in this project can do. See `ARCHITECTURE.md`
+  §12 decision 119 for the full spec sourcing and `NEXT_SESSION.md` for
+  where the diagnosis currently stands.
+
+---
 
 **★★★★★ NEW 2026-09-01 (361st filing) — ONE QUESTION, AND IT IS ABOUT
 PUBLISHED HISTORY, SO IT IS NOT THE ENGINEER'S AND NOT THIS ROLE'S.
