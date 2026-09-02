@@ -507,6 +507,20 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// How many spot colorant planes this canvas's buffer holds, or `0` for
+    /// a canvas that has no colorant buffer at all.
+    ///
+    /// A **read-only** peek, deliberately: its one caller
+    /// (`Interpreter::overprint_would_change`) is a predicate taking
+    /// `&self`, and giving it a `&mut` handle to satisfy a question about
+    /// a count would let a predicate paint.
+    pub(crate) fn spot_plane_count(&self) -> usize {
+        match self {
+            Self::Cmyk(b) => b.spot_plane_count(),
+            _ => 0,
+        }
+    }
+
     /// Refuse the recording, by name, keeping the first reason.
     ///
     /// A no-op in paint mode: a painter has nothing to refuse. Callers can

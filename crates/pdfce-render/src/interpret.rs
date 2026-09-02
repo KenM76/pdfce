@@ -4023,11 +4023,11 @@ impl Interpreter<'_> {
         let op_fill = !skip_paint
             && self.gs.current.text.fills()
             && self.color.paints(false)
-            && self.overprint_would_change(false);
+            && self.overprint_would_change(false, canvas.spot_plane_count());
         let op_stroke = !skip_paint
             && self.gs.current.text.strokes()
             && self.color.paints(true)
-            && self.overprint_would_change(true);
+            && self.overprint_would_change(true, canvas.spot_plane_count());
         if op_fill {
             self.diag.overprint_effective += 1;
         }
@@ -5265,7 +5265,7 @@ impl Interpreter<'_> {
     /// specifies all four components, selects the source for all four, and
     /// is identical to Normal. Counting it would put a large number on
     /// ordinary documents and hide the cases that matter.
-    fn overprint_would_change(&self, stroking: bool) -> bool {
+    fn overprint_would_change(&self, stroking: bool, spot_planes: usize) -> bool {
         let on = if stroking {
             self.gs.current.overprint_stroke
         } else {
@@ -5289,6 +5289,60 @@ impl Interpreter<'_> {
         let (space, comps) = resolved
             .as_ref()
             .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
+        // ★★★ A SPOT PLANE MAKES "OVERPRINT CHANGES NOTHING" FALSE, whatever
+        // the source space says, and this is the second time a shortcut
+        // written for four channels has been falsified by a fifth.
+        //
+        // Every arm below asks *"does this source leave any of the four
+        // PROCESS channels to the backdrop?"* — and answers `false` for a
+        // `DeviceCMYK` source at `OPM 0`, correctly, because such a source
+        // names C, M, Y and K and the blend really does degenerate to
+        // Normal across them.
+        //
+        // It does **not** name the page's spot colorant. Table 149 puts a
+        // colorant the source does not name at the backdrop under `OP true`
+        // in BOTH overprint-mode columns, so an overprinting `0 0 0 .5 k`
+        // over a spot backdrop must leave that spot standing — and routing
+        // it to the ordinary paint path instead **erases the plane**,
+        // because an ordinary paint deposits its own (empty) spot array.
+        //
+        // Measured on `PCS 3.0` before this: the trap X rendered
+        // `(147,149,152)` — 50 % K with the green GONE — inside a cell whose
+        // surround was `(82,115,37)`. The deposit was working; the routing
+        // sent the mark that had to preserve it down the path that cannot.
+        //
+        // Gated on the page actually having a plane, so the 98.6 % of pages
+        // that name no spot colorant reach the identical decision they
+        // always did.
+        //
+        // ★★ AND GATED ON THE SOURCE BEING ONE OVERPRINT APPLIES TO UNDER THE
+        // CONFIGURED SCOPE, which the first cut of this was not — it returned
+        // `true` for every overprinting paint on a page with a plane, and
+        // that made `overprint_zero_tint_scope` DO NOTHING: three of
+        // `grey_overprint`'s tests went red together, one of them by
+        // asserting the widest scope must differ from the narrowest and
+        // getting identical pixels.
+        //
+        // `classify` is asked rather than re-tested — `R221`, ask the
+        // accepting code and never restate its conditions. It is the same
+        // function the `DeviceGray`/`DeviceRgb` arm below consults, and the
+        // scope lives inside it: a grey source is promoted to
+        // `DeviceCmykDirect` under `grey_as_k_only` and left at
+        // `OtherProcess` under `device_cmyk_only`. `OtherProcess` is the
+        // "overprint does not reach this source" answer, so a spot plane
+        // does not rescue it.
+        if spot_planes > 0
+            && matches!(
+                crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope),
+                Some(
+                    crate::overprint::SourceKind::DeviceCmykDirect
+                        | crate::overprint::SourceKind::ProcessCmykIndirect
+                        | crate::overprint::SourceKind::SeparationOrDeviceN { .. }
+                )
+            )
+        {
+            return true;
+        }
         match space {
             crate::color::ColorSpace::DeviceCmyk => {
                 // Mode 1 only: at mode 0 all four components are specified
@@ -8189,12 +8243,16 @@ impl Interpreter<'_> {
         // (fills, strokes, text, images, and shadings)".
         let mut overprint_fill = false;
         let mut overprint_stroke = false;
+        // Read once, before the two predicates: a spot plane on this page
+        // makes "overprint changes nothing" false whatever the source space
+        // says. See `overprint_would_change`.
+        let spot_planes = canvas.spot_plane_count();
         if !skip_paint {
-            if fill && fill_rule.is_some() && self.overprint_would_change(false) {
+            if fill && fill_rule.is_some() && self.overprint_would_change(false, spot_planes) {
                 self.diag.overprint_effective += 1;
                 overprint_fill = true;
             }
-            if stroke && self.overprint_would_change(true) {
+            if stroke && self.overprint_would_change(true, spot_planes) {
                 self.diag.overprint_effective += 1;
                 overprint_stroke = true;
             }
