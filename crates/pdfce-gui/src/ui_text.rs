@@ -2516,11 +2516,6 @@ pub fn setting_page_blend_radius() -> &'static str {
 space. Ordinary screen documents are unaffected either way."
 }
 
-/// The §8.6.7 zero-tint scope, in the operator's terms.
-///
-/// Every string here is written about INK ON PAPER, not about clause numbers.
-/// The operator choosing this is a print buyer looking at a proof that came
-/// back wrong, not somebody reading the standard.
 /// The question this setting answers, in the operator's terms.
 ///
 /// Deliberately about the DOCUMENT and the OUTCOME, never the clause: an
@@ -2573,6 +2568,11 @@ usual setting. Choose this when you are comparing pdfce's picture against \
 another program's and want the two to be answering the same question."
 }
 
+/// The §8.6.7 zero-tint scope, in the operator's terms.
+///
+/// Every string here is written about INK ON PAPER, not about clause numbers.
+/// The operator choosing this is a print buyer looking at a proof that came
+/// back wrong, not somebody reading the standard.
 pub fn setting_grey_overprint_title() -> &'static str {
     "Whether grey knocks out the ink underneath it"
 }

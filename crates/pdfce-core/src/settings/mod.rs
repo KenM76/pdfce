@@ -2788,11 +2788,11 @@ impl Settings {
         out.push_str("# conform, and they differ: a white object overprinting a spot backdrop\n");
         out.push_str("# knocks it out under the first and preserves it under the second.\n");
         out.push_str("#\n");
-        out.push_str("#   simulate_separations          the default -- keep the ink on its own\n");
-        out.push_str("#                                 plate; 8.6.6.4 NOTE 7 and 10.8.3 both\n");
-        out.push_str("#                                 rank this better under overprint\n");
-        out.push_str("#   alternate_space_substitution  render for the actual composite device,\n");
-        out.push_str("#                                 reproducing what a screen viewer shows\n");
+        out.push_str("#   simulate_separations          the default -- keep the ink on its own\n"); // string-gap-exempt: a two-column layout in the settings file itself, aligning each option token with its description; the run of spaces IS the column
+        out.push_str("#                                 plate; 8.6.6.4 NOTE 7 and 10.8.3 both\n"); // string-gap-exempt: a two-column layout in the settings file itself, aligning each option token with its description; the run of spaces IS the column
+        out.push_str("#                                 rank this better under overprint\n"); // string-gap-exempt: a two-column layout in the settings file itself, aligning each option token with its description; the run of spaces IS the column
+        out.push_str("#   alternate_space_substitution  render for the actual composite device,\n"); // string-gap-exempt: a two-column layout in the settings file itself, aligning each option token with its description; the run of spaces IS the column
+        out.push_str("#                                 reproducing what a screen viewer shows\n"); // string-gap-exempt: a two-column layout in the settings file itself, aligning each option token with its description; the run of spaces IS the column
         out.push_str("#\n");
         out.push_str(
             "# Measured on the print-conformance corpus: the default trips 9 trap marks\n",
