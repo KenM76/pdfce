@@ -1,6 +1,6 @@
 ---
 name: a-gate-sweep-certifies-the-tree-it-ran-on
-description: Running all gates green then making more commits ships a red CI — check-commits-filed.py is structurally unable to pass on a code commit made after its own filing
+description: A hand-run check can be weaker than CI's by a gate, a flag or a target set; and check-commits-filed's answer is a property of the current tip, so run it AFTER your last commit
 metadata:
   type: feedback
 ---
@@ -104,6 +104,27 @@ on a healthy tree and success on a violated one. It survived because nothing
 had ever *run* the list — it was read and retyped. Giving a documented list a
 consumer is what turns its errors into red lines.
 
+★★ **FOURTH RECURRENCE, 2026-09-02, and a NEW WAY to hand-run a weaker
+check.** This time the omission was not a missing gate but a missing FLAG:
+I ran `cargo clippy --workspace --all-targets` by hand. **CI runs
+`--all-targets --all-features`**, and the warning lived in a feature-gated
+path, so my run was clean and CI was red. `run-gates.sh` runs the
+`--all-features` form; my retyped one did not.
+
+⇒ The habit is not "type the gate names correctly", it is **do not retype the
+command at all**. A hand-typed invocation can differ from CI's by a gate, by
+a flag, or by a target set — and all three failure modes look identical from
+here: a green local run and a red remote one.
+
+★ **And a fifth, same day, on the ORDERING half:** `check-commits-filed.py`
+DEFERS the tip commit, so it answered `exit=0` — and then committing a
+*different* Pass's filing into the same batch moved the tip, un-deferred the
+code commit behind it, and flipped the gate to `exit=1` between my check and
+my push. **Its answer is a property of the current tip.** So "run it
+immediately before pushing" is not enough: run it **after the last commit you
+intend to push**, never before.
+
 Related: [[feedback_never_bundle_code_into_a_filing_commit]] (the same gate,
 the opposite mistake), [[feedback_gates_i_owe_myself]],
-[[feedback_run_the_projects_own_gates]].
+[[feedback_run_the_projects_own_gates]],
+[[feedback_repo_scoped_gates_run_before_every_push]].
