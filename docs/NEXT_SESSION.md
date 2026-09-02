@@ -186,10 +186,11 @@ function of one scalar.
   across this whole session by construction
   (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir
   D:/Dev/temp/acro-refs`).
-- Backups: last bundle is `pdfce-20260901-1855-faf699a-full.bundle`, which is
-  now **six commits stale**. Refresh with
+- Backups: **current** —
+  `/d/Dev/pdfce-backups/pdfce-20260902-0055-f0a55fe-full.bundle`, verified
+  ("records a complete history"). Refresh after the next batch with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
-  then `git bundle verify`.
+  then `git bundle verify` on it.
 
 ---
 
