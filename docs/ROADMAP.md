@@ -96,6 +96,155 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 379th filing, 2026-09-02 — `Pass 238.0` (`8ce0507`) SHIPS THE IMAGE HALF OF
+THE SPOT-COLORANT PLANE'S STEP 4: `Separation`/`DeviceN` IMAGES (DIRECT OR
+BEHIND `/Indexed`) AND STENCIL MASKS ON AN INK PAGE NOW DEPOSIT ONE PLANE PER
+NAMED SPOT COLORANT, MIRRORING THE FILL RULE `Pass 228.0` SHIPPED. THREE
+FILL-PATH BUGS THE NEW IMAGE ROUTE EXPOSED ARE ALSO FIXED. SHADINGS AND
+KNOCKOUT GROUPS STILL FLATTEN — FILED BELOW AS `Pass 239.0`, *Next up*.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hash, date and
+substance relayed verbatim by the engineer in the dispatch prompt, not
+independently confirmed via `git show`. Conformance-sweep figures
+(`tools/suite-check.py`) reported as measured by the engineer, not
+independently re-run by this role.
+
+### Pass 238.0 (`8ce0507`, 2026-09-02) — the spot-colorant plane, step 4 (image half): images and stencil masks deposit; three fill-path bugs closed
+
+**Origin.** Named in `docs/NEXT_SESSION.md` §0 as the top item ("images,
+shadings, knockout groups") but never separately filed under *Backlog*/*Next
+up* beyond that handoff — filed here after the fact, same convention as
+`Pass 237.0`.
+
+#### 1. Images now carry a spot plane
+
+A `Separation`/`DeviceN` image XObject — direct or behind `/Indexed` —
+deposits one tint plane per named spot colorant instead of being flattened
+into CMYK first: `image::SpotTexel` on a new `OverprintSource::spots`,
+`SpotColorant` alias, `IndexedOverprint::{spot_colorants, spot_entries}`,
+landing in `PixelCmyk::s` through `CmykBuffer::composite_cmyk_image`'s new
+`spots` + `SpotSource` parameters. **All-or-nothing per image**, the same
+rule the fill path already applies — an image never carries flattened ink in
+some pixels and a live plane in others.
+
+#### 2. Stencil masks painted as a fill, not a second implementation
+
+A stencil mask (`/ImageMask true`) on an ink page is now rasterised to a
+coverage mask and sent through the CURRENT FILL's `BrushSpec` —
+`Interpreter::paint_stencil_as_fill` calls
+`cmyk_paint::paint_brush_coverage_into_cmyk` (split out of
+`paint_solid_into_cmyk`) or the overprint route. `paint_overprint` itself was
+split into `overprint_plan` (resolves colour once, a new `OverprintPlan`
+struct) and `overprint_composite` (applies coverage), so a stencil and an
+ordinary path fill of the same colour cannot disagree — they run the same
+code past the plan.
+
+#### 3. Process-space images under `/OP true` leave the spot backdrop alone
+
+Table 149's "any process colour space × spot colorant" row (`c_b` in both
+overprint-mode columns) is now honoured for images: `cmyk_buffer::SpotSource
+::{Paint, Preserve}` lets a process-space image leave every spot plane
+untouched. `overprint_process_images_unsupported` is now **always zero** —
+kept on the metrics line for script stability, documented as permanently
+zero in three places (doc comment, CLI help text, `FEATURES.md`).
+
+#### 4. Supporting plumbing
+
+- `composite_overprint_varying_spots` names spots per sample on the
+  overprint image route (`composite_overprint_varying` now delegates to it
+  for the four-channel case).
+- `overprint::cmyk_group_rules_with_planes(.., spots_plated)` turns OFF the
+  `Pass 195.0` mixed-source widening to `[Source; 4]` once every named spot
+  already has a plane; `cmyk_group_rules` is now defined as
+  `_with_planes(.., false)`. Both the fill route (after plane resolution in
+  `overprint_composite`) and the new image route call the plane-aware form;
+  shadings and meshes still call the un-widened form, because they do not
+  deposit yet.
+- `overprint::spot_lut(space, component, arity, intent)` — one LUT builder
+  now shared by the interpreter's `spot_lut_for` cache and the image
+  decoder, replacing two.
+- `overprint_would_change` routes an `OtherProcess` source through the
+  composite whenever a spot plane exists — the prior exclusion was the
+  flattened representation talking, and `OverprintZeroTintScope`'s own doc
+  comment had predicted this change would eventually be needed.
+
+#### Three fill-path bugs the image path exposed
+
+Each found because an agreement test went red with the **fill** as the wrong
+half, not the new image code:
+
+- `authored_spot_inks` and `process_tints_only` read an `/Indexed` operand as
+  a raw tint instead of resolving the palette entry first (§8.6.6.3) — a
+  fill deposited the palette **index** and built the spot LUT from the
+  `/Indexed` space itself. Two wrongs cancelled on the fill route until an
+  image deposited a genuine tint through the same code and rendered white.
+- The `OtherProcess` exclusion in item 3 above was itself a third bug — the
+  fill route had never exercised it because no suite fill happens to be a
+  process-space paint over a spot backdrop under overprint.
+
+#### Tests and gates
+
+3 new fixtures (`tools/gen-devicen-image-fixtures.py`:
+`duotone2-image-vs-fill-cmyk`, `stencil-spot-vs-fill-cmyk`,
+`duotone2-op-image-over-cmyk-mark`) + 3 tests
+(`crates/pdfce-render/tests/devicen_image_ink.rs`); `rgb_op_over_cmyk.pdf`
+added to `tools/gen-grey-overprint-fixtures.py`. `grey_overprint.rs`:
+`the_literal_reading_knocks_the_spot_out` renamed
+`the_literal_reading_paints_the_process_channels_and_the_spot_survives`
+(expectation flipped, reason recorded in the test itself),
+`a_grey_image_is_never_upgraded_whatever_the_scope` now asserts the spot
+survives, `all_process_spaces_reaches_rgb_and_the_narrower_scopes_do_not`
+moved to the process backdrop, plus a new
+`an_rgb_source_leaves_the_spot_standing_under_every_scope`. `PROVENANCE.md`
+in both fixture directories extended; the two rows whose claim moved are
+struck in place rather than rewritten. Sabotage of both the stencil route
+and the plane-aware group rules caught. `cargo test --workspace` green.
+`tools/run-gates.sh`: PASS, 31 commands. **No `Cargo.toml` touched** — GUI-
+core separation invariant unaffected by construction.
+
+#### Measured on the conformance sweep (`tools/suite-check.py`, 51 patches)
+
+- `PCS 2.0`: 4 traps → 1 (only the shading cell `j` remains — shadings are
+  `Pass 239.0`'s own scope, below).
+- `PCS 3.1` (grey image overprint over a spot backdrop): now renders the
+  patch's own "Correct" reference — the shadow sits on the green.
+- `PCS 8.0` / `PCS 8.1`: both duotone images and both colourised-TIFF images
+  now show their check marks; the gradient bars on the same two patches
+  still fail — those bars are **shadings**, not images.
+- **Headline unchanged at 7 FAIL / 37 pass / 7 unresolved of 51** —
+  numerically flat only because `PCS 8.0` moved from "unjudged" to "one trap
+  remaining, on its own shading bar," not because nothing moved.
+- Against the operator's own eye-list from a multipage render (`2.0
+  c,d,h,i,j`; `3.0 k`; `4.0.1 k`; `3.1`; `8.1`; `8.01`; `13.0 b`; `17.2`):
+  this Pass clears `2.0 c/d/h/i` and `3.1` and the image halves of
+  `8.1`/`8.01`. `2.0 j` and the `8.x` gradient bars are shadings — `Pass
+  239.0`, below. `3.0 k` / `4.0.1 k` are the device-model question (decision
+  119). `13.0 b` / `17.2` are the ICC RGB-image question (`docs
+  /NEXT_SESSION.md` §A items 1–2) — outside this Pass's scope.
+
+#### `docs/FEATURES.md`
+
+*Subtractive (colorant) compositing buffer* row and *Overprint SIMULATION*
+row both amended in place (struck-and-corrected, per hard rule 4): images no
+longer flatten spot colorants; shadings and knockout groups still do. The
+*Per-colorant (n-channel) compositing buffer* Planned row's closing sentence
+corrected a fourth time, narrowing its remaining scope to shadings +
+knockout groups and pointing at `Pass 239.0`. No row moved fully from
+*Planned* to *Implemented* — the capability is still partial.
+
+#### Standing rules — two recurrences, no new mint
+
+`check-public-fns-documented` caught a `//` comment welded between a doc
+block and its item (the doc-block-anchor lesson this project has hit
+before) and `check-string-gaps` caught a wrapped string literal — both on
+the first gate sweep, both fixed before commit. Recorded here as
+recurrences of existing lessons, not new findings.
+
+**Decision ceiling unchanged at `122`; next free `123`. Standing-rules
+ceiling unchanged at `R239`; next free `R240`.**
+
+---
+
 **★★ 378th filing, 2026-09-02 — `Pass 237.0` (`c7a774c`) SHIPS `reorder_annotations`
 (BY ID, NOT INDEX) AND WIDENS `RenderPreset` TO A SEVENTH AXIS, PINNING
 `SimulateSeparations` FOR EVERY PDF/X LEVEL AT TIER `Implied` — NEITHER WAS
@@ -100908,6 +101057,41 @@ in the "still open" list. Full build record: this file's own
 `f79f044..f79d9a2` *Shipped* entry, top of *Shipped*.
 
 ## Next up
+
+### Pass 239.0 — the spot-colorant plane, step 5 (the arc's remainder after `Pass 238.0`'s image half): shadings + knockout-group backdrops deposit spot planes — filed 2026-09-02 (379th filing), NOT STARTED
+
+**Origin.** The named remainder of `Pass 238.0` (above, *Shipped*) and of
+`docs/NEXT_SESSION.md` §0's step 4 ("images, shadings, knockout groups") —
+the image and stencil-mask halves shipped as `Pass 238.0`; this is what is
+still owed.
+
+**Scope:**
+
+- **Axial/radial shadings (types 2–3) first.** `ColorRamp::at_cmyk`
+  (`Pass 122.6`) already carries native CMYK samples per ramp step — extend
+  it to carry a spot-plane sample the same way the image path just gained
+  one.
+- **Mesh shadings (types 4–7) next.** Per-vertex colour, native ink already
+  lands via `Pass 137.1` — extend per-vertex colour resolution to spot
+  planes.
+- **Both shading routes need the deposit**: the overprint route
+  (`composite_overprint_varying_spots`, new this Pass) and the `Pass 137.0`
+  native-ink (non-overprint) route — a shading can reach either, and only
+  one currently has any spot-plane awareness to extend.
+- **Knockout groups' initial backdrop** needs to carry `s` (the spot planes)
+  alongside the four process planes it already snapshots — see *Implemented
+  → Subtractive (colorant) compositing buffer*'s own note that a knockout
+  group holds a full copy of its initial backdrop.
+- `overprint::names_a_process_colorant`'s spot-only refusal on the shading
+  route becomes UNNECESSARY once shading planes exist — the same shape as
+  the image refusal `Pass 238.0` narrowed away. Predicted here so it is not
+  re-derived as a fresh finding when it happens.
+
+**Acceptance.** `PCS 2.0` cell `j` and the `PCS 8.0`/`8.1` gradient bars are
+the conformance-sweep targets `Pass 238.0`'s own measurement named as still
+failing for exactly this reason (see *Shipped*, `Pass 238.0`).
+
+---
 
 > ★★★ **`Pass 184.0` SHIPPED and has left this section, 2026-08-30 (346th
 > filing).** It sat here through the 345th filing while only criterion A was

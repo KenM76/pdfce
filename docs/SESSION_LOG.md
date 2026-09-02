@@ -86537,3 +86537,107 @@ answered.
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (379th filing) — `Pass 238.0` (`8ce0507`) SHIPPED — the spot-colorant plane, step 4's IMAGE HALF: `Separation`/`DeviceN` images and stencil masks now deposit one plane per named spot colorant, mirroring the fill rule; three fill-path bugs the new route exposed are fixed; shadings and knockout groups still flatten — filed as `Pass 239.0`, *Next up*
+
+**Sourcing.** No shell this filing. Commit hash, date and substance relayed
+verbatim by the engineer in the dispatch prompt, not read via `git show`.
+Conformance-sweep figures (`tools/suite-check.py`, 51 patches) reported as
+measured by the engineer, not independently re-run by this role.
+
+**Shipped:**
+- `Pass 238.0` (`8ce0507`) — `image::SpotTexel` on a new
+  `OverprintSource::spots`, `SpotColorant` alias,
+  `IndexedOverprint::{spot_colorants, spot_entries}`, deposited into
+  `PixelCmyk::s` through `CmykBuffer::composite_cmyk_image`'s new `spots` +
+  `SpotSource` params. All-or-nothing per image, mirroring the fill rule
+  `Pass 228.0` shipped.
+- Same Pass — stencil masks on an ink page painted as a FILL of the current
+  colour: `Interpreter::paint_stencil_as_fill` rasterises the stencil to a
+  coverage mask and routes it through `cmyk_paint::paint_brush_coverage_
+  into_cmyk` (split out of `paint_solid_into_cmyk`) or the overprint route.
+  `paint_overprint` split into `overprint_plan` (colour, new `OverprintPlan`
+  struct) + `overprint_composite` (coverage), so a stencil and a path fill
+  cannot disagree — same code past the plan.
+- Same Pass — process-space images under `/OP true` on an ink page now
+  leave every spot plane to the backdrop (`SpotSource::{Paint, Preserve}`,
+  Table 149's "any process colour space × spot colorant" row).
+  `overprint_process_images_unsupported` is now always zero, kept on the
+  metrics line for script stability.
+- Supporting: `composite_overprint_varying_spots` (image overprint route
+  names spots per sample); `overprint::cmyk_group_rules_with_planes(..,
+  spots_plated)` turns off the `Pass 195.0` mixed-source widening once
+  every named spot has a plane, on both the fill and image routes (shadings
+  still call the un-widened form); `overprint::spot_lut(..)` — one LUT
+  builder now shared by the interpreter's cache and the image decoder;
+  `overprint_would_change` now routes `OtherProcess` sources through the
+  composite when a spot plane exists.
+- Three FILL-path bugs the new image path exposed and fixed:
+  `authored_spot_inks` and `process_tints_only` read an `/Indexed` operand
+  as a raw tint instead of resolving the palette entry (§8.6.6.3) — a fill
+  deposited the INDEX and built the spot LUT from the `/Indexed` space,
+  two wrongs cancelling until an image deposited a true tint and rendered
+  white; and the `OtherProcess` exclusion above.
+- Tests: 3 new fixtures (`tools/gen-devicen-image-fixtures.py`) + 3 tests
+  (`crates/pdfce-render/tests/devicen_image_ink.rs`); `rgb_op_over_cmyk.pdf`
+  in `tools/gen-grey-overprint-fixtures.py`; `grey_overprint.rs` gained one
+  renamed test (expectation flipped, reason recorded) and one new test;
+  `PROVENANCE.md` extended in both fixture directories. Sabotage of the
+  stencil route and the plane-aware rules both caught. `cargo test
+  --workspace` green; `tools/run-gates.sh` PASS, 31 commands. **No
+  `Cargo.toml` touched.**
+
+**Findings + decisions:**
+- No new architectural decision this filing — the Pass extends step 3b/3c's
+  already-decided design (per-colorant lazy planes, decision 118) to a new
+  paint route rather than deciding anything fresh.
+- Two standing-rule RECURRENCES, no new mint: `check-public-fns-documented`
+  caught a `//` comment welded between a doc block and its item (the
+  doc-block-anchor lesson this project has hit before); `check-string-gaps`
+  caught a wrapped string literal. Both on the first gate sweep, both fixed
+  before commit.
+
+**Measured on the conformance sweep (`tools/suite-check.py`, 51 patches):**
+- `PCS 2.0`: 4 traps → 1 (only the shading cell `j` remains).
+- `PCS 3.1` (grey image overprint over spot): now renders the patch's own
+  "Correct" reference.
+- `PCS 8.0` / `8.1`: both duotone images and both colourised-TIFF images
+  show their check marks; the gradient bars on the same patches still fail
+  (shadings, not images).
+- Headline unchanged at 7 FAIL / 37 pass / 7 unresolved of 51 — flat only
+  because `PCS 8.0` moved from unjudged to "one trap on its shading bar,"
+  not because nothing moved.
+- Operator's own eye-list (`2.0 c,d,h,i,j`; `3.0 k`; `4.0.1 k`; `3.1`;
+  `8.1`; `8.01`; `13.0 b`; `17.2`): this Pass clears `2.0 c/d/h/i`, `3.1`,
+  and the image halves of `8.1`/`8.01`. `2.0 j` and the `8.x` gradient bars
+  are shadings — `Pass 239.0`. `3.0 k`/`4.0.1 k` are the device-model
+  question (decision 119, closed). `13.0 b`/`17.2` are the ICC RGB-image
+  question (`docs/NEXT_SESSION.md` §A items 1–2) — outside this Pass.
+
+**`docs/FEATURES.md`:** *Subtractive (colorant) compositing buffer* and
+*Overprint SIMULATION* rows amended in place (struck-and-corrected): images
+no longer flatten spot colorants, shadings and knockout groups still do.
+*Per-colorant (n-channel) compositing buffer* (Planned) corrected a fourth
+time, narrowed to shadings + knockout groups, pointing at `Pass 239.0`. No
+row moved fully Planned → Implemented — the capability is still partial.
+
+**`ROADMAP.md`:** `Pass 238.0` filed to *Shipped* (top); `Pass 239.0` filed
+to *Next up* (shadings types 2–3 then 4–7, on both the overprint and native-
+ink shading routes, plus knockout groups' initial backdrop carrying `s`;
+notes that `names_a_process_colorant`'s shading-route refusal becomes
+unnecessary once shading planes exist, same shape as the image refusal this
+Pass narrowed).
+
+**`C:\personal_rag\pdf\`:** nothing added — the findings are about pdfce's
+own compositing routes, not producer behaviour.
+
+**Still in flight:**
+- `Pass 239.0` — shadings (types 2–3 then 4–7) and knockout-group backdrops
+  still flatten every spot colorant. Not started.
+- `docs/NEXT_SESSION.md` is stale (predates `Pass 233.0`–`237.0`) — this
+  role does not own it (engineer-owned handoff, outside the five storage
+  tiers) but it is worth the engineer's own overwrite pass.
+
+**For next session:**
+- Backup/push state not independently checked by this role, no shell this
+  filing.
