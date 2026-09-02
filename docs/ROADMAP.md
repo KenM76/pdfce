@@ -96,6 +96,66 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★★ 383rd filing, 2026-09-02 — ONE COMMIT (`9228cad`), NO PASS: THE
+382nd FILING'S OWN FIX LOOKED AT WHICHEVER COMMIT SAT AT THE TIP OF
+`origin/main`, AND THE VERY NEXT PUSH (ITS OWN FILING COMMIT) PUT A CODE
+COMMIT ON THAT TIP — REFUSING `v0.22.0` AGAIN AN HOUR AFTER ACCEPTING
+IT. `verify-release.py` NOW WALKS THE RANGE INSTEAD OF READING A POINT
+IN IT.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hash, the
+change it makes, and the post-fix measurement are relayed verbatim by
+the engineer in the dispatch prompt, not independently confirmed via
+`git show`/`git log`. Not pushed as of this filing — pushed together
+with this filing's own commit, per standing practice.
+
+### `9228cad` — a descendant search that reads the current tip is still reading a moving target
+
+`b5f5554` (382nd filing, directly below) fixed `tools/verify-release.py`
+to accept a green CI run at a docs-only descendant of the tag on
+`origin/main` when the tag itself had none — but it looked at whichever
+commit sat at the tip of `origin/main` when the script ran, not at a
+specific descendant chosen by walking the range. The 382nd filing's own
+push landed its own filing commit on top of the already-accepted
+descendant `26a0b20`; that filing commit is itself a `tools/` change —
+a code prefix — so the new tip of `origin/main` differed from the tag
+in code, and the just-fixed check refused `v0.22.0` again, inside the
+hour, on the same release it had just cleared.
+
+**Fix.** `tools/verify-release.py` now runs `git rev-list --reverse
+<tag>..origin/main`, walks the range from the tag forward accumulating
+the diff at each step, stops at the first descendant whose cumulative
+diff from the tag touches a code prefix (`crates/ tools/ fixtures/
+.github/ fuzz/`), and uses the **newest docs-only descendant before
+that stopping point that has a CI run** — a specific commit selected by
+walking the range, never whichever commit happens to be the tip when
+the script is invoked.
+
+**Verified against `v0.22.0` itself, not reasoned about.** Re-run:
+picks `26a0b20` (9 non-code files changed from the tag) — the same
+descendant the 382nd filing's fix found, now found by walking the range
+instead of reading the tip — CI GREEN there, every other check ok. The
+only non-clean line was "working tree clean," and only because this fix
+itself sat uncommitted at measurement time.
+
+**Standing rules.** Recorded as a further instance under `R217`'s
+amendment chain (eighth note, below in *Standing rules*), not a new
+rule: the same shape the seventh note names — an instrument reading a
+property of a moving tip — recurred in the very fix that note
+describes, one push later.
+
+`docs/FEATURES.md`: untouched — a release-gate fix, not a capability.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | unchanged — no Pass ships from this filing |
+| Decisions | ceiling `123`, next free `124` | unchanged |
+| Standing rules | ceiling `R239`, next free `R240` | unchanged — `R217` gains an eighth amendment note, no new number |
+
+---
+
 **★★ 382nd filing, 2026-09-02 — ONE COMMIT (`b5f5554`), NO PASS:
 `verify-release.py`'S CI CHECK NOW ACCEPTS A GREEN RUN AT A DOCS-ONLY
 DESCENDANT OF THE TAG ON `origin/main` WHEN THE TAG ITSELF HAS NO
@@ -135587,6 +135647,39 @@ same cause (hashes exist only at commit time), two different failure modes.
   > restated at a second instrument that had independently reinvented the
   > unsatisfiable join. **Ceiling unaffected: rules `R239`, next free
   > `R240`; decisions `123`, next free `124`.**
+
+  > **★ EIGHTH AMENDMENT NOTE, 2026-09-02, 383rd filing (`9228cad`) — THE
+  > SEVENTH NOTE'S OWN FIX READ WHICHEVER COMMIT SAT AT THE TIP OF
+  > `origin/main`, WHICH IS THE SAME MOVING-TARGET SHAPE THIS RULE NAMES —
+  > FOUND ONE PUSH LATER, IN THE FIX ITSELF. NO NEW NUMBER;
+  > `tools/verify-release.py` WALKS THE RANGE NOW INSTEAD OF READING A
+  > POINT IN IT.**
+  >
+  > The seventh note's fix accepted a CI run at "a descendant on
+  > `origin/main`" without pinning which one when the range contains
+  > more than one commit — in practice it read whatever sat at the tip
+  > at measurement time. The 382nd filing's own push landed its filing
+  > commit (`b5f5554`, itself a `tools/` change) on top of the
+  > already-accepted docs-only descendant `26a0b20`; the new tip
+  > differed from the tag in a code prefix, and the check refused
+  > `v0.22.0` again, inside the hour, on the same release the seventh
+  > note had just cleared.
+  >
+  > **The fix walks the range instead of reading a single point in it.**
+  > `git rev-list --reverse <tag>..origin/main`, accumulating the diff at
+  > each step from the tag; stop at the first descendant whose
+  > cumulative diff touches a code prefix (`crates/ tools/ fixtures/
+  > .github/ fuzz/`); use the newest docs-only descendant *before* that
+  > point that has a CI run — a commit selected by walking the range,
+  > never whichever commit happens to sit at the tip when the script
+  > runs. Verified against `v0.22.0` again: same descendant found
+  > (`26a0b20`), CI green, every other check ok.
+  >
+  > **No new rule number** — this is `R217`'s own subject, the
+  > position-dependence of a tip-reading instrument, restated a second
+  > time in the same instrument that reinvented it a note ago. **Ceiling
+  > unaffected: rules `R239`, next free `R240`; decisions `123`, next
+  > free `124`.**
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 

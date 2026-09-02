@@ -86898,3 +86898,70 @@ amendment note appended under *Standing rules*.
   together, per the working order `R217`'s own family describes.
   Backup/push state for anything beyond that not independently checked
   by this role beyond the bundle noted above.
+
+## 2026-09-02 (383rd filing) — `verify-release.py`'s own fix from the 382nd filing read the tip of `origin/main` alone, and the very next push put a code commit on it, refusing `v0.22.0` an hour after accepting it; now walks the full range
+
+**Shipped:**
+- No new Pass. `9228cad` — `b5f5554` (382nd filing) fixed the CI check to
+  accept a green run at a docs-only descendant of the tag on
+  `origin/main` when the tag itself had none, but the fix looked at
+  whatever commit happened to sit at the tip when the script ran,
+  rather than at a specific, named descendant. The 382nd filing's own
+  push landed its filing commit on top of the already-accepted
+  descendant `26a0b20` — and that filing commit is itself a `tools/`
+  change, a code prefix — so the new tip of `origin/main` differed from
+  the tag in code, and the just-fixed check refused `v0.22.0` again,
+  inside the hour, on the same release it had just cleared. Fixed:
+  `tools/verify-release.py` now runs `git rev-list --reverse
+  <tag>..origin/main`, walks the range from the tag forward
+  accumulating the diff at each step, stops at the first descendant
+  whose cumulative diff touches a code prefix (`crates/ tools/
+  fixtures/ .github/ fuzz/`), and uses the newest docs-only descendant
+  *before* that stopping point that has a CI run — a specific commit
+  chosen by walking the range, not whichever commit happens to be the
+  tip at measurement time.
+
+**Decisions made this session:**
+- None. Second release-gate fix in a row on the same script; no
+  `ARCHITECTURE.md` §12 entry.
+
+**Findings + decisions:**
+- **`verify-release.py v0.22.0`, re-run after this fix: every check ok**
+  — same descendant found (`26a0b20`, 9 non-code files changed from the
+  tag), CI GREEN there, tag pushed and found on origin, `origin/main`
+  contains the tag, CLI `0.22.0` on OneDrive slot `pdfce1`, previous
+  `0.21.0` still on `pdfce2`. The only non-clean line at measurement
+  time was "working tree clean," and only because this fix itself sat
+  uncommitted.
+- **The shape is the same one the 382nd filing's own seventh `R217`
+  amendment note names — an instrument reading a property of a moving
+  tip — recurring in the very fix that note describes, one push later.**
+  Nothing about the underlying release changed between the two
+  filings; only the tip that the script happened to read did. `R217`
+  given an **eighth amendment note** (`ROADMAP.md`, *Standing rules*)
+  rather than a new number, for the same reason the seventh note was
+  not a new number: the fix belongs at the instrument, not at the rule.
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather
+  than inferred.
+
+**`docs/FEATURES.md`:** untouched — a release-gate fix, not a
+capability.
+
+**`ROADMAP.md`:** new top *Shipped* entry for `9228cad`; `R217`'s
+eighth amendment note appended under *Standing rules*, directly below
+the seventh.
+
+**Still in flight:**
+- The build-provenance-banner literal correction flagged by the 381st
+  filing (three sites: two in `crates/`, one in `docs/FEATURES.md`) —
+  still owed to the engineer; unrelated to this filing and not touched
+  by it.
+
+**For next session:**
+- This commit (`9228cad`) and this filing's own commit are pushed
+  together, per the working order `R217`'s own family describes. Given
+  that this is the **second** fix to the same script's CI check inside
+  one release cycle, worth a look next session at whether a third
+  moving-target shape is still lurking in it before relying on it
+  unattended for the next tag.
