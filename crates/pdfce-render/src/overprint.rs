@@ -588,6 +588,96 @@ pub fn authored_tints(kind: &SourceKind, comps: &[f32]) -> Option<[f32; 4]> {
     }
 }
 
+/// The SPOT colorants a source states, with their tints — the half
+/// [`authored_tints`] deliberately drops.
+///
+/// # ★★ What this is for, and why it is a separate function
+///
+/// [`authored_tints`] answers Table 149's question: *"which of the four
+/// PROCESS channels did this source state a tint into?"* A spot colorant
+/// has no process channel, so a `Separation /PANTONE 265 C` answers
+/// `[0, 0, 0, 0]` there — correctly, and the tint is **discarded**.
+///
+/// That discard is exactly right for overprint's process-channel
+/// arithmetic and exactly wrong for a per-colorant buffer, where the spot
+/// tint is the thing being carried. This function returns what the other
+/// one throws away. The two are deliberately not merged: they answer
+/// different questions and one of them is Table 149's, which must not
+/// acquire a spot dimension by accident.
+///
+/// # The identity rules, all three of which come from §8.6.6.4
+///
+/// - **`/None` never appears.** *"Painting operations in a `Separation`
+///   space with this colorant name shall have no effect on the current
+///   page"* — so it has no ink, and a plane for it would be a plane that
+///   must never be painted. Excluded here rather than suppressed later.
+/// - **`/All` never appears either**, and this is the subtle one. It
+///   *"shall refer collectively to all colorants available on an output
+///   device"* and applies its tint *"to all available colorants at once"*.
+///   That is a **broadcast**, not a colorant: it belongs in every plane
+///   including ones not yet allocated, and giving it a plane of its own
+///   would make it one ink among many — the opposite of what it means.
+///   [`authored_tints`] already broadcasts it across the four process
+///   channels; broadcasting it across spot planes is step 4's problem and
+///   is **not** silently half-done here.
+/// - **A name that IS a process colorant is not a spot.** `/Cyan`,
+///   `/Magenta`, `/Yellow`, `/Black` (case-folded, a documented pdfce
+///   choice) already have channels, and §8.6.6.5's `NChannel` rule makes
+///   the point normatively: components *"shall be evaluated
+///   individually … only the ones **not present on the output device**
+///   shall use the alternate colour space"*. A simulated CMYK device has
+///   those four.
+///
+/// # Returns
+///
+/// Pairs of `(colorant name bytes, tint)`, in the order the space
+/// declares its components, for every component that is a spot. Empty for
+/// every process space, which is the 98.6 % case in a 4,023-file corpus —
+/// so the allocation is skipped entirely there.
+///
+/// The name is borrowed from `kind`, not cloned: the caller either looks
+/// it up in an existing roster (no allocation) or hands it to
+/// `CmykBuffer::spot_index`, which clones once on the transition.
+///
+/// A component with no corresponding operand is skipped rather than
+/// defaulted — a `DeviceN` naming three colorants and supplied two
+/// operands is malformed, and inventing a tint for the third would paint
+/// ink the document never asked for.
+#[must_use]
+pub fn authored_spots<'a>(kind: &'a SourceKind, comps: &[f32]) -> Vec<(&'a [u8], f32)> {
+    let SourceKind::SeparationOrDeviceN { names } = kind else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, colorant) in names.iter().enumerate() {
+        let Some(&tint) = comps.get(i) else { break };
+        // `/All` and `/None` are handled by NOT being here; see the docs.
+        if let crate::color::Colorant::Named(name) = colorant
+            && process_channel(name).is_none()
+        {
+            out.push((&**name, tint));
+        }
+    }
+    out
+}
+
+/// Whether `kind` states a tint into at least one SPOT colorant.
+///
+/// A cheap pre-test for the paint path, which wants to skip the whole
+/// spot-plane apparatus on the overwhelming majority of sources. Kept
+/// beside [`authored_spots`] so the two cannot disagree about what counts
+/// as a spot — a predicate that drifts from the function it guards is a
+/// paint that silently stops depositing.
+#[must_use]
+pub fn names_a_spot_colorant(kind: &SourceKind) -> bool {
+    let SourceKind::SeparationOrDeviceN { names } = kind else {
+        return false;
+    };
+    names.iter().any(|colorant| {
+        matches!(colorant, crate::color::Colorant::Named(name) if process_channel(name).is_none())
+    })
+}
+
 /// Classify a [`ColorSpace`] into its Table 149 row.
 ///
 /// `in_image_sample` distinguishes the two `DeviceCMYK` rows: the standard
@@ -1953,5 +2043,197 @@ mod tests {
             "Zero ERASES the backdrop; reporting it as preserved would invert the \
              disclosure the operator reads",
         );
+    }
+
+    // -----------------------------------------------------------------
+    // `authored_spots` — the half `authored_tints` drops (`Pass 227.0`)
+    // -----------------------------------------------------------------
+
+    /// Would catch: a spot colorant's tint being dropped, which is the
+    /// state of affairs this function exists to end.
+    ///
+    /// The companion assertion is the point: `authored_tints` must STILL
+    /// answer all-zero for the same input. The two functions split one
+    /// source between them and neither may start answering the other's
+    /// question — Table 149's process arithmetic acquiring a spot
+    /// dimension by accident is a spec deviation, not a fix.
+    #[test]
+    fn a_separation_states_its_spot_tint_and_no_process_tint() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::Named(b"PANTONE 265 C".as_slice().into())],
+        };
+        assert_eq!(
+            authored_spots(&src, &[0.5]),
+            vec![(&b"PANTONE 265 C"[..], 0.5)]
+        );
+        assert_eq!(
+            authored_tints(&src, &[0.5]),
+            Some([0.0, 0.0, 0.0, 0.0]),
+            "the process half must be unchanged -- a spot states no process tint"
+        );
+    }
+
+    /// Would catch: a mixed `DeviceN` handing its process component to the
+    /// spot path or its spot component to the process path.
+    ///
+    /// ★ This is the exact shape of the backdrop in the patch this work
+    /// targets: `/DeviceN [/Black <spot>] /DeviceCMYK` filled `0.5 1 scn`.
+    /// Black is a process channel and must go to `authored_tints`; the
+    /// spot has no channel and must come out here. Getting the split wrong
+    /// is what smears a spot across C/M/Y.
+    #[test]
+    fn a_mixed_devicen_splits_its_components_between_the_two_readers() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![
+                Colorant::Named(b"Black".as_slice().into()),
+                Colorant::Named(b"Suite Green".as_slice().into()),
+            ],
+        };
+        assert_eq!(
+            authored_spots(&src, &[0.5, 1.0]),
+            vec![(&b"Suite Green"[..], 1.0)],
+            "only the component with no process channel"
+        );
+        assert_eq!(
+            authored_tints(&src, &[0.5, 1.0]),
+            Some([0.0, 0.0, 0.0, 0.5]),
+            "Black is a PROCESS channel and stays on the process side"
+        );
+    }
+
+    /// Would catch: `/None` being given an ink plane.
+    ///
+    /// §8.6.6.4: painting in a `Separation` space with this colorant name
+    /// *"shall have no effect on the current page"*. A plane for it would
+    /// be a plane that must never be painted — excluded here rather than
+    /// suppressed downstream, so no later code has to remember.
+    #[test]
+    fn the_none_colorant_never_becomes_a_plane() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::None],
+        };
+        assert!(authored_spots(&src, &[1.0]).is_empty());
+        assert!(!names_a_spot_colorant(&src));
+    }
+
+    /// Would catch: `/All` being given a plane of its own, which would
+    /// make a BROADCAST into one ink among many — the opposite of what it
+    /// means.
+    ///
+    /// §8.6.6.4 says `/All` *"shall refer collectively to all colorants
+    /// available on an output device"* and applies its tint *"to all
+    /// available colorants at once"*. `authored_tints` already broadcasts
+    /// it across the four process channels; broadcasting it across spot
+    /// planes is later work and must not be half-done by accident here.
+    #[test]
+    fn the_all_colorant_is_a_broadcast_not_a_plane() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::All],
+        };
+        assert!(
+            authored_spots(&src, &[0.75]).is_empty(),
+            "/All must not acquire a plane"
+        );
+        assert!(!names_a_spot_colorant(&src));
+        // ...and the existing broadcast across process channels is intact.
+        assert_eq!(authored_tints(&src, &[0.75]), Some([0.75; 4]));
+    }
+
+    /// Would catch: the process-colorant test losing its case folding, or
+    /// gaining it for non-ASCII.
+    ///
+    /// The folding is a pdfce CHOICE (`SEP-A1`: the standard defines no
+    /// matching rule), and it is ASCII-only so it cannot fold two distinct
+    /// non-ASCII names together. Pinned here because this function and
+    /// `authored_tints` must agree about what "is a process colorant"
+    /// means — a component counted by both, or by neither, is ink
+    /// duplicated or ink lost.
+    #[test]
+    fn process_colorant_names_fold_in_ascii_only() {
+        for spelling in [&b"black"[..], b"Black", b"BLACK", b"bLaCk"] {
+            let src = SourceKind::SeparationOrDeviceN {
+                names: vec![Colorant::Named(spelling.into())],
+            };
+            assert!(
+                authored_spots(&src, &[1.0]).is_empty(),
+                "{} is a process colorant however it is spelled",
+                String::from_utf8_lossy(spelling)
+            );
+        }
+        // A name that merely CONTAINS a process name is its own colorant.
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![Colorant::Named(b"Blackcurrant".as_slice().into())],
+        };
+        assert_eq!(
+            authored_spots(&src, &[1.0]),
+            vec![(&b"Blackcurrant"[..], 1.0)]
+        );
+    }
+
+    /// Would catch: a missing operand being defaulted to a tint, which
+    /// would paint ink the document never asked for.
+    ///
+    /// A `DeviceN` naming three colorants and supplied two operands is
+    /// malformed. §8.6.6.5 states no recovery, so the honest response is
+    /// to carry what was stated and stop — not to invent the rest.
+    #[test]
+    fn a_component_with_no_operand_is_skipped_not_defaulted() {
+        let src = SourceKind::SeparationOrDeviceN {
+            names: vec![
+                Colorant::Named(b"one".as_slice().into()),
+                Colorant::Named(b"two".as_slice().into()),
+                Colorant::Named(b"three".as_slice().into()),
+            ],
+        };
+        assert_eq!(
+            authored_spots(&src, &[0.25, 0.5]),
+            vec![(&b"one"[..], 0.25), (&b"two"[..], 0.5)],
+            "two operands, two colorants -- the third is not invented"
+        );
+    }
+
+    /// Would catch: a process space being walked for spots at all, which
+    /// is the 98.6 % case in a 4,023-file corpus and must cost nothing.
+    #[test]
+    fn a_process_space_states_no_spots() {
+        for kind in [
+            SourceKind::DeviceCmykDirect,
+            SourceKind::ProcessCmykIndirect,
+            SourceKind::OtherProcess,
+            SourceKind::Group,
+        ] {
+            assert!(authored_spots(&kind, &[0.1, 0.2, 0.3, 0.4]).is_empty());
+            assert!(!names_a_spot_colorant(&kind));
+        }
+    }
+
+    /// Would catch: the cheap predicate drifting from the function it
+    /// guards — a paint that silently stops depositing.
+    #[test]
+    fn the_predicate_agrees_with_the_function_it_guards() {
+        let cases = [
+            vec![Colorant::Named(b"spot".as_slice().into())],
+            vec![Colorant::Named(b"Cyan".as_slice().into())],
+            vec![Colorant::All],
+            vec![Colorant::None],
+            vec![
+                Colorant::Named(b"Black".as_slice().into()),
+                Colorant::Named(b"spot".as_slice().into()),
+            ],
+            vec![],
+        ];
+        for names in cases {
+            let src = SourceKind::SeparationOrDeviceN {
+                names: names.clone(),
+            };
+            // Enough operands that no component is skipped for want of one,
+            // so the two can only disagree about what COUNTS as a spot.
+            let comps = vec![1.0_f32; names.len()];
+            assert_eq!(
+                names_a_spot_colorant(&src),
+                !authored_spots(&src, &comps).is_empty(),
+                "predicate and function disagree for {names:?}"
+            );
+        }
     }
 }
