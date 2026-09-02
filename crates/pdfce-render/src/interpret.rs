@@ -488,9 +488,11 @@ pub struct Diagnostics {
     /// **What is still missing**, and why this counter is not a success
     /// measure: the four PROCESS colorants survive, and a spot colorant
     /// painted by a PATH FILL (`Pass 228.0`), a STENCIL MASK or a SAMPLED
-    /// IMAGE (`Pass 238.0`) keeps a plane of its own and is left standing
-    /// the way a press leaves it — but a spot painted by a SHADING still
-    /// flattens through its tint transform and cannot be. That half is
+    /// IMAGE (`Pass 238.0`), an axial/radial/function SHADING or a shading
+    /// PATTERN (`Pass 239.0`) keeps a plane of its own and is left standing
+    /// the way a press leaves it, through transparency and knockout groups
+    /// too — but a spot painted by a MESH shading (types 4–7) still
+    /// flattens through its tint transform and cannot be. That corner is
     /// owed.
     ///
     /// ★ Said "a SPOT colorant has no plane of its own" unconditionally
@@ -4948,6 +4950,25 @@ impl Interpreter<'_> {
                 self.policy.overprint_zero_tint_scope,
             );
             let mut painted_natively = false;
+            // ★★ THE SPOT PLANES (`Pass 239.0`). Resolve every spot colorant
+            // the ramp names to a plane, all or nothing, under the
+            // separation-simulation model only -- the same gate the fill and
+            // image paths apply. Empty means "paint the flattened ink as
+            // before"; full means the ramp's authored process tints go to
+            // the process channels and each spot to its own plane.
+            let simulate = matches!(
+                self.policy.spot_colorant_device_model,
+                pdfce_core::settings::SpotColorantDeviceModel::SimulateSeparations
+            );
+            let spot_planes: Vec<usize> = match shading.ramp.as_ref() {
+                Some(ramp) if simulate && !ramp.spot_colorants().is_empty() => {
+                    crate::overprint::resolve_spot_planes(buf, ramp.spot_colorants())
+                }
+                _ => Vec::new(),
+            };
+            let spots_plated = shading.ramp.as_ref().is_some_and(|r| {
+                !r.spot_colorants().is_empty() && spot_planes.len() == r.spot_colorants().len()
+            });
             // ★ ONLY a Separation/DeviceN source may take this route, and the
             // exclusion is a correctness guard rather than caution. Table
             // 149's `DeviceCmykDirect` row under `/OPM 1` is the one
@@ -4964,12 +4985,16 @@ impl Interpreter<'_> {
                 // Rules ONCE, not per pixel: for this source kind Table 149
                 // selects on the colorant NAMES alone. See
                 // `composite_overprint_varying` for why that is a property of
-                // the source kind and not a shortcut.
-                let mut rules = crate::overprint::cmyk_group_rules(
+                // the source kind and not a shortcut. Told whether the spots
+                // are plated, so the mixed-source widening below is off when
+                // the spot has somewhere of its own to go
+                // (`cmyk_group_rules_with_planes`, `Pass 238.0`).
+                let mut rules = crate::overprint::cmyk_group_rules_with_planes(
                     &kind,
                     [0.0; 4],
                     true,
                     u8::from(self.gs.current.overprint_mode == 1),
+                    spots_plated,
                 );
 
                 // ★★★ NARROW A MIXED SOURCE TO THE CHANNELS THIS SHADING
@@ -5038,7 +5063,10 @@ impl Interpreter<'_> {
                 // The marks on that patch need the per-spot-colorant plane,
                 // as the paragraph above said. This note exists so the next
                 // reader spends the ablation on something else.
-                if crate::overprint::names_unplatable_spot(&kind) {
+                // ★ With planes there is nothing to narrow: the rules above
+                // are the table's own, and the spot's ink is not in the
+                // ramp's process channels at all (`Pass 239.0`).
+                if !spots_plated && crate::overprint::names_unplatable_spot(&kind) {
                     let reach = shading
                         .ramp
                         .as_ref()
@@ -5108,14 +5136,20 @@ impl Interpreter<'_> {
                 // (135,125,178) -> (144,194,74), against Acrobat's
                 // (127,124,162) -> (134,195,52). Page mean |diff| 38.75 ->
                 // 34.14.
-                if !crate::overprint::names_a_process_colorant(&kind) {
+                // ★ `Pass 239.0`: the refusal stays for the PLANE-LESS case
+                // only. With a plane, a spot-only shading preserving all four
+                // process channels while writing its own plane is exactly
+                // what a press does -- the bar this comment describes now
+                // paints, in its own ink, over the check marks it used to
+                // erase or vanish beneath.
+                if !spots_plated && !crate::overprint::names_a_process_colorant(&kind) {
                     // Refused, and SAID SO. Without the counter this looks
                     // identical to a shading that had nothing to paint — which
                     // is precisely how the original defect stayed invisible
                     // with every counter reading green.
                     self.diag.overprint_shadings_unsupported += 1;
                 } else if shading
-                    .paint_cmyk(to_target, region, clip, alpha, rules, buf)
+                    .paint_cmyk(to_target, region, clip, alpha, rules, &spot_planes, buf)
                     .is_some()
                 {
                     self.diag.shading.painted += 1;
@@ -5208,6 +5242,7 @@ impl Interpreter<'_> {
                         clip,
                         alpha,
                         [crate::overprint::ComponentRule::Source; 4],
+                        &spot_planes,
                         buf,
                     )
                     .is_some()
@@ -6850,10 +6885,84 @@ impl Interpreter<'_> {
             self.gs.current.fill_alpha
         };
         canvas.refuse(PoisonReason::Shading);
-        // Bridged for the same reason the `sh` operator is: the ramp is
-        // already sRGB by the time it is sampled. See that site.
+        let op = if stroking {
+            self.gs.current.overprint_stroke
+        } else {
+            self.gs.current.overprint_fill
+        };
         if let Some(buf) = canvas.cmyk_mut() {
             let (w, h) = (buf.width(), buf.height());
+            // ★★ THE NATIVE INK ROUTE FOR A SHADING PATTERN (`Pass 239.0`).
+            // A pattern fill bridged through sRGB for pdfce's whole life --
+            // `sh` gained its native routes in `Pass 122.6` and `137.0` and
+            // this site, which shares the painter, never did. The print-
+            // conformance suite's "shading" cells are pattern fills, and the
+            // spot one stayed an X after every other cell on its patch went
+            // clean. Same painter, same rules, same planes as `sh`; the mask
+            // (path × clip) is the clip.
+            let simulate = matches!(
+                self.policy.spot_colorant_device_model,
+                pdfce_core::settings::SpotColorantDeviceModel::SimulateSeparations
+            );
+            let spot_planes: Vec<usize> = match shading.ramp.as_ref() {
+                Some(ramp) if simulate && !ramp.spot_colorants().is_empty() => {
+                    crate::overprint::resolve_spot_planes(buf, ramp.spot_colorants())
+                }
+                _ => Vec::new(),
+            };
+            let spots_plated = shading.ramp.as_ref().is_some_and(|r| {
+                !r.spot_colorants().is_empty() && spot_planes.len() == r.spot_colorants().len()
+            });
+            let kind = crate::overprint::classify(
+                &shading.color_space,
+                false,
+                self.policy.overprint_zero_tint_scope,
+            );
+            if shading.has_colorants() {
+                // Overprint applies only to a `Separation`/`DeviceN` source
+                // here, for the value-dependence reason the `sh` route gives;
+                // every other source under `/OP` keeps the bridge below and
+                // its disclosure. Without overprint every rule is `Source`.
+                let rules = match (&kind, op) {
+                    (Some(k @ crate::overprint::SourceKind::SeparationOrDeviceN { .. }), true) => {
+                        Some(crate::overprint::cmyk_group_rules_with_planes(
+                            k,
+                            [0.0; 4],
+                            true,
+                            u8::from(self.gs.current.overprint_mode == 1),
+                            spots_plated,
+                        ))
+                    }
+                    (_, false) => Some([crate::overprint::ComponentRule::Source; 4]),
+                    _ => None,
+                };
+                if let Some(rules) = rules
+                    && (spots_plated
+                        || !op
+                        || kind
+                            .as_ref()
+                            .is_some_and(crate::overprint::names_a_process_colorant))
+                    && shading
+                        .paint_cmyk(
+                            to_target,
+                            region,
+                            Some(&mask),
+                            alpha,
+                            rules,
+                            &spot_planes,
+                            buf,
+                        )
+                        .is_some()
+                {
+                    self.diag.shading.painted += 1;
+                    if op {
+                        self.diag.overprint_composited += 1;
+                    }
+                    return true;
+                }
+            }
+            // Bridged for the same reason the `sh` operator's last resort
+            // is: the ramp is already sRGB by the time it is sampled.
             let Some(mut scratch) = tiny_skia::Pixmap::new(w, h) else {
                 self.diag.color.patterns_unpainted += 1;
                 return false;
@@ -6862,6 +6971,9 @@ impl Interpreter<'_> {
                 .paint(to_target, region, Some(&mask), alpha, &mut scratch)
                 .is_some()
             {
+                if op {
+                    self.diag.overprint_shadings_unsupported += 1;
+                }
                 buf.composite_srgb(
                     &scratch,
                     clamp_region(region, w, h),

@@ -690,7 +690,26 @@ def main():
         sim = reference_similarity(png) if ref_style else None
         ref_sim = None
         eng = None
-        if marks:
+        if marks and mark_style:
+            # ★★ A MARK-CRITERION PATCH IS NEVER SCORED BY THE CROSS DETECTOR
+            # (2026-09-02, `Pass 239.0`). A check mark IS two diagonal strokes,
+            # so on a patch whose pass condition is "green check marks appear"
+            # the diagonal-energy detector fires on the very marks that mean
+            # success. Measured on PCS 8.1 after its spot planes landed: pdfce's
+            # render trips 4 "traps" -- all of them check marks and the
+            # duotone's fin edge -- while the reference engine's render of the
+            # same patch trips 0 at a slightly different contrast, and the two
+            # renders are indistinguishable by eye. Before this Pass the same
+            # patch DID draw real crosses and the detector counted them, which
+            # is why the FAIL looked earned: the instrument was right for the
+            # wrong reason, then wrong for the same reason.
+            #
+            # So: the count is reported, and the verdict is the one this
+            # harness already uses for a criterion it cannot detect. NOT a
+            # pass -- the operator still has to look -- and NOT a FAIL, because
+            # a diagonal stroke on this patch is not evidence of anything.
+            verdict = "MARK?"
+        elif marks:
             verdict = "X"
             # THE SAME HONESTY GUARD THE STRIP COMPARISON ALREADY HAS, applied
             # to the trap detector, which had none.

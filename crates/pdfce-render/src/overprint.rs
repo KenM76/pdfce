@@ -145,6 +145,36 @@
 use crate::color::{ColorSpace, Colorant};
 use pdfce_core::settings::{CmykIntent, OverprintZeroTintScope};
 
+/// A spot colorant's name and its tint curve — the pair a plane is
+/// allocated from (`Pass 238.0`). Shared by the image decoder and the
+/// shading ramp so the two carry identical shapes into `spot_index`.
+pub(crate) type SpotColorant = (
+    std::sync::Arc<[u8]>,
+    std::sync::Arc<crate::cmyk_buffer::SpotLut>,
+);
+
+/// Resolve every colorant in `colorants` to a plane, all or nothing.
+///
+/// The all-or-nothing rule is the fill path's: a spot's ink reaches the page
+/// by its plane OR flattened into the process channels, never both, so a
+/// caller that gets an empty `Vec` back paints flattened exactly as before
+/// and one that gets a full one deposits every spot. `spot_index` runs each
+/// closure only on the colorant's first allocation on the page.
+#[must_use]
+pub(crate) fn resolve_spot_planes(
+    buf: &mut crate::cmyk_buffer::CmykBuffer,
+    colorants: &[SpotColorant],
+) -> Vec<usize> {
+    let mut planes = Vec::with_capacity(colorants.len());
+    for (name, lut) in colorants {
+        match buf.spot_index(name, || (**lut).clone()) {
+            Some(plane) => planes.push(plane),
+            None => return Vec::new(),
+        }
+    }
+    planes
+}
+
 /// One spot colorant's tint curve — the colorant ALONE on white paper,
 /// sampled across `0..=1` through the space's own tint transform.
 ///

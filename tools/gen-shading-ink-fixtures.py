@@ -240,9 +240,97 @@ def overprint_spot_only() -> bytes:
     ])
 
 
+# ---------------------------------------------------------------------------
+# Pass 239.0 -- a SPOT shading deposits its colorant into its own plane, and
+# so does a shading PATTERN, exactly as a fill of the same tint does.
+# ---------------------------------------------------------------------------
+#
+# Same oracle as `build`: the same authored colour drawn twice on one page --
+# a flat `/Separation` fill on the left, a constant-colour axial shading (or a
+# shading pattern) of the same `/Separation` at the same tint on the right. A
+# correct renderer paints them the same colour. Before this Pass the shading
+# flattened its spot through the tint transform into C/M/Y while the fill
+# beside it kept the spot on its own plane, and the two collapsed to sRGB by
+# different arithmetic: measured 6-9 levels apart.
+#
+# The spot ink is a saturated green (the tint transform below) so that the
+# two routes have somewhere to disagree -- a neutral would barely move.
+SPOT_TINT = b"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0.9 0.0 0.75 0.1] /N 1 >>"
+SPOT_T = b"0.6"
+
+
+def spot_shading(*, pattern: bool, over_k: bool = False) -> bytes:
+    """A `/Separation` fill beside a `/Separation` shading of one tint.
+
+    `pattern=False` draws the shading with `sh` inside a clip; `pattern=True`
+    fills the same rectangle with a `/PatternType 2` shading pattern -- the
+    route the print-conformance suite's "shading" cells actually use, and
+    the one that bridged through sRGB for pdfce's whole life while `sh` had
+    native ink routes since `Pass 122.6`.
+    """
+    # ★ `over_k`: the DISCRIMINATING geometry. On white paper a deposited spot
+    # and a flattened one collapse to the same sRGB by construction -- the
+    # plane's curve is sampled through the very conversion the flattened route
+    # takes -- so a plain agreement test cannot tell the two apart (a sabotage
+    # that refused every shading its planes left it green). Over a `0 0 0 0.5 k`
+    # mark with `/OP true` they separate: the deposited spot leaves the K
+    # standing (Table 149, spot source x process colorant => c_b), the
+    # flattened one is a spot-only source the native route refuses, paints
+    # normally, and knocks the K out. The fill beside it deposits, so
+    # agreement now means "the shading took the same route".
+    gs = b"/GSop gs " if over_k else b""
+    under = (
+        b"q 0 0 0 0.5 k 10 20 80 60 re f 110 20 80 60 re f Q\n" if over_k else b""
+    )
+    if pattern:
+        right = b"q " + gs + b"/Pattern cs /P0 scn 110 20 80 60 re f Q\n"
+        resources = (
+            b"/Resources << /ColorSpace << /Cs0 6 0 R >> "
+            b"/ExtGState << /GSop 10 0 R >> "
+            b"/Pattern << /P0 8 0 R >> /Shading << /Sh0 5 0 R >> >> "
+        )
+    else:
+        right = b"q " + gs + b"110 20 80 60 re W n /Sh0 sh Q\n"
+        resources = (
+            b"/Resources << /ColorSpace << /Cs0 6 0 R >> "
+            b"/ExtGState << /GSop 10 0 R >> "
+            b"/Shading << /Sh0 5 0 R >> >> "
+        )
+    content = (
+        under
+        + b"q " + gs + b"/Cs0 cs " + SPOT_T + b" scn 10 20 80 60 re f Q\n"
+        + right
+    )
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] "
+        b"/Group << /S /Transparency /CS /DeviceCMYK >> "
+        + resources + b"/Contents 4 0 R >>",
+        stream(b"", content),
+        # Axial, in the /Separation, constant tint across the rectangle.
+        b"<< /ShadingType 2 /ColorSpace 6 0 R /Coords [110 0 190 0] "
+        b"/Function 7 0 R /Extend [true true] >>",
+        b"[/Separation /SpotGreen /DeviceCMYK 9 0 R]",
+        # The SHADING's function: t -> the one tint, at both ends.
+        b"<< /FunctionType 2 /Domain [0 1] /C0 [" + SPOT_T + b"] /C1 ["
+        + SPOT_T + b"] /N 1 >>",
+        # The shading pattern wrapping the same shading (identity matrix).
+        b"<< /PatternType 2 /Shading 5 0 R >>",
+        # The colour space's tint transform.
+        SPOT_TINT,
+        b"<< /Type /ExtGState /OP true /op true /OPM 1 >>",
+    ]
+    return assemble(objects)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, data in {
+        "spot-shading-vs-fill-cmyk.pdf": spot_shading(pattern=False),
+        "spot-pattern-vs-fill-cmyk.pdf": spot_shading(pattern=True),
+        "spot-shading-op-over-k-vs-fill.pdf": spot_shading(pattern=False, over_k=True),
+        "spot-pattern-op-over-k-vs-fill.pdf": spot_shading(pattern=True, over_k=True),
         "shading-vs-fill-cmyk.pdf": build(subtractive=True),
         "shading-vs-fill-rgb.pdf": build(subtractive=False),
         "shading-overprint-mixed-spot-keeps-k.pdf": overprint_mixed(True),

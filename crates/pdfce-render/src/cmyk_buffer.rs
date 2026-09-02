@@ -201,6 +201,11 @@ use crate::compositor::{
 struct KnockoutPlanes {
     /// The group's initial backdrop colorants, `[C, M, Y, K]`.
     initial: [Vec<Chan>; 4],
+    /// The group's initial backdrop SPOT tints, one plane per entry of the
+    /// buffer's roster at the moment the group began (`Pass 239.0`). A
+    /// plane allocated later in the group has no entry here and reads as
+    /// `0.0` — "no ink of this colorant" was exactly true of the backdrop.
+    initial_spots: Vec<Vec<Chan>>,
     /// The group's initial backdrop alpha, `α_0`.
     initial_alpha: Vec<Chan>,
     /// `α_gi` — the group's own accumulated alpha, excluding the backdrop.
@@ -332,6 +337,27 @@ pub(crate) struct SpotPlane {
     pub(crate) tint: Vec<Chan>,
     /// This colorant's appearance, sampled once at plane-allocation time.
     pub(crate) lut: SpotLut,
+}
+
+/// Re-index a pixel's spot tints from a child buffer's roster into a
+/// parent's, through the map [`CmykBuffer::spot_map_from`] built. A plane
+/// with no parent slot contributes nothing; a parent slot no child plane
+/// maps to stays `0.0`, which is the correct tint of a colorant the child
+/// never painted.
+#[inline]
+fn remap_spots(
+    child: [Chan; crate::compositor::MAX_SPOTS],
+    map: &[Option<usize>],
+) -> [Chan; crate::compositor::MAX_SPOTS] {
+    let mut out = [0.0; crate::compositor::MAX_SPOTS];
+    for (from, to) in map.iter().enumerate() {
+        if let (Some(to), Some(tint)) = (to, child.get(from))
+            && let Some(slot) = out.get_mut(*to)
+        {
+            *slot = *tint;
+        }
+    }
+    out
 }
 
 /// Entries in a [`SpotLut`].
@@ -1875,6 +1901,40 @@ impl CmykBuffer {
         }
     }
 
+    /// Map every plane of `child`'s roster onto a plane of this buffer's,
+    /// BY COLORANT NAME, allocating here on first sight (`Pass 239.0`).
+    ///
+    /// # ★ Why a merge cannot copy spot planes by index
+    ///
+    /// A child buffer starts with the roster it was given — empty for an
+    /// isolated group, the parent's at that moment for a knockout or
+    /// non-isolated one — and allocates further planes in the order ITS
+    /// content names colorants. The parent allocates in the order the page
+    /// names them. So plane 0 of a child can be a colorant the parent holds
+    /// at plane 2, or does not hold at all. Merging by index would put the
+    /// child's ink in the wrong colorant, or — through `set_pixel`'s
+    /// surplus-dropping zip — nowhere, silently. Before this existed every
+    /// spot painted inside a transparency group on an ink page took one of
+    /// those two routes.
+    ///
+    /// A child colorant the parent cannot give a plane (roster cap, byte
+    /// ceiling) maps to `None`: its ink is dropped at the merge and counted
+    /// in `spots_flattened`, the same refusal counter every other route
+    /// increments, so the loss is disclosed rather than silent.
+    fn spot_map_from(&mut self, child: &Self) -> Vec<Option<usize>> {
+        child
+            .spots
+            .iter()
+            .map(|plane| {
+                let index = self.spot_index(&plane.colorant, || plane.lut.clone());
+                if index.is_none() {
+                    self.spots_flattened += 1;
+                }
+                index
+            })
+            .collect()
+    }
+
     /// Composite a child buffer's **result** into this one as a single
     /// object — §11.4.5.
     ///
@@ -1909,6 +1969,7 @@ impl CmykBuffer {
         debug_assert_eq!(child.width, self.width);
         debug_assert_eq!(child.height, self.height);
         let alpha = alpha.clamp(0.0, 1.0);
+        let map = self.spot_map_from(child);
         // ★ ONLY WHERE THE CHILD WAS ACTUALLY PAINTED. A group's result is
         // transparent everywhere else by construction, and
         // `composite_element_cmyk` of a transparent source is the identity
@@ -1926,6 +1987,7 @@ impl CmykBuffer {
                 if source.a <= 0.0 {
                     continue;
                 }
+                source.s = remap_spots(source.s, &map);
                 // A group's result has shape too, and it is the group's own
                 // `f_g` rather than its alpha. `alpha` here is §11.4.5's outer
                 // constant opacity, which scales `α` and leaves shape alone —
@@ -2136,11 +2198,29 @@ impl CmykBuffer {
             // `backdrop_present` test normally means we never get here.
             return Some(child);
         };
+        // The roster too (`Pass 239.0`): the backdrop a non-isolated group
+        // sees includes its spot ink, and a child that started with an
+        // empty roster showed the group a backdrop with every spot missing.
+        // Cloned whole rather than per-rectangle because a roster is small
+        // (at most `MAX_SPOTS` names and curves); the tints are copied over
+        // the dirty rectangle like the process planes.
+        child.spots = self
+            .spots
+            .iter()
+            .map(|p| SpotPlane {
+                colorant: p.colorant.clone(),
+                tint: vec![0.0; p.tint.len()],
+                lut: p.lut.clone(),
+            })
+            .collect();
         for y in y0..y1 {
             let row = (y * self.width) as usize;
             let (a, b) = (row + x0 as usize, row + x1 as usize);
             for plane in 0..4 {
                 child.planes[plane][a..b].copy_from_slice(&self.planes[plane][a..b]);
+            }
+            for (dst, src) in child.spots.iter_mut().zip(self.spots.iter()) {
+                dst.tint[a..b].copy_from_slice(&src.tint[a..b]);
             }
             child.alpha[a..b].copy_from_slice(&self.alpha[a..b]);
         }
@@ -2205,6 +2285,7 @@ impl CmykBuffer {
         let Some((x0, y0, x1, y1)) = iso.dirty_region() else {
             return 0;
         };
+        let map = self.spot_map_from(nis);
         self.mark_dirty((x0, y0, x1, y1));
         let mut changed = 0_u32;
         for y in y0..y1 {
@@ -2215,8 +2296,29 @@ impl CmykBuffer {
                     continue;
                 }
                 let backdrop = self.pixel(idx);
-                let over = nis.pixel(idx);
+                let mut over = nis.pixel(idx);
+                // The child's spot planes in THIS buffer's index space, so
+                // the removal below subtracts the right backdrop plane from
+                // the right group plane (`Pass 239.0`).
+                over.s = remap_spots(over.s, &map);
                 let c = remove_backdrop_cmyk(over, backdrop, agn);
+                // §11.4.4's removal is per component, and a spot plane is a
+                // component: the same formula, applied to each plane the
+                // group carried. `remove_backdrop_cmyk` is left on its four
+                // channels rather than widened, because its tests pin that
+                // arithmetic and the spot arm is one line.
+                let mut s = [0.0; crate::compositor::MAX_SPOTS];
+                {
+                    let a0 = backdrop.a.clamp(0.0, 1.0);
+                    let k = if a0 <= 0.0 {
+                        0.0
+                    } else {
+                        a0.mul_add(-1.0, a0 / agn)
+                    };
+                    for (i, slot) in s.iter_mut().enumerate() {
+                        *slot = k.mul_add(over.s[i] - backdrop.s[i], over.s[i]);
+                    }
+                }
                 let m = mask.map_or(1.0, |d| d.get(idx).map_or(1.0, |v| Chan::from(*v) / 255.0));
                 // Shape is the group's own `f_g`, unscaled by the outer
                 // constant alpha -- §11.4.5 scales alpha and leaves shape
@@ -2225,7 +2327,7 @@ impl CmykBuffer {
                 // bug the moment this buffer ever is one.
                 let source = PixelCmyk {
                     c,
-                    s: [0.0; crate::compositor::MAX_SPOTS],
+                    s,
                     a: agn * alpha * m,
                 };
                 if self.composite_at(idx, source, agn, blend) {
@@ -2261,9 +2363,18 @@ impl CmykBuffer {
                 for plane in &mut child.planes {
                     plane[a..b].fill(0.0);
                 }
+                for plane in &mut child.spots {
+                    plane.tint[a..b].fill(0.0);
+                }
                 child.alpha[a..b].fill(0.0);
             }
         }
+        // The roster goes too (`Pass 239.0`): the next group starts with
+        // the roster IT is given, and a child handed back with planes still
+        // named would hand the next group a roster it never asked for --
+        // with the spot ink cleared above, but with indices that no longer
+        // mean what the merge assumes.
+        child.spots.clear();
         child.dirty = None;
         child.knockout = None;
         child.bridged = 0;
@@ -2356,11 +2467,21 @@ impl CmykBuffer {
         // each one.
         self.planes = initial.planes.clone();
         self.alpha = initial.alpha.clone();
+        // ★ And the backdrop's SPOT planes, roster and all (`Pass 239.0`).
+        // Until this the accumulator started with the backdrop's four
+        // process planes and an EMPTY roster, so a spot beneath a knockout
+        // group was gone before the group's first element — the "knockout
+        // groups drop spot ink" approximation `NEXT_SESSION.md` named.
+        // Cloning the roster also aligns the child's plane indices with the
+        // parent's, which the name-mapped merge no longer depends on but
+        // which keeps the common case a straight copy.
+        self.spots = initial.spots.clone();
         // The accumulator STARTS as the backdrop, so everything the
         // backdrop touched is already written here.
         self.dirty = initial.dirty;
         self.knockout = Some(Box::new(KnockoutPlanes {
             initial: initial.planes.clone(),
+            initial_spots: initial.spots.iter().map(|p| p.tint.clone()).collect(),
             initial_alpha: initial.alpha.clone(),
             group_alpha: vec![0.0; n],
             group_shape: vec![0.0; n],
@@ -2404,6 +2525,10 @@ impl CmykBuffer {
         }) {
             let ag = ko.group_alpha[idx];
             let accum = self.pixel(idx);
+            let mut s0 = [0.0; crate::compositor::MAX_SPOTS];
+            for (slot, plane) in s0.iter_mut().zip(ko.initial_spots.iter()) {
+                *slot = plane[idx];
+            }
             let initial = PixelCmyk {
                 c: [
                     ko.initial[0][idx],
@@ -2411,18 +2536,28 @@ impl CmykBuffer {
                     ko.initial[2][idx],
                     ko.initial[3][idx],
                 ],
-                s: [0.0; crate::compositor::MAX_SPOTS],
+                s: s0,
                 a: ko.initial_alpha[idx],
             };
             let c = remove_backdrop_cmyk(accum, initial, ag);
-            self.set_pixel(
-                idx,
-                PixelCmyk {
-                    c,
-                    s: [0.0; crate::compositor::MAX_SPOTS],
-                    a: ag,
-                },
-            );
+            // §11.4.4's removal on the spot planes too (`Pass 239.0`): the
+            // same `C_n + (C_n − C_0)·(α_0/α_gn − α_0)`, per plane. This
+            // wrote `[0.0; MAX_SPOTS]` until then and threw away every spot
+            // the group's elements had carried.
+            let mut s = [0.0; crate::compositor::MAX_SPOTS];
+            {
+                let a0 = initial.a.clamp(0.0, 1.0);
+                let agn = ag.clamp(0.0, 1.0);
+                let k = if a0 <= 0.0 || agn <= 0.0 {
+                    0.0
+                } else {
+                    a0.mul_add(-1.0, a0 / agn)
+                };
+                for (i, slot) in s.iter_mut().enumerate() {
+                    *slot = k.mul_add(accum.s[i] - initial.s[i], accum.s[i]);
+                }
+            }
+            self.set_pixel(idx, PixelCmyk { c, s, a: ag });
         }
         self
     }
@@ -2459,6 +2594,10 @@ impl CmykBuffer {
     ) -> bool {
         let before = self.pixel(idx);
         let after = if let Some(ko) = self.knockout.as_deref_mut() {
+            let mut s0 = [0.0; crate::compositor::MAX_SPOTS];
+            for (slot, plane) in s0.iter_mut().zip(ko.initial_spots.iter()) {
+                *slot = plane[idx];
+            }
             let initial = PixelCmyk {
                 c: [
                     ko.initial[0][idx],
@@ -2466,7 +2605,7 @@ impl CmykBuffer {
                     ko.initial[2][idx],
                     ko.initial[3][idx],
                 ],
-                s: [0.0; crate::compositor::MAX_SPOTS],
+                s: s0,
                 a: ko.initial_alpha[idx],
             };
             let (px, ag) = composite_element_knockout_cmyk(

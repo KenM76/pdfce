@@ -12204,12 +12204,14 @@ overprint_process_images_unsupported={}",
         // same numbers four lines up). Third occurrence of the shape;
         // recorded because a stale comment is the half nobody re-reads.
         //
-        // What IS still approximate, and it is NARROWER since `Pass 228.0`
-        // and narrower again since `Pass 238.0`: the four PROCESS colorants
-        // are preserved, and a spot colorant painted by a PATH FILL, a
-        // STENCIL MASK or a SAMPLED IMAGE keeps a plane of its own. A spot
-        // painted by a SHADING still goes through its tint transform and
-        // cannot be left standing the way a press leaves it.
+        // What IS still approximate, and it is NARROWER since `Pass 228.0`,
+        // `238.0` and `239.0`: the four PROCESS colorants are preserved, and
+        // a spot colorant painted by a PATH FILL, a STENCIL MASK, a SAMPLED
+        // IMAGE, an axial/radial/function SHADING or a shading PATTERN keeps
+        // a plane of its own, through transparency groups and knockout
+        // groups too. A spot painted by a MESH shading (types 4-7) still
+        // goes through its tint transform and cannot be left standing the
+        // way a press leaves it.
         //
         // ★ FOURTH occurrence of the stale-comment shape this block already
         // names three of: said "a SPOT colorant has no plane of its own"
@@ -12516,7 +12518,7 @@ when comparing against another renderer",
             // existed, which is exactly the kind of claim that goes stale
             // silently: nothing tests an operator-facing paragraph.
             if d.cmyk_buffer_engaged {
-                "★ WHAT IS AND IS NOT APPROXIMATE HERE: this page's blending colour space is SUBTRACTIVE, so pdfce composited it in a four-colorant buffer plus one plane per spot colorant, and Table 149 read the backdrop's colorants DIRECTLY rather than reconstructing them from an RGB composite. That is the exact case CompatibleOverprint was written for. What remains approximate is ONE thing, and it is NARROWER again than this sentence used to say: a spot colorant painted by a PATH FILL (`Pass 228.0`/`230.0`), a STENCIL MASK or a SAMPLED IMAGE (`Pass 238.0`) has a plane of its own and is left standing the way a press leaves it. What still has no plane is a spot painted by a SHADING — that one flattens through its tint transform. ★★ This sentence read 'a SPOT colorant still has no plane of its own' until 2026-09-02, four Passes after that stopped being true, and then 'an IMAGE or a SHADING' until `Pass 238.0` moved images too: an accurate disclosure falsified twice by improvements to the very thing it describes, in operator-facing output. ★ AN OVERPRINTING IMAGE IN A PROCESS SPACE (`DeviceGray`, `DeviceRGB`, `DeviceCMYK`) now leaves every spot plane to the backdrop — Table 149's row 2 is TWO rows, not one: a process source takes `c_s` for the group's PROCESS components and `c_b` for its SPOT ones, in both overprint modes, and `Pass 238.0` gave the image path the second half. Measured on this project's own synthetic fixtures: a grey PATH and the same grey as an IMAGE, both overprinting a spot, now leave it standing identically. Read `overprint_images_unsupported` for what genuinely could not run"
+                "★ WHAT IS AND IS NOT APPROXIMATE HERE: this page's blending colour space is SUBTRACTIVE, so pdfce composited it in a four-colorant buffer plus one plane per spot colorant, and Table 149 read the backdrop's colorants DIRECTLY rather than reconstructing them from an RGB composite. That is the exact case CompatibleOverprint was written for. What remains approximate is ONE thing, and it is NARROWER again than this sentence used to say: a spot colorant painted by a PATH FILL (`Pass 228.0`/`230.0`), a STENCIL MASK or a SAMPLED IMAGE (`Pass 238.0`), an axial, radial or function SHADING or a shading PATTERN (`Pass 239.0`) has a plane of its own and is left standing the way a press leaves it, through transparency and knockout groups as well. What still has no plane is a spot painted by a MESH shading (types 4-7) — that one flattens through its tint transform. ★★ This sentence read 'a SPOT colorant still has no plane of its own' until 2026-09-02, four Passes after that stopped being true; then 'an IMAGE or a SHADING' until `Pass 238.0`; then 'a SHADING' until `Pass 239.0`: an accurate disclosure falsified three times by improvements to the very thing it describes, in operator-facing output. ★ AN OVERPRINTING IMAGE IN A PROCESS SPACE (`DeviceGray`, `DeviceRGB`, `DeviceCMYK`) now leaves every spot plane to the backdrop — Table 149's row 2 is TWO rows, not one: a process source takes `c_s` for the group's PROCESS components and `c_b` for its SPOT ones, in both overprint modes, and `Pass 238.0` gave the image path the second half. Measured on this project's own synthetic fixtures: a grey PATH and the same grey as an IMAGE, both overprinting a spot, now leave it standing identically. Read `overprint_images_unsupported` for what genuinely could not run"
             } else {
                 "★ WHAT IS STILL APPROXIMATE, because a composited count is not a correct one: this page's blending colour space is ADDITIVE, so pdfce composited in RGB with CMYK reconstructed per pixel. The four PROCESS colorants survive that reconstruction; a SPOT colorant does not — it is flattened through its tint transform and cannot be left standing the way a press leaves it"
             }

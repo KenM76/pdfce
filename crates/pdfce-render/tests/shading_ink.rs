@@ -117,6 +117,86 @@ fn mean_abs(a: (f64, f64, f64), b: (f64, f64, f64)) -> f64 {
     ((a.0 - b.0).abs() + (a.1 - b.1).abs() + (a.2 - b.2).abs()) / 3.0
 }
 
+/// ★★ A SPOT shading and a spot fill of one tint agree on an ink page
+/// (`Pass 239.0`). The fill has deposited its colorant into a plane of its
+/// own since `Pass 228.0`; the shading flattened it through the tint
+/// transform until this Pass, and the two collapsed to sRGB by different
+/// arithmetic. Same oracle as the `DeviceCMYK` pair above, one colour space
+/// over: no reference render, just agreement.
+#[test]
+fn a_spot_shading_and_a_spot_fill_of_one_tint_agree_on_a_subtractive_page() {
+    let page = render("spot-shading-vs-fill-cmyk.pdf");
+    let (fill, shading) = fill_and_shading(&page);
+    let d = mean_abs(fill, shading);
+    assert!(
+        d <= 1.5,
+        "fill {fill:?} vs `sh` shading {shading:?}, mean |diff| {d:.2}: the spot \
+         must reach the same plane by both routes"
+    );
+}
+
+/// ★★★ THE DISCRIMINATING PAIR. On white paper the two tests above cannot
+/// tell a deposited spot from a flattened one: the plane's curve is sampled
+/// through the very conversion the flattened route takes, so both land on
+/// the same sRGB by construction — a sabotage that refused every shading its
+/// planes left them green. Over a `0 0 0 0.5 k` mark with `/OP true` the
+/// routes separate: a deposited spot leaves the K standing (Table 149, spot
+/// source × process colorant ⇒ `c_b`); a flattened one is a spot-only source
+/// the native route refuses, paints normally, and knocks the K out. The fill
+/// beside it deposits, so agreement here means the shading took the plane.
+#[test]
+fn an_overprinting_spot_shading_over_black_agrees_with_the_fill_and_keeps_the_black() {
+    let page = render("spot-shading-op-over-k-vs-fill.pdf");
+    let (fill, shading) = fill_and_shading(&page);
+    let d = mean_abs(fill, shading);
+    assert!(
+        d <= 1.5,
+        "fill {fill:?} vs `sh` shading {shading:?} over 50% K under /OP true, mean \
+         |diff| {d:.2}: a shading that flattened its spot knocked the K out"
+    );
+    // And the K really is there: the spot alone (the two white-paper tests)
+    // is a light green; over preserved 50 % K it must be markedly darker.
+    assert!(
+        fill.1 < 150.0,
+        "the 50% K beneath must survive the overprinting spot: {fill:?}"
+    );
+}
+
+/// The same through a shading PATTERN under `/OP true`.
+#[test]
+fn an_overprinting_spot_pattern_over_black_agrees_with_the_fill_and_keeps_the_black() {
+    let page = render("spot-pattern-op-over-k-vs-fill.pdf");
+    let (fill, pattern) = fill_and_shading(&page);
+    let d = mean_abs(fill, pattern);
+    assert!(
+        d <= 1.5,
+        "fill {fill:?} vs shading pattern {pattern:?} over 50% K under /OP true, \
+         mean |diff| {d:.2}: a pattern that bridged through sRGB knocked the K out"
+    );
+    assert!(
+        fill.1 < 150.0,
+        "the 50% K beneath must survive the overprinting spot: {fill:?}"
+    );
+}
+
+/// The same, through a `/PatternType 2` shading PATTERN — the route the
+/// print-conformance suite's "shading" cells use, and the one that bridged
+/// through sRGB for pdfce's whole life while `sh` gained native routes in
+/// `Pass 122.6` and `137.0`. One patch kept a white X in exactly this cell
+/// after every other cell beside it went clean.
+#[test]
+fn a_spot_shading_pattern_and_a_spot_fill_of_one_tint_agree_on_a_subtractive_page() {
+    let page = render("spot-pattern-vs-fill-cmyk.pdf");
+    let (fill, pattern) = fill_and_shading(&page);
+    let d = mean_abs(fill, pattern);
+    assert!(
+        d <= 1.5,
+        "fill {fill:?} vs shading pattern {pattern:?}, mean |diff| {d:.2}: a \
+         pattern fill is the same painter as `sh` and must take its native \
+         ink route"
+    );
+}
+
 /// ★★★ THE ONE THAT MATTERS. On a page that composites in ink, a shading and a
 /// fill of the same authored `DeviceCMYK` colour must be the same colour.
 #[test]
@@ -267,9 +347,15 @@ fn the_overprinting_shading_actually_paints_and_ramps() {
         "the shading must RAMP across the band; identical ends mean its function \
          was not evaluated and this fixture asserts nothing"
     );
+    // ★ `Pass 239.0` moved this from the BLUE channel to the RED one. The
+    // shading names Cyan (`Source`) and its spot; with the spot on a plane
+    // of its own the backdrop's Y and K are preserved at BOTH ends, so the
+    // channel that ramps is the one the shading actually writes: cyan
+    // rising is red falling. Blue was a witness of the flattened route,
+    // where the spot's ink landed in Y and moved the blue by accident.
     assert!(
-        right.2 > left.2 + 40,
-        "expected blue to rise across the spot-to-cyan ramp; got left={left:?} right={right:?}"
+        left.0 > right.0 + 40,
+        "expected red to FALL across the spot-to-cyan ramp as the named cyan rises; got left={left:?} right={right:?}"
     );
 }
 

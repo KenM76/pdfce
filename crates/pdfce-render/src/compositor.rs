@@ -957,14 +957,20 @@ pub fn composite_element_knockout_cmyk(
         let ct = a_s.mul_add(blended[i], k * initial.c[i]);
         c[i] = (1.0 - f_s).mul_add(accum.a * accum.c[i], ct) / ai;
     }
-    (
-        PixelCmyk {
-            c,
-            s: [0.0; MAX_SPOTS],
-            a: ai,
-        },
-        ag,
-    )
+    // The spot planes, by the same recurrence (`Pass 239.0`). This wrote
+    // `[0.0; MAX_SPOTS]` until then -- the "knockout groups drop spot ink"
+    // approximation, silent because the initial backdrop carried no spot
+    // planes to notice the loss against. `blend_spots` already carries
+    // §11.7.4.2's rule that only separable, white-preserving modes reach a
+    // spot plane; here it is applied against the group's INITIAL backdrop
+    // exactly as the process channels are.
+    let blended_s = blend_spots(blend, initial, source, a0);
+    let mut sp = [0.0_f32; MAX_SPOTS];
+    for i in 0..MAX_SPOTS {
+        let st = a_s.mul_add(blended_s[i], k * initial.s[i]);
+        sp[i] = (1.0 - f_s).mul_add(accum.a * accum.s[i], st) / ai;
+    }
+    (PixelCmyk { c, s: sp, a: ai }, ag)
 }
 
 /// **§11.4.4's backdrop removal, in a subtractive space.**

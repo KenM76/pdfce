@@ -435,6 +435,25 @@ pub struct ColorRamp {
     /// is not `DeviceCmyk`. Empty is a real answer, not a missing one, and
     /// callers fall back to the sRGB route rather than inventing inks.
     cmyk: Vec<Option<[f32; 4]>>,
+    /// The **authored process tints** for the same samples — Table 149's
+    /// question, *"which process tints did the file state?"* — one per
+    /// sample, `[0; 4]` where the space names no process colorant
+    /// (`Pass 239.0`).
+    ///
+    /// Distinct from [`Self::cmyk`] for the reason `image::OverprintSource`
+    /// gives at length: `cmyk` is the tint transform's OUTPUT, which already
+    /// contains every spot's ink as process colour; this is only what the
+    /// operands named. When the spots go to planes of their own, THIS is the
+    /// process half the paint must use, or the spot lands twice.
+    ///
+    /// Empty when the space is not a `Separation`/`DeviceN` naming a spot.
+    process: Vec<[f32; 4]>,
+    /// The **authored spot tints** per sample, one column per entry of
+    /// [`Self::spot_colorants`]. Same length discipline as `process`.
+    spots: Vec<Vec<f32>>,
+    /// The spot colorants this shading's space names — name and tint curve
+    /// — in declaration order. Empty for every other space.
+    spot_colorants: Vec<crate::overprint::SpotColorant>,
     /// The domain the samples span, `[t0, t1]`, as taken from the
     /// shading's own `/Domain`.
     domain: [f32; 2],
@@ -463,6 +482,45 @@ impl ColorRamp {
         // that is allowed to be arbitrary PostScript, and nothing would
         // force the two passes to agree.
         let mut cmyk = Vec::with_capacity(RAMP_SAMPLES);
+        // The spot half (`Pass 239.0`): which components are spots, and
+        // their curves, resolved ONCE for the ramp. `classify` is asked with
+        // `in_image_sample = false` because a shading is not a sampled
+        // image (Table 149 row 1's qualifier), and with the narrowest scope
+        // because the scope only decides whether a process source is
+        // upgraded to `DeviceCmykDirect` — irrelevant to whether a space
+        // NAMES a spot.
+        let kind = crate::overprint::classify(
+            space,
+            false,
+            pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
+        );
+        let arity = space.components();
+        let spot_slots: Vec<(usize, std::sync::Arc<[u8]>)> = match &kind {
+            Some(k) if crate::overprint::names_a_spot_colorant(k) => {
+                crate::overprint::authored_spots(k, &vec![0.0_f32; arity])
+                    .into_iter()
+                    .map(|(component, name, _)| (component, std::sync::Arc::from(name)))
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
+        let spot_colorants: Vec<crate::overprint::SpotColorant> = spot_slots
+            .iter()
+            .map(|(component, name)| {
+                (
+                    std::sync::Arc::clone(name),
+                    std::sync::Arc::new(crate::overprint::spot_lut(
+                        space, *component, arity, intent,
+                    )),
+                )
+            })
+            .collect();
+        let mut process: Vec<[f32; 4]> = Vec::with_capacity(if spot_slots.is_empty() {
+            0
+        } else {
+            RAMP_SAMPLES
+        });
+        let mut spots: Vec<Vec<f32>> = Vec::with_capacity(process.capacity());
         let mut raw = Vec::new();
         let mut comps: Vec<f32> = Vec::new();
         let span = f64::from(domain[1] - domain[0]);
@@ -473,6 +531,10 @@ impl ColorRamp {
             if !function.eval(&[t], &mut raw) {
                 samples.push(None);
                 cmyk.push(None);
+                if !spot_slots.is_empty() {
+                    process.push([0.0; 4]);
+                    spots.push(vec![0.0; spot_slots.len()]);
+                }
                 continue;
             }
             comps.clear();
@@ -480,6 +542,19 @@ impl ColorRamp {
             comps.extend(raw.iter().map(|v| *v as f32));
             samples.push(space.to_rgb(&comps, intent, diag));
             cmyk.push(space.to_cmyk(&comps, diag));
+            // Authored tints from the SAME `comps`, in the SAME loop, for the
+            // reason the two lines above share it.
+            if !spot_slots.is_empty()
+                && let Some(k) = &kind
+            {
+                process.push(crate::overprint::authored_tints(k, &comps).unwrap_or([0.0; 4]));
+                spots.push(
+                    spot_slots
+                        .iter()
+                        .map(|(component, _)| comps.get(*component).copied().unwrap_or(0.0))
+                        .collect(),
+                );
+            }
         }
         // All-or-nothing: a ramp whose space yields colorants at some
         // samples and not others would let a shading overprint across part
@@ -491,8 +566,40 @@ impl ColorRamp {
         Self {
             samples,
             cmyk,
+            process,
+            spots,
+            spot_colorants,
             domain,
         }
+    }
+
+    /// The spot colorants this ramp's space names, with their curves —
+    /// what a caller hands to `overprint::resolve_spot_planes` before
+    /// painting in ink (`Pass 239.0`). Empty for every space that names no
+    /// spot, which is the answer that keeps the plane apparatus off the
+    /// common path.
+    #[must_use]
+    pub(crate) fn spot_colorants(&self) -> &[crate::overprint::SpotColorant] {
+        &self.spot_colorants
+    }
+
+    /// The **authored** colour at `t` — process tints as the file stated
+    /// them, plus one tint per entry of [`Self::spot_colorants`] — for a
+    /// paint that deposits the spots into their own planes. `None` where
+    /// the ramp carries no spot half or the function did not evaluate.
+    ///
+    /// The counterpart of [`Self::at_cmyk`], which is the FLATTENED answer;
+    /// a caller uses exactly one of the two per paint, never both.
+    #[must_use]
+    pub(crate) fn at_authored(&self, t: f32) -> Option<([f32; 4], &[f32])> {
+        if self.spot_colorants.is_empty() {
+            return None;
+        }
+        let i = self.index_of(t);
+        // The function failed at this sample: the flattened twin is `None`
+        // there too, and a paint must not invent ink.
+        self.cmyk.get(i).copied().flatten()?;
+        Some((*self.process.get(i)?, self.spots.get(i)?.as_slice()))
     }
 
     /// The colour at parametric coordinate `t`, or `None` where the
@@ -1757,6 +1864,21 @@ impl Shading {
     /// is unchanged either way, but a reader diagnosing a bridged mesh
     /// needs to know which of the two questions the `None` answered.
     #[must_use]
+    ///
+    /// # The spot planes (`Pass 239.0`)
+    ///
+    /// `spot_planes` are the plane indices for [`ColorRamp::spot_colorants`],
+    /// in order, from `overprint::resolve_spot_planes` — or empty, in which
+    /// case the ramp's FLATTENED ink paints exactly as before. With planes,
+    /// each pixel's source is the ramp's authored process tints plus its
+    /// spot tints, and every plane the ramp does not name keeps the
+    /// backdrop. A mesh ignores them (it has no ramp-shaped spot half yet)
+    /// and paints its flattened ink; that is disclosed by the caller.
+    ///
+    /// Eight parameters, allowed: the paint's geometry, its two rule sets
+    /// and its destination are one call's worth of state, and a struct for
+    /// them would have exactly this one constructor site.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_cmyk(
         &self,
         to_target: tiny_skia::Transform,
@@ -1764,6 +1886,7 @@ impl Shading {
         clip: Option<&tiny_skia::Mask>,
         alpha: f32,
         rules: [crate::overprint::ComponentRule; 4],
+        spot_planes: &[usize],
         buf: &mut crate::cmyk_buffer::CmykBuffer,
     ) -> Option<usize> {
         if let Some(mesh) = self.mesh.as_ref() {
@@ -1795,12 +1918,28 @@ impl Shading {
             y_hi.max(0) as u32,
         );
         let width = buf.width() as i32;
+        let deposit = !spot_planes.is_empty() && spot_planes.len() == ramp.spot_colorants().len();
         #[allow(clippy::cast_possible_wrap)]
-        let changed = buf.composite_overprint_varying(clamped, rules, alpha, |x, y| {
-            let (t, coverage) = sample_at(self, to_target, x as i32, y as i32, width, clip)?;
-            let c = ramp.at_cmyk(t)?;
-            Some((c, coverage))
-        });
+        let changed = if deposit {
+            buf.composite_overprint_varying_spots(clamped, rules, alpha, |x, y| {
+                let (t, coverage) = sample_at(self, to_target, x as i32, y as i32, width, clip)?;
+                let (process, tints) = ramp.at_authored(t)?;
+                let mut s: [Option<f32>; crate::compositor::MAX_SPOTS] =
+                    [None; crate::compositor::MAX_SPOTS];
+                for (plane, tint) in spot_planes.iter().zip(tints.iter()) {
+                    if let Some(slot) = s.get_mut(*plane) {
+                        *slot = Some(*tint);
+                    }
+                }
+                Some((process, s, coverage))
+            })
+        } else {
+            buf.composite_overprint_varying(clamped, rules, alpha, |x, y| {
+                let (t, coverage) = sample_at(self, to_target, x as i32, y as i32, width, clip)?;
+                let c = ramp.at_cmyk(t)?;
+                Some((c, coverage))
+            })
+        };
         Some(changed as usize)
     }
 
@@ -2239,6 +2378,9 @@ mod tests {
             // colorant vector is the honest state for a ramp built from a
             // space that has none.
             cmyk: Vec::new(),
+            process: Vec::new(),
+            spots: Vec::new(),
+            spot_colorants: Vec::new(),
             samples: (0..RAMP_SAMPLES)
                 .map(|i| {
                     #[allow(clippy::cast_precision_loss)]
@@ -2265,6 +2407,9 @@ mod tests {
             // colorant vector is the honest state for a ramp built from a
             // space that has none.
             cmyk: Vec::new(),
+            process: Vec::new(),
+            spots: Vec::new(),
+            spot_colorants: Vec::new(),
             samples: vec![Some(Rgb::BLACK); RAMP_SAMPLES],
             domain: [3.0, 3.0],
         };

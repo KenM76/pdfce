@@ -643,12 +643,7 @@ pub struct OverprintSource {
     pub spots: Vec<SpotTexel>,
 }
 
-/// A spot colorant's name and its tint curve — the pair a plane is
-/// allocated from (`Pass 238.0`).
-pub(crate) type SpotColorant = (
-    std::sync::Arc<[u8]>,
-    std::sync::Arc<crate::cmyk_buffer::SpotLut>,
-);
+pub(crate) use crate::overprint::SpotColorant;
 
 /// One spot colorant's per-texel tint, packed for rasterisation.
 ///
