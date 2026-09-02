@@ -1,0 +1,97 @@
+# Public functions with NO doc comment -- PRE-EXISTING DEBT, not an allowlist.
+#
+# `tools/check-public-fns-documented.py` enforces CLAUDE.md rule 6 (every
+# function gets a doc comment explaining WHY). This file carries the 73
+# violations that already existed when the gate was written on 2026-09-02,
+# so the gate could be turned on that day instead of after a 73-function
+# writing session.
+#
+# ★ SHORTENING THIS FILE IS THE INTENDED DIRECTION. Do NOT add to it. A
+#   newly undocumented function is a new violation of a binding rule, and
+#   silencing it here defeats the entire point of the gate.
+#
+# ★★ BEFORE WRITING A DOC COMMENT FOR ANY ROW HERE, CHECK WHETHER IT WENT
+#   MISSING RATHER THAN NEVER EXISTING. Two of the original 75 were exactly
+#   that: `cmyk_buffer.rs::set_pixel`'s documentation had been welded onto
+#   its neighbour `mark_dirty`, which therefore shipped a first sentence
+#   describing a different function. Read the item ABOVE the undocumented
+#   one before assuming nothing was ever written.
+#
+# Entries are `path::function_name` with no line number, deliberately: line
+# numbers churn on every edit and would make this a merge-conflict
+# generator. The cost is that moving a function does not re-check it.
+#
+# Sorted; one per line; `#` comments and blank lines ignored.
+crates/pdfce-core/src/attachments.rs::list_attachments
+crates/pdfce-core/src/civil_time.rs::format_rfc3339_utc
+crates/pdfce-core/src/dimension/group.rs::delete_group
+crates/pdfce-core/src/dimension/sidecar.rs::deserialize_model
+crates/pdfce-core/src/edit.rs::delete_annotation
+crates/pdfce-core/src/edit.rs::delete_subpath
+crates/pdfce-core/src/edit.rs::move_annotation
+crates/pdfce-core/src/formclip.rs::new
+crates/pdfce-core/src/pageops/mod.rs::extract
+crates/pdfce-core/src/text_edit/edit.rs::new
+crates/pdfce-core/src/text_edit/reflow.rs::reflow_recognition_options
+crates/pdfce-core/src/text_extract/mod.rs::with_gap_ratios
+crates/pdfce-core/src/vector/clip.rs::to_bytes
+crates/pdfce-gui/src/canvas.rs::active_snap_candidate
+crates/pdfce-gui/src/canvas.rs::next_snap_index
+crates/pdfce-gui/src/canvas.rs::screen_tolerance_to_page
+crates/pdfce-gui/src/canvas.rs::selection_after_marquee
+crates/pdfce-gui/src/canvas.rs::snap_commit_clicks
+crates/pdfce-gui/src/canvas.rs::snap_marker_shapes
+crates/pdfce-gui/src/canvas.rs::snap_query_enabled
+crates/pdfce-gui/src/canvas_overlay.rs::draw_form_field_chrome
+crates/pdfce-gui/src/canvas_overlay.rs::draw_selection_outlines
+crates/pdfce-gui/src/dock.rs::panel_is_active
+crates/pdfce-gui/src/object_provider.rs::object_sample_points
+crates/pdfce-gui/src/object_provider.rs::page_objects
+crates/pdfce-gui/src/object_provider.rs::subpath_node_points
+crates/pdfce-gui/src/panels_structure.rs::layers_panel
+crates/pdfce-gui/src/raster.rs::build
+crates/pdfce-gui/src/ui_text.rs::form_field_rich_text_unreadable
+crates/pdfce-gui/src/ui_text.rs::setting_cmyk_title
+crates/pdfce-gui/src/ui_text.rs::setting_grey_overprint_all
+crates/pdfce-gui/src/ui_text.rs::setting_grey_overprint_all_note
+crates/pdfce-gui/src/ui_text.rs::setting_grey_overprint_grey_as_k
+crates/pdfce-gui/src/ui_text.rs::setting_grey_overprint_grey_as_k_note
+crates/pdfce-gui/src/ui_text.rs::setting_grey_overprint_literal
+crates/pdfce-gui/src/ui_text.rs::setting_grey_overprint_literal_note
+crates/pdfce-gui/src/ui_text.rs::setting_mesh_padding_none
+crates/pdfce-gui/src/ui_text.rs::setting_mesh_padding_per_record
+crates/pdfce-gui/src/ui_text.rs::setting_mesh_padding_title
+crates/pdfce-gui/src/ui_text.rs::setting_page_blend_device_native
+crates/pdfce-gui/src/ui_text.rs::setting_page_blend_intent_always
+crates/pdfce-gui/src/ui_text.rs::setting_page_blend_intent_if_subtractive
+crates/pdfce-gui/src/ui_text.rs::setting_style_policy_auto
+crates/pdfce-gui/src/ui_text.rs::setting_style_policy_auto_note
+crates/pdfce-gui/src/ui_text.rs::setting_style_policy_refuse
+crates/pdfce-gui/src/ui_text.rs::setting_style_policy_refuse_note
+crates/pdfce-gui/src/ui_text.rs::setting_style_policy_warn
+crates/pdfce-gui/src/ui_text.rs::setting_style_policy_warn_note
+crates/pdfce-gui/src/ui_text.rs::snap_derived_centerline_confirm
+crates/pdfce-gui/src/ui_text.rs::snap_toggle_label
+crates/pdfce-gui/src/ui_text.rs::snap_toggle_tooltip
+crates/pdfce-gui/src/viewer.rs::canvas_to_pdf_space
+crates/pdfce-gui/src/viewer.rs::pdf_space_to_canvas
+crates/pdfce-print/src/devmode.rs::apply
+crates/pdfce-print/src/devmode.rs::apply_paper
+crates/pdfce-render/src/clip_cache.rs::new
+crates/pdfce-render/src/cmyk_buffer.rs::composite_overprint
+crates/pdfce-render/src/color.rs::to_rgb
+crates/pdfce-render/src/display_list.rs::new
+crates/pdfce-render/src/font/mod.rs::with_missing_as
+crates/pdfce-render/src/font/mod.rs::with_page_blend_space_source
+crates/pdfce-render/src/icc.rs::new
+crates/pdfce-render/src/image.rs::decode
+crates/pdfce-render/src/interpret.rs::run
+crates/pdfce-render/src/overprint.rs::cmyk_group_rules
+crates/pdfce-render/src/profile.rs::ablation
+crates/pdfce-render/src/profile.rs::note_full_identity
+crates/pdfce-render/src/profile.rs::note_identity
+crates/pdfce-render/src/profile.rs::reset
+crates/pdfce-render/src/profile.rs::set_ablation
+crates/pdfce-render/src/profile.rs::snapshot
+crates/pdfce-render/src/shading.rs::at
+crates/pdfce-render/src/shading.rs::paint

@@ -1420,6 +1420,56 @@ fn decode_view(obj: Option<&Object>) -> DestView {
     }
 }
 
+/// Read `graph`'s document outline (§12.3.3) with the diagnostics the read
+/// produced.
+///
+/// **The entry point of this module**, and the one a UI should call. Its
+/// sibling [`parse_outline`] is the same read with the diagnostics thrown
+/// away, which is a convenience and a hazard: only this one can tell you
+/// the tree was TRUNCATED.
+///
+/// # Contract
+///
+/// **Infallible.** Returns an [`Outline`], never a `Result`. Malformed
+/// input yields a *partial* tree plus a populated [`OutlineDiagnostics`] --
+/// there is no input that makes it panic, abort, recurse without bound or
+/// loop. That is the crate-wide panic-free policy applied to a structure
+/// that is unusually easy to weaponise: a `/Next` chain is an
+/// attacker-controlled linked list.
+///
+/// **Bounded**, three ways, each of which sets a diagnostic flag when it
+/// bites: at most [`MAX_OUTLINE_ITEMS`] items, at most
+/// [`MAX_OUTLINE_DEPTH`] levels, and no object visited twice.
+///
+/// **Nothing is dropped silently.** An item whose destination will not
+/// resolve keeps its place in the tree carrying the most specific
+/// [`Destination`] variant the file supports -- see that enum.
+///
+/// # Why it walks the page tree with [`page_slots`] and not `pages`
+///
+/// `pages` also resolves `/Resources` and `/MediaBox` and fails the whole
+/// walk for a page missing either. A bookmark should still know which page
+/// it points at when that page has no `/MediaBox`, so the structural walk
+/// is the right one -- the same choice [`DestinationReader::new`] makes,
+/// for the same reason.
+///
+/// # A truncated tree must be PRESENTED as truncated
+///
+/// [`OutlineDiagnostics::is_faithful`] is the single question a caller
+/// should ask before drawing a bookmarks panel. Showing a guard-rail-
+/// truncated tree as if it were the document's own is `CLAUDE.md` rule 4
+/// (*fuzzy, never sneaky*) applied to a structural inference, and the
+/// diagnostics exist so that it can be avoided without the caller
+/// re-deriving what happened.
+///
+/// # ★ This function had NO doc comment until `Pass 224.0`
+///
+/// It is cited by name in `docs/core-api/`, it is the module's headline
+/// entry point, and its explanation lived only in the module header where
+/// nothing tied the two together. Recorded rather than quietly fixed
+/// because the shape recurs: the *most* documented modules are where an
+/// individual item's docs go missing, since the module header makes the
+/// absence invisible to a reader who already knows the subject.
 pub fn read_outline<G: ObjectGraph + ?Sized>(graph: &G) -> Outline {
     let mut diagnostics = OutlineDiagnostics::default();
 

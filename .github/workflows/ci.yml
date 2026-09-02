@@ -309,7 +309,7 @@ jobs:
   # and the COUNT is the part that decays, so the count is the part a gate
   # can falsify.
   audits:
-    name: repository audits (20 checks)
+    name: repository audits (21 checks)
     runs-on: ubuntu-latest
     steps:
       # ★ FULL HISTORY REQUIRED, and its absence was SILENT.
@@ -536,6 +536,22 @@ jobs:
       # compiles, it formats, and it reads correctly in source.
       - name: check no operator-facing string has a baked-in gap
         run: bash tools/check-string-gaps.sh
+
+      # A public function with no doc comment violates CLAUDE.md rule 6, and
+      # -- the reason this is a gate rather than a habit -- it is the
+      # OBSERVABLE SYMPTOM of a doc block that was silently corrupted.
+      #
+      # When a splice welds two `///` blocks together, the surviving block
+      # keeps a first sentence describing the item that lost its
+      # documentation, and the item itself turns up bare. `cmyk_buffer.rs`
+      # shipped exactly that: `mark_dirty` opened with "Write one pixel,
+      # clamping into range", which is `set_pixel`'s job. rustfmt, clippy
+      # and `doc_lazy_continuation` are all content with a contiguous weld.
+      #
+      # 73 pre-existing violations are carried in a baseline file that is
+      # DEBT, not an allowlist -- the gate fails on anything outside it.
+      - name: check every public fn has a doc comment
+        run: python tools/check-public-fns-documented.py
 
       # Every colour in the GUI is a named role in theme.rs, so a theme change
       # cannot leave one hard-coded literal behind at the wrong contrast.

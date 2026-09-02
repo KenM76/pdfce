@@ -731,19 +731,26 @@ impl CmykBuffer {
         }
     }
 
-    /// Write one pixel, clamping into range.
-    ///
-    /// The clamp is not defensive tidiness: §11.3.6's weighted average is
-    /// exact in theory and `f32` in practice, and a blend function such as
-    /// `Difference` on values a hair outside `[0, 1]` compounds rather
-    /// than settles. Clamping on write means every value this buffer hands
-    /// back to a blend function is a legal colorant tint.
     /// Widen the dirty rectangle to include `region`.
     ///
-    /// Called by every composite entry point rather than by `set_pixel`,
-    /// deliberately: a per-pixel widen would cost a branch and two
-    /// comparisons in the innermost loop of the renderer to compute
-    /// something the caller already knows as a rectangle.
+    /// Called by every composite entry point rather than by
+    /// [`Self::set_pixel`], deliberately: a per-pixel widen would cost a
+    /// branch and two comparisons in the innermost loop of the renderer,
+    /// to compute something the caller already knows as a rectangle.
+    ///
+    /// # ★ This doc block used to open with a description of `set_pixel`
+    ///
+    /// Two doc blocks had fused into one -- `set_pixel`'s four paragraphs
+    /// about clamping, then this function's, with no separation -- and
+    /// `set_pixel` itself sat forty lines below with no documentation at
+    /// all. So `mark_dirty` shipped a first sentence reading *"Write one
+    /// pixel, clamping into range"*, describing a different function.
+    ///
+    /// Nothing caught it. `rustfmt` and `clippy` are both content with a
+    /// contiguous weld; `clippy::doc_lazy_continuation` only sees the
+    /// blank-line variant. `tools/check-public-fns-documented.py` exists
+    /// because the *observable* symptom of a corrupted doc block is an
+    /// undocumented NEIGHBOUR, which is a thing a script can find.
     fn mark_dirty(&mut self, region: (u32, u32, u32, u32)) {
         let (x0, y0, x1, y1) = region;
         if x0 >= x1 || y0 >= y1 {
@@ -763,6 +770,27 @@ impl CmykBuffer {
         (r.0 < r.2 && r.1 < r.3).then_some(r)
     }
 
+    /// Write one pixel, clamping every component into `[0, 1]`.
+    ///
+    /// # The clamp is not defensive tidiness
+    ///
+    /// §11.3.6's weighted average is exact in theory and `f32` in
+    /// practice. A blend function such as `Difference`, handed values a
+    /// hair outside `[0, 1]`, **compounds** rather than settles: the
+    /// excess feeds the next composite, which produces a slightly larger
+    /// excess. Clamping on write means every value this buffer ever hands
+    /// back to a blend function is a legal colorant tint, so the drift has
+    /// nowhere to accumulate.
+    ///
+    /// Note it clamps and does NOT mark dirty -- see [`Self::mark_dirty`]
+    /// for why that is the caller's job.
+    ///
+    /// # Panics
+    ///
+    /// Never for an `idx` produced from this buffer's own dimensions. The
+    /// slice index is bounds-checked by Rust and a caller that violates it
+    /// has a bug this function should not paper over -- the same contract
+    /// [`Self::pixel`] states.
     #[inline]
     pub(crate) fn set_pixel(&mut self, idx: usize, px: PixelCmyk) {
         for i in 0..4 {
