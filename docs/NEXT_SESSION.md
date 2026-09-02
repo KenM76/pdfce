@@ -258,6 +258,39 @@ function of one scalar.
   mid-way. Two scripts died that way this session. Gates in `tools/`
   `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`; ad-hoc scripts
   should just stay ASCII.
+- **★★ READ CI'S COLOUR FROM GITHUB, EVERY SESSION, EARLY.**
+  `gh run list --limit 10 --json status,conclusion,headSha,createdAt`.
+
+  **Measured 2026-09-02: CI was RED for roughly nineteen hours — 34 of the
+  last 40 runs, unbroken from 2026-09-01 08:10Z — across the whole of the
+  previous session and about twenty pushed commits.** It went green only when
+  this session happened to fix the two causes for unrelated reasons: nine
+  unfiled commits (`check-commits-filed`) and three baked-in string gaps
+  (`check-string-gaps`), both of which were found by running the LOCAL sweep,
+  not by looking at CI.
+
+  Nobody looked. The rule was already in this file and in `CLAUDE.md` rule 8;
+  a local green sweep reads as "everything is fine" and the remote had been
+  saying otherwise since the morning.
+
+- **★ PUSH A CODE COMMIT AND ITS FILING COMMIT TOGETHER, in one `git push`.**
+
+  A filing commit cannot contain code (it would fail the gate it exists to
+  satisfy) and a code commit cannot be filed before it exists. So there is
+  always a moment where `check-commits-filed` is legitimately red — and if you
+  push during it, **CI goes red for a non-defect.** That happened twice on
+  2026-09-02 (`983b438` and `78958ff`), and diagnosing it cost a tick.
+
+  **Evidence that pushing both at once fixes it, rather than an assumption:**
+  the push `9d43079..61c3735` contained two commits (`16eaaa2` code +
+  `61c3735` filing) and produced **exactly one** CI run, on the tip, green.
+  GitHub runs one job per *push*, on the tip — not one per commit. Every
+  other push this session carried a single commit, so that two-commit push is
+  the only observation that distinguishes the two, and it is the one that
+  settles it.
+
+  ⇒ Commit the code, dispatch the librarian, commit the filing, **then** push.
+
 - **Stage by path. Never `git add -A`** — the repository is public and agents
   share the working tree.
 - **A licensed conformance suite's NAME must never appear in any repo file.**
