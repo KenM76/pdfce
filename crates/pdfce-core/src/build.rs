@@ -20,35 +20,50 @@
 //! shipped in the same folder disagree about which build they are, which is
 //! the one thing a provenance banner exists to prevent.
 //!
-//! # ★ `iccce` is reported as `not-linked-yet` — PENDING, not decided against
 //!
-//! pdfce does not depend on `iccce` **yet**. Measured, not assumed: nothing
-//! in any `Cargo.toml` or source file references it.
+//! # `iccce` — reported from the resolved dependency graph
 //!
-//! ★ **The `-yet` is load-bearing and was missing at first.** `iccce` exists
-//! *because of* pdfce — its README names pdfce as its first consumer, and
-//! lists four capabilities pdfce cannot deliver without it (`ICCBased` beyond
-//! `/Alternate`, colorimetric `Separation`/`DeviceN`, PDF/X output intents,
-//! soft-proofing). Decision 064's status line is **"DECIDED (boundary), NOT
-//! STARTED (either consumer)"**, and the Pass that wires it is `Pass 97.x`,
-//! the colorant compositor — currently top of the queue, and worth ~16 of
-//! the 18 remaining suite failures. `iccce` has already shipped the exact
-//! call that Pass needs.
+//! pdfce depends on `iccce` as of `Pass 199.2`: `iccce-profile` and
+//! `iccce-cmm`, pinned to tag `v0.3.0` in `crates/pdfce-render`. So
+//! [`BuildInfo::iccce`] carries a real answer — version, pin, resolved
+//! revision, and when that revision was committed:
 //!
-//! Reporting this as a settled architectural boundary — which the first
-//! version of these docs did — makes an **unfinished integration** read as a
-//! **completed separation**. Those need opposite things from a reader.
+//! ```text
+//!   iccce:     0.3.0 (tag v0.3.0, a4d9003b, committed 2026-09-01T08:54:36Z)
+//! ```
 //!
-//! So [`BuildInfo::iccce`] reads `not-linked-yet`, and the version output says
-//! so out loud. The alternative — reading the sibling checkout's `git
-//! describe` off disk — would answer *"which iccce is on this machine"*
-//! while appearing to answer *"which iccce is in this binary"*. Those
-//! coincide only by accident, and the accident is invisible to whoever
+//! That is all four halves of what the operator asked for on 2026-08-18:
+//! *"the build revision, date, and time for the version of iccce used"*.
+//!
+//! ## ★★ This field said `not-linked-yet` for six days after that stopped
+//! being true
+//!
+//! The text here used to argue at length that the absence was **pending,
+//! not architectural** — and that argument was right, and the operator had
+//! already corrected an earlier version of it that called the absence a
+//! settled boundary. What neither version anticipated is that the
+//! *presence* would arrive and the string would not notice.
+//!
+//! `Pass 199.2` added the dependency. `Pass 223.0` fixed the stamp. In
+//! between, `pdfce-cli --version` told the operator that pdfce does not link
+//! `iccce`, while linking it.
+//!
+//! The mechanism is in `build.rs`'s own docs and is worth reading once: the
+//! detector waited on `DEP_ICCCE_PROVENANCE`, which Cargo only ever sets for
+//! a dependency declaring a `links` key. `iccce` declares none, so the
+//! detector could not have fired however long it waited — and a detector
+//! that cannot fire is indistinguishable, from outside, from a condition
+//! that has not occurred.
+//!
+//! ## Where the value comes from
+//!
+//! The workspace `Cargo.lock` — the *resolved* graph, i.e. the exact
+//! revision this build compiles. Deliberately **not** the sibling checkout
+//! at `D:\Dev\iccce`, which would answer *"which iccce is on this
+//! machine"* while appearing to answer *"which iccce is in this binary"*.
+//! Those coincide only by accident, and the accident is invisible to whoever
 //! reads the banner later.
 //!
-//! Stating the absence, rather than omitting the line, is what makes the
-//! operator's question answered every time he asks it. `Pass 101.1`
-//! replaces the string with a real revision when the dependency lands.
 
 /// Where this binary came from.
 ///
@@ -87,10 +102,30 @@ pub struct BuildInfo {
     /// different situation from one built today from this morning's commit,
     /// and only the two timestamps side by side distinguish them.
     pub committed_at: &'static str,
-    /// The `iccce` build linked into this one, or `not-linked-yet`.
+    /// The `iccce` build linked into this one — its version, the pin the
+    /// manifest asked for, the resolved git revision, and when that
+    /// revision was committed. `not-linked` when there is none.
     ///
-    /// Reads `not-linked-yet` today because the integration **has not been
-    /// done**, not because it was decided against — see the module docs.
+    /// Example: `0.3.0 (tag v0.3.0, a4d9003b, committed 2026-09-01T08:54:36Z)`.
+    ///
+    /// ## ★ It reports what the WORKSPACE links, not what `pdfce-core` links
+    ///
+    /// `iccce-profile` and `iccce-cmm` are dependencies of
+    /// **`pdfce-render`**, and this stamp is baked by `pdfce-core`'s build
+    /// script. Every shipped binary links `pdfce-render`, so inside this
+    /// workspace the two coincide. A project depending on `pdfce-core`
+    /// alone has no `iccce` in its graph and gets `not-linked`, which is
+    /// the truth for that build.
+    ///
+    /// ## This field read `not-linked-yet` until `Pass 223.0`, wrongly
+    ///
+    /// `Pass 199.2` added the dependency; this went on saying the
+    /// integration was pending for six days, in the one output surface
+    /// whose entire purpose is to be believed without checking. The
+    /// mechanism it waited on (`DEP_ICCCE_PROVENANCE`) is only ever set
+    /// for a dependency declaring a `links` key, which `iccce` does not —
+    /// so the detector could not have fired however long it waited. See
+    /// `build.rs`'s `iccce_provenance`.
     pub iccce: &'static str,
 }
 
@@ -115,8 +150,9 @@ impl BuildInfo {
     /// say "this build cannot identify itself" instead of quietly printing
     /// the word `unknown` three times and hoping somebody notices.
     ///
-    /// Note that [`Self::iccce`] is **not** part of this: `not-linked-yet` is a
-    /// determined answer, not a missing one.
+    /// Note that [`Self::iccce`] is **not** part of this: `not-linked` is a
+    /// determined answer, not a missing one, and so is a provenance string
+    /// that omits the commit date because no repository could supply it.
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.built_at != "unknown" && self.revision != "unknown" && self.committed_at != "unknown"
@@ -147,17 +183,19 @@ impl std::fmt::Display for BuildInfo {
         writeln!(f, "  revision:  {}", self.revision)?;
         writeln!(f, "  committed: {}", self.committed_at)?;
         write!(f, "  iccce:     {}", self.iccce)?;
-        if self.iccce == "not-linked-yet" {
-            // The operator asked for iccce's revision by name, so the answer
-            // has to say WHY there is not one -- otherwise it reads as a
+        if self.iccce == "not-linked" {
+            // The operator asked for iccce's revision BY NAME, so an answer
+            // of "there isn't one" has to say why -- otherwise it reads as a
             // defect in the stamp rather than as a fact about the build.
             //
-            // And it says PENDING rather than merely absent, because iccce
-            // exists for pdfce and the integration is unstarted work, not a
-            // decision to stay apart. See the module docs.
+            // ★ This branch is now the OUT-OF-WORKSPACE case, not the
+            // not-yet-integrated one. Inside the workspace every binary
+            // links iccce and this never fires; it fires for a project
+            // depending on `pdfce-core` alone, where the absence is real
+            // and permanent rather than pending.
             write!(
                 f,
-                " (integration pending -- Pass 97.x; see ARCHITECTURE.md decision 064)"
+                " (this build links pdfce-core alone; iccce is pdfce-render's dependency)"
             )?;
         }
         if self.is_dirty() {

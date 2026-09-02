@@ -612,11 +612,17 @@ mod exit {
 /// six-week-old commit is a different situation from one off this morning's,
 /// and only the pair distinguishes them.
 ///
-/// The `iccce` line reports `not-linked-yet` because the integration is
-/// **unstarted work, not a decision to stay apart** — `iccce` was created for
-/// pdfce and names it as its first consumer. It is printed anyway, with the
-/// reason, because the operator asked for that revision by name: an omitted
-/// line reads as an oversight, a stated pending answers the question.
+/// The `iccce` line reports the colour engine's version, the pin the
+/// manifest asked for, the resolved git revision and when that revision was
+/// committed — all four halves of what the operator asked for on 2026-08-18.
+///
+/// ★ **It said `not-linked-yet` from `Pass 199.2` to `Pass 223.0`, and that
+/// was false for six days.** The dependency landed and the stamp went on
+/// announcing that it had not. Worth remembering as a shape rather than as
+/// an incident: the disclosure was accurate when written, was falsified by
+/// an improvement to the very thing it described, and nothing failed —
+/// because the code that would have noticed was waiting on a signal
+/// (`DEP_ICCCE_PROVENANCE`) that its subject never emits.
 fn build_banner() -> &'static str {
     let b = pdfce_core::build::BuildInfo::current();
     // The FIRST line is the version alone, because clap already prints the
@@ -629,8 +635,12 @@ fn build_banner() -> &'static str {
         "{}\n  built:     {}\n  revision:  {}\n  committed: {}\n  iccce:     {}",
         b.version, b.built_at, b.revision, b.committed_at, b.iccce
     );
-    if b.iccce == "not-linked-yet" {
-        text.push_str(" (integration pending -- Pass 97.x; see ARCHITECTURE.md decision 064)");
+    // Mirrors `BuildInfo`'s own Display, deliberately -- a stamp copied out
+    // of `--version` and one copied out of a crash report must read the same.
+    // This branch is the out-of-workspace case and never fires for a shipped
+    // pdfce-cli, which links pdfce-render and therefore links iccce.
+    if b.iccce == "not-linked" {
+        text.push_str(" (this build links pdfce-core alone; iccce is pdfce-render's dependency)");
     }
     if b.is_dirty() {
         text.push_str(

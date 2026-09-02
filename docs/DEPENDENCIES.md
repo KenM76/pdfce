@@ -78,7 +78,43 @@ transitive tree — `pdfce-core` pulls a deliberately small set.
 | `tiny-skia` | BSD-3-Clause | The **CPU rasterizer**. Fills and strokes paths, blends, clips — a software port of Skia (the engine behind Chrome's graphics). CPU-only is what lets rendering run headless, in tests and in the CLI. |
 | `skrifa` | MIT OR Apache-2.0 | **Reads font files** and extracts glyph outlines from TrueType/OpenType/CFF, so text can be drawn as shapes. |
 | `subsetter` | MIT OR Apache-2.0 | **Font subsetting** — cuts an embedded font down to only the glyphs a document actually uses, so saved files do not carry a whole typeface for six characters. |
+| `iccce-profile` | MIT | **Parses ICC colour profiles.** Reads the profile embedded in a PDF's `/ICCBased` colour space or its `/OutputIntent`, so pdfce can know what a document's colours actually mean rather than guessing from the `/Alternate` space. |
+| `iccce-cmm` | MIT | **The colour-management engine** — converts between profiles at a chosen rendering intent. This is what makes a CMYK image in a document with a press profile come out the colour the press would print, rather than the colour a naive formula produces. |
 | `thiserror` | MIT OR Apache-2.0 | As above. |
+
+#### ★ `iccce` is the one dependency whose "why" is an architectural decision
+
+Every other package in this file was chosen because writing it would be a
+waste of time. `iccce` is different, and this file is the place that has to
+say so, because the generated `THIRD_PARTY_LICENSES.md` can only answer
+*what licence* and never *why is this here*.
+
+`iccce` (`github.com/KenM76/iccce`, MIT) is a **sibling project of pdfce's,
+written for pdfce** — its README names pdfce as its first consumer. By
+**decision 064** it owns *all* colour conversion: pdfce never implements a
+colour-management module, never picks up a competing CMM crate, and hands
+colour questions across that boundary instead. Decision 115 records the
+consumption terms.
+
+Two consequences worth stating plainly:
+
+- **It is pinned to a git tag, not a crates.io version** —
+  `tag = "v0.3.0"` in `crates/pdfce-render/Cargo.toml`. `iccce` is not
+  published to crates.io, and its author has declined to promise a release
+  cadence, so a tag is the strongest pin available. A tag is immutable in
+  practice and `Cargo.lock` records the resolved revision regardless, which
+  is what `pdfce-cli --version` reports.
+- **It clears the wasm32 gate**, which is why it is admissible at all.
+  Anything that could not cross into the future web fork would make colour
+  management the first capability pdfce could not carry there — see
+  `ARCHITECTURE.md` §3's GUI-core separation invariant, of which the wasm32
+  CI job is the enforcement.
+
+Note where it sits: `pdfce-render`, **not** `pdfce-core`. Colour management
+is a *rendering* concern; the object model has no opinion about what a
+colour looks like. That placement is also why `pdfce-core`'s build script
+could not see the dependency for six days after it landed — see
+`crates/pdfce-core/build.rs`.
 
 ### `pdfce-print` — printing
 
@@ -135,6 +171,13 @@ MIT, Apache-2.0, BSD-3-Clause, Zlib, or a choice among them.
   dependency-licence review.
 - Linking GPL or AGPL code is categorically impossible for an MIT project,
   so it is not a judgement call.
+- **`iccce-profile` and `iccce-cmm` are plain MIT**, verified against
+  `iccce`'s own `Cargo.toml` on 2026-09-01. They are a *git* dependency
+  rather than a registry one, so `cargo-about` resolves them from the
+  fetched source; they appear in `THIRD_PARTY_LICENSES.md` like any other
+  package. Being a sibling project of the operator's own does not exempt
+  them from classification — rule 13 applies to every dependency
+  regardless of who wrote it.
 - `jpeg-encoder` is the one **conjunctive** licence — `(MIT OR Apache-2.0)
   AND IJG` — so its IJG terms apply on top of the choice, not instead of it.
 - MuPDF, Poppler, Ghostscript and Inkscape are **behavioural references

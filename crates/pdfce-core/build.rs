@@ -17,49 +17,58 @@
 //! | `PDFCE_BUILD_COMMIT_TIMESTAMP` | the committer date of that revision, RFC 3339 UTC, or `unknown` |
 //! | `PDFCE_ICCCE_PROVENANCE` | see "the second half" below |
 //!
-//! # ★ The second half of the request cannot be answered, and why saying so
-//! is the answer
 //!
-//! pdfce **does not depend on `iccce`**. Measured, not assumed:
-//! `grep -rn "iccce" Cargo.toml crates/*/Cargo.toml` returns nothing, and no
-//! source file in the workspace mentions it. `iccce` exists as a sibling
-//! project and `ARCHITECTURE.md`'s decision 064 records the boundary — it
-//! owns colour conversion — but a boundary is a *decision*, not a
-//! dependency edge.
+//! # ★ The second half of the request, and the six days it was answered wrongly
 //!
-//! So there is no "version of iccce used in this build" to report. Stamping
-//! one anyway — by reading the sibling checkout's `git describe`, say —
-//! would assert a relationship that does not exist, and would go on
-//! asserting it every time somebody read the banner. That is the
-//! claim-bearing-copy rule applied to a version string.
+//! pdfce **does depend on `iccce`**, as of `Pass 199.2` (`3194f1b`):
+//! `iccce-profile` and `iccce-cmm`, git dependencies pinned to tag `v0.3.0`
+//! in `crates/pdfce-render/Cargo.toml`. So there *is* a "version of iccce
+//! used in this build" to report, and this script reports it — version,
+//! pin, resolved revision, and that revision's commit date.
 //!
-//! What this script does instead is emit `PDFCE_ICCCE_PROVENANCE` as the
-//! literal string `not-linked-yet`, so the version output **answers the
-//! operator's question every time he asks it** rather than leaving it
-//! silently unaddressed. `Pass 101.1` replaces that with the real
-//! revision, date and time on the day the dependency lands — and the
-//! detection is deliberately structural (see `iccce_provenance`), so it
-//! starts reporting the moment that happens rather than waiting for
-//! somebody to remember this file.
+//! ## What it read before, and why the correction is worth the words
 //!
-//! # ★ `not-linked-YET`, and the suffix is a correction
+//! From `Pass 101.0` to `Pass 223.0` this emitted the literal string
+//! `not-linked-yet`, together with prose explaining that the integration
+//! was pending. Every word of that was true when written. `Pass 199.2`
+//! made it false, and it went on being printed for six days — in the one
+//! output surface whose entire purpose is to be believed without checking.
 //!
-//! This first read `not-linked`, and the prose around it called the absence
-//! architectural — *"a boundary is a decision, not a dependency edge"*. The
-//! operator challenged that within the day, and he was right.
+//! ★★ **It did not self-correct, and the reason is the transferable part.**
+//! The old `iccce_provenance` read `DEP_ICCCE_PROVENANCE`, an environment
+//! variable Cargo sets only for a dependency that declares a `links` key.
+//! `iccce` declares none. The function's own doc comment promised *"this
+//! begins reporting the moment that becomes true"* — the moment came and
+//! nothing happened, **because the mechanism it was waiting for is not the
+//! mechanism that arrived.**
 //!
-//! `iccce` was **created for pdfce**. Its README's second sentence is *"Its
-//! first consumer is `pdfce`"*, and it names four things pdfce cannot do
-//! without it: `ICCBased` spaces rendered better than their `/Alternate`,
-//! `Separation`/`DeviceN` spot colours through a real colorimetric path,
-//! PDF/X output intents, and soft-proofing. None of those is a one-time
-//! reference; all four are permanent capabilities pdfce has not got.
-//! Decision 064's own status line says **"DECIDED (boundary), NOT STARTED
-//! (either consumer)"**.
+//! From the outside those are indistinguishable: a detector waiting on a
+//! signal its subject never emits looks exactly like a subject that has not
+//! arrived. Which is this project's own recurring lesson — *when a
+//! measurement looks clean, ask what the instrument cannot see* — landing
+//! on a self-describing string rather than on a renderer.
 //!
-//! So the honest word is **pending**, not *separate*. An unfinished
-//! integration and an architectural separation look identical in a one-word
-//! banner, and only one of them is a thing somebody still has to do.
+//! ## Why `Cargo.lock` is a legitimate source and a sibling checkout is not
+//!
+//! The old prose warned, correctly, that reading `D:\Dev\iccce`'s
+//! `git describe` would answer *"which iccce is on this machine"* while
+//! appearing to answer *"which iccce is in this binary"*. **That argument
+//! still stands and this does not violate it.** `Cargo.lock` is the
+//! *resolved* graph — the exact version and revision `rustc` is about to
+//! compile. It answers the second question directly.
+//!
+//! The commit **date** is then looked up by that revision in Cargo's own
+//! bare mirror under `$CARGO_HOME/git/db`. A repository is used there as a
+//! lookup table keyed by a revision that came from the lock, not as a
+//! source of truth about what is linked — see `iccce_commit_time`.
+//!
+//! ## The caveat, stated rather than buried
+//!
+//! `iccce` is `pdfce-render`'s dependency and this script runs for
+//! `pdfce-core`, which does not depend on it. The lock is workspace-wide,
+//! so inside this workspace the stamp is right for every shipped binary
+//! (all of them link `pdfce-render`). A project depending on `pdfce-core`
+//! alone finds no entry and gets `not-linked` — the truth for that build.
 //!
 //! # Reproducibility — the trade this makes, stated rather than buried
 //!
@@ -217,35 +226,306 @@ fn locate_git_dir() -> Option<std::path::PathBuf> {
         }
     }
 }
-
-/// What to report about the `iccce` build linked into this one.
+/// The `iccce` build linked into this one, read from the workspace
+/// `Cargo.lock`.
 ///
-/// # Why this reads the DEPENDENCY GRAPH and not a path on disk
+/// # ★★ Why `Cargo.lock`, when the doc this replaced forbade reading a
+/// sibling checkout
 ///
-/// Because the question is *"which iccce is in this binary"*, and a sibling
-/// checkout at `D:\Dev\iccce` answers a different question — *"which iccce
-/// is on this machine"*. Those coincide only by accident, and reporting the
-/// second as if it were the first is precisely the kind of plausible,
-/// unverifiable claim a version banner must not make.
+/// The previous version of this function returned the literal
+/// `"not-linked-yet"` and argued — correctly — that stamping the sibling
+/// checkout's `git describe` would answer *"which iccce is on this
+/// machine"* while appearing to answer *"which iccce is in this binary"*.
+/// **That argument still stands, and `Cargo.lock` is not an instance of
+/// it.** The lock file is the *resolved* dependency graph: the exact
+/// version and the exact git revision `rustc` is about to compile into
+/// this build. It answers the second question directly, which is why the
+/// old objection does not transfer.
 ///
-/// Cargo sets `DEP_<links>_*` variables only for crates that declare a
-/// `links` key, which `iccce` does not, so the reliable structural signal is
-/// `CARGO_PKG_*` on the dependency itself. Until pdfce actually depends on
-/// `iccce`, there is nothing to read, and this returns `not-linked-yet` — which
-/// is a true statement rather than an omission.
+/// # ★ It reports what the WORKSPACE links, not what `pdfce-core` links
 ///
-/// `Pass 101.1` fills this in when the dependency lands. It is written as a
-/// function with this doc comment, rather than as a hard-coded string
-/// literal at the call site, so the next person to add the dependency finds
-/// the explanation at the place they have to change.
+/// This is the honesty caveat, and it is the reason the old mechanism
+/// could never have worked. `iccce-profile` and `iccce-cmm` are
+/// dependencies of **`pdfce-render`**; `pdfce-core` does not depend on
+/// either, and this build script runs for `pdfce-core`. So:
+///
+/// - Inside the workspace — every shipped binary (`pdfce-cli`,
+///   `pdfce-gui`) links `pdfce-render`, so the lock's answer is the
+///   binary's answer.
+/// - Outside it — a project depending on `pdfce-core` alone has no
+///   `iccce` in its graph, finds no entry, and gets `not-linked`, which
+///   is the truth for that build.
+///
+/// # Why the old mechanism never fired, recorded so it is not rebuilt
+///
+/// It read `DEP_ICCCE_PROVENANCE`, an environment variable Cargo sets
+/// only for a dependency that declares a `links` key in its manifest.
+/// `iccce` declares none. Its doc comment promised *"this begins
+/// reporting the moment that becomes true"* — the moment came in
+/// `Pass 199.2` and it did not begin reporting, **because the mechanism
+/// it was waiting for is not the mechanism that arrived.** A detector
+/// waiting on a signal its subject never emits is indistinguishable, from
+/// the outside, from a subject that never arrived.
+///
+/// # Output shape
+///
+/// - `0.3.0 (tag v0.3.0, a4d9003b)` — a git dependency, the usual case.
+/// - `0.3.0 (git a4d9003b)` — a git dependency pinned by branch or rev
+///   rather than tag.
+/// - `0.3.0 (registry)` / `0.3.0 (path)` — if it ever comes from
+///   crates.io or a path override.
+/// - `not-linked` — no `iccce` package in the lock.
+/// - `disagreement: …` — the `iccce-*` packages resolved to **different**
+///   versions or sources. Reported rather than reduced to one of them:
+///   two halves of one colour engine at different revisions is a real
+///   defect, and picking a winner would hide it in the one output whose
+///   job is to be believed.
+///
+/// Never `unknown` on a parse failure that finds no entry — the absence
+/// of an entry *is* `not-linked`, and inventing a third state for "the
+/// file was there but I could not read it" would need the parser to be
+/// able to fail, which a line scan over three keys cannot.
 fn iccce_provenance() -> String {
-    // The env-var shape Cargo would give us if `iccce` were a build
-    // dependency exporting metadata. Checked rather than assumed absent, so
-    // this begins reporting the moment that becomes true.
-    if let Ok(v) = std::env::var("DEP_ICCCE_PROVENANCE")
-        && !v.trim().is_empty()
-    {
-        return v.trim().to_owned();
+    let Some(lock) = locate_lockfile() else {
+        return "not-linked".to_owned();
+    };
+    println!("cargo::rerun-if-changed={}", lock.display());
+    let Ok(text) = std::fs::read_to_string(&lock) else {
+        return "not-linked".to_owned();
+    };
+
+    // A line scan rather than a TOML parser, for the same reason the rest
+    // of this script shells out to `git` instead of linking `gix`: a build
+    // script's dependencies are compiled for the host on every clean
+    // build, and `Cargo.lock`'s `[[package]]` blocks are three flat
+    // string keys with no nesting, no arrays-of-tables inside them and no
+    // multi-line strings. There is nothing here a parser would get right
+    // that this gets wrong.
+    let mut found: Vec<(String, String, String)> = Vec::new();
+    let mut name = String::new();
+    let mut version = String::new();
+    let mut source = String::new();
+    let mut flush = |name: &mut String, version: &mut String, source: &mut String| {
+        if name.starts_with("iccce") && !version.is_empty() {
+            found.push((name.clone(), version.clone(), source.clone()));
+        }
+        name.clear();
+        version.clear();
+        source.clear();
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line == "[[package]]" {
+            flush(&mut name, &mut version, &mut source);
+        } else if let Some(value) = unquote(line, "name") {
+            name = value;
+        } else if let Some(value) = unquote(line, "version") {
+            version = value;
+        } else if let Some(value) = unquote(line, "source") {
+            source = value;
+        }
     }
-    "not-linked-yet".to_owned()
+    flush(&mut name, &mut version, &mut source);
+
+    let Some((_, first_version, first_source)) = found.first() else {
+        return "not-linked".to_owned();
+    };
+    // Every `iccce-*` crate is published from one repository at one tag,
+    // so a disagreement means something went wrong upstream of this
+    // build. See the doc comment for why it is surfaced rather than
+    // resolved.
+    if let Some((odd_name, odd_version, _)) = found
+        .iter()
+        .find(|(_, v, s)| v != first_version || s != first_source)
+    {
+        return format!(
+            "disagreement: {} of {} iccce crate(s) differ (e.g. {odd_name} {odd_version} vs {first_version})",
+            found
+                .iter()
+                .filter(|(_, v, s)| v != first_version || s != first_source)
+                .count(),
+            found.len(),
+        );
+    }
+    let described = describe_source(first_source);
+    match iccce_commit_time(first_source, &git_revision(first_source)) {
+        Some(when) => format!("{first_version} ({described}, committed {when})"),
+        None => format!("{first_version} ({described})"),
+    }
+}
+
+/// The resolved git revision out of a `Cargo.lock` `source` value, or the
+/// empty string when the source is not a git one.
+///
+/// Split out of [`describe_source`] rather than returned alongside its
+/// text because the two are wanted at different fidelities: the banner
+/// shows eight characters, and [`iccce_commit_time`] must look the object
+/// up by the FULL revision — an abbreviated one is ambiguous to `git` in
+/// principle and is simply the wrong string to hand a lookup.
+fn git_revision(source: &str) -> String {
+    source
+        .strip_prefix("git+")
+        .and_then(|git| git.split_once('#'))
+        .map_or_else(String::new, |(_, rev)| rev.to_owned())
+}
+
+/// The value of `key = "…"` on one `Cargo.lock` line, if that is the key.
+///
+/// Anchored on `key = "` rather than on `contains(key)` so that a
+/// `source` line whose URL happens to contain the word `name` cannot be
+/// read as a `name` line.
+fn unquote(line: &str, key: &str) -> Option<String> {
+    let prefix = format!("{key} = \"");
+    let rest = line.strip_prefix(&prefix)?;
+    Some(rest.strip_suffix('"')?.to_owned())
+}
+
+/// A lock-file `source` value reduced to the shortest phrase that
+/// identifies the build.
+///
+/// The git revision is abbreviated to eight characters — enough to be
+/// unambiguous in any real repository, short enough that the banner line
+/// stays readable. The full revision is in `Cargo.lock`, which is
+/// committed, so nothing is lost.
+fn describe_source(source: &str) -> String {
+    if source.is_empty() {
+        // No `source` key at all means a path dependency or a workspace
+        // member: the code is on this disk, not fetched.
+        return "path".to_owned();
+    }
+    let Some(git) = source.strip_prefix("git+") else {
+        return "registry".to_owned();
+    };
+    let rev = git
+        .split_once('#')
+        .map(|(_, rev)| rev)
+        .unwrap_or_default()
+        .chars()
+        .take(8)
+        .collect::<String>();
+    // `?tag=v0.3.0`, `?branch=main`, `?rev=abc123` — the pin the manifest
+    // actually asked for, which is what a reader recognises. The resolved
+    // revision is what they get; both are worth printing.
+    let pin = git
+        .split_once('?')
+        .and_then(|(_, query)| query.split('#').next())
+        .and_then(|query| query.split_once('='))
+        .map(|(kind, value)| format!("{kind} {value}"));
+    match (pin, rev.is_empty()) {
+        (Some(pin), false) => format!("{pin}, {rev}"),
+        (Some(pin), true) => pin,
+        (None, false) => format!("git {rev}"),
+        (None, true) => "git".to_owned(),
+    }
+}
+
+/// The workspace `Cargo.lock`, found by walking up from this crate.
+///
+/// Walks rather than hard-coding `../../Cargo.lock` so that a vendored or
+/// relocated checkout still resolves, and stops at the filesystem root
+/// rather than after a fixed number of levels — the same shape
+/// [`locate_git_dir`] uses, and for the same reason.
+fn locate_lockfile() -> Option<std::path::PathBuf> {
+    let start = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    let mut dir: Option<&Path> = Some(Path::new(&start));
+    while let Some(current) = dir {
+        let candidate = current.join("Cargo.lock");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        dir = current.parent();
+    }
+    None
+}
+
+/// When the linked `iccce` revision was committed, RFC 3339 UTC.
+///
+/// # ★ Why this is a fact about the BINARY and not about the machine
+///
+/// The build script's other `iccce` doc block explains why reading the
+/// sibling checkout at `D:\Dev\iccce` would be dishonest: it answers
+/// *"which iccce is on this machine"*. This does not have that problem,
+/// and the difference is one word — **`rev`**.
+///
+/// `rev` comes out of `Cargo.lock`: it is the exact revision this build
+/// compiles. Asking a repository *"when was `a4d9003b` committed"* has one
+/// answer, the same on every machine that has the object, and it is a
+/// property of the linked code rather than of the checkout that answered.
+/// A repository is being used as a **lookup table keyed by the revision**,
+/// not as a source of truth about what is linked.
+///
+/// # Where it looks, and why that one first
+///
+/// `$CARGO_HOME/git/db/<name>-<hash>` — Cargo's own bare mirror of the
+/// dependency's repository. It is the copy Cargo fetched *in order to
+/// build this*, so if the build succeeded the object is there by
+/// construction. That makes it the only lookup that cannot be stale or
+/// absent for a git dependency actually being compiled.
+///
+/// `<hash>` is Cargo's hash of the repository URL and is not reproducible
+/// here, so the directory is matched by the `<name>-` prefix derived from
+/// the URL's last path segment.
+///
+/// # Failure is silence, not a guess
+///
+/// Returns `None` on every failure — no `CARGO_HOME`, no `git` on PATH, a
+/// registry or path dependency with no repository, an object that is
+/// somehow absent. The caller then prints the provenance without a date,
+/// which is a shorter true statement rather than a longer plausible one.
+fn iccce_commit_time(source: &str, rev: &str) -> Option<String> {
+    if rev.is_empty() {
+        return None;
+    }
+    let url = source.strip_prefix("git+")?.split('?').next()?;
+    // `https://github.com/KenM76/iccce.git` -> `iccce`
+    let name = url
+        .rsplit('/')
+        .next()?
+        .trim_end_matches(".git")
+        .to_ascii_lowercase();
+    if name.is_empty() {
+        return None;
+    }
+
+    let cargo_home = std::env::var("CARGO_HOME").map_or_else(
+        |_| {
+            std::env::var("USERPROFILE")
+                .or_else(|_| std::env::var("HOME"))
+                .map(|home| Path::new(&home).join(".cargo"))
+        },
+        |value| Ok(std::path::PathBuf::from(value)),
+    );
+    let db = cargo_home.ok()?.join("git").join("db");
+
+    let prefix = format!("{name}-");
+    for entry in std::fs::read_dir(&db).ok()? {
+        let Ok(entry) = entry else { continue };
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .starts_with(&prefix)
+        {
+            continue;
+        }
+        let out = Command::new("git")
+            .args(["show", "-s", "--format=%ct", rev])
+            .current_dir(entry.path())
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            continue;
+        }
+        // Formatted through the same helper the build's own timestamps
+        // use, so a date copied out of the `iccce` line and one copied out
+        // of the `committed` line are directly comparable — which is the
+        // whole point of the operator having asked for both.
+        if let Some(seconds) = String::from_utf8(out.stdout)
+            .ok()
+            .and_then(|s| s.trim().parse::<i64>().ok())
+        {
+            return Some(format_rfc3339_utc(seconds));
+        }
+    }
+    None
 }
