@@ -86026,3 +86026,93 @@ alone.
   spot-plane arc.
 - Backup/push state: not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (373rd filing) — `Pass 232.0` (`86b83f4`, comment-only overprint-derivation fix) SHIPPED; the `v0.20.0` release (`599dec6` + tag/build/deploy) recorded for the first time, no Pass ID; `R217` given a FIFTH amendment note after its own author pushed both commits unfiled
+
+**Sourcing.** No shell this filing. Both commit bodies supplied verbatim as a
+scratch file (`.librarian-two.txt`, 62 lines) by the engineer; independently
+cross-checked against live source — `crates/pdfce-render/src/cmyk_buffer.rs:1654-1669`,
+`crates/pdfce-render/src/interpret.rs:5292-5314` (the two corrected sites) and
+`crates/pdfce-render/src/interpret.rs:6339-6343` +
+`crates/pdfce-render/src/overprint.rs:204-210` (the two sites checked and
+deliberately left alone) — rather than trusted on the commit text alone. The
+release facts (tag, CI colour, OneDrive slot state, `THIRD_PARTY_LICENSES.md`
+byte-identity) are the engineer's relayed account, **not independently
+verified — no shell this filing** (hard rule 8).
+
+**Shipped:**
+
+- **`Pass 232.0`** (`86b83f4`) — three comments written across `Pass
+  228.0`–`230.0` justified preserving a spot colorant under `OP true` with
+  *"a colorant not named in the source colour space is left to the
+  backdrop"* — the `Separation`/`DeviceN` rows' phrasing (decision 119),
+  lifted onto process-source rows that apply no name test at all. Corrected
+  to cite §11.7.3 directly: every object paints every component, process and
+  spot, at an implicit tint 0.0 where unspecified; overprint decides only
+  whether that 0.0 is written or replaced by the backdrop. **No behaviour
+  change** — the code already reached the conforming answer, only its stated
+  reason was wrong. Two further sites (`overprint.rs`'s spot-only refusal,
+  `interpret.rs`'s `Pass 229.0` comment) were checked and **deliberately
+  left alone** — both genuinely sit on the `Separation`/`DeviceN` row, so a
+  blanket sweep-the-phrase pass would have replaced two correct statements
+  with a less precise one. **`docs/FEATURES.md`: no row moves** — comment
+  fix, no capability change.
+
+- **`v0.20.0` release** (`599dec6` + tag/build/deploy chain) — recorded here
+  for the first time; the 371st filing had only noted a release would
+  follow. `599dec6` ("fuzz lockfile follows the 0.20.0 version bump") is
+  mechanical — `cargo about` regenerated `THIRD_PARTY_LICENSES.md`
+  byte-identical, dependency set unmoved — and was **judged not to warrant a
+  Pass ID**, same treatment as `v0.19.0`'s release commit `d19d4e4`. As
+  relayed by the engineer: cut, tagged, pushed, packaged, smoke-tested from
+  a fresh folder, deployed to OneDrive slot `pdfce1` (`pdfce2` retains
+  `v0.19.0`, per `R229`'s alternating-slot discipline), and
+  `tools/verify-release.py v0.20.0` reported clean including CI green at the
+  tagged commit. Operator go-ahead ("release asap when done") was explicit
+  and current at time of asking. **None of this independently re-verified**
+  — no shell this filing.
+
+**Decisions made this session:** none — no crate boundary, library choice or
+invariant redefinition; `ARCHITECTURE.md` §12 not touched.
+
+**Findings + decisions:**
+
+- **A process failure, recorded honestly rather than smoothed over: both
+  commits above were pushed unfiled**, the exact shape `R217` exists to
+  prevent, by the same session that minted `R217`'s fourth amendment note a
+  few hours earlier ("pair the code commit and its filing commit in the same
+  push"). **Why it was missed, in the engineer's own account:** the push
+  *did* contain a filing commit — the 372nd filing's own librarian commit —
+  but that commit files `Pass 231.0`, not either of these two. "A push
+  contains a filing commit" and "a push contains the filing commit for its
+  own commits" are different facts, and the impression of the first
+  substituted for checking the second. Same shape as hard rule 11(e) (a
+  match that isn't *the* match reads as green), recurring in a process gate
+  rather than a documentation sweep.
+- **`R217` given a fifth amendment note, no new rule number**: *run
+  `tools/check-commits-filed.py` immediately before every push, not merely
+  "commit a filing alongside."* The engineer's own proposed sharpening,
+  accepted verbatim — see `ROADMAP.md`'s `R217` entry.
+
+**Still in flight / open:**
+
+- Everything the 372nd filing left open is unchanged by this filing: open
+  operator question `(cb)` (Acrobat `Use Overprint Preview` reference-render
+  regeneration), step 4 of the spot-plane arc (images/shadings/knockout
+  groups), and the comment-paraphrase fix — the last of which **this filing
+  discharges** via `Pass 232.0`, so it drops off the open list.
+
+**For next session:**
+
+- Confirm the `v0.20.0` tag and CI colour with a shell (`git tag -l
+  "v0.20*"`, `gh run list`) before treating the release record above as
+  independently verified rather than relayed.
+- Re-generate the Acrobat reference renders with `Use Overprint Preview`
+  forced to `Always`, if/when the operator answers `(cb)`, and re-measure
+  `PCS 3.0`/`PCS 4.0`.
+- Step 4 (images + knockout groups) remains the scoped next task on the
+  spot-plane arc.
+- Run `tools/check-commits-filed.py` immediately before every future push —
+  the new `R217` working order, not just "a filing landed recently."
+- Backup/push state: not independently checked by this role, no shell this
+  filing.

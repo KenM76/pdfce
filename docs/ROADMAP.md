@@ -96,6 +96,153 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ TWO COMMITS, 373rd filing, 2026-09-02 — `Pass 232.0` (`86b83f4`) corrects
+the derivation the previous three Passes' comments carried (behaviour
+unchanged); the `v0.20.0` release (`599dec6` + the tag/build/deploy chain) is
+RECORDED HERE FOR THE FIRST TIME; AND THE COMMITS THIS FILING FILES WERE
+PUSHED WITH `R217`'S OWN ORDERING RULE ALREADY BROKEN — by the rule's author,
+hours after minting it.**
+
+**Sourcing (hard rule 8).** No shell this filing. Both commit bodies supplied
+verbatim as a scratch file (`D:\Dev\pdfce\.librarian-two.txt`, 62 lines,
+`####`-delimited) by the engineer, not read via `git log`. Independently
+cross-checked by `Read`/`Grep` against live source rather than taken on the
+commit text alone:
+
+- `crates/pdfce-render/src/cmyk_buffer.rs:1654-1669` — the corrected comment,
+  citing §11.7.3 verbatim ("every object paints every existing colour
+  component, both process and spot… a subtractive tint value of 0.0 shall be
+  assumed") and naming the withdrawn "not named in the source colour space"
+  framing as the `Separation`/`DeviceN` rows' phrasing, lifted in error.
+- `crates/pdfce-render/src/interpret.rs:5292-5314` — the second corrected
+  site (`overprint_would_change`), same citation, same withdrawal, plus a
+  forward pointer to `iso32000__s__8.6.7.md` and the `pdfce-spec-librarian`
+  adjudication decision 119 recorded.
+- `crates/pdfce-render/src/interpret.rs:6339-6343` and
+  `crates/pdfce-render/src/overprint.rs:204-210` — the two sites the commit
+  says were **checked and deliberately left alone**. Confirmed: both still
+  carry the "named in source space" / "not named… left to the backdrop"
+  wording, and both sit on the `Separation`/`DeviceN` row, where that wording
+  is the standard's own. `interpret.rs:6339-6343` additionally carries an
+  explicit in-line note dated 2026-09-02 pointing at the sibling site that
+  *was* corrected — a self-documenting "why this one wasn't touched," found
+  on read rather than asserted from the commit message.
+
+No `Cargo.toml` change in `86b83f4` — GUI-core separation not implicated.
+Round-trip/minimal-diff not implicated — comments only, no behaviour change,
+confirmed by the commit's own framing and by nothing in the diff touching a
+non-comment line per the cross-checked spans above. **Not independently
+re-verified this filing**: whether `599dec6`'s `cargo about` regeneration
+was genuinely byte-identical, whether the tag exists, whether CI is green at
+the tagged commit, and whether the OneDrive `pdfce1`/`pdfce2` slot state
+matches what is reported — all relayed from the engineer's account, not
+`git`/`gh`-checked, no shell this filing (hard rule 8).
+
+### Pass 232.0 (`86b83f4`, 2026-09-02) — the overprint comments reached the
+right cell by a route the tables do not take
+
+Comments only, no behaviour change — and that is the entire content of the
+fix: the code was already correct; its *stated reason* was not.
+
+**What was wrong.** Three comments written across `Pass 228.0`–`230.0`
+justified preserving a spot colorant under `OP true` with *"a colorant not
+named in the source colour space is left to the backdrop."* That sentence is
+the `Separation`/`DeviceN` rows' phrasing (Table 149's *named-in-source-space*
+test genuinely applies there). Lifted onto a **process-source** row —
+`DeviceGray`/`DeviceRGB`/`DeviceCMYK`/`ICCBased` — it reaches the correct
+cell by a test those rows do not apply at all: process-source rows carry no
+name test.
+
+**The correct derivation, per decision 119** (this filing's predecessor,
+372nd filing): §11.7.3 — *every object paints every existing colour
+component, process and spot alike; any component the source did not specify
+is painted at subtractive tint 0.0.* A process source therefore does not
+*fail to address* a spot colorant, it paints it at tint 0.0; overprint's only
+job is choosing whether that 0.0 is written (`OP false`) or replaced by the
+backdrop (`OP true`). Fixed at the two sites named in Sourcing above.
+
+**★ Two further sites checked and deliberately left alone**
+(`overprint.rs`'s spot-only refusal, `interpret.rs`'s `Pass 229.0` comment) —
+both sit on the `Separation`/`DeviceN` row, the row the standard genuinely
+words that way. Correcting all five occurrences by pattern-matching the
+withdrawn phrase would have replaced two *correct* statements with a less
+precise one. Worth stating as the counter-example to hard rule 11(e)'s "sweep
+for the claim, not the phrase": sweeping the phrase here would have done
+damage, because the phrase is right on two of the five sites it appears on.
+
+**`docs/FEATURES.md`: no row moves.** Comment-only fix; no capability, no
+counter, no disclosure text changed.
+
+---
+
+### `v0.20.0` release (`599dec6` + tag/build/deploy, 2026-09-02) — no Pass ID
+
+**Recorded here for the first time** — the 371st filing noted "a release
+follows this filing" as an open item; this is that release, relayed by the
+engineer and not independently re-verified (no shell this filing, hard rule
+8).
+
+**`599dec6`** — `chore: fuzz lockfile follows the 0.20.0 version bump`.
+Mechanical, part of the `v0.20.0` cut: `cargo about` regenerated
+`THIRD_PARTY_LICENSES.md`, reported byte-identical — the dependency set did
+not move for this release. **Judged not to warrant a Pass ID**: no scoped
+unit of engineering work, no acceptance criteria, no behaviour change —
+identical in kind to `v0.19.0`'s release commit (`d19d4e4`), which also
+received no Pass ID, only a release-record note in this section (see the
+`Pass 213.0` entry above for that precedent).
+
+**As relayed by the engineer:** `v0.20.0` was cut, tagged, pushed, packaged,
+and smoke-tested from a fresh folder; deployed to OneDrive CLI slot `pdfce1`
+(`pdfce2` retains `v0.19.0` as the previous version, per the alternating-slot
+discipline `R229` established at `Pass 166.0`); and `tools/verify-release.py
+v0.20.0` reported clean on every check, including CI green at the tagged
+commit. The operator's go-ahead ("release asap when done") was explicit and
+current at time of asking (371st filing), satisfying rule 8's gate on
+cutting a tag/release.
+
+**Not independently checked by this role**, per hard rule 8: tag existence,
+CI colour, OneDrive slot contents, and the "byte-identical" claim for
+`THIRD_PARTY_LICENSES.md` are all the engineer's account. A future filing
+with a shell should confirm `git tag -l "v0.20*"` and `gh run list` before
+treating this record as independently verified rather than relayed.
+
+---
+
+### Process failure recorded honestly: `R217`'s own author pushed the two
+commits above with the rule already broken
+
+The engineer's own report, filed verbatim because hard rule 8's discipline
+("don't infer, and don't launder a relayed claim as verified") applies as
+much to a self-report as to a backup figure. **`599dec6` and `86b83f4` were
+pushed unfiled** — the exact shape `R217` exists to prevent (a code/docs
+commit landing at the tip with no filing commit paired in the same push) —
+**by the same session that minted `R217`'s fourth amendment note** (369th
+filing, "GitHub runs one job per PUSH, not per commit — pair the code commit
+and its filing commit in the same push") **a few hours earlier.**
+
+**Why it was missed, in the engineer's own account, worth keeping rather
+than smoothing over:** the push *was* accompanied by a filing commit in the
+same push — the 372nd filing's own librarian commit — but that filing
+commit files `Pass 231.0`, not `599dec6` or `86b83f4`. **"A push contains a
+filing commit" and "a push contains the filing commit for its own code
+commits" are different facts**, and the first one is what a quick check sees.
+This is the same shape hard rule 11 names for `crates/` sweeps — a check that
+looks for *a* match rather than *the* match returns a false green — applied
+here to a process gate instead of a documentation sweep.
+
+**Whether `R217` needs a sharper statement.** The engineer offered a
+candidate: *"run `check-commits-filed.py` immediately before every push, not
+merely commit a filing alongside."* Judged **worth adding as a fifth
+amendment note, not a new rule number** — this is `R217`'s own subject (the
+width and discipline of the deferral window), and the fourth amendment note
+already restated the *timing* half (pair code+filing in one push); this
+occurrence is about the *verification* half — a push can satisfy the pairing
+rule's letter (a filing commit is present) while violating its intent (it
+isn't paired with *these* commits), and the only check that catches that
+distinction is running the gate itself, immediately before the push, rather
+than trusting that "a filing landed recently" is the same fact. Added below,
+under `R217`.
+
 **★ ONE COMMIT, 372nd filing, 2026-09-02 — `Pass 231.0` (`36291a1`).**
 
 **Sourcing (hard rule 8).** No shell this filing. Full commit body supplied
@@ -134126,6 +134273,40 @@ same cause (hashes exist only at commit time), two different failure modes.
   > per push) that explains why a technically-compliant commit order still
   > produced red runs. **Ceiling unaffected: rules `R239`, next free `R240`;
   > decisions `118`, next free `119`.**
+
+  > **★ FIFTH AMENDMENT NOTE, 2026-09-02, 373rd filing — "A FILING LANDED IN
+  > THIS PUSH" IS NOT THE SAME FACT AS "THIS PUSH'S COMMITS ARE FILED," AND
+  > ONLY RUNNING THE GATE DISTINGUISHES THEM. NO NEW NUMBER; ONE WORKING
+  > ORDER SHARPENED.**
+  >
+  > **`R217`'s own author violated it a few hours after minting the fourth
+  > amendment note above.** `599dec6` (the `v0.20.0` lockfile-follows-version
+  > commit) and `86b83f4` (`Pass 232.0`, comment-only) were pushed with no
+  > filing commit for either, satisfying the letter of the fourth
+  > amendment's "pair code and filing in the same push" only by accident: the
+  > push *did* contain a filing commit — the 372nd filing's own — but that
+  > commit files `Pass 231.0`, a different Pass, not these two commits. The
+  > two facts read as one at a glance and are not.
+  >
+  > **Why this survived a check rather than being caught by one:** nothing
+  > was checked. The push "felt accompanied by a filing" because a filing
+  > commit was genuinely present in recent history, and that impression
+  > substituted for running `tools/check-commits-filed.py`, the one instrument
+  > that actually answers the question. This is hard rule 11(e)'s shape (a
+  > search that finds *a* match reads as though it found *the* match)
+  > recurring in a process gate rather than a documentation sweep.
+  >
+  > **The added clause, the engineer's own proposed sharpening, accepted
+  > verbatim:** ***run `tools/check-commits-filed.py` immediately before every
+  > push, not merely "commit a filing alongside."*** A recent filing commit
+  > existing in history is not evidence about *this* push's unfiled commits;
+  > the gate is the only thing that checks that, and it costs one command.
+  >
+  > **No new rule number** — this is `R217`'s own subject, the discipline of
+  > verifying the deferral window rather than assuming it, one more time in
+  > the sequence the fourth amendment note already opened (timing) and this
+  > one closes (verification). **Ceiling unaffected: rules `R239`, next free
+  > `R240`; decisions `119`, next free `120`.**
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 
