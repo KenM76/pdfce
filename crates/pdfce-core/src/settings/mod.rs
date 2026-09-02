@@ -896,6 +896,128 @@ impl OverprintZeroTintScope {
     }
 }
 
+/// Which **output-device model** pdfce renders a spot colorant against
+/// (`OP-A7`).
+///
+/// # ★★ This is a real fork in the standard, not a quality knob
+///
+/// ISO 32000-1 **§8.6.6.4** contains a `shall` that fires the moment a
+/// `Separation` colour space is *set*, long before any overprint rule is
+/// consulted:
+///
+/// > the conforming reader **shall determine whether the device has an
+/// > available colorant** corresponding to the name of the requested space
+/// > … **if it does not**, it *"shall arrange for subsequent painting
+/// > operations to be performed in an alternate colour space."*
+///
+/// A screen has no `PANTONE 265 C` plate. Read literally, that clause says
+/// a composite device must substitute the alternate space — after which the
+/// ink is ordinary process colour and **overprint can no longer preserve
+/// it, because there is no longer a spot colorant on the page to preserve.**
+///
+/// ISO 32000-**2** §10.8.3 then defines *separation simulation*: render as
+/// if for a **simulated** device that does have the colorant. That is a
+/// `may`, and it is 2.0-only — ISO 32000-1 has no such concept at all.
+///
+/// ⇒ **Both answers are conformant, and they render differently.** A white
+/// object overprinting a spot backdrop knocks it out under one and preserves
+/// it under the other. That is why this is a setting: the standard does not
+/// choose, so pdfce must not pretend it did.
+///
+/// # Why the default is [`Self::SimulateSeparations`]
+///
+/// Because §8.6.6.4's own **NOTE 7** says the alternate-space path *"does
+/// not necessarily reflect the interactions between an object and its
+/// backdrop when overprinting is enabled"* and points at separation
+/// simulation as *"an alternative method to yield better results when
+/// overprinting is involved"* — and §10.8.2's worked example (cyan then
+/// yellow, overprinting) shows the two paths giving *"dramatically different
+/// colours"*, with the composite one wrong.
+///
+/// ★ **Stated honestly, because the asymmetry is real:** the default has
+/// **no ISO 32000-1 basis whatsoever**. It is the recommended branch of an
+/// *optional* 2.0 feature. "On the recommended branch" is a weaker claim
+/// than "the conforming one", and an earlier decision record made the
+/// stronger one before this clause was found.
+///
+/// # ★ The consequence for any test that uses another engine as an oracle
+///
+/// A viewer in composite mode ([`Self::AlternateSpaceSubstitution`]) and one
+/// simulating separations produce **different, both-correct** pixels for the
+/// same file. So an expected-colour fixture for a spot-overprint cell
+/// encodes an unstated assumption about which model the oracle was in, and
+/// will fail correct code the moment that oracle's preference changes.
+/// Expected values for such cells belong **per device model**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum SpotColorantDeviceModel {
+    /// Render for a **simulated device that has the colorant** — ISO
+    /// 32000-2 §10.8.3. The spot keeps its own ink plane, and overprint
+    /// preserves it.
+    ///
+    /// **The default.** See the type's docs for why, and for the honest
+    /// caveat that this branch is 2.0-only and optional.
+    #[default]
+    SimulateSeparations,
+    /// Render for the **actual composite device**, which has no such
+    /// colorant — ISO 32000-1 §8.6.6.4's `shall`. The `Separation` is
+    /// converted through its tint transform at the moment its space is set,
+    /// and from then on it is ordinary process ink.
+    ///
+    /// **Choose this to reproduce a composite viewer's output**, including
+    /// Adobe Acrobat's default view. Overprint is still honoured in full —
+    /// it simply has no spot colorant left to act on, which is exactly why
+    /// a white object knocks the ink out under this model and preserves it
+    /// under the other.
+    ///
+    /// Conformant under **both** editions, unlike the default.
+    AlternateSpaceSubstitution,
+}
+
+impl SpotColorantDeviceModel {
+    /// Parse a settings-file / command-line token, or `None` if unknown.
+    ///
+    /// One vocabulary, two readers — the settings parser and the CLI flag
+    /// both come here, so a token the file accepts and a token the flag
+    /// accepts cannot diverge. Same argument
+    /// [`OverprintZeroTintScope::parse`] makes.
+    ///
+    /// ```
+    /// use pdfce_core::settings::SpotColorantDeviceModel as Model;
+    /// assert_eq!(Model::parse("simulate_separations"), Some(Model::SimulateSeparations));
+    /// assert_eq!(
+    ///     Model::parse("alternate_space_substitution"),
+    ///     Some(Model::AlternateSpaceSubstitution)
+    /// );
+    /// assert_eq!(Model::parse("nonsense"), None);
+    /// ```
+    #[must_use]
+    pub fn parse(token: &str) -> Option<Self> {
+        match token {
+            "simulate_separations" => Some(Self::SimulateSeparations),
+            "alternate_space_substitution" => Some(Self::AlternateSpaceSubstitution),
+            _ => None,
+        }
+    }
+
+    /// The settings-file token for this value — the exact inverse of
+    /// [`Self::parse`].
+    ///
+    /// ```
+    /// use pdfce_core::settings::SpotColorantDeviceModel as Model;
+    /// for m in [Model::SimulateSeparations, Model::AlternateSpaceSubstitution] {
+    ///     assert_eq!(Model::parse(m.as_str()), Some(m), "round trip");
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SimulateSeparations => "simulate_separations",
+            Self::AlternateSpaceSubstitution => "alternate_space_substitution",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum PageBlendSpaceSource {
@@ -1692,6 +1814,11 @@ pub struct Settings {
     /// **960 lines below the block `Pass 174.5` corrected and in the same
     /// file** — `R234`'s own worked example.
     pub overprint_zero_tint_scope: OverprintZeroTintScope,
+    /// Which output-device model a spot colorant is rendered against —
+    /// spec fork `OP-A7`. See [`SpotColorantDeviceModel`]; both values are
+    /// conformant and they render a spot backdrop under overprint
+    /// differently.
+    pub spot_colorant_device_model: SpotColorantDeviceModel,
     /// How a type 6/7 mesh-shading patch record is byte-padded - spec
     /// ambiguity `MSH-A1`, 8.7.4.5.5/.7/.8. See [`MeshPatchPadding`], whose
     /// docs carry the clause text and the reason it is permanent rather
@@ -1780,6 +1907,7 @@ impl Default for Settings {
             // this module and in `pdfce-render` pin that agreement.
             page_blend_space_source: PageBlendSpaceSource::default(),
             overprint_zero_tint_scope: OverprintZeroTintScope::default(),
+            spot_colorant_device_model: SpotColorantDeviceModel::default(),
             mesh_patch_padding: MeshPatchPadding::default(),
             mask_resample: MaskResample::default(),
             image_minify: MinifyFilter::default(),
@@ -2285,6 +2413,22 @@ impl Settings {
                         .to_owned(),
                 }),
             },
+            "spot_colorant_device_model" => match SpotColorantDeviceModel::parse(value) {
+                Some(model) => self.spot_colorant_device_model = model,
+                // A bad value is a NOTE and the default stands, exactly as
+                // every neighbouring arm does it -- a settings file with one
+                // typo must still load, and the operator must be told which
+                // value is actually in force rather than left to infer it.
+                None => notes.push(SettingNote::BadValue {
+                    key: key.to_owned(),
+                    value: value.to_owned(),
+                    line,
+                    using: Self::default()
+                        .spot_colorant_device_model
+                        .as_str()
+                        .to_owned(),
+                }),
+            },
             "overprint_zero_tint_scope" => match OverprintZeroTintScope::parse(value) {
                 Some(scope) => self.overprint_zero_tint_scope = scope,
                 None => notes.push(SettingNote::BadValue {
@@ -2631,6 +2775,36 @@ impl Settings {
             out,
             "overprint_zero_tint_scope = {}\n",
             self.overprint_zero_tint_scope.as_str()
+        );
+
+        out.push_str("# Which OUTPUT DEVICE a spot colorant is rendered for -- spec fork OP-A7.\n");
+        out.push_str(
+            "# ISO 32000-1 8.6.6.4 REQUIRES substituting a Separation's alternate colour\n",
+        );
+        out.push_str(
+            "# space when the device has no colorant of that name, which a screen never\n",
+        );
+        out.push_str("# does. ISO 32000-2 10.8.3 PERMITS simulating a device that does. Both\n");
+        out.push_str("# conform, and they differ: a white object overprinting a spot backdrop\n");
+        out.push_str("# knocks it out under the first and preserves it under the second.\n");
+        out.push_str("#\n");
+        out.push_str("#   simulate_separations          the default -- keep the ink on its own\n");
+        out.push_str("#                                 plate; 8.6.6.4 NOTE 7 and 10.8.3 both\n");
+        out.push_str("#                                 rank this better under overprint\n");
+        out.push_str("#   alternate_space_substitution  render for the actual composite device,\n");
+        out.push_str("#                                 reproducing what a screen viewer shows\n");
+        out.push_str("#\n");
+        out.push_str(
+            "# Measured on the print-conformance corpus: the default trips 9 trap marks\n",
+        );
+        out.push_str(
+            "# across the four spot patches, the alternative 16 -- those traps exist to\n",
+        );
+        out.push_str("# catch a composite renderer, so the corpus expects the default.\n");
+        let _ = writeln!(
+            out,
+            "spot_colorant_device_model = {}\n",
+            self.spot_colorant_device_model.as_str()
         );
 
         out.push_str(
@@ -3338,6 +3512,8 @@ mod tests {
             page_blend_space_source: PageBlendSpaceSource::DeviceNative,
             // NOT the default (`GreyAsKOnly`), same reason.
             overprint_zero_tint_scope: OverprintZeroTintScope::DeviceCmykOnly,
+            // Non-default, per the discipline the comment above states.
+            spot_colorant_device_model: SpotColorantDeviceModel::AlternateSpaceSubstitution,
             // NOT the default (`PerRecord`), same reason.
             mesh_patch_padding: MeshPatchPadding::None,
             word_gap_ratio: 0.35,

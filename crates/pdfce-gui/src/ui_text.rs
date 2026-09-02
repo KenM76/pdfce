@@ -2521,6 +2521,58 @@ space. Ordinary screen documents are unaffected either way."
 /// Every string here is written about INK ON PAPER, not about clause numbers.
 /// The operator choosing this is a print buyer looking at a proof that came
 /// back wrong, not somebody reading the standard.
+/// The question this setting answers, in the operator's terms.
+///
+/// Deliberately about the DOCUMENT and the OUTCOME, never the clause: an
+/// operator choosing this is asking "why does my proof look different from
+/// my screen", not "which row of Table 148 applies".
+pub fn setting_spot_device_model_title() -> &'static str {
+    "Whether a special ink keeps its own printing plate"
+}
+
+/// What the standard does not settle here.
+pub fn setting_spot_device_model_silence() -> &'static str {
+    "A special ink -- a named colour like a company's exact green, mixed as \
+its own ink rather than built from cyan, magenta, yellow and black -- has no \
+plate on a screen. The standard says a viewer with no such ink must fall back \
+to the four-colour recipe for it, and it also allows pretending the ink is \
+there. Those give different pictures whenever something overprints that ink: \
+falling back wipes the ink out, pretending keeps it. Both are correct."
+}
+
+/// Who is affected, so an operator can tell whether to care.
+pub fn setting_spot_device_model_radius() -> &'static str {
+    "Affects print files that use named special inks together with \
+overprinting. Ordinary documents, and files with no special inks, look the \
+same either way."
+}
+
+/// The default option's label.
+pub fn setting_spot_device_model_simulate() -> &'static str {
+    "Keep the ink on its own plate (recommended)"
+}
+
+/// Why the default is the default.
+pub fn setting_spot_device_model_simulate_note() -> &'static str {
+    "Shows what the job will look like coming off a press, where the ink \
+really does have its own plate. This is what the printing-industry test \
+files expect: across four of them this setting produces nine flagged \
+problems and the other produces sixteen."
+}
+
+/// The alternative option's label.
+pub fn setting_spot_device_model_composite() -> &'static str {
+    "Convert it to the four-colour recipe"
+}
+
+/// What the alternative is for, stated as a reason to choose it rather than
+/// as a shortcoming.
+pub fn setting_spot_device_model_composite_note() -> &'static str {
+    "Shows what an ordinary on-screen viewer shows, including Acrobat in its \
+usual setting. Choose this when you are comparing pdfce's picture against \
+another program's and want the two to be answering the same question."
+}
+
 pub fn setting_grey_overprint_title() -> &'static str {
     "Whether grey knocks out the ink underneath it"
 }

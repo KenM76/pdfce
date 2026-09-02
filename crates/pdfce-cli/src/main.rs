@@ -2948,6 +2948,30 @@ enum Command {
         /// change how every later render behaves.
         #[arg(long)]
         overprint_zero_tint_scope: Option<String>,
+        /// Override `spot_colorant_device_model` for this render only
+        /// (`OP-A7`): `simulate_separations` (default) or
+        /// `alternate_space_substitution`.
+        ///
+        /// **Which output device the page is rendered FOR**, and the
+        /// standard genuinely offers both.
+        ///
+        /// ISO 32000-1 §8.6.6.4 *requires* a reader to substitute a
+        /// `Separation`'s alternate colour space when the device has no
+        /// colorant of that name — which a screen never does. ISO 32000-2
+        /// §10.8.3 *permits* simulating a device that does have it. The two
+        /// render a spot backdrop under overprint differently: the composite
+        /// model knocks it out, the simulated one preserves it. Both are
+        /// conformant.
+        ///
+        /// Use `alternate_space_substitution` to reproduce what a composite
+        /// viewer shows, including Adobe Acrobat's default view — which is
+        /// the setting to reach for when comparing pdfce against another
+        /// engine's screenshot.
+        ///
+        /// Applied OVER the saved settings and **never written back**, like
+        /// `--overprint-zero-tint-scope` above.
+        #[arg(long)]
+        spot_colorant_device_model: Option<String>,
         /// Render only a **region** of the page, as
         /// `llx,lly,urx,ury` in PDF user-space points.
         ///
@@ -8665,12 +8689,14 @@ fn run() -> ExitCode {
             hide_layers,
             print_state,
             overprint_zero_tint_scope,
+            spot_colorant_device_model,
         } => cmd_render_page(
             &input,
             page,
             scale,
             standard.as_deref(),
             overprint_zero_tint_scope.as_deref(),
+            spot_colorant_device_model.as_deref(),
             region.as_deref(),
             &output,
             !no_annotations,
@@ -11460,6 +11486,7 @@ fn cmd_render_page(
     scale: f32,
     standard: Option<&str>,
     overprint_zero_tint_scope: Option<&str>,
+    spot_colorant_device_model: Option<&str>,
     region: Option<&str>,
     output: &Path,
     annotations: bool,
@@ -11561,6 +11588,32 @@ numbered 1..={})",
         }
     }
 
+    // Same shape as the block above, and deliberately not folded into it:
+    // the two settings answer different questions (`OP-A5` vs `OP-A7`) and a
+    // shared parser would have to know which enum a token belongs to.
+    if let Some(token) = spot_colorant_device_model {
+        use pdfce_core::settings::SpotColorantDeviceModel as Model;
+        match Model::parse(token) {
+            Some(model) => {
+                settings.spot_colorant_device_model = model;
+                eprintln!(
+                    "pdfce-cli: render-page: spot_colorant_device_model = {} for this render only; your saved setting is unchanged",
+                    model.as_str()
+                );
+            }
+            None => {
+                // Refused by name, for the reason the block above gives: a
+                // mistyped token rendering under the default looks exactly
+                // like the flag working, and the operator reached for it
+                // precisely because they wanted the non-default.
+                eprintln!(
+                    "pdfce-cli: render-page: unknown --spot-colorant-device-model {token:?} — known: simulate_separations, alternate_space_substitution"
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        }
+    }
+
     // The subset-standard preset, applied OVER the operator's saved settings
     // and never written back. A render flag must not mutate a settings file:
     // one `--standard pdf-x4` render would otherwise silently change how every
@@ -11654,6 +11707,7 @@ numbered 1..={})",
         // as good as its spelling of the claim, which is the same failure the
         // sweep existed to catch, one level up.
         .with_overprint_zero_tint_scope(settings.overprint_zero_tint_scope)
+        .with_spot_colorant_device_model(settings.spot_colorant_device_model)
         // `MSH-A1`: what a type 6/7 mesh-shading PATCH record pads to.
         // The clause states the rule for a VERTEX and the patch clauses
         // point back at it without redefining the unit, in both editions.
@@ -12192,7 +12246,7 @@ overprint_process_images_unsupported={}",
     // the one misreading `InkProbeSource` exists to prevent. So it gets its
     // own prefixed line, which a parser can select or ignore whole.
     if let Some(probe) = &d.ink_probe {
-        println!("{}", format_ink_probe(&probe));
+        println!("{}", format_ink_probe(probe));
     }
     report_diagnostics(
         d,

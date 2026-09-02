@@ -6053,6 +6053,24 @@ impl Interpreter<'_> {
     /// back white (see [`crate::cmyk_buffer::SpotLut::transparent`]), not
     /// by inflating a count.
     fn authored_spot_inks(&self, stroking: bool) -> Vec<crate::canvas::SpotInk> {
+        // ★★ `OP-A7`: under the COMPOSITE device model there are no spot
+        // planes at all, because ISO 32000-1 §8.6.6.4 requires the alternate
+        // space to be substituted at the moment the `Separation` space is
+        // SET — before any paint, and long before overprint is consulted.
+        //
+        // Returning nothing here is the whole implementation of that branch:
+        // no plane is allocated, `deposit` is false in `cmyk_paint`, and the
+        // paint falls through to the flattened tint transform, which IS the
+        // alternate space. Overprint then still runs in full — it simply has
+        // no spot colorant left to act on, which is exactly why a white
+        // object knocks the ink out under this model and preserves it under
+        // the default.
+        if matches!(
+            self.policy.spot_colorant_device_model,
+            pdfce_core::settings::SpotColorantDeviceModel::AlternateSpaceSubstitution
+        ) {
+            return Vec::new();
+        }
         let Some((space, comps)) = self.color.device_color(stroking) else {
             return Vec::new();
         };

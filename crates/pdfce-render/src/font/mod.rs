@@ -622,6 +622,17 @@ pub struct RenderOptions {
     /// the default. (This said *"the §8.6.7 ambiguity … both defensible
     /// readings"* until `Pass 174.6`.)
     pub overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope,
+    /// Which output-device model a spot colorant renders against — spec
+    /// fork `OP-A7`.
+    ///
+    /// ISO 32000-1 §8.6.6.4 *requires* a reader to substitute the alternate
+    /// colour space when the device has no colorant of that name, which a
+    /// screen never does; ISO 32000-2 §10.8.3 *permits* simulating a device
+    /// that does. **Both are conformant and they render a spot backdrop
+    /// under overprint differently** — one knocks it out, the other
+    /// preserves it. See
+    /// [`pdfce_core::settings::SpotColorantDeviceModel`].
+    pub spot_colorant_device_model: pdfce_core::settings::SpotColorantDeviceModel,
     /// How a type 6/7 mesh-shading patch record is byte-padded - spec
     /// ambiguity `MSH-A1`. See
     /// [`pdfce_core::settings::MeshPatchPadding`], whose docs carry the
@@ -838,6 +849,8 @@ pub struct RenderPolicy<'a> {
     pub page_blend_space_source: pdfce_core::settings::PageBlendSpaceSource,
     /// See [`RenderOptions::overprint_zero_tint_scope`].
     pub overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope,
+    /// See [`RenderOptions::spot_colorant_device_model`].
+    pub spot_colorant_device_model: pdfce_core::settings::SpotColorantDeviceModel,
     /// See [`RenderOptions::mesh_patch_padding`].
     pub mesh_patch_padding: pdfce_core::settings::MeshPatchPadding,
     /// See [`RenderOptions::mask_resample`].
@@ -887,6 +900,7 @@ impl Default for RenderOptions {
             // "Acrobat's reading", which was measured false on process
             // geometry in `Pass 206.0`.
             overprint_zero_tint_scope: pdfce_core::settings::OverprintZeroTintScope::default(),
+            spot_colorant_device_model: pdfce_core::settings::SpotColorantDeviceModel::default(),
             // OFF. The one lossy knob in this struct, and decision 082
             // puts that choice with the operator rather than with the
             // default.
@@ -1135,6 +1149,17 @@ impl RenderOptions {
         self
     }
 
+    /// Choose the output-device model a spot colorant renders against
+    /// (`OP-A7`). See [`RenderOptions::spot_colorant_device_model`].
+    #[must_use]
+    pub fn with_spot_colorant_device_model(
+        mut self,
+        model: pdfce_core::settings::SpotColorantDeviceModel,
+    ) -> Self {
+        self.spot_colorant_device_model = model;
+        self
+    }
+
     #[must_use]
     pub fn with_page_blend_space_source(
         mut self,
@@ -1240,6 +1265,7 @@ impl RenderOptions {
             max_cmyk_buffer_bytes: self.max_cmyk_buffer_bytes,
             page_blend_space_source: self.page_blend_space_source,
             overprint_zero_tint_scope: self.overprint_zero_tint_scope,
+            spot_colorant_device_model: self.spot_colorant_device_model,
             mesh_patch_padding: self.mesh_patch_padding,
             mask_resample: self.mask_resample,
             image_minify: self.image_minify,
@@ -1316,6 +1342,8 @@ mod render_policy_tests {
                 // match if the expected value were the default.
                 overprint_zero_tint_scope:
                     pdfce_core::settings::OverprintZeroTintScope::DeviceCmykOnly,
+                spot_colorant_device_model: pdfce_core::settings::SpotColorantDeviceModel::default(
+                ),
                 mesh_patch_padding: pdfce_core::settings::MeshPatchPadding::None,
                 mask_resample: pdfce_core::settings::MaskResample::Bilinear,
                 image_minify: pdfce_core::settings::MinifyFilter::Smooth,

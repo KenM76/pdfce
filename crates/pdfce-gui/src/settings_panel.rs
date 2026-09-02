@@ -98,8 +98,8 @@ use pdfce_core::pageops::SeparationPolicy;
 use pdfce_core::settings::{
     ActualTextPrecedence, CmykIntent, CmykJpegPolarity, MaskResample, MeshPatchPadding,
     MinifyFilter, MissingAppearanceState, OverprintZeroTintScope, PageBlendSpaceSource,
-    QuadPointOrder, Settings, StoreLocation, StylePolicy, TrailingEol, UnmappableCode,
-    XrefEntryEol,
+    QuadPointOrder, Settings, SpotColorantDeviceModel, StoreLocation, StylePolicy, TrailingEol,
+    UnmappableCode, XrefEntryEol,
 };
 
 use crate::ui_text;
@@ -247,6 +247,7 @@ pub fn show(
                         style_policy_setting(ui, draft);
                         page_blend_space_setting(ui, draft);
                         grey_overprint_setting(ui, draft);
+                        spot_device_model_setting(ui, draft);
                         ui.add_space(10.0);
                         cmyk_jpeg_setting(ui, draft);
                         ui.add_space(10.0);
@@ -485,6 +486,30 @@ fn grey_overprint_setting(ui: &mut egui::Ui, draft: &mut Draft) {
         OverprintZeroTintScope::AllProcessSpaces,
         ui_text::setting_grey_overprint_all(),
         Some(ui_text::setting_grey_overprint_all_note()),
+    );
+}
+
+fn spot_device_model_setting(ui: &mut egui::Ui, draft: &mut Draft) {
+    header(
+        ui,
+        ui_text::setting_spot_device_model_title(),
+        ui_text::setting_spot_device_model_silence(),
+        ui_text::setting_spot_device_model_radius(),
+    );
+    let v = &mut draft.working.spot_colorant_device_model;
+    option(
+        ui,
+        v,
+        SpotColorantDeviceModel::SimulateSeparations,
+        ui_text::setting_spot_device_model_simulate(),
+        Some(ui_text::setting_spot_device_model_simulate_note()),
+    );
+    option(
+        ui,
+        v,
+        SpotColorantDeviceModel::AlternateSpaceSubstitution,
+        ui_text::setting_spot_device_model_composite(),
+        Some(ui_text::setting_spot_device_model_composite_note()),
     );
 }
 
