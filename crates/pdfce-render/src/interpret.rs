@@ -337,7 +337,11 @@ pub struct Diagnostics {
     pub icc_unmanaged_paints: usize,
     /// Process-space sampled images painted under `/OP true` onto a
     /// subtractive buffer, where Table 149's SPOT sub-row could not be
-    /// honoured because pdfce has no spot plane.
+    /// honoured because the IMAGE path does not deposit into a spot plane.
+    ///
+    /// ★ Said "because pdfce has no spot plane" until 2026-09-02. Planes
+    /// landed in `Pass 225.0` and a path FILL uses them; the image path is
+    /// the remaining half.
     ///
     /// ★ THE COUNTER EXISTS BECAUSE THREE SOURCE COMMENTS CLAIMED NOTHING WAS
     /// OWED HERE, and that claim was false. §11.7.4.3 Table 149's row for
@@ -356,9 +360,11 @@ pub struct Diagnostics {
     /// to know the count is non-zero.
     ///
     /// ★ It counts the SITUATION, not confirmed damage, and that limit is
-    /// stated rather than implied: with no spot plane the backdrop's spot-ness
-    /// has already been flattened into process ink by the time an image paints
-    /// over it, so pdfce genuinely cannot tell whether a spot was underneath.
+    /// stated rather than implied: a backdrop laid down by an IMAGE has
+    /// already been flattened into process ink by the time another image
+    /// paints over it, so pdfce genuinely cannot tell whether a spot was
+    /// underneath. (A backdrop laid down by a path fill now keeps its plane
+    /// and this does not apply to it.)
     /// A non-zero value means "this page contains the shape of the problem",
     /// which is the strongest honest claim available without the plane.
     pub overprint_process_images_unsupported: usize,
@@ -653,9 +659,10 @@ pub struct Diagnostics {
     ///    `c_b` under `OP true`, so a source that names no process colorant
     ///    at all would preserve the whole backdrop — which is right for a
     ///    press with that spot ink on a plate, and an **erased image** for a
-    ///    renderer with four process planes and no spot plane. pdfce paints
+    ///    renderer whose IMAGE path deposits into no spot plane. pdfce paints
     ///    the flattened tint transform instead and counts it here. The fix
-    ///    is the per-colorant buffer, already filed; it is not reachable
+    ///    is extending the deposit to images; the planes themselves exist
+    ///    since `Pass 225.0`. It is not reachable
     ///    from this call site.
     /// 2. **A destination that cannot be read back** — a recording canvas,
     ///    or a scratch allocation that failed. §11.7.4.3 composites against
@@ -5020,8 +5027,10 @@ impl Interpreter<'_> {
                 // space" column, which under `OP true` is `c_b`. Composited
                 // literally, the shading preserves the entire backdrop and
                 // paints NOTHING — correct for a press, where the ink is on
-                // its own plate, and a vanished mark for a renderer with four
-                // process planes and no spot plane.
+                // its own plate, and a vanished mark for a renderer whose
+                // IMAGE path deposits into no spot plane. (Path fills have
+                // deposited since `Pass 228.0`; this comment said "no spot
+                // plane" flatly until 2026-09-02.)
                 //
                 // Measured on a print-conformance patch whose spot-colour
                 // gradient bar is exactly this shape
@@ -7982,8 +7991,9 @@ impl Interpreter<'_> {
             self.diag.overprint_images_unsupported += 1;
             self.diag.note(
                 b"image painted under /OP true in a spot-only Separation/DeviceN space: \
-                  pdfce has no plane for a spot colorant, so Table 149's preservation \
-                  cannot run; the tint transform was painted normally",
+                  the IMAGE path does not yet deposit into a spot plane, so Table 149's \
+                  preservation cannot run here; the tint transform was painted normally. \
+                  A path FILL in the same space does keep its plane",
             );
             return false;
         }
