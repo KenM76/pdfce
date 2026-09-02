@@ -96,6 +96,162 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 366th filing, 2026-09-01 — `Pass 225.0` (`16eaaa2`).**
+
+**Sourcing (hard rule 8).** This role had no shell this filing. The full
+commit body was supplied verbatim as a scratch file
+(`D:\Dev\pdfce\.librarian-225.txt`) by the engineer, not read via `git log`
+directly. Every file/line/symbol claim naming a specific location was
+additionally cross-checked against LIVE SOURCE by `Read`/`Grep` this
+filing: `SpotPlane` (`cmyk_buffer.rs:327`), `CmykBuffer::spots_flattened`
+(`:567`), `CmykBuffer::spot_index` (`:1086`), `CmykBuffer::fold_spots_srgb`
+(`:2443`), `PixelCmyk::s` and `MAX_SPOTS = 4` (`compositor.rs:625,646`),
+`compositor::blend_spots` (`:770`), six `#[allow(dead_code)]` sites in
+`cmyk_buffer.rs` (`:325,368,381,566,1085,1143`), and the corrected
+citation itself — `tools/check-public-fns-documented.py:42,47` now names
+`check-cli-help-leads.py`, which exists (`tools/check-cli-help-leads.py`),
+where it previously named `check-cli-help-nonempty.py`, which does not
+(confirmed absent by `Glob`). `docs/NEXT_SESSION.md` §B/§C independently
+corroborate the push state, the conformance figures and the two
+operational findings below, written by the same engineer session before
+this filing. No `Cargo.toml` change mentioned or found on inspection —
+`pdfce-render`'s existing dependency set is unchanged — so GUI-core
+separation is not implicated and `cargo tree` was not re-run to confirm
+an unchanged fact, flagged per hard rule 8. This Pass adds storage,
+blending and collapse to an already-inert carrier and is itself proved
+inert (conformance sweep byte-identical before and after), so round-trip/
+minimal-diff is not implicated either — no document is written any
+differently.
+
+### Pass 225.0 (`16eaaa2`, 2026-09-01) — the spot-colorant plane, step 2 of ~4: storage, blending and collapse, still PROVED inert
+
+**Scope.** Step 1 (`Pass 217.0`, `643e270`) landed the carrier —
+`PixelCmyk::s`, every value pinned at zero. This Pass adds everything that
+operates on it except the deposit: **storage** (`CmykBuffer::spots:
+Vec<SpotPlane>`, each a colorant name plus a page-sized tint plane, and
+`spots_flattened` counting colorants that could not get one), **allocation**
+(`CmykBuffer::spot_index`, bounded by `MAX_SPOTS` and the buffer's own byte
+ceiling, returning `None` — counted, never silent — when neither can be
+satisfied), **blending** (`compositor::blend_spots`, wired into
+`composite_element_cmyk`), and **collapse** (`CmykBuffer::fold_spots_srgb`,
+a multiply whose identity is white, so a page with no spot roster is
+bit-identical *by construction* rather than by a guard). Like step 1, this
+is landed **proved to change nothing**: the conformance sweep is **7 FAIL /
+37 pass / 7 UNRESOLVED of 51**, byte-identical before and after — the whole
+point of shipping the machinery separately from the step that gives it
+effect (`Pass 217.0`'s stated reason still applies: none of the ten
+suite-visible failures this fixes gets one pixel closer until step 3
+deposits ink).
+
+**★★ THE DESIGN CHANGED FROM THE SCOPED PLAN, AND THE CHANGE DELETES A
+SUBSYSTEM BEFORE IT WAS BUILT — decision 118, `ARCHITECTURE.md` §12.**
+`docs/NEXT_SESSION.md` §0 (as it stood after `Pass 217.0`'s scoping study,
+361st filing) scoped this step as *"roster + ONE plane"*, with the roster
+built by a resource pre-pass over the page. **There is no roster and no
+pre-pass in the shipped code.** Planes are allocated **lazily, at first
+use.** The argument is correctness, not speed: a plane created part-way
+through a page is all zeros behind it, and zero is the *right* value —
+"no ink of this colorant" is exactly true of every mark laid down before
+the document first named it, so there is nothing to back-fill. That
+property removes the pre-pass entirely, and with it a real hazard: a
+resource pre-pass would have to recurse into form XObjects, patterns,
+annotation appearance streams and Type 3 glyph procedures to be complete,
+and any colorant it MISSED would be flattened silently, with no signal,
+because a roster is only checkable against the render it was built for.
+Allocating on first use is complete *by construction* — a colorant gets a
+plane exactly when a paint asks for one, so there is no enumeration to be
+incomplete. See decision 118 for the full record and its forward pointer
+from decision 116.
+
+**Two spec findings, both from the corpus rather than from memory.**
+**ISO 32000-2 §10.8.3 "Separation simulation" exists and specifies this.**
+Overprint simulation was previously recorded as a negative result — ISO
+32000-1 never describes it (0 hits for "separation simulation") — and that
+remains true of the 2008 edition; it is false of 2020, which defines a
+four-step algorithm, names the capability (`SeparationSimulation`, Table
+275) and NOTE 5's it as *"Overprint Preview."* `fold_spots_srgb` implements
+that clause's step (c), with two deviations disclosed **in the code**
+rather than buried: the multiply runs in sRGB rather than the clause's
+undefined *"flat XYZ (no gamma)"*, and the per-separation ink→colour map is
+the tint transform rather than colorimetry the clause declines to specify.
+**§10.8 contains no `shall` at all** — the algorithm binds the RESULT, not
+the METHOD — so neither deviation is a conformance failure. This is
+matching a spec, not inventing a feature; the corpus entry
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__10.8.md` already
+existed and already registered the ambiguities — consumed here, not
+created. **§11.7.4.2 is a `shall`:** only separable, white-preserving
+blend modes apply to a spot colour, and `blend_spots` degrades the four
+non-separable modes to Normal on spot planes while process channels still
+get them.
+
+**★ TWO SABOTAGE RUNS SURVIVED, AND BOTH FINDINGS ARE IN THE CODE.** Not
+two weak tests — they failed for different reasons, and only one is a
+defect in the test.
+
+**1. The §11.7.4.2 guard in `blend_spots` is REDUNDANT.** Deleting it
+changes nothing: `blend_separable`'s own final arm already answers `cs` for
+a non-separable mode, which is what Normal gives — the contract has two
+enforcers and no test can tell them apart. **Kept anyway** — it states the
+clause at the branch the clause governs and keeps `blend_separable`'s
+"unreachable" note true of this path — and **both sites now say so**, so a
+green run here is not read as proof the guard is load-bearing. Checked
+against the *Standing rules* list before filing: this is a further dated
+instance of **`R225`** (*a sabotage is only as discriminating as its
+fixture*) rather than a new rule — same family as the annotation-`/Matrix`
+identity trap and the other cited instances, not a fresh mechanism.
+
+**2. The zero-tint early-out in `fold_spots_srgb` WAS load-bearing, and the
+test could not see it — the interesting half.** The test's LUT returned
+white at tint 0, so multiplying by it was the identity whether or not the
+early-out existed. But a tint transform is an arbitrary document-supplied
+function (§7.10) and nothing obliges it to be sane at zero — a LUT that
+returns ink at tint 0 would tint **every pixel of the page** the moment its
+plane was allocated, whether or not that colorant ever actually painted
+anything. The test now uses a deliberately malformed LUT returning solid
+red at zero, and the sabotage fails it, turning a performance assertion
+into a robustness-against-untrusted-input one. **This is `R225`'s family in
+a new domain** (a default-valued fixture — a well-behaved LUT — cannot
+falsify a carry it happens to agree with by coincidence): filed as a
+further dated instance rather than a new rule, for the same reason as
+finding 1.
+
+**Inert on purpose, and marked.** `#[allow(dead_code)]` on the spot chain
+(`cmyk_buffer.rs:325,368,381,566,1085,1143`), each with the reason and the
+step that removes it, placed on the items rather than the file so that
+anything ELSE going dead in `cmyk_buffer.rs` still reports.
+
+**Verification.** 10 new unit tests, 384 render tests green (384 total,
+not a delta — the corpus this Pass touches adds no new render fixture),
+clippy clean. Conformance sweep byte-identical to the pre-Pass baseline —
+7 FAIL / 37 pass / 7 UNRESOLVED of 51, both before and after.
+
+**Also corrects a false citation introduced in `f01e15e` (`Pass 224.0`):**
+the sibling gate is `check-cli-help-leads.py`, not
+`check-cli-help-nonempty.py` — written from memory of what the gate does
+rather than from its filename, caught by a reading agent (this role,
+365th filing), and corrected here rather than in a follow-up commit,
+with the error left recorded in the doc comment itself rather than
+silently fixed. No gate checks whether a doc-comment cross-reference
+resolves.
+
+**`FEATURES.md`: no row change, and no box ticked — same precedent as
+step 1.** The conformance sweep is byte-identical before and after; there
+is nothing the operator can do differently after this Pass than before it.
+`Pass 217.0` got no row for the identical reason. The existing *Planned*
+row for the per-colorant compositing buffer had gone stale in one clause
+(it described the now-superseded pre-pass-roster design) — **corrected in
+place, no box moved**; see `FEATURES.md`'s own note at that row.
+
+**Step 3, where the first pixel moves.** The DEPOSIT: `interpret.rs`
+reading a `Separation`/`DeviceN` fill's colorant names and tints and
+handing them to the paint call, plus Table 149's spot rule under
+overprint. Target is the two traps `PCS 3.0` fails at, whose cause is
+measured and attributed: its backdrop is `/DeviceN [/Black <spot>]
+/DeviceCMYK`, pdfce flattens the spot into C/M/Y, and a `DeviceCMYK`
+source then knocks those out — destroying a colorant it never named.
+
+---
+
 **★★★ NINE COMMITS FILED TOGETHER, 363rd filing, 2026-09-01 — `Pass 213.0`
 THROUGH `Pass 221.0`, ALL FOUND UNFILED BY `tools/check-commits-filed.py`.**
 In chronological (shipping) order: `Pass 213.0` (`1f1ef21`), `Pass 214.0`

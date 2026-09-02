@@ -29368,6 +29368,13 @@ today**, so `Box` is correct now and the question belongs with the roster that
 will actually perform the allocation. **Cheap to change while the variant has
 one constructor.**
 
+**★ AMENDED 2026-09-01 (decision 118, `Pass 225.0`) — no roster was built.**
+Planes are allocated lazily at first use, not from a pre-pass roster; the
+"the roster that will actually perform the allocation" clause above is kept
+for its history but no longer names a component that exists. The `Box` vs
+`Arc` question now belongs with `CmykBuffer::spot_index`
+(`cmyk_buffer.rs:1086`), which performs the allocation instead.
+
 **Consequence recorded because a decision log exists to carry it:** the
 signature change **acted as a duplicate detector** — a **verbatim inline copy**
 of `process_channel` in `authored_tints` (four arms, the same four names)
@@ -29468,3 +29475,99 @@ collapse ship.
 
 **Decision ceiling moves `116` → `117`; next free `118`.** **Standing rules
 ceiling `R239` — UNCHANGED**, next free `R240`; no rule minted this filing.
+
+---
+
+### 2026-09-01 (366th filing, `16eaaa2`) — decision 118: **A SPOT-COLORANT PLANE IS ALLOCATED LAZILY, AT FIRST USE — NOT FROM A PRE-PASS ROSTER. THIS IS A CORRECTNESS ARGUMENT, NOT A PERFORMANCE ONE, AND IT DELETES A PLANNED SUBSYSTEM BEFORE IT WAS BUILT**
+
+**Status: DECIDED.** `Pass 225.0` (`16eaaa2`, step 2 of ~4 of the
+spot-colorant plane: storage, blending and collapse, landed still PROVED
+inert — conformance sweep byte-identical, 7 FAIL / 37 pass / 7 UNRESOLVED of
+51 before and after) ships `CmykBuffer::spot_index`
+(`crates/pdfce-render/src/cmyk_buffer.rs:1086`) as the sole allocator of a
+`SpotPlane`. It finds-or-creates a plane on first use, bounded by
+`compositor::MAX_SPOTS` (4) and the buffer's own byte ceiling, refusing —
+counted via `spots_flattened`, never silent — when neither can be
+satisfied.
+
+**Supersedes a scoped plan, not merely extends one.** `Pass 217.0`'s own
+scoping study (361st filing, `ROADMAP.md` *Backlog*) and the handoff that
+carried it forward (`docs/NEXT_SESSION.md` §0, as it stood before this
+Pass) both described this step as *"roster + ONE plane"*: a resource
+pre-pass over a page's content stream (and its forms, patterns, annotation
+appearance streams and Type 3 glyph procedures) that would enumerate every
+spot colorant a page names, before any paint ran, so a plane could be
+provisioned up front. **No roster and no pre-pass exist in the shipped
+code.** This is not an implementation detail arrived at while building the
+scoped design — it is a different design, decided instead of the scoped
+one, and recorded here because it reverses a plan a prior filing already
+committed to paper.
+
+**The argument for lazy allocation is correctness, not speed — stated
+because the obvious reading of "skip the pre-pass" is a performance
+trade, and that reading is wrong.** A plane created part-way through a
+page's content stream is all zeros for every pixel painted before that
+point, and **zero is the exactly correct value**: "no ink of this
+colorant" is true, by construction, of every mark laid down before the
+document first named the colorant a plane now exists for. There is
+nothing to back-fill, and therefore nothing a pre-pass would have bought
+except earlier knowledge of a fact lazy allocation never needs.
+
+**What the pre-pass would have cost, and it is a real hazard, not a
+hypothetical one.** To be complete, a resource pre-pass has to recurse into
+every place a colour space can be named: form XObjects (nested arbitrarily
+deep), tiling and shading patterns, annotation appearance streams, and
+Type 3 glyph procedures. **Any colorant such a walk MISSED would be
+flattened silently** — the plane would simply never exist for it, with no
+counter, no refusal, no visible symptom — because a roster is only
+checkable against the render it was built to serve; there is no
+independent oracle for "did the pre-pass see everything." Lazy allocation
+has no such blind spot **by construction**: a colorant gets a plane exactly
+when a paint operator asks for one, so there is no enumeration step that
+could be incomplete, and therefore no population the allocator could have
+missed.
+
+**Consequence for decision 116.** Decision 116 (colorant identity as
+`Box<[u8]>`) deferred its `Box` vs `Arc` question to *"the roster that will
+actually perform the allocation."* That roster does not exist; the
+question now belongs to `spot_index` itself, which performs the allocation
+instead. Amended in place at decision 116, above, with a forward pointer
+to this entry — decision 116's own analysis is otherwise unaffected, since
+`spot_index` still performs at most one allocation per colorant per page
+regardless of how it discovers that colorant.
+
+**Two spec findings landed the same commit, recorded here because they
+bear on `fold_spots_srgb`'s design, not because they are architectural
+decisions of their own.** `CmykBuffer::fold_spots_srgb`
+(`cmyk_buffer.rs:2443`) implements ISO 32000-2 §10.8.3 "Separation
+simulation" step (c) — a corpus finding, not an invention: ISO 32000-1
+never describes overprint/separation preview (0 hits, negative result,
+still true of the 2008 text), while ISO 32000-2:2020 defines a four-step
+algorithm, names the capability `SeparationSimulation` (Table 275) and
+NOTE 5's it as "Overprint Preview." Two deviations from the clause are
+disclosed in the code rather than buried — the multiply runs in sRGB
+rather than the clause's undefined "flat XYZ (no gamma)," and the
+per-separation ink→colour map is the tint transform rather than
+colorimetry the clause declines to specify — and neither is a conformance
+failure, because **§10.8 contains no `shall` at all**: the clause binds the
+result the algorithm must produce, not the method used to produce it.
+
+**Two sabotage findings, filed as further dated instances of `R225`
+(`ROADMAP.md` *Standing rules*: "a sabotage is only as discriminating as
+its fixture"), not as a new rule** — checked against the existing family
+before filing, per this project's own two-occurrence-then-consolidate
+discipline. First: the §11.7.4.2 non-separable-blend-mode guard in
+`compositor::blend_spots` is redundant with `blend_separable`'s own final
+arm, which already answers `cs` for any non-separable mode; kept for
+legibility, both sites now say so. Second, the one worth generalising: the
+zero-tint early-out in `fold_spots_srgb` **was** load-bearing, and the
+original test could not see it, because its LUT happened to return white
+at tint 0 — the same coincident-oracle shape `R225` already names, newly
+instanced against a document-supplied tint-transform function rather than
+against a fixture's baked geometry. Fixed with a deliberately malformed
+LUT returning solid red at zero.
+
+**Decision ceiling moves `117` → `118`; next free `119`.** **Standing rules
+ceiling `R239` — UNCHANGED**, next free `R240`; no rule minted this filing
+(`R225` gains two further dated instances, recorded in `ROADMAP.md`'s
+`Pass 225.0` entry rather than here).

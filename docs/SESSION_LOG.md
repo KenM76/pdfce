@@ -85302,3 +85302,128 @@ Code tooling generally.
   (not independently re-run here — no shell).
 - Read and act on the two unread iccce replies (carried forward from the
   364th filing).
+
+## 2026-09-01 (366th filing) — `Pass 225.0` (`16eaaa2`) SHIPPED — the spot-colorant plane, step 2 of ~4 (storage/blending/collapse), still PROVED inert; a scoped pre-pass roster was deleted before it was built (decision 118); two R225 instances; `main` one commit unpushed at time of filing
+
+**Sourcing.** This role had no shell this filing. The full commit body was
+supplied verbatim as a scratch file (`.librarian-225.txt`) by the engineer,
+not read via `git log`; every file/line/symbol claim was additionally
+cross-checked against live source by `Read`/`Grep` — see the filing header
+in `ROADMAP.md`'s *Shipped* section for the full citation list.
+
+**Shipped:**
+
+- **`Pass 225.0`** (`16eaaa2`) — `CmykBuffer::spots: Vec<SpotPlane>` +
+  `spots_flattened` (storage), `CmykBuffer::spot_index` (allocation, bounded
+  by `MAX_SPOTS`/byte ceiling, refusal counted not silent),
+  `compositor::blend_spots` wired into `composite_element_cmyk` (blending),
+  `CmykBuffer::fold_spots_srgb` (collapse, implementing ISO 32000-2 §10.8.3).
+  10 new unit tests, 384 render tests green, clippy clean. Conformance sweep
+  **7 FAIL / 37 pass / 7 UNRESOLVED of 51, byte-identical before and after**
+  — deliberately, same reason `Pass 217.0` (step 1) was landed inert.
+
+**Decisions made this session:**
+
+- **Decision 118 minted** (`ARCHITECTURE.md` §12): spot planes are allocated
+  **lazily, at first use**, not from the resource pre-pass roster
+  `docs/NEXT_SESSION.md` §0 had scoped after `Pass 217.0`'s study (361st
+  filing). Correctness argument, not a performance one — a plane born
+  part-way through a page is all zeros behind it, and zero is exactly right
+  ("no ink of this colorant" is true of every mark laid down before the
+  document named it) — so there is no pre-pass to recurse into forms/
+  patterns/annotation appearance streams/Type 3 procedures, and nothing it
+  can miss by omission. Amended decision 116 in place with a forward
+  pointer (its "Box vs Arc belongs with the roster" clause named a
+  component that no longer exists; the question now belongs to
+  `spot_index`). This is a **prior-filing-overturning** decision, which is
+  why it earned a full decision record rather than a passing mention.
+
+**Findings + decisions:**
+
+- **ISO 32000-2 §10.8.3 "Separation simulation" exists and specifies the
+  collapse pdfce now ships** — a corpus finding, not memory: ISO 32000-1
+  never describes it (0 hits, still true of 2008), ISO 32000-2:2020 defines
+  a four-step algorithm, names the capability `SeparationSimulation`
+  (Table 275), NOTE 5's it "Overprint Preview." `fold_spots_srgb`
+  implements step (c) with two disclosed deviations (multiply in sRGB not
+  the clause's undefined flat XYZ; tint transform not colorimetry) —
+  neither a conformance failure, because **§10.8 contains no `shall` at
+  all**. Corpus entry `PDF_Spec/iso32000/iso32000__s__10.8.md` pre-existed;
+  consumed, not created.
+- **Two sabotage findings, both filed as further dated instances of `R225`**
+  (*a sabotage is only as discriminating as its fixture* — `ROADMAP.md`
+  *Standing rules*), checked against the family before filing, no new rule
+  minted. (1) The §11.7.4.2 non-separable-blend guard in `blend_spots` is
+  redundant with `blend_separable`'s own final arm; kept for legibility,
+  both sites now say so, a green run is not proof it's load-bearing. (2)
+  **The interesting one**: `fold_spots_srgb`'s zero-tint early-out WAS
+  load-bearing and the original test's LUT (white at tint 0) could not see
+  it — a tint transform is an arbitrary document-supplied function
+  (§7.10) with no obligation to be sane at zero. Fixed with a deliberately
+  malformed LUT returning solid red at tint 0. Same coincident-oracle shape
+  `R225` already names, newly instanced against a document-supplied
+  function rather than a fixture's baked geometry.
+- **`FEATURES.md` wording corrected, no box moved** — the *Planned* row for
+  the per-colorant compositing buffer described the now-superseded
+  pre-pass-roster design; corrected in place to describe lazy allocation
+  and to cite the §10.8.3 finding, same precedent as the 360th filing's
+  iccce-row correction. No box ticked for `Pass 225.0` itself, same
+  precedent as `Pass 217.0` — the conformance sweep is byte-identical, so
+  nothing is operator-visible.
+- **False citation from `Pass 224.0` (`f01e15e`) corrected in this Pass's
+  tree**: `check-public-fns-documented.py`'s doc comment named
+  `check-cli-help-nonempty.py`, which does not exist; the real sibling is
+  `check-cli-help-leads.py`. Flagged by this role at the 365th filing,
+  acted on here — the error is left recorded in the doc comment rather
+  than silently fixed, per this project's own house style for that kind
+  of correction.
+- **`docs/NEXT_SESSION.md` was rewritten wholesale (`f0a55fe`)** — worth one
+  line because of what nearly shipped in it: an early draft of its §B
+  **contradicted itself about the push state**, and its header called
+  `Pass 225.0` "filed" when it was not yet. Both caught and corrected
+  before commit, by measuring rather than recalling — the exact flaw
+  `d731410` corrected in the *previous* handoff, recurring one session
+  later. Recorded as a pattern worth watching, not as a new finding.
+- **Two operational findings, both paid for this session, recorded in
+  `docs/NEXT_SESSION.md` §C**: launching `tools/run-gates.sh` with an
+  explicit background flag gets it **killed mid-run** (letting the harness
+  auto-background a *foreground* launch works and has worked every time);
+  and a `cargo test --workspace` failure inside a gate sweep can be
+  **resource starvation** from a previously-killed run's orphaned
+  processes rather than a real failure (it passed clean re-run alone).
+  **The second is generalizable to any Rust project and is written up**:
+  `D:/dev/rag/rust/a_cargo_test_workspace_failure_inside_a_gate_sweep_may_be_starvation_not_a_real_failure.md`
+  (index updated same filing). **The first is judged Claude-Code-tooling
+  (the Bash tool's background-launch behaviour), not Rust ecosystem —
+  outside this role's remit** (`troubleshooting-librarian` owns
+  `personal_rag/claude_code`); flagged here rather than written to that
+  tree by this role.
+
+**Still in flight / open:**
+
+- Step 3 of ~4 — the DEPOSIT (`interpret.rs` reading a `Separation`/
+  `DeviceN` fill's colorant names/tints and handing them to the paint
+  call, plus Table 149's spot rule under overprint) — is the next task,
+  targeting the two traps `PCS 3.0` fails at (measured cause: a
+  `/DeviceN [/Black <spot>] /DeviceCMYK` backdrop, spot flattened into
+  C/M/Y, then knocked out by a `DeviceCMYK` source — destroying a
+  colorant it never named).
+- The two unread iccce channel replies noted since the 364th filing remain
+  unread by this role.
+
+**For next session:**
+
+- **`main` pushed to `origin/main` at `61c3735`; the handoff rewrite
+  `f0a55fe` landed AFTER that push and is, as of this filing, unpushed
+  (1 commit).** **This role did not verify this itself (no shell this
+  filing) — relayed from the engineer's report per hard rule 8**, and
+  corroborated by `docs/NEXT_SESSION.md` §B's own `HEAD = 61c3735, pushed;
+  0 unpushed at the time of writing` (written before `f0a55fe` existed).
+  Standing-authorized to push per `CLAUDE.md` rule 8 / decision 090; the
+  engineer states intent to push again.
+- Conformance standing unchanged this Pass: **7 FAIL / 37 pass / 7
+  UNRESOLVED of 51.**
+- Backups: engineer reports current at
+  `/d/Dev/pdfce-backups/pdfce-20260902-0055-f0a55fe-full.bundle`,
+  verify-clean — **not independently checked by this role, no shell**,
+  per hard rule 8.
