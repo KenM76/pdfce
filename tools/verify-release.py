@@ -265,22 +265,71 @@ def main(tag: str) -> int:
         except json.JSONDecodeError:
             runs = []
         if not runs:
-            # No run at all is reported, not passed. A tagged commit that CI
-            # never saw has been verified by nobody.
-            check(False, "CI ran at the tagged commit",
-                  "no workflow run found for this commit -- it has never been "
-                  "checked by CI at all")
+            # ★ THE TAG IS NEVER THE TIP, BY RULE, SO "NO RUN AT THIS COMMIT"
+            # IS THE EXPECTED STATE (2026-09-02, v0.22.0).
+            #
+            # CI runs ONCE PER PUSH, on the tip. The project's own rule --
+            # push a code commit and its filing commit TOGETHER, so the
+            # filing gate is never red on a pushed tip -- means the commit a
+            # release is tagged at is followed by at least one docs-only
+            # filing commit before anything is pushed. So the tagged commit
+            # has no run of its own, and demanding one here made the
+            # verifier fail every release cut under that rule. v0.22.0 was
+            # the first: tagged at the version bump, pushed with its filing
+            # on top, `no workflow run found` for a commit whose code CI
+            # checked seconds later at the tip.
+            #
+            # The honest substitute: a run at a DESCENDANT of the tag on
+            # `origin/main` whose diff from the tag touches NO code path --
+            # the same prefixes `check-commits-filed.py` uses to decide what
+            # is code. Then the binaries CI built are the tag's binaries, and
+            # the run's verdict is the tag's verdict. A descendant that
+            # differs in code is NOT accepted: that would be verifying a
+            # different release.
+            code_prefixes = ("crates/", "tools/", "fixtures/", ".github/", "fuzz/")
+            tip = git("rev-parse", "origin/main")
+            changed = git("diff", "--name-only", tagged, tip).split()
+            code_changed = [f for f in changed if f.startswith(code_prefixes)]
+            tip_runs = []
+            if tip and tip != tagged and not code_changed:
+                gh_tip = subprocess.run(
+                    ["gh", "run", "list", "--commit", tip, "--limit", "20",
+                     "--json", "status,conclusion,name"],
+                    capture_output=True, text=True,
+                )
+                try:
+                    tip_runs = json.loads(gh_tip.stdout or "[]") if gh_tip.returncode == 0 else []
+                except json.JSONDecodeError:
+                    tip_runs = []
+            if tip_runs:
+                print(f"  note  no run at the tagged commit; using origin/main "
+                      f"{tip[:7]}, which differs from the tag only in "
+                      f"{len(changed)} non-code file(s)")
+                runs = tip_runs
+                where = f"a docs-only descendant ({tip[:7]})"
+            else:
+                # No run at all is reported, not passed. A tagged commit that
+                # CI never saw -- and no docs-only descendant it saw either --
+                # has been verified by nobody.
+                check(False, "CI ran at the tagged commit",
+                      "no workflow run found for this commit or for a docs-only "
+                      "descendant on origin/main -- it has never been checked "
+                      "by CI at all"
+                      + (f" (origin/main {tip[:7]} differs in code: "
+                         + ", ".join(code_changed[:3]) + ")" if code_changed else ""))
         else:
+            where = "the tagged commit"
+        if runs:
             failed = [r for r in runs
                       if r.get("conclusion") not in (None, "success", "skipped")]
             pending = [r for r in runs if r.get("status") != "completed"]
             if pending:
-                check(False, "CI is finished at the tagged commit",
+                check(False, f"CI is finished at {where}",
                       f"{len(pending)} run(s) still in progress -- a run that "
                       "has not failed yet is not a run that passed")
             check(
                 not failed,
-                "CI is GREEN at the tagged commit",
+                f"CI is GREEN at {where}",
                 "failing run(s): "
                 + ", ".join(f"{r.get('name', '?')}={r.get('conclusion')}"
                             for r in failed)
