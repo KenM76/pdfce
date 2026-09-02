@@ -1,0 +1,64 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Names 20 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 /MediaBox [0 0 612 792] /Resources << >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Annots [6 0 R 7 0 R 8 0 R 9 0 R] >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R >>
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /Link /Rect [36 700 200 730] /Border [0 0 0] /A << /S /URI /URI (https://example.invalid/spec) >> >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Link /Rect [36 660 200 690] /Border [0 0 0] /A << /S /JavaScript /JS (app.alert\(1\);) >> >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Link /Rect [36 620 200 650] /Border [0 0 0] /A << /S /Launch /F (payload.exe) >> >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Link /Rect [36 580 200 610] /Border [0 0 0] /A << /S /GoToR /F (other.pdf) /D (tree-target) /NewWindow true >> >>
+endobj
+20 0 obj
+<< /Dests 21 0 R >>
+endobj
+21 0 obj
+<< /Limits [(tree-target) (tree-target)] /Names [(tree-target) [5 0 R /Fit]] >>
+endobj
+xref
+0 22
+0000000000 65535 f 
+0000000015 00000 n 
+0000000078 00000 n 
+0000000188 00000 n 
+0000000269 00000 n 
+0000000316 00000 n 
+0000000363 00000 n 
+0000000504 00000 n 
+0000000638 00000 n 
+0000000763 00000 n 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000918 00000 n 
+0000000954 00000 n 
+trailer
+<< /Size 22 /Root 1 0 R >>
+startxref
+1050
+%%EOF

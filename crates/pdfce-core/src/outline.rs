@@ -1521,6 +1521,269 @@ pub fn parse_outline<G: ObjectGraph + ?Sized>(graph: &G) -> Vec<OutlineItem> {
 }
 
 // ---------------------------------------------------------------------
+// Destinations reached from carriers OTHER than an outline item
+// ---------------------------------------------------------------------
+
+/// A reusable resolver that turns **any** destination *carrier*
+/// dictionary into a fully resolved [`Destination`].
+///
+/// ## What a "carrier" is, and why one type covers three of them
+///
+/// A destination is never written on its own. It is written *on*
+/// something, and ISO 32000-1 gives that something exactly two keys:
+///
+/// - **`/Dest`** — a destination value directly (§12.3.2.2 array,
+///   §12.3.2.3 name or byte string), and
+/// - **`/A`** — an action dictionary (§12.6) which, *if* its `/S` is
+///   `/GoTo` or `/GoToR`, carries a destination in its own `/D`.
+///
+/// Three unrelated-looking objects carry that identical pair:
+///
+/// | Carrier | Clause | Table (1.7) |
+/// |---|---|---|
+/// | Outline item (a bookmark) | §12.3.3 | 153 |
+/// | **`/Link` annotation** | **§12.5.6.5** | **173** |
+/// | `/Widget` annotation (a pushbutton) | §12.5.6.19 | 188 (`/A`) |
+///
+/// Table 173 is explicit that a link's `/Dest` *"shall not be present if
+/// an `A` entry is present"*, which is the same mutual exclusion Table
+/// 153 states for a bookmark — so the precedence rule, the malformed
+/// both-present case, the name-tree walk, the `<< /D … >>` wrapper
+/// tolerance and the `/GoToR` refusal are **the same rules on all
+/// three**. One resolver is therefore not a convenience; two would be a
+/// drift hazard of exactly the kind this module's header warns about
+/// between itself and [`crate::pageops::references`].
+///
+/// ## Why this exists as a type rather than a free function
+///
+/// Resolving a destination needs two document-wide tables:
+///
+/// 1. the page-object → 0-based-index map, from
+///    [`crate::page_tree::page_slots`], and
+/// 2. both §12.3.2.3 named-destination namespaces, flattened.
+///
+/// Both are **O(document)** to build and neither depends on the carrier.
+/// A free `link_destination(graph, annot)` would rebuild both on every
+/// call, so a page of 200 links would walk the page tree 200 times. The
+/// type makes the cost explicit and paid once. Build it when a document
+/// is opened; keep it as long as the document is unmodified.
+///
+/// **It is a snapshot.** It reads the catalog at construction, so a
+/// reader built before an edit that adds a named destination, deletes a
+/// page, or reorders the page tree will resolve against the *old*
+/// structure. Rebuild after any structural edit — this is why it is not
+/// cached inside `EditSession`.
+///
+/// ## Resolved, never raw
+///
+/// [`Self::destination`] hands back a [`Destination`], not an
+/// [`Object`]. That is deliberate and is the whole point of the type: a
+/// `/Dest` may be an array, a name into the PDF 1.1 `/Dests` dictionary,
+/// or a byte string into the PDF 1.2 `/Names → /Dests` name tree, and a
+/// `/GoTo` action's `/D` is the same three-way again. Handing a consumer
+/// the unresolved object would put the name-tree walk — with its
+/// collision rule, its cycle guard and its [`MAX_DEST_HOPS`] bound — into
+/// every consumer that wanted to follow a link, and those copies would
+/// diverge from this one.
+///
+/// # Examples
+///
+/// ```no_run
+/// use pdfce_core::annot::page_annotations;
+/// use pdfce_core::document::Document;
+/// use pdfce_core::outline::{Destination, DestinationReader};
+/// use pdfce_core::page_tree::pages;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let doc = Document::load(std::path::Path::new("input.pdf"))?;
+/// // Built ONCE for the document, not once per link.
+/// let reader = DestinationReader::new(&doc);
+///
+/// for page in pages(&doc)? {
+///     for annot in page_annotations(&doc, page.id) {
+///         if annot.subtype != b"Link" {
+///             continue;
+///         }
+///         match annot.destination(&doc, &reader) {
+///             Some(Destination::Page { page_index, view }) => {
+///                 println!("link at {:?} goes to page {} as {view:?}", annot.rect, page_index + 1);
+///             }
+///             Some(other) => println!("link is not a local page jump: {other:?}"),
+///             None => println!("link carries no destination at all"),
+///         }
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct DestinationReader {
+    /// Page object id to 0-based document-order index. Empty when the
+    /// page tree could not be walked; see [`Self::page_tree_error`].
+    page_index: HashMap<ObjId, usize>,
+    /// Both catalog named-destination namespaces, pre-flattened.
+    named: NamedDestinations,
+    /// Why [`Self::page_index`] is empty, when it is empty because the
+    /// walk failed rather than because the document has no pages.
+    page_tree_error: Option<PageTreeError>,
+}
+
+impl DestinationReader {
+    /// Build a reader for `graph`'s catalog.
+    ///
+    /// Infallible by design, exactly as [`read_outline`] is. A document
+    /// whose page tree is damaged still has readable links — they simply
+    /// resolve to [`Destination::UnmappedPage`] instead of
+    /// [`Destination::Page`], and [`Self::page_tree_error`] says why.
+    /// Returning a `Result` here would force every caller to choose
+    /// between refusing to show links at all and unwrapping, and the
+    /// first is worse for the operator than a link that reports it
+    /// cannot find its page.
+    ///
+    /// [`page_slots`] is used rather than [`crate::page_tree::pages`]
+    /// for the same reason [`read_outline`] gives: `pages` also resolves
+    /// `/Resources` and `/MediaBox` and fails the whole walk for a page
+    /// missing either, and a link should still know which page it points
+    /// at when that page has no `/MediaBox`.
+    #[must_use]
+    pub fn new<G: ObjectGraph + ?Sized>(graph: &G) -> Self {
+        let (page_index, page_tree_error) = match page_slots(graph) {
+            Ok(slots) => (
+                slots
+                    .iter()
+                    .enumerate()
+                    .map(|(index, slot)| (slot.id, index))
+                    .collect(),
+                None,
+            ),
+            Err(error) => (HashMap::new(), Some(error)),
+        };
+        Self {
+            page_index,
+            named: NamedDestinations::new(graph),
+            page_tree_error,
+        }
+    }
+
+    /// Why the page-object map is empty, when the page-tree walk failed.
+    ///
+    /// `None` is the ordinary case. `Some` means **every**
+    /// [`Destination`] this reader produces from an explicit array will
+    /// be [`Destination::UnmappedPage`] regardless of whether the target
+    /// page exists — the reader could not build the map to check
+    /// against. A consumer that reports "this link is broken" without
+    /// checking this would blame the document for the reader's own
+    /// failure, which is the exact instrument-blindness this project
+    /// keeps finding.
+    #[must_use]
+    pub fn page_tree_error(&self) -> Option<&PageTreeError> {
+        self.page_tree_error.as_ref()
+    }
+
+    /// How many named destinations the document defines, across **both**
+    /// §12.3.2.3 namespaces after collision merging.
+    ///
+    /// `0` with links present is a useful signal: every by-name link in
+    /// the document will resolve to [`Destination::Named`], which usually
+    /// means the `/Names` tree was lost by a producer or a page-range
+    /// extraction.
+    #[must_use]
+    pub fn named_destination_count(&self) -> usize {
+        self.named.len()
+    }
+
+    /// Resolve the destination carried by `carrier`, if it carries one.
+    ///
+    /// `carrier` is the *dictionary of the thing that was clicked* — a
+    /// `/Link` annotation, a `/Widget`, or an outline item. It is read
+    /// for `/Dest` first and `/A` second, per Table 153 and Table 173's
+    /// identical precedence.
+    ///
+    /// # Returns
+    ///
+    /// - `None` — the carrier has **neither** `/Dest` nor `/A`. For a
+    ///   `/Link` that is a malformed annotation (Table 173 requires one
+    ///   of them for the annotation to do anything); for a `/Widget` it
+    ///   is entirely ordinary — most widgets are not buttons.
+    /// - `Some(`[`Destination::Page`]`)` — a page in **this** document,
+    ///   with the Table 151 view to establish on arrival. The only
+    ///   variant a viewer can navigate directly.
+    /// - `Some(`[`Destination::UnmappedPage`]`)` — the destination named
+    ///   an object that is not a page in this document's tree. A link
+    ///   left behind by a page delete looks exactly like this.
+    /// - `Some(`[`Destination::Named`]`)` — a name neither namespace
+    ///   defines.
+    /// - `Some(`[`Destination::Remote`]`)` — `/GoToR`, a page of another
+    ///   file. **Never resolved against this document's names**, by
+    ///   design; see [`read_remote`].
+    /// - `Some(`[`Destination::NonNavigation`]`)` — an action that is not
+    ///   a page jump: `/URI`, `/Launch`, `/JavaScript`, `/SubmitForm`,
+    ///   `/Named`, `/GoToE`, anything else. **Recognised and disclosed,
+    ///   never executed.**
+    ///
+    /// The last four are the reason this returns the enum rather than an
+    /// `Option<usize>` page index: a viewer that collapses them into
+    /// "no link here" tells the operator nothing, and a viewer that
+    /// collapses them into a page jump lies.
+    ///
+    /// Diagnostics accumulated during the read are discarded. Use
+    /// [`Self::destination_with_diagnostics`] to keep them.
+    #[must_use]
+    pub fn destination<G: ObjectGraph + ?Sized>(
+        &self,
+        graph: &G,
+        carrier: &Dict,
+    ) -> Option<Destination> {
+        self.destination_with_diagnostics(graph, carrier).0
+    }
+
+    /// [`Self::destination`], keeping the diagnostics the read produced.
+    ///
+    /// Only the destination-related counters can be non-zero — this does
+    /// no tree traversal, so `items`, `max_depth`, `cycles_broken` and
+    /// the title counters are always at their defaults. What can fire is
+    /// [`OutlineDiagnostics::dest_and_action_both_present`] (Table 173
+    /// forbids it and pdfce takes `/Dest`),
+    /// [`OutlineDiagnostics::unmapped_pages`],
+    /// [`OutlineDiagnostics::unresolved_names`],
+    /// [`OutlineDiagnostics::cross_namespace_resolutions`],
+    /// [`OutlineDiagnostics::unknown_views`],
+    /// [`OutlineDiagnostics::malformed_views`] and
+    /// [`OutlineDiagnostics::unreadable_actions`].
+    ///
+    /// `page_tree_error` and `named_destinations_defined` are copied in
+    /// from the reader rather than measured per call, so they report the
+    /// document, not this carrier.
+    #[must_use]
+    pub fn destination_with_diagnostics<G: ObjectGraph + ?Sized>(
+        &self,
+        graph: &G,
+        carrier: &Dict,
+    ) -> (Option<Destination>, OutlineDiagnostics) {
+        // The budget and visited set are inert here: neither
+        // `resolve_item_destination` nor anything it calls reads them —
+        // they bound the *sibling/child* traversal, which this entry
+        // point does not perform. They are given their ordinary values
+        // rather than zero so that a future change which does start
+        // consulting them is bounded correctly instead of refusing every
+        // read.
+        let mut context = ReadContext {
+            budget: MAX_OUTLINE_ITEMS,
+            visited: HashSet::new(),
+            page_index: &self.page_index,
+            named: &self.named,
+            diagnostics: OutlineDiagnostics {
+                page_tree_error: self.page_tree_error.clone(),
+                named_destinations_defined: self.named.len(),
+                ..OutlineDiagnostics::default()
+            },
+        };
+        let resolved = resolve_item_destination(graph, carrier, &mut context);
+        (resolved, context.diagnostics)
+    }
+}
+
+// ---------------------------------------------------------------------
 // Traversal
 // ---------------------------------------------------------------------
 

@@ -461,6 +461,6 @@ fn an_optional_content_section_is_counted() {
     assert_eq!(
         m.objects.len(),
         1,
-        "the content is still listed -- it is a disagreement with the renderer,          not a reason to hide the object"
+        "the content is still listed -- it is a disagreement with the renderer, not a reason to hide the object"
     );
 }

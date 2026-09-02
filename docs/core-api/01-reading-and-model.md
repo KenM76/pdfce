@@ -137,7 +137,8 @@ builds `--no-default-features`, so both configurations compile.
 | Compute hidden layers, correctly for print/export | `annot::optional_content_default_off(&graph)` — `annot.rs:701` | §12.3 |
 | Refine layer visibility for on-screen view only | `annot::apply_view_usage(&graph, …)` — `annot.rs:1268` **(never on a print path — T-12.8)** | §12.3 |
 | List annotations on a page with their rects | `annot::page_annotations(&graph, page.id)` — `annot.rs:531` | §12.4 |
-| Make hyperlinks clickable | **No direct API** — `Annotation` models no `/Dest`/`/A`. Read the raw dict, then `pageops::references::DestinationResolver::resolve_target` — `pageops/references.rs:187` | §12.4 |
+| Make hyperlinks clickable | `annot::page_link_destinations(&graph, page.id, &reader)` — `annot.rs:852`, with `outline::DestinationReader::new(&graph)` — `outline.rs:1649` built ONCE per document. Returns rect + fully resolved `Destination` per `/Link`. **`Pass 222.0` — this row previously said "no direct API"; that is obsolete.** | §12.4, §12.6.4 |
+| Resolve where ONE annotation goes (incl. a `/Widget` pushbutton) | `Annotation::destination(&graph, &reader)` — `annot.rs:622`. Needs `Annotation::id`; use `page_link_destinations` when completeness matters. | §12.5.6.5 |
 | Report dangling cross-references (document health) | `pageops::references::census_dangling` — `pageops/references.rs:336` ⚠️ **Counts REFERENCES only.** `/ResetForm`, `/SubmitForm` and `/Hide` name their targets by fully-qualified **name string**, and a name is not a reference — so deleting such a field leaves this report at zero while the buttons stop working. `is_empty() == true` is therefore **not** a clean bill of health on its own; pair it with `delete_field`'s `action_targets_orphaned` and `rename_field`'s `action_targets_retargeted` (`Pass 184.0`). | §12.4 |
 | Census digital signatures and their byte coverage | `signature::census(&graph)` — `signature.rs:370`; `signature::byte_range_coverage` — `signature.rs:900` | §12.5 |
 | Read `/Info` title / author / subject / keywords | `EditSession::info_text(InfoField)` — `edit.rs:3807` **(needs a session; only those 4 fields)** | §12.6 |
@@ -2328,20 +2329,77 @@ Methods: `is_widget()` `:450`, `is_group_subordinate()` `:468`,
 normalised per §7.9.5."* y-UP, points, **not flipped**, **not** adjusted for
 `crop_box` or `rotate`.
 
-**★★ `Annotation` has NO `/Dest` and NO `/A` field.** Verified by grep
-against `annot.rs` — the struct simply does not model them
-(`annot.rs:284-288` lists the R43 scope exclusions: `/L`, `/Vertices`,
-`/InkList`, `/QuadPoints`, `/IC`, `/MK`, icon `/Name`; `/Dest` and `/A` are
-absent too). **Clickable hyperlinks are therefore not available from
-`page_annotations`.** To build them you must read the raw annotation dict
-via `ObjectGraph` and use
-`pageops::references::DestinationResolver::resolve_target`
-(`pageops/references.rs:187`) — which returns a target page **`ObjId`**, not
-an index and not a `DestView`. You then map that through `page_slots` and
-implement fit-style parsing yourself, because `outline.rs`'s destination
-parser is entirely private. Budget for this; it is the single largest
-missing piece on the read side for a viewer.
+**★★ `Annotation` still has NO `/Dest` and NO `/A` field**, and that is
+deliberate — but as of `Pass 222.0` **it no longer means links are
+unreachable.** The previous wording of this section said *"clickable
+hyperlinks are therefore not available"* and told you to read the raw
+dict, map `ObjId`s through `page_slots`, and implement fit-style parsing
+yourself. **That is obsolete. Do not do it.** The resolution is now
+public and is the same code the bookmarks panel uses.
 
+```rust
+use pdfce_core::annot::page_link_destinations;
+use pdfce_core::outline::{Destination, DestinationReader, DestView};
+
+// Built ONCE per document. It flattens both named-destination
+// namespaces and the page map — O(document) — so building one per page
+// walks the page tree once per page.
+let reader = DestinationReader::new(&doc);          // outline.rs:1649
+
+for page in &pages_in(&doc)? {
+    let found = page_link_destinations(&doc, page.id, &reader);   // annot.rs:852
+    for link in &found.links {
+        // Hit-test on `link.rect`; navigate on `link.destination`.
+        if let Destination::Page { page_index, view } = &link.destination {
+            go_to(*page_index, view);        // page_index is ALREADY 0-based
+        }
+    }
+    // Links carrying NEITHER /Dest nor /A — clickable, and able to do
+    // nothing. Counted, never dropped, so that "no links" and "all the
+    // links are broken" stay distinguishable.
+    let _ = found.links_without_destination;
+}
+```
+
+`DestinationReader` — `outline.rs:1620`, with `new` `:1649`,
+`page_tree_error()` `:1679`, `named_destination_count()` `:1691`,
+`destination(&graph, carrier_dict)` `:1732`, and
+`destination_with_diagnostics` `:1758` when you want the
+`OutlineDiagnostics` the read produced.
+
+`page_link_destinations(&graph, page_id, &reader)` — `annot.rs:852` →
+`PageLinks` `:776` (`links: Vec<LinkDestination>`,
+`links_without_destination: usize`). `LinkDestination` `:737` carries
+`annots_index` (the `/Annots` position — **not** its position in
+`links`), `id`, `rect`, `destination`.
+
+`Annotation::destination(&graph, &reader)` — `annot.rs:622` — resolves a
+**single** annotation, including a `/Widget` pushbutton's `/A`. It needs
+`Annotation::id`, so a dictionary written directly into `/Annots` (legal,
+rare) returns `None` indistinguishably from "carries no destination".
+`page_link_destinations` has no such blind spot; prefer it whenever
+completeness matters.
+
+**★ The five variants are the disclosure, and four of them are not
+`None`.** Only `Destination::Page` is navigable. `UnmappedPage` (a target
+that is not a page in this tree — the residue of a page delete), `Named`
+(a name neither namespace defines), `Remote` (`/GoToR`, another file —
+**never** resolved against this document's names, by design) and
+`NonNavigation` (`/URI`, `/Launch`, `/JavaScript`, … — *recognised and
+disclosed, never executed*) each say something a viewer should tell the
+operator. Collapsing them into "no link here" reports a document full of
+working links as empty; collapsing them into a page jump lies about where
+it goes.
+
+**`Annotation::action_type` is unchanged** and is still the `/S` name
+only. That is the right disclosure for an inventory and costs nothing to
+read; this is the separate, expensive question of where the action
+*points*.
+
+`pageops::references::DestinationResolver` still exists and still answers
+a **different** question — "which page object does this reference, for
+the delete/extract dangling census" — discarding the view parameters on
+the way. Use `DestinationReader` for anything that navigates.
 `DestinationResolver` — `pageops/references.rs:72`, with `new` `:84`,
 `named_count` `:121`, `names_targeting` `:129`, `resolve_destination` `:149`,
 `resolve_target` `:187`. Also `census_dangling` `:336` → `DanglingReport`

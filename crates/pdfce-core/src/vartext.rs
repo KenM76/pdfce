@@ -1271,7 +1271,7 @@ mod tests {
         let s_tall = tall.applied_autosize.expect("auto-size disclosed");
         assert!(
             s_tall > s_short * 1.5,
-            "★ a box twice as tall must get a substantially larger size, not the              same capped constant: {s_short} vs {s_tall}"
+            "★ a box twice as tall must get a substantially larger size, not the same capped constant: {s_short} vs {s_tall}"
         );
         assert_eq!(short.used_size, s_short);
         // Height-derived, from Helvetica's own /FontBBox height of 1.156 em,
@@ -1308,7 +1308,7 @@ mod tests {
         let height_only = (26.0 - 2.0) / 1.156;
         assert!(
             size < height_only,
-            "the text does not fit 40 pt at the height-derived {height_only}, so it              must shrink; got {size}"
+            "the text does not fit 40 pt at the height-derived {height_only}, so it must shrink; got {size}"
         );
         assert_eq!(a.applied_autosize_bound, Some(AutoFitBound::Width));
     }

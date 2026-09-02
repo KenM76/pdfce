@@ -98,6 +98,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object};
+use crate::outline::{Destination, DestinationReader};
 use crate::page_tree::Rect;
 use crate::settings::MissingAppearanceState;
 
@@ -570,6 +571,62 @@ impl Annotation {
             String::from_utf8_lossy(&self.subtype).into_owned()
         }
     }
+
+    /// Where this annotation goes when it is activated — the fully
+    /// resolved [`Destination`] behind its `/Dest` or `/A` (§12.5.6.5
+    /// Table 173 for a `/Link`; Table 188's `/A` for a `/Widget`).
+    ///
+    /// ## Why this is not a field on [`Annotation`]
+    ///
+    /// [`Self::action_type`] carries the action's `/S` name and nothing
+    /// else, deliberately — that is the whole disclosure a *listing*
+    /// needs, and it costs nothing to read. Resolving where the action
+    /// *points* is a different and far more expensive question: it needs
+    /// the page-object map and both named-destination namespaces, each
+    /// **O(document)** to build. Putting it in the model would make
+    /// every [`page_annotations`] call on every page pay for a walk that
+    /// almost no caller wants.
+    ///
+    /// So the cost is moved to a [`DestinationReader`] the caller builds
+    /// **once per document** and hands in here. See that type for why it
+    /// is a snapshot and when it must be rebuilt.
+    ///
+    /// ## ★ It needs [`Self::id`], and one shape of file has none
+    ///
+    /// This re-reads the annotation's dictionary through `graph`, which
+    /// requires the annotation to have been reached by an **indirect
+    /// reference** from `/Annots`. Table 164's dictionaries are indirect
+    /// objects, so that is the case in every well-formed file — but a
+    /// dictionary written *directly* into the `/Annots` array is
+    /// tolerated by [`page_annotations`] and arrives here with
+    /// [`Self::id`] `None`, and this returns `None` for it.
+    ///
+    /// **That is a `None` meaning "could not read", sitting in the same
+    /// slot as a `None` meaning "carries no destination".** The two are
+    /// not distinguishable through this method, which is precisely why
+    /// [`page_link_destinations`] exists: it walks `/Annots` and resolves
+    /// each dictionary in place, never consulting `id`, and reports the
+    /// unresolvable ones in
+    /// [`PageLinks::links_without_destination`] rather than dropping
+    /// them. Prefer it for anything that must be complete; use this one
+    /// for the single annotation an operator just clicked, where the
+    /// annotation demonstrably came from a real object.
+    ///
+    /// # Returns
+    ///
+    /// See [`DestinationReader::destination`] for the full variant list
+    /// and what a viewer should do with each. In short: only
+    /// [`Destination::Page`] is directly navigable; the other four are
+    /// disclosures, not jumps, and must not be collapsed into "no link".
+    #[must_use]
+    pub fn destination<G: ObjectGraph + ?Sized>(
+        &self,
+        graph: &G,
+        reader: &DestinationReader,
+    ) -> Option<Destination> {
+        let dict = graph.resolved(self.id?);
+        reader.destination(graph, dict.as_dict()?)
+    }
 }
 
 /// Walk one page's `/Annots` array and model every annotation on it
@@ -664,6 +721,181 @@ pub fn page_annotations_with<G: ObjectGraph + ?Sized>(
             continue;
         };
         out.push(model_annotation(graph, id, dict, missing_as));
+    }
+    out
+}
+
+/// One `/Link` annotation that has somewhere to go: its clickable box
+/// and its fully resolved destination, together.
+///
+/// The pair is the point. Hit-testing needs the [`rect`](Self::rect) and
+/// navigating needs the [`destination`](Self::destination), and a viewer
+/// that had to correlate two separately-ordered lists to get both would
+/// have an off-by-one waiting in it.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct LinkDestination {
+    /// This link's 0-based position in the page's `/Annots` array — the
+    /// same `index=` the CLI's `list-annotations` prints, and the same
+    /// numbering `delete-annotation` takes.
+    ///
+    /// **Not** an index into the [`Vec`] this arrives in: entries with no
+    /// destination are omitted, so the two disagree on any page that has
+    /// a malformed link. Address the annotation by this, never by its
+    /// position in the result.
+    pub annots_index: usize,
+    /// The annotation object's identity, when it was reached by an
+    /// indirect reference (§7.3.10 — it always is in a well-formed
+    /// file). `None` for a dictionary written directly into `/Annots`,
+    /// which this function resolves anyway; see
+    /// [`Annotation::destination`] for why that case is the reason this
+    /// function exists.
+    pub id: Option<ObjId>,
+    /// The clickable box in default user space, normalised per §7.9.5.
+    ///
+    /// `None` is a real and reportable state, not a filter: §12.5.2
+    /// makes `/Rect` **required**, so a link without one has a
+    /// destination it can never be clicked to reach. It is kept rather
+    /// than dropped so a repair tool can see it — a viewer should skip
+    /// it for hit-testing and is free to say why.
+    pub rect: Option<Rect>,
+    /// Where activating it goes, fully resolved through both
+    /// §12.3.2.3 namespaces and any `<< /D … >>` wrappers.
+    ///
+    /// Only [`Destination::Page`] is directly navigable. The other
+    /// variants are disclosures — an unresolvable name, a page that is
+    /// not in this document's tree, another file, or an action that is
+    /// not a navigation at all — and collapsing them into "nothing here"
+    /// is the failure mode this enum exists to prevent.
+    pub destination: Destination,
+}
+
+/// Every navigable `/Link` on one page, plus what could not be read.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
+pub struct PageLinks {
+    /// The links that resolved, in `/Annots` order.
+    pub links: Vec<LinkDestination>,
+    /// How many `/Link` annotations on the page carried **neither**
+    /// `/Dest` nor `/A`.
+    ///
+    /// Table 173 gives a link no other way to do anything, so each of
+    /// these is a link the operator can see a border around and can
+    /// never follow — a malformed annotation, usually the residue of an
+    /// action stripped by a sanitiser.
+    ///
+    /// ★ It is counted rather than silently skipped because **a caller
+    /// that only sees [`Self::links`] cannot distinguish a page with no
+    /// links from a page whose links are all broken**, and those call
+    /// for opposite operator messages.
+    pub links_without_destination: usize,
+}
+
+/// Read every `/Link` annotation on one page and resolve where each one
+/// goes (§12.5.6.5, Table 173).
+///
+/// This is the *complete* answer to "what is clickable on this page and
+/// where does it lead", and the one to build a clickable table of
+/// contents on. It walks `/Annots` and resolves each link's dictionary
+/// **in place**, so unlike [`Annotation::destination`] it does not depend
+/// on the annotation having an object id, and unlike a filter over
+/// [`page_annotations`] it reports the links it could not resolve
+/// instead of dropping them.
+///
+/// ## `/Link` only, deliberately
+///
+/// A `/Widget` pushbutton may also carry a `/GoTo` in its `/A` (Table
+/// 188) and is genuinely navigable. It is **not** included here, because
+/// this function's name is a promise about what it returns and a widget
+/// is a form control first — activating one has form-side consequences
+/// (`/AA` triggers, field focus) that a link does not, and a viewer
+/// should not treat the two the same by accident. Resolve a widget
+/// through [`Annotation::destination`], with the same
+/// [`DestinationReader`].
+///
+/// ## Cost
+///
+/// `reader` is taken by reference rather than built here so that the two
+/// **O(document)** tables behind it are built once and reused across
+/// every page. Building one per call would make paging through a
+/// 900-page document walk the page tree 900 times.
+///
+/// Bounded by [`MAX_ANNOTS_PER_PAGE`], like [`page_annotations`].
+///
+/// # Examples
+///
+/// ```no_run
+/// use pdfce_core::annot::page_link_destinations;
+/// use pdfce_core::document::Document;
+/// use pdfce_core::outline::{Destination, DestinationReader};
+/// use pdfce_core::page_tree::pages;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let doc = Document::load(std::path::Path::new("input.pdf"))?;
+/// let reader = DestinationReader::new(&doc);
+///
+/// for page in pages(&doc)? {
+///     let found = page_link_destinations(&doc, page.id, &reader);
+///     if found.links_without_destination > 0 {
+///         eprintln!("{} link(s) on this page lead nowhere", found.links_without_destination);
+///     }
+///     for link in found.links {
+///         if let Destination::Page { page_index, .. } = link.destination {
+///             println!("{:?} -> page {}", link.rect, page_index + 1);
+///         }
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[must_use]
+pub fn page_link_destinations<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    page_id: ObjId,
+    reader: &DestinationReader,
+) -> PageLinks {
+    let mut out = PageLinks::default();
+
+    let page = graph.resolved(page_id);
+    // §7.7.3.4: `/Annots` is NOT inheritable, so there is no page-tree
+    // walk here — a page without the key has no annotations, full stop.
+    let Some(array) = page
+        .as_dict()
+        .and_then(|dict| dict.get(b"Annots"))
+        .map(|value| graph.resolve(value))
+        .and_then(Object::as_array)
+    else {
+        return out;
+    };
+
+    for (annots_index, entry) in array.iter().enumerate() {
+        if annots_index >= MAX_ANNOTS_PER_PAGE {
+            break;
+        }
+        let id = entry.as_reference();
+        // A dangling reference resolves to null (§7.3.10) and a stray
+        // number is not an annotation; both are skipped rather than
+        // counted, because neither is a *link* that failed — they are
+        // not links at all.
+        let Some(dict) = graph.resolve(entry).as_dict() else {
+            continue;
+        };
+        let is_link = graph
+            .resolve(dict.get(b"Subtype").unwrap_or(&Object::Null))
+            .as_name()
+            .is_some_and(|name| name.as_bytes() == b"Link");
+        if !is_link {
+            continue;
+        }
+        match reader.destination(graph, dict) {
+            Some(destination) => out.links.push(LinkDestination {
+                annots_index,
+                id,
+                rect: dict.get(b"Rect").and_then(|value| read_rect(graph, value)),
+                destination,
+            }),
+            None => out.links_without_destination += 1,
+        }
     }
     out
 }
@@ -1675,6 +1907,7 @@ pub fn need_appearances<G: ObjectGraph + ?Sized>(graph: &G) -> bool {
 mod tests {
     use super::*;
     use crate::document::Document;
+    use crate::outline::DestView;
 
     /// Assemble a classic-xref PDF from numbered object bodies (raw bytes,
     /// so stream objects can be built by the same helper). Object 1 is the
@@ -2869,5 +3102,331 @@ mod tests {
         assert!(!off.contains(&ObjId::new(5, 0)), "state untouched");
         assert_eq!(notes.categories_unevaluable, 2);
         assert_eq!(notes.groups_managed, 0);
+    }
+
+    // -----------------------------------------------------------------
+    // `/Link` destinations (§12.5.6.5, Table 173) — `Pass 222.0`
+    // -----------------------------------------------------------------
+
+    /// A two-page document whose page 1 carries the given `/Annots` text
+    /// and whose catalog carries the given extra text (a `/Names` tree,
+    /// typically). Page 1 is object 3, page 2 is object 4.
+    ///
+    /// Deliberately TWO pages: a one-page fixture cannot tell a correct
+    /// `page_index` from a hard-coded `0`, which is the single most
+    /// likely defect in a destination resolver and the reason a
+    /// default-valued fixture cannot falsify a carry.
+    fn two_page_doc_with_links(
+        annots: &str,
+        catalog_extra: &str,
+        extra: &[(u32, Vec<u8>)],
+    ) -> Document {
+        let mut objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!("<< /Type /Catalog /Pages 2 0 R {catalog_extra} >>").into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 612 792] \
+                  /Resources << >> >>"
+                    .to_vec(),
+            ),
+            (
+                3,
+                format!("<< /Type /Page /Parent 2 0 R /Annots {annots} >>").into_bytes(),
+            ),
+            (4, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
+        ];
+        objects.extend_from_slice(extra);
+        build_pdf(&objects)
+    }
+
+    /// Would catch: a `/GoTo` action's `/D` array not being followed at
+    /// all — the exact gap pdfceGUI reported, where `action_type` said
+    /// `GoTo` and nothing could say where.
+    ///
+    /// Also pins the `/FitR` view through, because a viewer that lands on
+    /// the right page at the wrong zoom is a visible defect, and pins the
+    /// page index to **1** (the second page) so a hard-coded zero fails.
+    #[test]
+    fn a_goto_action_on_a_link_resolves_to_a_page_and_a_view() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R]",
+            "",
+            &[(
+                5,
+                b"<< /Type /Annot /Subtype /Link /Rect [10 20 110 40] \
+                  /A << /S /GoTo /D [4 0 R /FitR 76 119 687 558] >> >>"
+                    .to_vec(),
+            )],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        let found = page_link_destinations(&graph, ObjId::new(3, 0), &reader);
+
+        assert_eq!(found.links_without_destination, 0);
+        assert_eq!(found.links.len(), 1);
+        let link = &found.links[0];
+        assert_eq!(link.annots_index, 0);
+        assert_eq!(link.id, Some(ObjId::new(5, 0)));
+        let rect = link.rect.expect("Table 173 makes /Rect required");
+        assert!((rect.llx - 10.0).abs() < 1e-9 && (rect.ury - 40.0).abs() < 1e-9);
+        match &link.destination {
+            Destination::Page { page_index, view } => {
+                assert_eq!(*page_index, 1, "the SECOND page, not a defaulted zero");
+                match view {
+                    DestView::FitR {
+                        left,
+                        bottom,
+                        right,
+                        top,
+                    } => {
+                        // Table 151 lets any of the four be null, so
+                        // each is an Option — `Some` here is half the
+                        // assertion, the value is the other half.
+                        assert_eq!(*left, Some(76.0));
+                        assert_eq!(*bottom, Some(119.0));
+                        assert_eq!(*right, Some(687.0));
+                        assert_eq!(*top, Some(558.0));
+                    }
+                    other => panic!("expected FitR, got {other:?}"),
+                }
+            }
+            other => panic!("expected a resolved page, got {other:?}"),
+        }
+    }
+
+    /// Would catch: the `/Names → /Dests` name-tree path not being walked
+    /// for a LINK, which is the half a bookmark-only resolver would have
+    /// silently lacked — every by-name link would look broken.
+    #[test]
+    fn a_link_by_name_resolves_through_the_names_tree() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R]",
+            "/Names << /Dests 6 0 R >>",
+            &[
+                (
+                    5,
+                    b"<< /Type /Annot /Subtype /Link /Rect [0 0 50 50] \
+                      /A << /S /GoTo /D (chapter-two) >> >>"
+                        .to_vec(),
+                ),
+                (
+                    6,
+                    b"<< /Names [(chapter-two) [4 0 R /XYZ 0 792 null]] >>".to_vec(),
+                ),
+            ],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        assert_eq!(reader.named_destination_count(), 1);
+        let found = page_link_destinations(&graph, ObjId::new(3, 0), &reader);
+
+        assert_eq!(found.links.len(), 1);
+        match &found.links[0].destination {
+            Destination::Page { page_index, view } => {
+                assert_eq!(*page_index, 1);
+                // Table 151: a NULL zoom means "retain the current
+                // magnification". A viewer that read it as 0 would zoom
+                // the page out of existence.
+                assert!(view.zoom_is_retain(), "null zoom must mean retain");
+            }
+            other => panic!("expected a resolved page, got {other:?}"),
+        }
+    }
+
+    /// Would catch: a link's direct `/Dest` (rather than `/A`) being
+    /// ignored. Table 173 permits either, and the two are mutually
+    /// exclusive — a resolver that only read `/A` would break every link
+    /// written the older way.
+    #[test]
+    fn a_link_may_carry_dest_directly_and_it_wins_over_an_action() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R]",
+            "",
+            &[(
+                5,
+                // Malformed on purpose: Table 173 says /Dest "shall not
+                // be present if an A entry is present". pdfce takes
+                // /Dest, matching the outline path, and COUNTS the
+                // conflict rather than silently picking.
+                b"<< /Type /Annot /Subtype /Link /Rect [0 0 50 50] \
+                  /Dest [4 0 R /Fit] \
+                  /A << /S /GoTo /D [3 0 R /Fit] >> >>"
+                    .to_vec(),
+            )],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        let dict_obj = graph.resolved(ObjId::new(5, 0));
+        let dict = dict_obj.as_dict().expect("annotation dictionary");
+        let (resolved, diagnostics) = reader.destination_with_diagnostics(&graph, dict);
+
+        assert_eq!(diagnostics.dest_and_action_both_present, 1);
+        match resolved {
+            Some(Destination::Page { page_index, .. }) => {
+                assert_eq!(page_index, 1, "/Dest wins, so page 2 not page 1");
+            }
+            other => panic!("expected /Dest to win, got {other:?}"),
+        }
+    }
+
+    /// Would catch: a `/URI` link being reported as a page jump, or as
+    /// nothing at all. Both are wrong in opposite directions — the first
+    /// navigates the operator somewhere arbitrary, the second hides that
+    /// the link exists.
+    #[test]
+    fn a_uri_link_is_disclosed_as_a_non_navigation_never_as_a_page() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R]",
+            "",
+            &[(
+                5,
+                b"<< /Type /Annot /Subtype /Link /Rect [0 0 50 50] \
+                  /A << /S /URI /URI (https://example.invalid/) >> >>"
+                    .to_vec(),
+            )],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        let found = page_link_destinations(&graph, ObjId::new(3, 0), &reader);
+
+        assert_eq!(found.links.len(), 1);
+        assert_eq!(found.links_without_destination, 0);
+        match &found.links[0].destination {
+            Destination::NonNavigation { action } => {
+                assert_eq!(
+                    action.as_ref().map(Name::as_bytes),
+                    Some(&b"URI"[..]),
+                    "the action type is the disclosure"
+                );
+            }
+            other => panic!("a /URI is not a page jump, got {other:?}"),
+        }
+    }
+
+    /// Would catch: a link with neither `/Dest` nor `/A` being dropped
+    /// silently, which would make a page of wholly-broken links
+    /// indistinguishable from a page with no links.
+    ///
+    /// Sabotage note: deleting the `links_without_destination` increment
+    /// makes this test fail on the counter alone — the `links` vector is
+    /// empty either way, which is exactly why the counter had to exist.
+    #[test]
+    fn a_link_that_goes_nowhere_is_counted_not_dropped() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R 6 0 R]",
+            "",
+            &[
+                (
+                    5,
+                    b"<< /Type /Annot /Subtype /Link /Rect [0 0 50 50] >>".to_vec(),
+                ),
+                // A non-link annotation on the same page must not be
+                // counted by either field.
+                (
+                    6,
+                    b"<< /Type /Annot /Subtype /Square /Rect [0 0 9 9] >>".to_vec(),
+                ),
+            ],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        let found = page_link_destinations(&graph, ObjId::new(3, 0), &reader);
+
+        assert!(found.links.is_empty());
+        assert_eq!(
+            found.links_without_destination, 1,
+            "the /Square must not be counted; the broken /Link must be"
+        );
+    }
+
+    /// Would catch: `annots_index` being the position in the RESULT
+    /// rather than in `/Annots`, which would make every
+    /// `delete-annotation` built on it address the wrong object once a
+    /// page held anything other than links.
+    #[test]
+    fn annots_index_is_the_array_position_not_the_result_position() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R 6 0 R 7 0 R]",
+            "",
+            &[
+                (
+                    5,
+                    b"<< /Type /Annot /Subtype /Square /Rect [0 0 9 9] >>".to_vec(),
+                ),
+                (
+                    6,
+                    b"<< /Type /Annot /Subtype /Widget /Rect [0 0 9 9] \
+                      /A << /S /GoTo /D [4 0 R /Fit] >> >>"
+                        .to_vec(),
+                ),
+                (
+                    7,
+                    b"<< /Type /Annot /Subtype /Link /Rect [0 0 9 9] \
+                      /A << /S /GoTo /D [4 0 R /Fit] >> >>"
+                        .to_vec(),
+                ),
+            ],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        let found = page_link_destinations(&graph, ObjId::new(3, 0), &reader);
+
+        assert_eq!(found.links.len(), 1, "the /Widget is deliberately excluded");
+        assert_eq!(
+            found.links[0].annots_index, 2,
+            "third in /Annots, first in the result"
+        );
+
+        // …but the same widget IS reachable through the per-annotation
+        // route, which is the documented division of labour.
+        let widget = page_annotations(&graph, ObjId::new(3, 0))
+            .into_iter()
+            .find(Annotation::is_widget)
+            .expect("the widget is on the page");
+        assert!(
+            matches!(
+                widget.destination(&graph, &reader),
+                Some(Destination::Page { page_index: 1, .. })
+            ),
+            "a pushbutton's /A is resolvable, just not by page_link_destinations"
+        );
+    }
+
+    /// Would catch: a destination naming an object that is not a page
+    /// being reported as `Page { page_index: 0 }` — the residue of a page
+    /// delete, presented as a working link to the front of the document.
+    #[test]
+    fn a_link_to_a_deleted_page_is_unmapped_never_page_zero() {
+        let doc = two_page_doc_with_links(
+            "[5 0 R]",
+            "",
+            &[
+                (
+                    5,
+                    // Object 6 is a plain dictionary, not a page in the tree.
+                    b"<< /Type /Annot /Subtype /Link /Rect [0 0 50 50] \
+                  /A << /S /GoTo /D [6 0 R /Fit] >> >>"
+                        .to_vec(),
+                ),
+                (6, b"<< /Type /Whatever >>".to_vec()),
+            ],
+        );
+        let graph = doc.view();
+        let reader = DestinationReader::new(&graph);
+        assert!(
+            reader.page_tree_error().is_none(),
+            "the tree itself is fine"
+        );
+        let found = page_link_destinations(&graph, ObjId::new(3, 0), &reader);
+
+        match &found.links[0].destination {
+            Destination::UnmappedPage { page, .. } => {
+                assert_eq!(*page, Some(ObjId::new(6, 0)), "the failed id is kept");
+            }
+            other => panic!("expected UnmappedPage, got {other:?}"),
+        }
     }
 }

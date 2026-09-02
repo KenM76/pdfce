@@ -500,6 +500,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use pdfce_core::PdfError;
 use pdfce_core::document::Document;
+use pdfce_core::outline::{DestView, Destination, DestinationReader, RemoteTarget};
 use pdfce_core::pageops::{DocumentView, InsertPosition, PageOpError, SplitCriterion};
 use pdfce_core::signature::{SaveMode as CoreSaveMode, SignatureImpact};
 
@@ -3189,6 +3190,46 @@ enum Command {
     /// *how many*. Emits the locale-invariant stable-line format; nothing
     /// is modified.
     ListAnnotations {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based pages to inventory: `all`, `3`, `1-4`, `5,1-2`.
+        #[arg(long, default_value = "all")]
+        pages: String,
+    },
+
+    /// **List every clickable link and where it goes** (ISO 32000-1
+    /// §12.5.6.5, Table 173).
+    ///
+    /// `list-annotations` says a `/Link` is *there* and prints
+    /// `action=GoTo`; it deliberately stops at the action's type. This
+    /// resolves the destination behind it — through a `/GoTo` action's
+    /// `/D`, a direct `/Dest`, either §12.3.2.3 named-destination
+    /// namespace, and any `<< /D … >>` wrapper — so a script can dump a
+    /// document's table of contents, or find the links a page delete left
+    /// pointing at nothing.
+    ///
+    /// One line per link. `dest=` is the resolution, and only
+    /// `dest=page` is a jump this document can perform:
+    ///
+    /// - `dest=page target=<1-based> view=<Fit|FitH|FitR|XYZ|…>` — resolved.
+    /// - `dest=unmapped target=<obj> …` — named an object that is not a
+    ///   page in this document's tree; the usual residue of a page delete.
+    /// - `dest=named name="…"` — a name neither namespace defines.
+    /// - `dest=remote file="…"` — `/GoToR`, a page of ANOTHER file.
+    ///   Never resolved against this document's names, by design.
+    /// - `dest=action action=<URI|Launch|JavaScript|…>` — not a
+    ///   navigation at all. **Recognised and disclosed, never executed.**
+    ///
+    /// A trailing `links-without-destination=<n>` summary line counts
+    /// `/Link` annotations carrying neither `/Dest` nor `/A` — links the
+    /// operator can see and can never follow. It is printed even when
+    /// zero, so that "no broken links" and "this tool did not check" stay
+    /// distinguishable.
+    ///
+    /// `/Widget` pushbuttons that carry a `/GoTo` are **not** listed: a
+    /// widget is a form control first, and activating one has form-side
+    /// consequences a link has none of. Read-only; nothing is modified.
+    ListLinks {
         /// Input PDF.
         input: PathBuf,
         /// 1-based pages to inventory: `all`, `3`, `1-4`, `5,1-2`.
@@ -8632,6 +8673,7 @@ fn run() -> ExitCode {
             print_state,
         ),
         Command::ListAnnotations { input, pages } => cmd_list_annotations(&input, &pages),
+        Command::ListLinks { input, pages } => cmd_list_links(&input, &pages),
         Command::DumpObject {
             input,
             id,
@@ -12998,6 +13040,208 @@ with_note={with_note} with_author={with_author} need_appearances={need_appearanc
         selected.len(),
     );
     exit::SUCCESS
+}
+
+/// `list-links`: resolve every `/Link` annotation's destination
+/// (ISO 32000-1 §12.5.6.5, Table 173) across the selected pages.
+///
+/// ## Why this is not a column on `list-annotations`
+///
+/// `list-annotations` prints the action's `/S` name and stops, and that
+/// is the right disclosure for an inventory: it is free to read, it
+/// answers *"what does this do to me"*, and it never walks the document.
+/// Resolving where the action **points** costs a page-tree walk plus a
+/// flatten of both §12.3.2.3 named-destination namespaces. Bolting that
+/// onto `list-annotations` would make every inventory of every document
+/// pay for a question almost no inventory asks.
+///
+/// So the cost lives here, where it is asked for, and is paid **once**:
+/// [`DestinationReader`] is built before the page loop, not inside it.
+/// Building one per page would walk the page tree once per page — the
+/// quadratic shape this crate has been bitten by before.
+///
+/// ## Output contract
+///
+/// One `link` line per resolved link, then exactly one `links` summary
+/// line. Field order is fixed and every value is a single whitespace-free
+/// token or a quoted string, so `awk '$2 ~ /page=/'` keeps working.
+///
+/// The summary line is printed **unconditionally**, including when both
+/// its counts are zero. That is deliberate: a tool that prints nothing
+/// for a document with no links is indistinguishable from a tool that
+/// failed to look, and this crate has shipped that exact ambiguity
+/// before.
+///
+/// ## Exit codes
+///
+/// `0` always, when the document opened — a document with no links is
+/// not an error, it is an answer. Open failures map through
+/// [`exit_code_for_doc`]; an unwalkable page tree is
+/// [`exit::RUNTIME_ERROR`], because "which page is this" has no answer
+/// at all then and every line would be a lie of omission.
+fn cmd_list_links(input: &Path, pages_spec: &str) -> u8 {
+    let doc = match open_document(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let pages = match pdfce_core::page_tree::pages(&doc) {
+        Ok(pages) => pages,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let selected = match parse_pages(pages_spec, pages.len()) {
+        Ok(sel) => sel,
+        Err(msg) => {
+            eprintln!("pdfce-cli: {}: {msg}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    // Built ONCE. See this function's doc comment.
+    let reader = DestinationReader::new(&doc);
+    if let Some(err) = reader.page_tree_error() {
+        // Reachable only if `page_slots` fails where `pages` succeeded,
+        // which their differing strictness makes possible in principle.
+        // Disclosed rather than swallowed: with no page map, EVERY
+        // explicit destination below reports `unmapped` whether or not
+        // its target exists, and blaming the document for that would be
+        // the reader accusing the file of its own blindness.
+        eprintln!(
+            "pdfce-cli: {}: page tree unreadable ({err}); every destination \
+will report unmapped",
+            input.display()
+        );
+    }
+
+    let (mut resolved, mut broken) = (0usize, 0usize);
+    for &page_index in &selected {
+        let Some(page) = pages.get(page_index) else {
+            continue;
+        };
+        let found = pdfce_core::annot::page_link_destinations(&doc, page.id, &reader);
+        broken += found.links_without_destination;
+        for link in &found.links {
+            resolved += 1;
+            let rect = match link.rect {
+                Some(r) => format!("{},{},{},{}", r.llx, r.lly, r.urx, r.ury),
+                None => "none".to_owned(),
+            };
+            let detail = describe_destination(&link.destination);
+            println!(
+                "link page={} index={} rect={rect} {detail}",
+                page_index + 1,
+                link.annots_index,
+            );
+        }
+    }
+    println!("links resolved={resolved} links-without-destination={broken}");
+    exit::SUCCESS
+}
+
+/// Render one [`Destination`] as the `dest=…` field group of a
+/// `list-links` line.
+///
+/// Every variant gets a **distinct** `dest=` token, and none of them is
+/// `dest=none`. That is the point of the function: a viewer or a script
+/// that collapsed `remote`, `named`, `unmapped` and `action` into "no
+/// destination" would report a document full of working links as a
+/// document full of nothing, and a script that collapsed them into
+/// `page` would send the operator somewhere arbitrary. The five tokens
+/// are the disclosure.
+fn describe_destination(destination: &Destination) -> String {
+    match destination {
+        Destination::Page { page_index, view } => {
+            // 1-based on the way out, matching every other page= this
+            // CLI prints; 0-based is a core-internal convention.
+            format!(
+                "dest=page target={} view={}",
+                page_index + 1,
+                view_token(view)
+            )
+        }
+        Destination::UnmappedPage { page, view } => {
+            let target = match page {
+                Some(id) => format!("{} {}", id.num, id.generation),
+                None => "none".to_owned(),
+            };
+            format!(
+                "dest=unmapped target={} view={}",
+                quoted_token(&target),
+                view_token(view)
+            )
+        }
+        Destination::Named { name } => format!(
+            "dest=named name={}",
+            quoted_token(&String::from_utf8_lossy(name))
+        ),
+        Destination::Remote {
+            file,
+            target,
+            view,
+            new_window,
+        } => {
+            let file = match file {
+                Some(bytes) => quoted_token(&String::from_utf8_lossy(bytes.as_slice())),
+                None => "none".to_owned(),
+            };
+            let target = match target {
+                RemoteTarget::PageNumber(number) => format!("page:{number}"),
+                RemoteTarget::Named(bytes) => {
+                    format!("name:{}", sanitize_token(&String::from_utf8_lossy(bytes)))
+                }
+                _ => "unknown".to_owned(),
+            };
+            // §12.6.4.3 leaves `/NewWindow` absent-means-viewer's-choice,
+            // so `unset` is a third value, not a synonym for `0`.
+            let window = match new_window {
+                Some(true) => "new",
+                Some(false) => "same",
+                None => "unset",
+            };
+            format!(
+                "dest=remote file={file} target={target} window={window} view={}",
+                view_token(view)
+            )
+        }
+        Destination::NonNavigation { action } => {
+            let action = match action {
+                Some(name) => sanitize_token(&String::from_utf8_lossy(name.as_bytes())),
+                None => "unreadable".to_owned(),
+            };
+            format!("dest=action action={action}")
+        }
+        // `Destination` is `#[non_exhaustive]`; a variant added later
+        // must not silently become one of the five above.
+        _ => "dest=unrecognised".to_owned(),
+    }
+}
+
+/// The Table 151 fit style as one lowercase-free token.
+///
+/// The style only — not its parameters. A `/XYZ`'s left/top/zoom and a
+/// `/FitR`'s rectangle are four to five more numbers per line, and a
+/// caller that needs them is a viewer, which should be calling
+/// `pdfce-core` rather than parsing this. What a *script* needs from a
+/// CLI line is whether the link frames a region or fits the sheet.
+fn view_token(view: &DestView) -> &'static str {
+    match view {
+        DestView::Absent => "absent",
+        DestView::Xyz { .. } => "XYZ",
+        DestView::Fit => "Fit",
+        DestView::FitH { .. } => "FitH",
+        DestView::FitV { .. } => "FitV",
+        DestView::FitR { .. } => "FitR",
+        DestView::FitB => "FitB",
+        DestView::FitBH { .. } => "FitBH",
+        DestView::FitBV { .. } => "FitBV",
+        DestView::Unknown { .. } => "unknown",
+        _ => "unrecognised",
+    }
 }
 
 /// `add-bookmark` — append one item to the document outline (§12.3.3).

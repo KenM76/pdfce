@@ -13,7 +13,7 @@ index and ends with **Traps**.
 
 | file | covers | size |
 |---|---|---|
-| [`01-reading-and-model.md`](01-reading-and-model.md) | loading, the COS object model, pages, content streams, text extraction, fonts, vector picking/snapping, filters, colour, navigation, metadata | 2,677 lines · 144 clauses cited |
+| [`01-reading-and-model.md`](01-reading-and-model.md) | loading, the COS object model, pages, content streams, text extraction, fonts, vector picking/snapping, filters, colour, navigation, metadata | 2,735 lines · 146 clauses cited |
 | [`02-editing-and-saving.md`](02-editing-and-saving.md) | `EditSession` end to end — **all 187 public verbs**, the command/undo contract, the dirty set, the save path, the guard/refusal model, `EditError`'s 114 variants | 4,410 lines · 125 clauses cited |
 | [`03-capabilities.md`](03-capabilities.md) | ce dimensions, forms, markup, redaction, OCR, print/imposition, rasterising — each with **★ what the UI must disclose** | 2,699 lines · 63 clauses cited |
 
