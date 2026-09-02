@@ -96,6 +96,124 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 368th filing, 2026-09-02 — `Pass 227.0` (`983b438`).**
+
+**Sourcing (hard rule 8).** No shell this filing. The full commit body was
+supplied verbatim as a scratch file (`D:\Dev\pdfce\.librarian-227.txt`) by
+the engineer, not read via `git log` directly. Every claim naming a live-code
+location was independently cross-checked by `Read`/`Grep`: `authored_tints`
+(`crates/pdfce-render/src/overprint.rs:549`), `authored_spots`
+(`:647`), `names_a_spot_colorant` (`:672`), all exist and read exactly as
+described including the three §8.6.6.4 identity rules stated in
+`authored_spots`'s own doc comment (`:608–629`). The named sabotage test,
+`a_mixed_devicen_splits_its_components_between_the_two_readers` (`:2085`),
+exists and matches the described `/DeviceN [/Black <spot>] /DeviceCMYK`
+shape exactly. All eight new tests were located and counted at `:2061–2238`
+— `a_separation_states_its_spot_tint_and_no_process_tint`,
+`a_mixed_devicen_splits_its_components_between_the_two_readers`,
+`the_none_colorant_never_becomes_a_plane`,
+`the_all_colorant_is_a_broadcast_not_a_plane`,
+`process_colorant_names_fold_in_ascii_only`,
+`a_component_with_no_operand_is_skipped_not_defaulted`,
+`a_process_space_states_no_spots`,
+`the_predicate_agrees_with_the_function_it_guards` — exactly eight, matching
+the commit message's count. **"Nothing calls them yet" independently
+confirmed**: `Grep` for `authored_spots`/`names_a_spot_colorant` across
+`crates/` returns hits in `overprint.rs` only. No `Cargo.toml` change
+mentioned or found on inspection, so GUI-core separation is not implicated.
+The change is two pure functions plus tests with no document-writing code
+touched, so round-trip/minimal-diff is not implicated either. **One claim
+not independently re-measured, flagged per hard rule 8**: the `D:` free-space
+figures below (190 MB → 34 GB) are the engineer's own, not re-checked by this
+role — no shell this filing.
+
+### Pass 227.0 (`983b438`, 2026-09-02) — the spot-colorant plane, step 3a of ~4: the READER half of the deposit, the tint a source states into a spot colorant no longer gets thrown away
+
+**The discard `authored_tints` was always right to make, for the wrong
+consumer.** `overprint::authored_tints` answers Table 149's question —
+*which of the four PROCESS channels did this source state a tint into?* — and
+a spot colorant, having no process channel, correctly answers `[0,0,0,0]` and
+is dropped. Right for Table 149's arithmetic, wrong for a per-colorant buffer
+where the spot tint is the thing being carried. `authored_spots` returns
+exactly what the other throws away. **The two are deliberately not merged** —
+they answer different questions, and Table 149's must not acquire a spot
+dimension by accident — and a test
+(`a_separation_states_its_spot_tint_and_no_process_tint`) asserts
+`authored_tints` still answers all-zero for the identical input, pinning the
+boundary so a future change cannot move it quietly.
+
+**Three §8.6.6.4 identity rules, all implemented and tested at the reader.**
+`/None` never becomes a plane (§8.6.6.4: painting in a `Separation` named
+`/None` *"shall have no effect on the current page"* — a plane for it would
+be a plane that must never be painted, excluded here rather than suppressed
+downstream). `/All` never becomes a plane either, and this is the subtle
+one: it *"shall refer collectively to all colorants available on an output
+device"*, which is a **broadcast**, not a colorant — giving it a plane would
+make it one ink among many, the opposite of what it means; `authored_tints`
+already broadcasts it across the four process channels, and **broadcasting
+it across spot planes is explicitly left to step 4, not half-done here by
+accident**. A name that IS a process colorant is not a spot — §8.6.6.5's
+`NChannel` rule states the point normatively (*"only the ones not present
+on the output device"* use the alternate space, and a simulated CMYK device
+has all four).
+
+**Sabotage-verified.** Removing the process-colorant exclusion fails two
+tests, one of which is modelled directly on the backdrop of the patch this
+work targets: `/DeviceN [/Black <spot>] /DeviceCMYK` filled `0.5 1 scn`.
+Black must go to `authored_tints`; the spot must come out of `authored_spots`
+— getting that split wrong is precisely what smears a spot across C/M/Y.
+
+**Also shipped: `names_a_spot_colorant`.** A cheap pre-test so the paint
+path can skip the whole spot apparatus on the 98.6 % of pages that name no
+spot colorant, kept beside the function it guards with a test walking six
+colorant shapes to assert the two agree
+(`the_predicate_agrees_with_the_function_it_guards`) — a predicate that
+drifts from its function is a paint that silently stops depositing.
+
+**No rendering changes.** Confirmed above: nothing in the crate calls either
+new function yet. This is step 3a — the reader — not step 3b, the deposit
+(`interpret.rs` handing a `Separation`/`DeviceN` fill's colorant names and
+tints to the paint call, plus Table 149's spot rule under overprint), which
+is the still-unshipped work that moves the first pixel. Target remains the
+two traps `PCS 3.0` fails at, whose cause is measured: its backdrop is
+`/DeviceN [/Black <spot>] /DeviceCMYK`, pdfce flattens the spot into C/M/Y,
+and a `DeviceCMYK` source then knocks those out — destroying a colorant it
+never named.
+
+**`FEATURES.md`: no row change, no box ticked — same precedent as steps 1
+and 2 (`Pass 217.0`, `Pass 225.0`).** No rendering changed and no
+operator-facing capability moved; there is nothing the operator can do
+differently after this Pass than before it.
+
+**★ Operational, and OPEN, not resolved — `D:` hit 100 % full mid-Pass.**
+`D:` reached 190 MB free and a build failed with `os error 112`.
+`target/debug/incremental` — 22 GB of pure, always-regenerable compiler
+cache — was removed, taking the drive to 34 GB free. `target/debug/deps` is
+still 58 GB and `target/` 63 GB overall. A `cargo clean` would reclaim the
+rest at the cost of a full rebuild; deliberately **not** run — that rebuild
+is the operator's time to spend, not the engineer's to spend for him. **For
+Ken:** `target/` still needs attention; these figures are the engineer's
+own and were not independently re-measured by this role (no shell this
+filing, hard rule 8).
+
+**A verification finding, filed to the RAG as a dated instance rather than
+re-derived next time it recurs.** A grep over the test suite's own run
+output, searching for this Pass's eight new test names, matched only five —
+three names simply did not match the grep pattern used, not because the
+tests failed to run. Each of the eight was then confirmed individually by
+exact name; all eight passed. This is the sweep-spelling family (hard rule
+11(e)) recurring in a new medium — a test-run transcript rather than prose —
+filed as a fourth, dated footer on
+`D:/dev/rag/rust/a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`
+(index/frontmatter both updated) rather than minted as a new rule, per the
+engineer's own request to check the existing family first. The mechanism is
+identical to the file's first instance (a missing `§` in a doc-claim sweep):
+a search is only as good as its spelling of what it is looking for, and this
+one failed in the direction that a suite-level "ok" summary can make look
+like nothing is wrong.
+
+---
+
 **★ ONE COMMIT, 367th filing, 2026-09-02 — `Pass 226.0` (`aaf6ff0`).**
 
 **Sourcing (hard rule 8).** No shell this filing. The full commit body was

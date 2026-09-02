@@ -85529,3 +85529,77 @@ or invariant redefinition; `ARCHITECTURE.md` §12 not touched.
 - Backup/push state: **not independently checked by this role, no shell
   this filing** — carrying forward the 366th filing's own caveat rather
   than repeating a number this role did not measure, per hard rule 8.
+
+## 2026-09-02 (368th filing) — `Pass 227.0` (`983b438`) SHIPPED — the spot-colorant plane, step 3a of ~4 (the READER half of the deposit): a spot colorant's tint is no longer thrown away; `D:` hit 100% full mid-Pass, partially reclaimed, still OPEN; a dated instance added to the sweep-spelling RAG family rather than a new mint
+
+**Sourcing.** No shell this filing. The commit body was supplied verbatim as
+a scratch file (`.librarian-227.txt`) by the engineer, not read via `git
+log`. Every claim naming a live-code location was independently
+cross-checked by `Read`/`Grep` — see the filing header in `ROADMAP.md`'s
+*Shipped* section for the full citation list.
+
+**Shipped:**
+
+- **`Pass 227.0`** (`983b438`) — `overprint::authored_spots`
+  (`crates/pdfce-render/src/overprint.rs:647`) and
+  `overprint::names_a_spot_colorant` (`:672`), pure functions plus eight new
+  tests. `authored_tints` answers Table 149's process-channel question and
+  correctly reads a spot colorant's tint as zero, then drops it — right for
+  that question, wrong for a per-colorant buffer that needs the spot tint
+  kept. `authored_spots` returns exactly what the other discards; a test
+  asserts `authored_tints` still answers all-zero for the same input,
+  pinning the boundary between the two. Three §8.6.6.4 identity rules
+  implemented and tested: `/None` never becomes a plane; `/All` is a
+  broadcast, not a plane (broadcasting it across spot planes is explicitly
+  left to later work, not half-done here); a name that is a process
+  colorant is not a spot. **No rendering changes — nothing calls either
+  function yet**, confirmed by grep over `crates/`. **Not a capability; no
+  `FEATURES.md` row** — same precedent as `Pass 217.0`/`Pass 225.0`, the
+  prior two steps of this plane.
+
+**Decisions made this session:** none — no crate boundary, library choice
+or invariant redefinition; `ARCHITECTURE.md` §12 not touched.
+
+**Findings + decisions:**
+
+- **A dated instance of the existing sweep-spelling family (hard rule
+  11(e)), not a new finding.** A grep over the test suite's own run output,
+  searching for this Pass's eight new test names, matched only five — three
+  names simply did not match the grep pattern used, not because the tests
+  failed to run. Each of the eight was then confirmed individually by exact
+  name; all eight passed. Filed as a fourth, dated footer on
+  `D:/dev/rag/rust/a_sweep_for_a_claim_is_only_as_good_as_its_spelling_of_the_claim.md`
+  (index/frontmatter both updated) rather than minted as a new rule, per the
+  engineer's own request to check the existing family before minting
+  anything new. The footer also names the reason this instance is worse
+  than the file's prose instances: a stale doc claim sits still and can be
+  re-swept tomorrow, but a test-run transcript is gone the moment the
+  process exits, so the miss is unrecoverable after the fact unless caught
+  in the same session — the corollary offered is to re-run a suspect test
+  by exact name (loud failure on a misspelled filter) rather than trust a
+  transcript grep (silent under-count on the same misspelling).
+
+**Still in flight / open:**
+
+- Step 3b of ~4 (the deposit proper — `interpret.rs` handing a
+  `Separation`/`DeviceN` fill's colorant names and tints to the paint call,
+  plus Table 149's spot rule under overprint) is the next scoped task and
+  is where the first pixel moves. Target remains the two traps `PCS 3.0`
+  fails at.
+- **`D:` operational state — OPEN, not resolved.** `D:` hit 100% full (190
+  MB free) mid-Pass and a build failed with `os error 112`.
+  `target/debug/incremental` (22 GB, pure regenerable compiler cache) was
+  removed, taking the drive to 34 GB free. `target/debug/deps` is still 58
+  GB and `target/` 63 GB overall — a `cargo clean` would reclaim the rest
+  at the cost of a full rebuild, and the engineer deliberately left that
+  call to Ken rather than spending his rebuild time for him. **Figures are
+  the engineer's own, not independently re-measured by this role — no
+  shell this filing.**
+
+**For next session:**
+
+- **Ken: `D:` is tight** (34 GB free per the engineer's figure above,
+  `target/` at 63 GB) — worth a `cargo clean` at a convenient moment, or a
+  decision to relocate `target/` off `D:`.
+- Backup/push state: not independently checked by this role, no shell this
+  filing.
