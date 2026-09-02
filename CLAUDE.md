@@ -247,8 +247,26 @@ What holds now, replacing the struck bullet:
   it is standing-authorized as of 2026-08-27 ("always push").** Still
   gated, exactly as before, and still needing an **explicit, current**
   go-ahead each time:
-  - **cutting a tag or a release** — a release is a claim that a state is
-    fit to use, a different act from making commits visible;
+  - ~~**cutting a tag or a release** — a release is a claim that a state is
+    fit to use, a different act from making commits visible;~~
+    **★★ SUPERSEDED 2026-09-02 — decision 121. Releasing is now
+    STANDING-AUTHORIZED.** The operator, verbatim, given directly after
+    being told that `main` was pushed but fifteen commits sat unreleased
+    and OneDrive still carried the previous version: **"always go ahead
+    and push the latest one."**
+    So: cut the tag, package, smoke-test, deploy to OneDrive, no
+    per-release go-ahead.
+    ★ **Read narrowly, and the narrowing is part of the ruling** — the
+    same discipline decision 090 applied to "always push". It covers the
+    RELEASE act. It does **not** cover `--force`, rewriting published
+    history, non-`main` branches, or remote tags other than the release
+    tag; he was answering about shipping the latest work, not about
+    those. And it authorises the act, **not** skipping the gates: a
+    release still owes a green `tools/run-gates.sh`, a fresh-folder
+    smoke test, and `verify-release.py`.
+    The struck wording above is kept legible because a reader who
+    remembers the old rule needs to see that it moved, not wonder
+    whether they misremembered it;
   - **`git push --force`, or any push that rewrites published history** —
     destructive and unrecoverable for anyone who already cloned, and this
     project has direct evidence of the failure mode: rewriting a commit

@@ -29859,3 +29859,69 @@ and the new
 ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing
 (the region-count-instrument finding is filed as a personal_rag/pdf lesson,
 not proposed as a new standing rule — see this role's report).
+
+- **2026-09-02 — Decision 121. "ALWAYS GO AHEAD AND PUSH THE LATEST ONE"
+  GRANTS STANDING AUTHORITY FOR THE RELEASE ACT ITSELF — CUTTING A TAG,
+  PACKAGING, AND DEPLOYING — NOT FOR ANY PUSH DECISION `090` ALREADY DECLINED
+  TO GRANT.** (librarian filing, 377th, no shell.)
+
+  **The ruling, verbatim.** Ken, 2026-09-02, given directly after the
+  engineer reported that `main` was pushed but fifteen commits sat
+  unreleased and the OneDrive-deployed CLI still carried `v0.20.0`:
+  **"always go ahead and push the latest one."**
+
+  **What it grants.** `CLAUDE.md` rule 8's remaining gated clause — cutting a
+  tag or a release needs "an explicit, current go-ahead each time" — is
+  satisfied **standingly** from this ruling forward, for the release act:
+  version bump, tag, package, deploy. No future session needs to ask before
+  cutting the next release once its constituent Passes are shipped and
+  gated green.
+
+  **★ What it does NOT grant, narrowed on the same warrant decision `090`
+  used for the push half of this same rule, because the sentence answers one
+  question and the rule still bundles more than one act under "push":**
+
+  1. **`git push --force`, or any push that rewrites published history.**
+     Unaffected — decision `090`'s reasoning holds without restatement; a
+     release ruling does not touch it.
+  2. **Pushing any branch other than `main`, or creating remote branches
+     beyond a release tag.** The ruling was given about releasing pending
+     work sitting on `main`; it does not reach an act it was never asked
+     about.
+  3. **Skipping the release gates themselves.** "Always go ahead and push
+     the latest one" authorises *not asking first*; it does not authorise
+     cutting a tag without `run-gates.sh` green, or deploying without the
+     fresh-folder smoke test — those obligations are unchanged by who
+     approved the act.
+
+  **The precedent, restated because it is doing the same work a second
+  time.** Decision `090` narrowed "always push" to the push half of rule 8
+  and explicitly declined to extend it to the release half, on the
+  reasoning that a release is "a claim that a particular state is fit to
+  use — a different act from making commits visible." That reasoning is
+  unchanged by this ruling; what changed is that the operator has now
+  answered the *second* question decision `090` left open, in the same
+  narrow, one-sentence form. **Two separate operator rulings, six days
+  apart, each read for exactly what it says rather than for the broadest
+  thing it could be read to say** — the same discipline, applied twice, not
+  a discipline that wore out the first time.
+
+  **Why this is a decision and not merely a rule-8 edit.** Rule 8's own
+  2026-08-05 correction already recorded push and release as "each its own
+  decision" — plural, deliberately. Decision `090` answered one. This
+  answers the other. Collapsing both into a single rule-8 edit without a
+  decision-log entry for each would be the same over-reading rule 4's
+  history already warns against.
+
+  **Body-section update, filed in this same edit:** none required, for the
+  same reason decision `090` recorded none — §12 is the decision log itself,
+  and no other `ARCHITECTURE.md` body section states rule 8's push/release
+  split. **The editable mirror of this fact is `CLAUDE.md` rule 8, which
+  this role cannot edit** (outside the librarian's five storage tiers) —
+  flagged for the engineer to amend, striking the superseded "releasing
+  still needs a go-ahead" clause in place rather than deleting it, matching
+  how decision `090`'s own push clause was struck rather than removed.
+
+  **No new standing rule number.** Rule 8 is amended, not replaced; `R239`
+  is unchanged, next free `R240`. **Ceiling moves `120` → `121`; next free
+  `122`.**

@@ -96,6 +96,118 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ TWO COMMITS, 377th filing, 2026-09-02 — `Pass 236.0` (`e7b1b7c`) CORRECTS
+THE TWO SURVIVOR DISCLOSURES `PASS 234.0` LEFT OWED, BUT SHIPPED BUNDLED WITH
+THIS ROLE'S OWN FILING COMMIT FOR `234.0`/`235.0` — THE PROJECT'S OWN
+`never_bundle_code_into_a_filing_commit` LESSON'S SECOND OCCURRENCE, AND A
+FAILURE SHAPE `R217` DOES NOT COVER: THE GATE ANSWERED CORRECTLY AND THE PUSH
+WENT AHEAD ANYWAY; `8f48220` IS THE `v0.21.0` RELEASE, CUT UNDER A NEW
+STANDING AUTHORISATION — DECISION `121` — THAT EXTENDS "ALWAYS PUSH" TO THE
+RELEASE ACT ITSELF, NARROWED THE SAME WAY DECISION `090` NARROWED THE FIRST
+GRANT.**
+
+**Sourcing (hard rule 8).** No shell this filing. Both commit bodies supplied
+verbatim as a scratch file (`D:\Dev\pdfce\.librarian-236.txt`, 74 lines, two
+commits) by the engineer, not read via `git log`.
+
+### Pass 236.0 (`e7b1b7c`, 2026-09-02) — the two survivor disclosures, scoped and dated
+
+**The two sites this role found while filing `Pass 234.0`/`235.0` (376th
+filing) and reported as owed, not corrected — `crates/pdfce-render/src/interpret.rs:479-483`
+(the `OverprintDiagnostics` struct's own doc comment) and
+`crates/pdfce-cli/src/main.rs:12130-12134` (a source `//` comment above the
+overprint `eprintln!` call) — are now fixed, scoped identically to the six
+`a0c6587` corrected:** a path FILL keeps its plane since `Pass 228.0`; an
+IMAGE or SHADING still flattens. Each carries the date it stopped being
+flatly true. The `main.rs` site's own comment now records that it is the
+**fourth** occurrence of this stale-comment shape in a block that already
+named three of them — the disclosure documenting its own history of having
+been wrong, which is new for this family and worth carrying forward as a
+legibility habit rather than only a correction.
+
+`docs/FEATURES.md`: not touched — a disclosure correction, no capability
+moved, no row to tick.
+
+### ★★ The process failure this filing exists to record — a filing commit that could not file itself
+
+**`e7b1b7c` bundled `Pass 236.0`'s CODE (two files under `crates/`) into the
+same commit that carried this role's filing of `Passes 234.0`/`235.0` (two
+files under `docs/`).** A filing commit cannot file itself, so
+`check-commits-filed.py` correctly reported `e7b1b7c` as unfiled — discovered
+by the engineer only **after** `v0.21.0` was tagged and pushed.
+
+**This is `.claude/agent-memory/pdfce-engineer/feedback_never_bundle_code_into_a_filing_commit.md`'s
+exact founding subject, recurring at its second occurrence** (first:
+2026-08-22, `c24ad7a`, three hard-rule-11 repairs bundled into a librarian
+filing). Flagged for the engineer to append a dated footer there — that file
+is `pdfce-engineer`'s own agent memory, outside this role's five storage
+tiers.
+
+**★ Explicitly NOT `R217`'s sixth-amendment shape, and the distinction is
+the point of recording it separately.** Every prior `R217` amendment note is
+about the gate's **answer going stale or being misread** — a deferred tip
+losing its deferral before the push, a filing commit in the batch that files
+a *different* Pass, a CI record read without querying it. **Here the gate was
+neither stale nor misread: the engineer ran `check-commits-filed.py` before
+the push, it printed `exit=1`, correctly, and the push happened anyway**,
+because the command chain that ran the gate did not halt on its exit code.
+`R217`'s text constrains what may land on top of an unfiled commit and when
+to re-run the check; it says nothing about what happens when a correctly-red
+check is not wired to block the next command, because none of its six
+amendment notes describe a case where the check was current, correct, and
+simply not acted on.
+
+**Standing-rule disposition — `R217` NOT amended; no seventh note.**
+Widening `R217` to cover this would fold two different failure classes
+("the gate's answer was wrong for the moment it was asked" vs. "the gate's
+answer was right and nothing enforced it") under one number, which is the
+same over-generalisation `R217`'s own third amendment note warns against
+when it declines to read a fact-conflict as a rule conflict. **Recorded
+instead as a fresh named candidate, `n = 1`, below this project's usual
+two-occurrence bar for minting:** *a gate whose exit code is inspected by a
+human but not consumed by the command chain (`&&`, a CI `if:` condition, a
+pre-push hook) protects nothing that a hurried operator cannot simply read
+past — the check and the enforcement are different acts, and only the
+second one has teeth.* No number minted. **Ceiling unaffected: rules
+`R239`, next free `R240`; decisions `120`, next free `121` before this
+filing's own mint, below.**
+
+### `8f48220` — `chore: v0.21.0` — the release
+
+Mechanical version bump and lockfiles; `cargo about` regenerated
+`THIRD_PARTY_LICENSES.md` with **no change** — the dependency set did not
+move. `run-gates.sh` green on all 31 commands at the new version, committed,
+tagged `v0.21.0`, `main` and the tag both pushed. **Packaging, the
+fresh-folder smoke test, the OneDrive deploy and `verify-release.py` are NOT
+recorded as done** — the engineer stated they are still to come and this
+filing does not anticipate them.
+
+**★★ Decision `121` minted (`ARCHITECTURE.md` §12) — "ALWAYS GO AHEAD AND
+PUSH THE LATEST ONE" EXTENDS STANDING AUTHORITY TO THE RELEASE ACT, NARROWED
+THE SAME WAY DECISION `090` NARROWED THE ORIGINAL "ALWAYS PUSH" GRANT.** The
+operator, 2026-09-02, verbatim, given after being told `main` was pushed but
+fifteen commits sat unreleased and OneDrive still carried `v0.20.0`: *"always
+go ahead and push the latest one."* Read as covering the **release** act
+(cutting a tag, packaging, deploying) standingly from this ruling forward —
+**not** `git push --force`, not rewriting published history, and not pushing
+non-`main` branches or creating remote branches/tags beyond a release tag,
+none of which the operator was asked about or addressed. See
+`ARCHITECTURE.md` §12 decision `121` for the full reasoning.
+
+**`CLAUDE.md` rule 8 needs an amendment this role cannot make** — its
+current text (post decision-090 correction) still reads "releasing still
+needs a go-ahead" / "cutting a tag or a release" as one of the two
+still-gated acts. That clause is now superseded by decision `121`, the same
+way rule 8's original push clause was superseded by decision `090`; the
+struck wording should stay legible in place, not deleted, matching this
+project's own convention. `CLAUDE.md` is outside this role's five storage
+tiers (per its own charter) — flagged for the engineer, not edited here.
+
+**Decision ceiling moves `120` → `121`; next free `122`.** **Standing rules
+ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing.
+
+---
+
 **★★ TWO COMMITS, 376th filing, 2026-09-02 — `Pass 234.0` (`a0c6587`) CORRECTS
 TWO STALE SPOT-COLORANT DISCLOSURES, FOUR PASSES AFTER `225.0`/`228.0`/`229.0`/
 `230.0` FALSIFIED THEM — THE SECOND `R180` INSTANCE THIS SESSION — AND
@@ -130312,6 +130424,15 @@ and
   `crates/pdfce-cli/src/main.rs:12130-12134`, NOT touched by `a0c6587` and
   still stale** — see the `Pass 234.0`/`235.0` Shipped entry (top of
   *Shipped*) for the full account. Flagged as owed, not corrected here.
+
+  **★ DISCHARGED (2026-09-02, `e7b1b7c`, `Pass 236.0`, 377th filing).** Both
+  survivor sites above are now scoped identically to the six `a0c6587`
+  corrected — path FILL keeps its plane since `Pass 228.0`; IMAGE/SHADING
+  still flatten — each dated inline, with the `main.rs` site's comment now
+  naming itself the fourth occurrence of this stale-comment shape. See
+  `ROADMAP.md`'s `Pass 236.0` Shipped entry (top of *Shipped*) for the full
+  account, including the process failure that shipped this fix bundled into
+  its own filing commit.
 
 - **R181 — A disclosure COUNT must be computed from the same predicate
   the write path it describes actually uses, never a proxy predicate

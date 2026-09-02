@@ -34,6 +34,17 @@ Before **every** push, including docs-only and handoff-only ones. Run it
 again after `git add` and again after writing the commit message, because
 staged content and the message are both in scope.
 
+★★ **AND AS OF 2026-09-02, RELEASING IS STANDING-AUTHORIZED TOO** —
+decision 121, from *"always go ahead and push the latest one."* That removes
+the last per-act pause in the publish path: pushing was already standing,
+and now cutting a tag, packaging and deploying to OneDrive are as well.
+
+⇒ **The scrub matters more, not less, again.** Every remaining stop between
+a keystroke and the public repo is now a gate I choose to run. Nothing will
+ask me. The authorisation covers the ACT, explicitly not skipping the gates:
+a release still owes a green `tools/run-gates.sh`, a fresh-folder smoke test
+and `verify-release.py`.
+
 **What it does not fix:** the name is in published history and stays there.
 Removing it means rewriting published history, which is Ken's call
 (project rule 8, `ROADMAP.md` open question `(ca)`) and which this project

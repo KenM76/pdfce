@@ -86394,3 +86394,66 @@ corrections, no capability moved, no row to tick.
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (377th filing) — `Pass 236.0` (`e7b1b7c`) SHIPPED — the two survivor disclosures `Pass 234.0` left owed, now scoped and dated; but `e7b1b7c` bundled that code into this role's own filing commit for `234.0`/`235.0`, the second occurrence of the `never_bundle_code_into_a_filing_commit` lesson, caught by the gate and pushed past anyway; `8f48220` is the `v0.21.0` release, cut under a new standing authorisation (decision 121)
+
+**Sourcing.** No shell this filing. Both commit bodies supplied verbatim as a
+scratch file (`D:\Dev\pdfce\.librarian-236.txt`, 74 lines, two commits) by
+the engineer, not read via `git log`.
+
+**Shipped:**
+- `Pass 236.0` (`e7b1b7c`) — the two survivor sites this role flagged as
+  owed while filing `234.0`/`235.0` (`crates/pdfce-render/src/interpret.rs:479-483`,
+  `crates/pdfce-cli/src/main.rs:12130-12134`) are now scoped identically to
+  the six `a0c6587` corrected: a path fill keeps its plane since
+  `Pass 228.0`; an image or shading still flattens. Each dated inline; the
+  `main.rs` site now names itself the fourth occurrence of the shape.
+- `8f48220` — `v0.21.0` released. Mechanical version bump and lockfiles;
+  `cargo about` regenerated `THIRD_PARTY_LICENSES.md` with no change.
+  `run-gates.sh` green on all 31 commands, tagged, `main` and tag pushed.
+  Packaging, the fresh-folder smoke test, the OneDrive deploy and
+  `verify-release.py` are **not** recorded as done — still to come.
+
+**Decisions made this session:**
+- **Decision 121** (`ARCHITECTURE.md` §12) — "always go ahead and push the
+  latest one" extends standing authority to the RELEASE act (tag, package,
+  deploy), narrowed the same way decision 090 narrowed the original "always
+  push" grant: not force-push, not non-`main` branches, and not a licence to
+  skip the release gates themselves. `CLAUDE.md` rule 8 needs the matching
+  amendment; flagged for the engineer, not edited here (outside this role's
+  five storage tiers).
+
+**Findings + decisions:**
+- **A filing commit that could not file itself, discovered after the tag
+  was already cut.** `e7b1b7c` bundled `Pass 236.0`'s code (two `crates/`
+  files) into the same commit as this role's docs-only filing of
+  `234.0`/`235.0` (two `docs/` files), so `check-commits-filed.py` correctly
+  flagged `e7b1b7c` as unfiled — a code commit cannot file itself. Second
+  occurrence of `.claude/agent-memory/pdfce-engineer/feedback_never_bundle_code_into_a_filing_commit.md`'s
+  founding subject (first: 2026-08-22, `c24ad7a`). Flagged for the engineer
+  to append a dated footer there — agent memory outside this role's remit.
+- **A failure shape distinct from anything `R217`'s six amendment notes
+  describe, and explicitly NOT filed as a seventh one.** The engineer ran
+  `check-commits-filed.py` before pushing, saw `exit=1` — correct, current,
+  not stale, not misread — and pushed anyway, because the command chain
+  never gated on the exit code. Every `R217` amendment note to date is about
+  the gate's *answer* going stale or being misread; this is about a correct
+  answer nobody enforced. Recorded as a fresh named candidate at `n = 1`,
+  below the two-occurrence mint bar, rather than folded into `R217`:
+  *a gate whose exit code is inspected but not consumed by the command
+  chain protects nothing a hurried push cannot simply read past.*
+
+**`docs/FEATURES.md`:** not touched — disclosure correction plus a release,
+no capability moved, no row to tick.
+
+**Still in flight:**
+- Packaging, fresh-folder smoke test, OneDrive deploy and
+  `verify-release.py` for `v0.21.0` — engineer to report separately.
+- `CLAUDE.md` rule 8's release clause — needs the decision-121 amendment,
+  struck in place rather than deleted, by the engineer.
+- The bundling lesson's dated footer — by the engineer, in their own agent
+  memory.
+
+**For next session:**
+- Backup/push state not independently checked by this role, no shell this
+  filing.
