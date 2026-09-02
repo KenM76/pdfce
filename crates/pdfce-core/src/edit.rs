@@ -342,6 +342,16 @@ pub enum CommandKind {
         /// How many pages ended up somewhere different.
         count: usize,
     },
+    /// One page's `/Annots` array was put in a new order
+    /// ([`EditSession::reorder_annotations`]).
+    ///
+    /// Carries a count for the same reason [`Self::ReorderPages`] does: a
+    /// drag that rearranges a whole tab order is **one** undo entry, and
+    /// the Undo control wants a magnitude, not the permutation.
+    ReorderAnnotations {
+        /// How many annotations ended up at a different index.
+        count: usize,
+    },
     /// Several pages were rotated in one operation (Pass 3.2).
     RotatePages {
         /// How many pages the one operation turned.
@@ -6422,6 +6432,93 @@ pub enum EditError {
         /// How many pages the document has.
         expected: usize,
         /// How many distinct, in-range indices the caller supplied.
+        got: usize,
+    },
+    /// [`EditSession::reorder_annotations`] was given an order that is not
+    /// a permutation of the page's indirect `/Annots` entries.
+    ///
+    /// Refused rather than repaired, for the reason
+    /// [`Self::NotAPermutation`] gives for pages: an order that omits an
+    /// annotation would be a **delete** wearing a reorder's name, one that
+    /// repeats an annotation would be a **duplicate**, and one that names an
+    /// object the page does not list would be a **move between pages** —
+    /// none of which the operator asked for. The three lists say exactly
+    /// which ids were the problem, so a shell can point at the row.
+    #[error(
+        "the new order must list each of the {expected} indirect annotation(s) on page index {page_index} exactly once; it lists {listed}: {} missing, {} not on this page, {} repeated",
+        missing.len(),
+        unknown.len(),
+        repeated.len()
+    )]
+    AnnotsNotAPermutation {
+        /// The 0-based page the order was given for.
+        page_index: usize,
+        /// How many indirect-reference entries the page's `/Annots` holds.
+        expected: usize,
+        /// How many ids the caller listed.
+        listed: usize,
+        /// Ids on the page the caller did not list.
+        missing: Vec<ObjId>,
+        /// Ids the caller listed that are not in the page's `/Annots`.
+        unknown: Vec<ObjId>,
+        /// Ids the caller listed more than once.
+        repeated: Vec<ObjId>,
+    },
+    /// A page's `/Annots` lists the same object more than once, so there is
+    /// no single "position" for it and a permutation over ids cannot be
+    /// applied.
+    ///
+    /// The array is malformed — §12.5.2 makes `/Annots` *an array of
+    /// annotation dictionaries*, each an annotation on this page once — but
+    /// it is the file's malformation, and repairing it (dropping the
+    /// duplicate) under a reorder's name would be a delete nobody asked
+    /// for. Refused by name; the duplicate is identified so it can be dealt
+    /// with deliberately.
+    #[error(
+        "the /Annots of page index {page_index} lists object {id} more than once, so its annotations cannot be reordered by id until the duplicate is removed"
+    )]
+    AnnotsDuplicateReference {
+        /// The 0-based page.
+        page_index: usize,
+        /// The object listed twice or more.
+        id: ObjId,
+    },
+    /// [`EditSession::reorder_annotations`] was asked to put a `/TrapNet`
+    /// annotation somewhere other than last.
+    ///
+    /// ISO 32000-1 §12.5.6.21 (and 2.0, word for word, though the feature
+    /// is deprecated there): a trap network *"shall always be the last
+    /// element in the page object's `Annots` array"* — §14.11.6.2 gives the
+    /// reason, that it must print after everything else on the page. The
+    /// verb pins it to its slot; a caller may list it last (accepted) or
+    /// omit it, but listing it anywhere else asks for a file the standard
+    /// forbids, and is refused rather than quietly corrected.
+    #[error(
+        "the trap network annotation (object {id}) on page index {page_index} must stay the last entry of /Annots (ISO 32000-1 12.5.6.21); list it last or leave it out of the order"
+    )]
+    TrapNetMustStayLast {
+        /// The 0-based page.
+        page_index: usize,
+        /// The `/TrapNet` annotation.
+        id: ObjId,
+    },
+    /// The page's trap network carries an `/AnnotStates` array whose length
+    /// does not match the `/Annots` array it is supposed to parallel.
+    ///
+    /// Table 366 (2.0 Table 403) makes `/AnnotStates` index-parallel to
+    /// `/Annots` less the trap network's own entry. When the lengths
+    /// disagree the file is already malformed and there is no correct way
+    /// to permute the states alongside the annotations; refused rather
+    /// than guess which entries the author meant.
+    #[error(
+        "the trap network on page index {page_index} lists {got} appearance state(s) in /AnnotStates for {expected} annotation(s); the arrays must be parallel (ISO 32000-1 Table 366) before the annotations can be reordered"
+    )]
+    AnnotStatesMismatch {
+        /// The 0-based page.
+        page_index: usize,
+        /// `/Annots` entries excluding the trap network itself.
+        expected: usize,
+        /// `/AnnotStates` length found.
         got: usize,
     },
     /// Search-and-redact could not extract the document's text, so no
@@ -15537,6 +15634,163 @@ pub struct MarkupNoteChange {
     pub keys_written: Vec<String>,
 }
 
+/// What a page's `/Tabs` entry (ISO 32000-1 §7.7.3.3 Table 30, values in
+/// §12.5.1; ISO 32000-2 Table 31 adds two) says about how its annotations
+/// are to be tabbed through — read, never inferred.
+///
+/// This exists because [`EditSession::reorder_annotations`] permutes the
+/// `/Annots` array, and **array order governs the tab order only when
+/// `/Tabs` lets it**. A page that declares `/R`, `/C` or `/S` derives its
+/// tab order from geometry or from the structure tree, so reordering its
+/// array changes the paint order and nothing the operator was trying to
+/// change. The verb reorders anyway — the caller asked for the array — and
+/// discloses which of these the page carries so the shell can say *"this
+/// page tabs by row; the order you arranged is not the order a reader will
+/// use"* rather than let the operator find out by tabbing.
+///
+/// Values other than the two 1.x names and the three 2.0 names are kept
+/// verbatim in [`Self::Other`] rather than collapsed to "unknown": a
+/// disclosure that names the value the file actually carries is checkable
+/// against the file; one that says "something else" is not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PageTabs {
+    /// No `/Tabs` entry. Table 30/31 carries no `Default value:` line —
+    /// conspicuously, on a table where the standard states defaults for
+    /// `CropBox`, `Rotate` and others — and neither edition names a fallback
+    /// anywhere, so the file states **no tab order at all**. In practice
+    /// readers use `/Annots` order, but that is a fact about implementations
+    /// (spec corpus `iso32000__ref__annots_array_order.md` `TAB-N1`), not
+    /// about the file.
+    Absent,
+    /// `/R` — row order (PDF 1.5).
+    Row,
+    /// `/C` — column order (PDF 1.5).
+    Column,
+    /// `/S` — structure order (PDF 1.5): the order the annotations appear in
+    /// the structure tree. `/Annots` order is irrelevant to tabbing.
+    Structure,
+    /// `/A` — annotations-array order (PDF 2.0): the order of `/Annots`
+    /// **is** the tab order. The one value under which a reorder does
+    /// exactly what the operator meant, and says so.
+    ArrayOrder,
+    /// `/W` — widget order (PDF 2.0): widgets first, in `/Annots` order.
+    ///
+    /// ★ What follows them is **contested inside ISO 32000-2 itself**
+    /// (`TAB-A1` in the spec corpus): Table 31 says the other annotations
+    /// follow *"in the same array ordering"*, §12.5.1 says *"in row order"*.
+    /// Both are body text; no erratum exists. pdfce reads Table 31 — the
+    /// tail in `/Annots` order — and says so here rather than stating one
+    /// side as settled; [`Self::array_order_governs`] answers `Widgets`
+    /// for this value for exactly that reason.
+    WidgetOrder,
+    /// Any other name, verbatim (UTF-8-lossy).
+    Other(String),
+}
+
+impl PageTabs {
+    /// Read a `/Tabs` value. `None` (no entry) is [`Self::Absent`].
+    fn from_entry(entry: Option<&Object>) -> Self {
+        match entry.and_then(Object::as_name).map(Name::as_bytes) {
+            None => Self::Absent,
+            Some(b"R") => Self::Row,
+            Some(b"C") => Self::Column,
+            Some(b"S") => Self::Structure,
+            Some(b"A") => Self::ArrayOrder,
+            Some(b"W") => Self::WidgetOrder,
+            Some(other) => Self::Other(String::from_utf8_lossy(other).into_owned()),
+        }
+    }
+
+    /// How much of the tab order the `/Annots` array order governs under
+    /// this value, **as the file states it**.
+    ///
+    /// `Absent` answers [`ArrayOrderGoverns::Nothing`]: the array order is
+    /// what a reader *tends* to use when the file says nothing, but the
+    /// question here is what the file states, and an absent entry states
+    /// nothing. `/W` answers [`ArrayOrderGoverns::Widgets`] because the
+    /// standard contradicts itself about the rest (see [`Self::WidgetOrder`]);
+    /// a single `bool` could not carry that honestly.
+    #[must_use]
+    pub fn array_order_governs(&self) -> ArrayOrderGoverns {
+        match self {
+            Self::ArrayOrder => ArrayOrderGoverns::Everything,
+            Self::WidgetOrder => ArrayOrderGoverns::Widgets,
+            _ => ArrayOrderGoverns::Nothing,
+        }
+    }
+}
+
+/// How much of a page's tab order its `/Annots` array order governs — the
+/// answer to [`PageTabs::array_order_governs`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArrayOrderGoverns {
+    /// The file states no relationship between array order and tabbing
+    /// (`/Tabs` absent, `/R`, `/C`, `/S`, or an unknown value).
+    Nothing,
+    /// `/Tabs /W`: the widgets' visit order is the array order; the other
+    /// annotations' is contested in the standard.
+    Widgets,
+    /// `/Tabs /A`: every annotation is visited in array order.
+    Everything,
+}
+
+/// What a [`reorder_annotations`](EditSession::reorder_annotations) call
+/// moved, what it left where it was, and what the page says about tabbing.
+///
+/// Every field is a **disclosure**. The verb's contract is *"move the
+/// references and nothing else"*, and the fields exist so the caller can
+/// tell whether "nothing else" included something the operator would have
+/// wanted moved — a direct-dictionary entry that has no identity to name, or
+/// a `/Tabs` value under which the new order is not the tab order at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AnnotsReorder {
+    /// How many entries the page's `/Annots` holds after the reorder — the
+    /// same number as before; this verb never adds or drops one.
+    pub entries: usize,
+    /// How many entries ended up at a different index than they started.
+    /// `0` means the order given was the order the page already had, and no
+    /// command was recorded.
+    pub moved: usize,
+    /// Of [`Self::moved`], how many are **not** form widgets.
+    ///
+    /// `/Annots` order is paint order for every annotation, not only the
+    /// ones an operator tabs through. Moving a `/Link` or a markup past
+    /// another changes which one is drawn on top where they overlap — a side
+    /// effect of arranging a tab order that the operator did not ask for and
+    /// cannot see in a list of fields. Zero is the common case and means the
+    /// reorder touched nothing but widgets.
+    pub non_widgets_moved: usize,
+    /// Entries that are **not indirect references** — a dictionary written
+    /// directly into the array (Table 164 permits it; producers rarely do
+    /// it) or a non-dictionary value. They have no object id to be named
+    /// by, so `new_order` cannot list them, and they stay at the index they
+    /// had. Non-zero is the *"it could not fully take"* signal the shell
+    /// should surface.
+    pub pinned: usize,
+    /// The page's `/Tabs` entry, as found. Not written by this verb.
+    pub tabs: PageTabs,
+    /// `true` when the page shared an indirect `/Annots` array with another
+    /// page and pdfce copied it before reordering, so the other page keeps
+    /// its order (the same X7 copy-on-write the append path performs).
+    pub array_copied: bool,
+    /// `true` when the page carries a `/TrapNet` annotation, which was held
+    /// in its slot rather than permuted: ISO 32000-1 §12.5.6.21 requires it
+    /// to be the last entry. A caller that listed it last had that entry
+    /// accepted and ignored.
+    pub trap_net_pinned: bool,
+    /// `true` when the trap network's `/AnnotStates` array (Table 366) was
+    /// permuted alongside `/Annots` so the two stay index-parallel — the one
+    /// case in which this verb writes an annotation dictionary.
+    pub annot_states_permuted: bool,
+    /// How many `/GoToE` target dictionaries elsewhere in the document had
+    /// an integer `/A` pointing into this page's `/Annots` (Table 202) and
+    /// were re-indexed to the annotation's new position, so the embedded-
+    /// file link still names the annotation its author chose.
+    pub goto_e_targets_reindexed: usize,
+}
+
 /// What a [`move_annotation`](EditSession::move_annotation) call translated,
 /// and everything an operator could not otherwise see (`Pass 149.0`).
 ///
@@ -23297,6 +23551,590 @@ impl EditSession {
             stroke_width,
             rect_differences_scaled,
         })
+    }
+
+    /// Put a page's annotations — its `/Annots` array — in a new order,
+    /// **moving the references and nothing else**, with three disclosed
+    /// exceptions the standard's own `shall`s impose.
+    ///
+    /// `new_order` lists, in the wanted order, the object id of every
+    /// indirect entry the page's `/Annots` currently holds, each exactly
+    /// once. The verb rewrites the array so those references appear in that
+    /// order. No annotation dictionary is read, written, recreated or
+    /// re-registered: a widget keeps its id, its `/Parent` chain, its `/AA`
+    /// triggers and its place in `/AcroForm /Fields`, because none of those
+    /// live in the array being permuted.
+    ///
+    /// # Why this verb exists — `/Annots` order and the tab order
+    ///
+    /// ISO 32000-1 §7.7.3.3 Table 30 defines the page's `/Tabs` entry and
+    /// §12.5.1 its values; ISO 32000-2 Table 31 adds `/A`, under which the
+    /// `/Annots` array order **is** the tab order. When `/Tabs` is absent —
+    /// nearly every page in the wild — **neither edition states any tab
+    /// order at all** (no default on the row, no fallback sentence; see the
+    /// spec corpus `iso32000__ref__annots_array_order.md` `TAB-N1`), and
+    /// readers in practice fall back to the array. So "drag this field above
+    /// that one in the tab order" is, at the file level, "swap two references
+    /// in one array", and until this verb the only routes to it destroyed the
+    /// annotations on the way past — cut-and-paste rebuilds a field from a
+    /// spec and loses every property the spec does not carry; delete-and-
+    /// re-add is the same with a new object id. `pdfceGUI` measured both and
+    /// asked for this shape instead (request 2026-09-02), citing
+    /// [`Self::reorder_pages`] as the precedent: one array, one permutation,
+    /// one undo entry.
+    ///
+    /// # Why ids and not indices
+    ///
+    /// [`Self::reorder_pages`] takes indices because a page has no other
+    /// stable name. Annotations do — and the index a shell holds is almost
+    /// never a raw `/Annots` index: [`crate::annot::page_annotations`] skips
+    /// null and non-dictionary entries, so its positions and the array's
+    /// diverge on exactly the malformed files where a wrong guess costs
+    /// most. An id is checked against the array rather than trusted.
+    ///
+    /// # What is validated, and what is pinned
+    ///
+    /// `new_order` must be a permutation of the page's **indirect** entries:
+    /// same ids, each once — [`EditError::AnnotsNotAPermutation`] otherwise,
+    /// naming the missing, unknown and repeated ids. An array that lists one
+    /// object twice is refused as [`EditError::AnnotsDuplicateReference`]
+    /// rather than silently de-duplicated.
+    ///
+    /// Entries that are *not* references — a dictionary written directly
+    /// into the array, a stray number — have no id to be named by. They stay
+    /// at the index they had, and the reference entries are laid into the
+    /// remaining slots in the order given. Their count is disclosed as
+    /// [`AnnotsReorder::pinned`], because a list that "did not fully take"
+    /// must say so rather than be discovered by tabbing.
+    ///
+    /// # ★ The three `shall`s a permutation can break, and what is done
+    ///
+    /// None of them lives in the annotation clause, and all three fail
+    /// silently — §7.3.10 turns the damage into `null`, never an error.
+    ///
+    /// 1. **A `/TrapNet` annotation shall be the last element** (§12.5.6.21,
+    ///    restated §14.11.6.2 with the reason: the trap network prints after
+    ///    everything else). It is **pinned** to its slot and is not part of
+    ///    the permutation. A caller may list it — only as the **last** id,
+    ///    which is accepted and dropped — or omit it; listing it anywhere
+    ///    else is [`EditError::TrapNetMustStayLast`]. Disclosed as
+    ///    [`AnnotsReorder::trap_net_pinned`].
+    /// 2. **`/AnnotStates` is an index-parallel array to `/Annots`** (Table
+    ///    366 / 2.0 Table 403: *"shall be listed in the same order as the
+    ///    annotations in the page's `Annots` array"*, the trap network's own
+    ///    entry excluded). It lives in the `/TrapNet` dictionary, so honouring
+    ///    it means writing that one annotation — the first exception to "no
+    ///    annotation dictionary is written", and the one that keeps a
+    ///    prepress staleness check comparing the right states. A present
+    ///    array of the wrong length is refused as
+    ///    [`EditError::AnnotStatesMismatch`]. Disclosed as
+    ///    [`AnnotsReorder::annot_states_permuted`].
+    /// 3. **A `/GoToE` target dictionary's `/A` may be a zero-based index
+    ///    into this page's `/Annots`** (Table 202 / 2.0 Table 205). Every
+    ///    such integer in the document whose `/P` names this page is
+    ///    **re-indexed** to the annotation's new position — the second
+    ///    exception, and a pure re-index: the smallest change under rule 3
+    ///    that keeps an attachment link pointing where its author aimed it.
+    ///    Counted in [`AnnotsReorder::goto_e_targets_reindexed`].
+    ///
+    /// # What is NOT done, deliberately
+    ///
+    /// **`/Tabs` is read, not written.** The page's entry is reported as
+    /// [`AnnotsReorder::tabs`], and under `/R`, `/C` or `/S` the caller is
+    /// told that array order is not what a reader tabs by — but the entry
+    /// itself is left alone. Writing `/Tabs /A` would state the operator's
+    /// order in the file, and that is a change to the page dictionary with
+    /// standards consequences of its own: `/A` is a PDF 2.0 value, so
+    /// writing it into a 1.x file is a version defect (§7.5.2); and PDF/UA-1
+    /// (ISO 14289-1 §7.18.3) requires `/S` on every annotated page, so the
+    /// same write turns a conforming document into a non-conforming one.
+    /// (PDF/UA-2 §8.9.3.3 permits `A`, `W` or `S`; PDF/A says nothing.)
+    /// Recording the order is therefore a separate, explicit act with its
+    /// own verb, not a side effect of a drag — which is also what the parity
+    /// reference does: Acrobat's manual tab order is an `/Annots` permutation
+    /// with no `/Tabs` written.
+    ///
+    /// Nothing in the structure tree, `/AcroForm /Fields` or `/CO` is
+    /// touched: §14.8.2.3.2 makes logical order independent of array order,
+    /// `/Fields` carries no ordering semantics, and `/CO` is calculation
+    /// order — sorting it would change arithmetic, not tabbing.
+    ///
+    /// # One command
+    ///
+    /// However many entries moved, this is one undo entry — `ARCHITECTURE.md`
+    /// §11.3's *"reordering 50 pages in one drag"* case, one level down. An
+    /// order identical to the current one records nothing and returns
+    /// `moved == 0`.
+    ///
+    /// # The three shapes of `/Annots`
+    ///
+    /// Same handling as the append path: an **inline** array is rewritten in
+    /// the page dictionary; an **indirect** array owned by this page alone is
+    /// rewritten in place, page dictionary untouched; an indirect array
+    /// **shared** with another page is copied and this page repointed
+    /// ([`AnnotsReorder::array_copied`]), so the other page's order is not
+    /// changed behind its back. A page with no `/Annots` has nothing to
+    /// reorder: an empty `new_order` succeeds with `entries == 0`, anything
+    /// else is not a permutation of nothing.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`].
+    /// - [`EditError::PageOutOfRange`].
+    /// - [`EditError::AnnotsNotAnArray`] — `/Annots` is present but neither
+    ///   an array nor a reference to one.
+    /// - [`EditError::AnnotsDuplicateReference`].
+    /// - [`EditError::AnnotsNotAPermutation`].
+    /// - [`EditError::TrapNetMustStayLast`].
+    /// - [`EditError::AnnotStatesMismatch`].
+    pub fn reorder_annotations(
+        &mut self,
+        page_index: usize,
+        new_order: &[ObjId],
+    ) -> Result<AnnotsReorder, EditError> {
+        self.check_certification()?;
+
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(page_index)
+            .map(|s| s.id)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count: slots.len(),
+            })?;
+        let Some(Object::Dict(page)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Annots",
+            });
+        };
+        let page = page.clone();
+        let tabs = PageTabs::from_entry(page.get(b"Tabs"));
+
+        // The array's current entries, and where they live.
+        enum Holder {
+            Missing,
+            Inline,
+            Indirect(ObjId),
+        }
+        let (entries, holder): (Vec<Object>, Holder) = match page.get(b"Annots") {
+            None => (Vec::new(), Holder::Missing),
+            Some(Object::Array(arr)) => (arr.clone(), Holder::Inline),
+            Some(Object::Reference(array_id)) => match self.value(*array_id) {
+                Some(Object::Array(arr)) => (arr.clone(), Holder::Indirect(*array_id)),
+                // A dangling reference resolves to null (§7.3.10): no
+                // annotations, not a malformed array.
+                None | Some(Object::Null) => (Vec::new(), Holder::Missing),
+                Some(_) => return Err(EditError::AnnotsNotAnArray { page: page_id }),
+            },
+            Some(_) => return Err(EditError::AnnotsNotAnArray { page: page_id }),
+        };
+
+        // ---- classify every entry: movable reference, pinned trap network,
+        //      or pinned non-reference.
+        let subtype_of = |s: &Self, id: ObjId| -> Option<Vec<u8>> {
+            s.value(id)
+                .and_then(Object::as_dict)
+                .and_then(|d| d.get(b"Subtype"))
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes().to_vec())
+        };
+        let mut movable: Vec<ObjId> = Vec::new();
+        let mut seen: HashSet<ObjId> = HashSet::new();
+        let mut trap_nets: Vec<(usize, ObjId)> = Vec::new();
+        for (index, entry) in entries.iter().enumerate() {
+            if let Some(id) = entry.as_reference() {
+                if !seen.insert(id) {
+                    return Err(EditError::AnnotsDuplicateReference { page_index, id });
+                }
+                if subtype_of(self, id).as_deref() == Some(b"TrapNet") {
+                    trap_nets.push((index, id));
+                } else {
+                    movable.push(id);
+                }
+            }
+        }
+
+        // ---- the trap network may be listed LAST, and only last
+        // (§12.5.6.21). Anywhere else is a request to print the trap network
+        // under the page's other content, which the standard does not allow
+        // and the operator did not mean.
+        let mut order: Vec<ObjId> = new_order.to_vec();
+        let trap_ids: HashSet<ObjId> = trap_nets.iter().map(|(_, id)| *id).collect();
+        while let Some(last) = order.last().copied() {
+            if trap_ids.contains(&last) {
+                order.pop();
+            } else {
+                break;
+            }
+        }
+        if let Some(id) = order.iter().copied().find(|id| trap_ids.contains(id)) {
+            return Err(EditError::TrapNetMustStayLast { page_index, id });
+        }
+
+        // ---- validate: the order is a permutation of the movable entries
+        let mut listed: HashSet<ObjId> = HashSet::new();
+        let mut repeated: Vec<ObjId> = Vec::new();
+        let mut unknown: Vec<ObjId> = Vec::new();
+        for id in &order {
+            if !listed.insert(*id) {
+                if !repeated.contains(id) {
+                    repeated.push(*id);
+                }
+            } else if !seen.contains(id) {
+                unknown.push(*id);
+            }
+        }
+        let missing: Vec<ObjId> = movable
+            .iter()
+            .copied()
+            .filter(|id| !listed.contains(id))
+            .collect();
+        if !missing.is_empty() || !unknown.is_empty() || !repeated.is_empty() {
+            return Err(EditError::AnnotsNotAPermutation {
+                page_index,
+                expected: movable.len(),
+                listed: new_order.len(),
+                missing,
+                unknown,
+                repeated,
+            });
+        }
+
+        // ---- lay the references into the movable slots, in the new order.
+        // `from[p]` is the OLD index of the entry that now sits at `p` — the
+        // permutation, kept so the two index-parallel structures below can
+        // be moved by exactly the same map rather than a re-derivation.
+        let old_index: HashMap<ObjId, usize> = entries
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| e.as_reference().map(|id| (id, i)))
+            .collect();
+        let mut next = order.iter().copied();
+        let mut moved = 0usize;
+        let mut non_widgets_moved = 0usize;
+        let mut pinned = 0usize;
+        let mut reordered: Vec<Object> = Vec::with_capacity(entries.len());
+        let mut from: Vec<usize> = Vec::with_capacity(entries.len());
+        for (index, entry) in entries.iter().enumerate() {
+            match entry.as_reference() {
+                Some(was) if !trap_ids.contains(&was) => {
+                    let Some(now) = next.next() else {
+                        // Unreachable after validation (same count); kept as
+                        // a guard rather than an unwrap so a future edit to
+                        // the check above cannot turn this into a panic.
+                        reordered.push(entry.clone());
+                        from.push(index);
+                        continue;
+                    };
+                    if now != was {
+                        moved += 1;
+                        if subtype_of(self, now).as_deref() != Some(b"Widget") {
+                            non_widgets_moved += 1;
+                        }
+                    }
+                    reordered.push(Object::Reference(now));
+                    from.push(old_index.get(&now).copied().unwrap_or(index));
+                }
+                Some(_) => {
+                    // The trap network stays where it is.
+                    reordered.push(entry.clone());
+                    from.push(index);
+                }
+                None => {
+                    pinned += 1;
+                    reordered.push(entry.clone());
+                    from.push(index);
+                }
+            }
+        }
+        let trap_net_pinned = !trap_nets.is_empty();
+
+        let unmoved = |tabs: PageTabs, pinned: usize| AnnotsReorder {
+            entries: entries.len(),
+            moved: 0,
+            non_widgets_moved: 0,
+            pinned,
+            tabs,
+            array_copied: false,
+            trap_net_pinned,
+            annot_states_permuted: false,
+            goto_e_targets_reindexed: 0,
+        };
+        if moved == 0 {
+            return Ok(unmoved(tabs, pinned));
+        }
+
+        // ---- the write, in whichever object holds the array
+        let mut array_copied = false;
+        let mut objects: Vec<ObjectWrite> = match holder {
+            // Unreachable with moved > 0 (no entries ⇒ nothing moved), but
+            // the match must be total and "write nothing" is the honest arm.
+            Holder::Missing => Vec::new(),
+            Holder::Inline => {
+                let mut updated = page.clone();
+                updated.insert(Name::from(b"Annots"), Object::Array(reordered));
+                vec![self.page_write(page_id, updated)]
+            }
+            Holder::Indirect(array_id) => {
+                if self.annots_array_is_shared(array_id, &slots) {
+                    array_copied = true;
+                    let new_id = ObjId::new(self.alloc_number()?, 0);
+                    let mut updated = page.clone();
+                    updated.insert(Name::from(b"Annots"), Object::Reference(new_id));
+                    vec![
+                        ObjectWrite {
+                            id: new_id,
+                            before: None,
+                            after: Some(Object::Array(reordered)),
+                        },
+                        self.page_write(page_id, updated),
+                    ]
+                } else {
+                    vec![ObjectWrite {
+                        id: array_id,
+                        before: self.state.get(&array_id).cloned(),
+                        after: Some(Object::Array(reordered)),
+                    }]
+                }
+            }
+        };
+        if objects.is_empty() {
+            return Ok(unmoved(tabs, pinned));
+        }
+
+        // ---- `/AnnotStates` follows the same permutation (Table 366/403).
+        // The array describes every entry EXCEPT the trap network itself, in
+        // `/Annots` order, so its index space is the array's with the
+        // trap-network slot removed.
+        let mut annot_states_permuted = false;
+        if let Some(&(trap_index, trap_id)) = trap_nets.first()
+            && let Some(Object::Dict(trap)) = self.value(trap_id)
+            && let Some(states) = trap
+                .get(b"AnnotStates")
+                .map(|o| self.resolve_value(o))
+                .and_then(Object::as_array)
+                .map(<[Object]>::to_vec)
+        {
+            let expected = entries.len().saturating_sub(trap_nets.len());
+            if states.len() != expected {
+                return Err(EditError::AnnotStatesMismatch {
+                    page_index,
+                    expected,
+                    got: states.len(),
+                });
+            }
+            // Map an `/Annots` index to its `/AnnotStates` index: identical
+            // below the trap network's slot, one less above it.
+            let state_index = |annots_index: usize| -> Option<usize> {
+                if annots_index == trap_index {
+                    None
+                } else if annots_index > trap_index {
+                    Some(annots_index - 1)
+                } else {
+                    Some(annots_index)
+                }
+            };
+            let mut permuted: Vec<Object> = Vec::with_capacity(states.len());
+            for (new_index, &old) in from.iter().enumerate() {
+                if state_index(new_index).is_none() {
+                    continue;
+                }
+                let value = state_index(old)
+                    .and_then(|i| states.get(i))
+                    .cloned()
+                    .unwrap_or(Object::Null);
+                permuted.push(value);
+            }
+            let mut updated = trap.clone();
+            updated.insert(Name::from(b"AnnotStates"), Object::Array(permuted));
+            objects.push(ObjectWrite {
+                id: trap_id,
+                before: self.state.get(&trap_id).cloned(),
+                after: Some(Object::Dict(updated)),
+            });
+            annot_states_permuted = true;
+        }
+
+        // ---- `/GoToE` target dictionaries indexing this page's `/Annots`
+        // (Table 202/205): re-index every integer `/A` whose `/P` is this
+        // page, wherever in the document the action lives.
+        let mut new_index_of_old: Vec<usize> = vec![0; from.len()];
+        for (new_index, &old) in from.iter().enumerate() {
+            if let Some(slot) = new_index_of_old.get_mut(old) {
+                *slot = new_index;
+            }
+        }
+        let goto_e_targets_reindexed =
+            self.reindex_goto_e_targets(page_id, page_index, &new_index_of_old, &mut objects);
+
+        self.commit(Command {
+            kind: CommandKind::ReorderAnnotations { count: moved },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(AnnotsReorder {
+            entries: entries.len(),
+            moved,
+            non_widgets_moved,
+            pinned,
+            tabs,
+            array_copied,
+            trap_net_pinned,
+            annot_states_permuted,
+            goto_e_targets_reindexed,
+        })
+    }
+
+    /// Re-index every `/GoToE` target dictionary in the document whose `/A`
+    /// is an integer index into `page_id`'s `/Annots` (Table 202 / 2.0 Table
+    /// 205), after that array was permuted by `new_index_of_old`.
+    ///
+    /// Appends one [`ObjectWrite`] per indirect object that carried at least
+    /// one such target, and returns how many targets were re-indexed.
+    ///
+    /// # What is and is not a match
+    ///
+    /// Only the **first** target dictionary of an action (the one reached
+    /// from the action's own `/T`) refers to pages of *this* document — a
+    /// nested `/T` describes the embedded file's pages, whose annotation
+    /// arrays this verb did not touch. `/P` is matched as either a
+    /// zero-based page index or a reference to the page object, both of
+    /// which Table 202 permits. A target whose `/A` is a text string names
+    /// the annotation by `/NM` and is permutation-immune, so it is left
+    /// alone.
+    ///
+    /// # Why a whole-document sweep is acceptable here
+    ///
+    /// `/GoToE` actions may sit on annotations, in `/AA` trees, on outline
+    /// items, on the catalog's `/OpenAction`, or inside an action's `/Next`
+    /// chain — there is no index to consult, so the honest answer is to look
+    /// everywhere, once, per reorder. Every indirect object is visited and
+    /// its direct sub-structure walked; an object that is not a dictionary
+    /// or array is skipped at the first test. A reorder is an operator
+    /// gesture, not a hot loop.
+    fn reindex_goto_e_targets(
+        &self,
+        page_id: ObjId,
+        page_index: usize,
+        new_index_of_old: &[usize],
+        objects: &mut Vec<ObjectWrite>,
+    ) -> usize {
+        fn is_this_page(p: Option<&Object>, page_id: ObjId, page_index: usize) -> bool {
+            match p {
+                Some(Object::Integer(i)) => usize::try_from(*i).ok() == Some(page_index),
+                Some(Object::Reference(r)) => *r == page_id,
+                _ => false,
+            }
+        }
+        /// Rewrite the first-level target of a `/GoToE` action dict in
+        /// place; returns how many `/A` integers changed.
+        fn fix_action(
+            action: &mut Dict,
+            page_id: ObjId,
+            page_index: usize,
+            map: &[usize],
+        ) -> usize {
+            let Some(Object::Dict(target)) = action.get(b"T").cloned() else {
+                return 0;
+            };
+            if !is_this_page(target.get(b"P"), page_id, page_index) {
+                return 0;
+            }
+            let Some(Object::Integer(old)) = target.get(b"A") else {
+                return 0;
+            };
+            let Some(new) = usize::try_from(*old).ok().and_then(|i| map.get(i)) else {
+                return 0;
+            };
+            if usize::try_from(*old).ok() == Some(*new) {
+                return 0;
+            }
+            let mut target = target;
+            target.insert(
+                Name::from(b"A"),
+                Object::Integer(i64::try_from(*new).unwrap_or(i64::MAX)),
+            );
+            action.insert(Name::from(b"T"), Object::Dict(target));
+            1
+        }
+        /// Walk a direct value, fixing every `/GoToE` action dict found.
+        fn walk(
+            value: &mut Object,
+            page_id: ObjId,
+            page_index: usize,
+            map: &[usize],
+            depth: u32,
+        ) -> usize {
+            if depth > 64 {
+                return 0;
+            }
+            let mut fixed = 0;
+            match value {
+                Object::Dict(d) => {
+                    if d.get(b"S").and_then(Object::as_name).map(Name::as_bytes) == Some(b"GoToE") {
+                        fixed += fix_action(d, page_id, page_index, map);
+                    }
+                    for (_, v) in d.0.iter_mut() {
+                        fixed += walk(v, page_id, page_index, map, depth + 1);
+                    }
+                }
+                Object::Stream(s) => {
+                    for (_, v) in s.dict.0.iter_mut() {
+                        fixed += walk(v, page_id, page_index, map, depth + 1);
+                    }
+                }
+                Object::Array(a) => {
+                    for v in a.iter_mut() {
+                        fixed += walk(v, page_id, page_index, map, depth + 1);
+                    }
+                }
+                _ => {}
+            }
+            fixed
+        }
+
+        let mut ids: BTreeSet<ObjId> = self.base.objects().map(|o| o.id).collect();
+        ids.extend(self.state.keys().copied());
+        let mut total = 0usize;
+        for id in ids {
+            if self.deleted.contains(&id) {
+                continue;
+            }
+            let Some(value) = self.value(id) else {
+                continue;
+            };
+            if !matches!(
+                value,
+                Object::Dict(_) | Object::Array(_) | Object::Stream(_)
+            ) {
+                continue;
+            }
+            let mut updated = value.clone();
+            let fixed = walk(&mut updated, page_id, page_index, new_index_of_old, 0);
+            if fixed == 0 {
+                continue;
+            }
+            total += fixed;
+            // If this object is already being written by the reorder (the
+            // page dictionary itself, say), fold the re-index into that
+            // write rather than issuing a second one for the same id — two
+            // writes to one object in one command do not compose.
+            if let Some(existing) = objects.iter_mut().find(|w| w.id == id) {
+                if let Some(after) = existing.after.as_mut() {
+                    walk(after, page_id, page_index, new_index_of_old, 0);
+                }
+            } else {
+                objects.push(ObjectWrite {
+                    id,
+                    before: self.state.get(&id).cloned(),
+                    after: Some(updated),
+                });
+            }
+        }
+        total
     }
 
     pub fn move_annotation(
@@ -42382,6 +43220,523 @@ endstream",
             panic!("array");
         };
         assert_eq!(arr.len(), 1);
+    }
+
+    // ---- reorder_annotations ------------------------------------------
+
+    /// One page, four indirect annotations: two widgets (4, 5), a Link (6)
+    /// and a Text note (7). `annots` is the page's `/Annots` value verbatim
+    /// — an inline array, or `8 0 R` for the indirect array object 8 holds.
+    fn reorder_fixture(page_extra: &str, annots: &str) -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                &format!(
+                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> \
+                     /Annots {annots} {page_extra} >>"
+                ),
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (a) /Rect [0 0 10 10] >>",
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (b) /Rect [20 0 30 10] >>",
+                "<< /Type /Annot /Subtype /Link /Rect [40 0 50 10] >>",
+                "<< /Type /Annot /Subtype /Text /Rect [60 0 70 10] >>",
+                "[4 0 R 5 0 R 6 0 R 7 0 R]",
+            ],
+            "",
+        )
+    }
+
+    fn id(n: u32) -> ObjId {
+        ObjId::new(n, 0)
+    }
+
+    fn annots_of(s: &EditSession, page: ObjId) -> Vec<Option<ObjId>> {
+        let Some(Object::Dict(p)) = s.value(page) else {
+            panic!("page");
+        };
+        let arr = match p.get(b"Annots") {
+            Some(Object::Array(a)) => a.clone(),
+            Some(Object::Reference(r)) => match s.value(*r) {
+                Some(Object::Array(a)) => a.clone(),
+                other => panic!("annots ref -> {other:?}"),
+            },
+            other => panic!("annots {other:?}"),
+        };
+        arr.iter().map(Object::as_reference).collect()
+    }
+
+    #[test]
+    fn reorder_annotations_permutes_an_inline_array_in_one_command() {
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+        let out = s
+            .reorder_annotations(0, &[id(5), id(4), id(6), id(7)])
+            .unwrap();
+        assert_eq!(out.entries, 4);
+        assert_eq!(out.moved, 2, "two references changed index");
+        assert_eq!(out.non_widgets_moved, 0, "both movers are widgets");
+        assert_eq!(out.pinned, 0);
+        assert_eq!(out.tabs, PageTabs::Absent);
+        assert!(!out.array_copied);
+        assert_eq!(
+            annots_of(&s, id(3)),
+            vec![Some(id(5)), Some(id(4)), Some(id(6)), Some(id(7))]
+        );
+        // One undo entry, labelled with the count; undo restores the order.
+        assert_eq!(s.undo(), Some(CommandKind::ReorderAnnotations { count: 2 }));
+        assert_eq!(
+            annots_of(&s, id(3)),
+            vec![Some(id(4)), Some(id(5)), Some(id(6)), Some(id(7))]
+        );
+        assert!(!s.can_undo());
+        assert!(s.dirty_set().is_empty(), "undo leaves nothing to save");
+    }
+
+    #[test]
+    fn reorder_annotations_moves_references_and_nothing_else() {
+        // The whole request: no annotation dictionary is touched. The dirty
+        // set after a reorder is exactly ONE object -- the page -- and every
+        // annotation object is what it was.
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+        let before: Vec<Option<Object>> = (4..=7).map(|n| s.value(id(n)).cloned()).collect();
+        s.reorder_annotations(0, &[id(7), id(6), id(5), id(4)])
+            .unwrap();
+        let dirty = s.dirty_set();
+        assert_eq!(dirty.len(), 1, "only the page dictionary changed");
+        let after: Vec<Option<Object>> = (4..=7).map(|n| s.value(id(n)).cloned()).collect();
+        assert_eq!(before, after, "annotation objects are untouched");
+    }
+
+    #[test]
+    fn reorder_annotations_counts_non_widgets_that_moved() {
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+        // Move the Link (6) to the front: 6, 4, 5 all change index; 7 stays.
+        let out = s
+            .reorder_annotations(0, &[id(6), id(4), id(5), id(7)])
+            .unwrap();
+        assert_eq!(out.moved, 3);
+        assert_eq!(
+            out.non_widgets_moved, 1,
+            "the Link is the one non-widget that moved"
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_identity_records_nothing() {
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+        let out = s
+            .reorder_annotations(0, &[id(4), id(5), id(6), id(7)])
+            .unwrap();
+        assert_eq!(out.moved, 0);
+        assert!(!s.is_modified());
+        assert!(!s.can_undo());
+    }
+
+    #[test]
+    fn reorder_annotations_refuses_a_non_permutation_and_names_the_ids() {
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+        // Missing 7, unknown 99, repeated 4.
+        let err = s
+            .reorder_annotations(0, &[id(4), id(4), id(5), id(6), id(99)])
+            .unwrap_err();
+        match err {
+            EditError::AnnotsNotAPermutation {
+                page_index,
+                expected,
+                listed,
+                missing,
+                unknown,
+                repeated,
+            } => {
+                assert_eq!(page_index, 0);
+                assert_eq!(expected, 4);
+                assert_eq!(listed, 5);
+                assert_eq!(missing, vec![id(7)]);
+                assert_eq!(unknown, vec![id(99)]);
+                assert_eq!(repeated, vec![id(4)]);
+            }
+            other => panic!("wrong error: {other:?}"),
+        }
+        assert!(!s.is_modified(), "a refusal changes nothing");
+    }
+
+    #[test]
+    fn reorder_annotations_refuses_an_array_with_a_duplicate_reference() {
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 5 0 R 6 0 R 7 0 R]"));
+        let err = s
+            .reorder_annotations(0, &[id(7), id(6), id(5), id(4)])
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EditError::AnnotsDuplicateReference { page_index: 0, id: d } if d == id(5)
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_pins_direct_entries_and_discloses_them() {
+        // A direct dictionary at index 1 has no id; it must stay at index 1
+        // while the references flow around it.
+        let mut s = session(reorder_fixture(
+            "",
+            "[4 0 R << /Type /Annot /Subtype /Square /Rect [0 0 1 1] >> 5 0 R 6 0 R 7 0 R]",
+        ));
+        let out = s
+            .reorder_annotations(0, &[id(7), id(6), id(5), id(4)])
+            .unwrap();
+        assert_eq!(out.entries, 5);
+        assert_eq!(out.pinned, 1);
+        assert_eq!(out.moved, 4);
+        assert_eq!(
+            annots_of(&s, id(3)),
+            vec![Some(id(7)), None, Some(id(6)), Some(id(5)), Some(id(4))]
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_reads_tabs_and_does_not_write_it() {
+        for (extra, expect) in [
+            ("/Tabs /S", PageTabs::Structure),
+            ("/Tabs /R", PageTabs::Row),
+            ("/Tabs /C", PageTabs::Column),
+            ("/Tabs /A", PageTabs::ArrayOrder),
+            ("/Tabs /W", PageTabs::WidgetOrder),
+            ("/Tabs /Q", PageTabs::Other("Q".to_owned())),
+            ("", PageTabs::Absent),
+        ] {
+            let mut s = session(reorder_fixture(extra, "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+            let out = s
+                .reorder_annotations(0, &[id(5), id(4), id(6), id(7)])
+                .unwrap();
+            assert_eq!(out.tabs, expect, "{extra}");
+            let Some(Object::Dict(p)) = s.value(id(3)) else {
+                panic!("page");
+            };
+            let tabs_after = p.get(b"Tabs").cloned();
+            let tabs_before = if extra.is_empty() {
+                None
+            } else {
+                Some(Object::Name(Name::from(
+                    extra.trim_start_matches("/Tabs /").as_bytes(),
+                )))
+            };
+            assert_eq!(
+                tabs_after, tabs_before,
+                "/Tabs is read, never written ({extra})"
+            );
+        }
+        assert_eq!(
+            PageTabs::ArrayOrder.array_order_governs(),
+            ArrayOrderGoverns::Everything
+        );
+        assert_eq!(
+            PageTabs::WidgetOrder.array_order_governs(),
+            ArrayOrderGoverns::Widgets
+        );
+        assert_eq!(
+            PageTabs::Absent.array_order_governs(),
+            ArrayOrderGoverns::Nothing
+        );
+        assert_eq!(
+            PageTabs::Structure.array_order_governs(),
+            ArrayOrderGoverns::Nothing
+        );
+    }
+
+    /// Page with two widgets (4, 5), a Text note (6) and a `/TrapNet` (7)
+    /// last, the trap network carrying `/Version` and an `/AnnotStates`
+    /// array parallel to the three non-trap entries.
+    fn trapnet_fixture(states: &str) -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> \
+                 /Annots [4 0 R 5 0 R 6 0 R 7 0 R] >>",
+                "<< /Type /Annot /Subtype /Widget /FT /Btn /T (a) /AS /On /Rect [0 0 10 10] >>",
+                "<< /Type /Annot /Subtype /Widget /FT /Btn /T (b) /AS /Off /Rect [20 0 30 10] >>",
+                "<< /Type /Annot /Subtype /Text /Rect [60 0 70 10] >>",
+                &format!(
+                    "<< /Type /Annot /Subtype /TrapNet /Rect [0 0 300 300] /Version [] \
+                     /AnnotStates {states} >>"
+                ),
+            ],
+            "",
+        )
+    }
+
+    #[test]
+    fn reorder_annotations_pins_a_trap_network_last_and_permutes_annot_states() {
+        // Listing the trap network LAST is accepted; it stays in its slot.
+        let mut s = session(trapnet_fixture("[/On /Off null]"));
+        let out = s
+            .reorder_annotations(0, &[id(6), id(5), id(4), id(7)])
+            .unwrap();
+        assert!(out.trap_net_pinned);
+        assert!(out.annot_states_permuted);
+        assert_eq!(out.moved, 2, "6 and 4 swapped; 5 stayed; 7 pinned");
+        assert_eq!(
+            annots_of(&s, id(3)),
+            vec![Some(id(6)), Some(id(5)), Some(id(4)), Some(id(7))]
+        );
+        // /AnnotStates followed: [On Off null] -> [null Off On].
+        let Some(Object::Dict(trap)) = s.value(id(7)) else {
+            panic!("trap");
+        };
+        let Some(Object::Array(states)) = trap.get(b"AnnotStates") else {
+            panic!("states");
+        };
+        assert_eq!(
+            states,
+            &vec![
+                Object::Null,
+                Object::Name(Name::from(b"Off")),
+                Object::Name(Name::from(b"On")),
+            ]
+        );
+        // Omitting it is equally accepted.
+        let mut s2 = session(trapnet_fixture("[/On /Off null]"));
+        let out2 = s2.reorder_annotations(0, &[id(6), id(5), id(4)]).unwrap();
+        assert_eq!(out2.moved, 2);
+        // Undo restores both arrays.
+        s.undo();
+        assert_eq!(
+            annots_of(&s, id(3)),
+            vec![Some(id(4)), Some(id(5)), Some(id(6)), Some(id(7))]
+        );
+        let Some(Object::Dict(trap)) = s.value(id(7)) else {
+            panic!("trap");
+        };
+        assert_eq!(
+            trap.get(b"AnnotStates"),
+            Some(&Object::Array(vec![
+                Object::Name(Name::from(b"On")),
+                Object::Name(Name::from(b"Off")),
+                Object::Null,
+            ]))
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_refuses_a_trap_network_anywhere_but_last() {
+        let mut s = session(trapnet_fixture("[/On /Off null]"));
+        let err = s
+            .reorder_annotations(0, &[id(7), id(6), id(5), id(4)])
+            .unwrap_err();
+        assert!(
+            matches!(err, EditError::TrapNetMustStayLast { page_index: 0, id: t } if t == id(7)),
+            "{err:?}"
+        );
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn reorder_annotations_refuses_a_mismatched_annot_states_array() {
+        let mut s = session(trapnet_fixture("[/On /Off]"));
+        let err = s
+            .reorder_annotations(0, &[id(6), id(5), id(4)])
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EditError::AnnotStatesMismatch {
+                    page_index: 0,
+                    expected: 3,
+                    got: 2
+                }
+            ),
+            "{err:?}"
+        );
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn reorder_annotations_reindexes_goto_e_targets_into_this_page() {
+        // An outline item (8) carries a /GoToE whose first-level target
+        // names page 0 by index and annotation index 3 (the Text note, 7).
+        // A Link annotation (9) on the page carries one naming the page by
+        // REFERENCE and annotation index 0 (widget 4). A third action (10)
+        // targets page 1 -- a different page -- and must not move.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /Outlines 8 0 R /OpenAction 10 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> \
+                 /Annots [4 0 R 5 0 R 6 0 R 7 0 R 9 0 R] >>",
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (a) /Rect [0 0 10 10] >>",
+                "<< /Type /Annot /Subtype /Widget /FT /Tx /T (b) /Rect [20 0 30 10] >>",
+                "<< /Type /Annot /Subtype /Link /Rect [40 0 50 10] >>",
+                "<< /Type /Annot /Subtype /Text /Rect [60 0 70 10] >>",
+                "<< /Type /Outlines /First 8 0 R /Last 8 0 R /Count 1 \
+                 /A << /S /GoToE /T << /R /C /P 0 /A 3 /T << /R /C /P 0 /A 1 >> >> >> >>",
+                "<< /Type /Annot /Subtype /Link /Rect [80 0 90 10] \
+                 /A << /S /GoToE /T << /R /C /P 3 0 R /A 0 >> >> >>",
+                "<< /S /GoToE /T << /R /C /P 1 /A 0 >> >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        // Reverse the five: new order 9,7,6,5,4 -> old index 4 becomes 0,
+        // old 3 becomes 1, ..., old 0 becomes 4.
+        let out = s
+            .reorder_annotations(0, &[id(9), id(7), id(6), id(5), id(4)])
+            .unwrap();
+        assert_eq!(
+            out.goto_e_targets_reindexed, 2,
+            "outline target + link target"
+        );
+        let Some(Object::Dict(outline)) = s.value(id(8)) else {
+            panic!("outline");
+        };
+        let Some(Object::Dict(action)) = outline.get(b"A") else {
+            panic!("action");
+        };
+        let Some(Object::Dict(target)) = action.get(b"T") else {
+            panic!("target");
+        };
+        assert_eq!(
+            target.get(b"A"),
+            Some(&Object::Integer(1)),
+            "old index 3 -> new 1"
+        );
+        // The NESTED target describes the embedded file's page and is untouched.
+        let Some(Object::Dict(nested)) = target.get(b"T") else {
+            panic!("nested");
+        };
+        assert_eq!(nested.get(b"A"), Some(&Object::Integer(1)));
+        let Some(Object::Dict(link)) = s.value(id(9)) else {
+            panic!("link");
+        };
+        let Some(Object::Dict(la)) = link.get(b"A") else {
+            panic!("la");
+        };
+        let Some(Object::Dict(lt)) = la.get(b"T") else {
+            panic!("lt");
+        };
+        assert_eq!(
+            lt.get(b"A"),
+            Some(&Object::Integer(4)),
+            "old index 0 -> new 4"
+        );
+        // The other page's target is untouched.
+        let Some(Object::Dict(other)) = s.value(id(10)) else {
+            panic!("other");
+        };
+        let Some(Object::Dict(ot)) = other.get(b"T") else {
+            panic!("ot");
+        };
+        assert_eq!(ot.get(b"A"), Some(&Object::Integer(0)));
+        // Undo restores the outline's action.
+        s.undo();
+        let Some(Object::Dict(outline)) = s.value(id(8)) else {
+            panic!("outline");
+        };
+        let Some(Object::Dict(action)) = outline.get(b"A") else {
+            panic!("action");
+        };
+        let Some(Object::Dict(target)) = action.get(b"T") else {
+            panic!("target");
+        };
+        assert_eq!(target.get(b"A"), Some(&Object::Integer(3)));
+    }
+
+    #[test]
+    fn reorder_annotations_edits_a_sole_owner_indirect_array_in_place() {
+        let mut s = session(reorder_fixture("", "8 0 R"));
+        let out = s
+            .reorder_annotations(0, &[id(7), id(4), id(5), id(6)])
+            .unwrap();
+        assert!(!out.array_copied);
+        assert_eq!(out.moved, 4);
+        let dirty = s.dirty_set();
+        assert_eq!(dirty.len(), 1, "only the array object changed");
+        let Some(Object::Dict(p)) = s.value(id(3)) else {
+            panic!("page");
+        };
+        assert_eq!(
+            p.get(b"Annots").and_then(Object::as_reference),
+            Some(id(8)),
+            "the page still points at its own array"
+        );
+        assert_eq!(
+            annots_of(&s, id(3)),
+            vec![Some(id(7)), Some(id(4)), Some(id(5)), Some(id(6))]
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_copies_a_shared_indirect_array_x7() {
+        // Two pages share array 6. Reordering page 0 must leave page 1's
+        // order alone.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 300 300] \
+                 /Resources << >> >>",
+                "<< /Type /Page /Parent 2 0 R /Annots 6 0 R >>",
+                "<< /Type /Page /Parent 2 0 R /Annots 6 0 R >>",
+                "<< /Type /Annot /Subtype /Text /Rect [0 0 5 5] >>",
+                "[5 0 R 7 0 R]",
+                "<< /Type /Annot /Subtype /Text /Rect [10 0 15 5] >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let out = s.reorder_annotations(0, &[id(7), id(5)]).unwrap();
+        assert!(out.array_copied);
+        assert_eq!(annots_of(&s, id(3)), vec![Some(id(7)), Some(id(5))]);
+        assert_eq!(annots_of(&s, id(4)), vec![Some(id(5)), Some(id(7))]);
+        let Some(Object::Dict(p1)) = s.value(id(4)) else {
+            panic!("p1");
+        };
+        assert_eq!(
+            p1.get(b"Annots").and_then(Object::as_reference),
+            Some(id(6))
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_on_a_page_without_annots() {
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let out = s.reorder_annotations(0, &[]).unwrap();
+        assert_eq!(out.entries, 0);
+        assert!(!s.is_modified());
+        let err = s.reorder_annotations(0, &[id(9)]).unwrap_err();
+        assert!(
+            matches!(err, EditError::AnnotsNotAPermutation { expected: 0, .. }),
+            "{err:?}"
+        );
+        let err = s.reorder_annotations(3, &[]).unwrap_err();
+        assert!(
+            matches!(err, EditError::PageOutOfRange { index: 3, count: 1 }),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn reorder_annotations_survives_save_and_reopen() {
+        let mut s = session(reorder_fixture("", "[4 0 R 5 0 R 6 0 R 7 0 R]"));
+        s.reorder_annotations(0, &[id(6), id(7), id(4), id(5)])
+            .unwrap();
+        let bytes = s.to_incremental_bytes(&SaveOptions::identity()).unwrap().0;
+        let reopened = session(bytes);
+        assert_eq!(
+            annots_of(&reopened, id(3)),
+            vec![Some(id(6)), Some(id(7)), Some(id(4)), Some(id(5))]
+        );
+        // And the reopened annotations are the originals, not copies.
+        let annots = crate::annot::page_annotations(&reopened.graph(), id(3));
+        assert_eq!(annots.len(), 4);
+        assert_eq!(annots[0].id, Some(id(6)));
     }
 
     #[test]

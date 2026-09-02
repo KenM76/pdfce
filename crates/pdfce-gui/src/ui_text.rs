@@ -5144,6 +5144,7 @@ pub fn command_label(kind: CommandKind) -> String {
         }
         CommandKind::DeletePages { count } => format!("delete {count} page(s)"),
         CommandKind::ReorderPages { count } => format!("move {count} page(s)"),
+        CommandKind::ReorderAnnotations { count } => format!("reorder {count} annotation(s)"),
         CommandKind::RotatePages { count, .. } => format!("rotate {count} page(s)"),
         CommandKind::ReflowBlock {
             lines_before,

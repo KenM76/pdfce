@@ -4484,6 +4484,74 @@ enum Command {
         #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
         mode: SaveMode,
     },
+    /// **Put a page's annotations in a new order** — its `/Annots` array,
+    /// which is the paint order and, on nearly every page, the tab order.
+    ///
+    /// # What this is for
+    ///
+    /// A page with no `/Tabs` entry (ISO 32000-1 §7.7.3.3 Table 30, values
+    /// in §12.5.1) states no tab order at all, and readers in practice fall
+    /// back to the order of `/Annots`; under PDF 2.0's `/Tabs /A` (Table 31)
+    /// that order is the stated one. So "tab through these fields in this
+    /// order" is, at the file level, "arrange these references in this
+    /// order" — and that is what this command does. No annotation is
+    /// rewritten, recreated or re-registered: every widget keeps its object
+    /// id, its field, its `/Parent` chain and its triggers. Cut-and-paste
+    /// would have rebuilt them; this moves them.
+    ///
+    /// # Three things the standard makes follow the array, and do
+    ///
+    /// A `/TrapNet` annotation shall stay the last entry (§12.5.6.21) — it
+    /// is held in place, and may be listed last or left out. A trap
+    /// network's `/AnnotStates` shall stay index-parallel to `/Annots`
+    /// (Table 366) — it is permuted alongside. A `/GoToE` target's integer
+    /// `/A` is an index into this array (Table 202) — every one aimed at
+    /// this page is re-indexed to the annotation's new position. Each is
+    /// reported when it happens.
+    ///
+    /// # `--order`
+    ///
+    /// A comma-separated list of the page's annotation indices **in the
+    /// order you want them**, numbered from 0 as `list-annotations` prints
+    /// them — every index exactly once. `2,0,1` puts the third annotation
+    /// first. A list that drops or repeats an index is refused, because that
+    /// would be a delete or a duplicate wearing a reorder's name.
+    ///
+    /// # What is reported, and why
+    ///
+    /// The page's `/Tabs` value, because under `/R`, `/C` or `/S` a reader
+    /// does not tab by array order at all and the order you arranged will
+    /// not be the order it uses — the array is still reordered (paint order
+    /// changed as asked), and the mismatch is said out loud rather than
+    /// discovered by tabbing. Any non-widget that moved, because `/Annots`
+    /// order is also which annotation draws on top where two overlap. And
+    /// any entry that is a direct dictionary rather than an indirect object,
+    /// which has no identity to name and stays where it was.
+    ///
+    /// `/Tabs` itself is **not** written. Stating the order in the file is a
+    /// change to the page dictionary with its own standards consequences
+    /// and is a separate act.
+    ReorderAnnotations {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page whose annotations are being reordered.
+        #[arg(long, default_value_t = 1)]
+        page: usize,
+        /// The new order as `list-annotations` indices, e.g. `2,0,1` — every
+        /// annotation on the page exactly once.
+        #[arg(long)]
+        order: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// How to save: incremental (default) or full rewrite.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the edit reproduces the input file
+        /// byte for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Rotate an annotation** about a point (`Pass 155.0`) — the third
     /// transform, after `move-annotation` and `resize-annotation`.
     ///
@@ -9164,6 +9232,14 @@ fn run() -> ExitCode {
             output,
             mode,
         } => cmd_move_annotation(&input, page, index, dx, dy, &output, mode),
+        Command::ReorderAnnotations {
+            input,
+            page,
+            order,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_reorder_annotations(&input, page, &order, &output, mode, verify_undo),
         Command::RotateAnnotation {
             input,
             page,
@@ -27891,6 +27967,255 @@ fn cmd_delete_annotation(
 /// an annotation for one verb must be able to name it the same way for the
 /// other. Diverging on the addressing scheme is how a shell ends up with two
 /// annotation identities.
+/// Implement `pdfce-cli reorder-annotations`.
+///
+/// The index space is `list-annotations`' — [`pdfce_core::annot::page_annotations`]
+/// order, which skips null and non-dictionary `/Annots` entries — because
+/// that is the only numbering the operator has ever been shown. Indices are
+/// mapped to object ids here and the core verb is given ids, which it checks
+/// against the array rather than trusts; a direct-dictionary annotation has
+/// no id and is reported as pinned rather than silently dropped from the
+/// order.
+fn cmd_reorder_annotations(
+    input: &Path,
+    page: usize,
+    order: &str,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    if page == 0 {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    // Resolve indices to ids inside a block so the session borrow ends
+    // before the mutable call below.
+    let (ids, pinned_indices, count) = {
+        let slots = match session.page_slots() {
+            Ok(slots) => slots,
+            Err(err) => {
+                eprintln!("pdfce-cli: {}: {err}", input.display());
+                return exit::RUNTIME_ERROR;
+            }
+        };
+        let Some(slot) = slots.get(page - 1) else {
+            eprintln!(
+                "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+                input.display(),
+                slots.len()
+            );
+            return exit::RUNTIME_ERROR;
+        };
+        let annots = pdfce_core::annot::page_annotations(&session.graph(), slot.id);
+        let count = annots.len();
+
+        let mut indices: Vec<usize> = Vec::new();
+        for token in order.split(',') {
+            let token = token.trim();
+            if token.is_empty() {
+                continue;
+            }
+            match token.parse::<usize>() {
+                Ok(i) => indices.push(i),
+                Err(_) => {
+                    eprintln!(
+                        "pdfce-cli: {}: --order: `{token}` is not an annotation index (a whole number from 0, as list-annotations prints them)",
+                        input.display()
+                    );
+                    return exit::EDIT_REFUSED;
+                }
+            }
+        }
+        let mut seen = vec![false; count];
+        for &i in &indices {
+            if i >= count {
+                if count == 0 {
+                    eprintln!(
+                        "pdfce-cli: {}: --order names index {i}, but page {page} has no annotations",
+                        input.display()
+                    );
+                } else {
+                    eprintln!(
+                        "pdfce-cli: {}: --order names index {i}, but page {page} has {count} annotation(s) (indices 0..{})",
+                        input.display(),
+                        count - 1
+                    );
+                }
+                return exit::EDIT_REFUSED;
+            }
+            if seen[i] {
+                eprintln!(
+                    "pdfce-cli: {}: --order lists index {i} more than once; a reorder names every annotation exactly once",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            }
+            seen[i] = true;
+        }
+        if indices.len() != count {
+            let missing: Vec<String> = seen
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| !**s)
+                .map(|(i, _)| i.to_string())
+                .collect();
+            eprintln!(
+                "pdfce-cli: {}: --order lists {} of page {page}'s {count} annotation(s); missing {} — a reorder that drops one would be a delete under another name",
+                input.display(),
+                indices.len(),
+                missing.join(",")
+            );
+            return exit::EDIT_REFUSED;
+        }
+
+        let mut ids: Vec<pdfce_core::object::ObjId> = Vec::with_capacity(count);
+        let mut pinned_indices: Vec<usize> = Vec::new();
+        for &i in &indices {
+            match annots[i].id {
+                Some(id) => ids.push(id),
+                None => pinned_indices.push(i),
+            }
+        }
+        (ids, pinned_indices, count)
+    };
+
+    let outcome = match session.reorder_annotations(page - 1, &ids) {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // Disclosures, worst-first: the case where the order the operator
+    // arranged is NOT the tab order comes before the ones that merely
+    // qualify it.
+    let tabs_label = match &outcome.tabs {
+        pdfce_core::edit::PageTabs::Absent => "absent".to_owned(),
+        pdfce_core::edit::PageTabs::Row => "R".to_owned(),
+        pdfce_core::edit::PageTabs::Column => "C".to_owned(),
+        pdfce_core::edit::PageTabs::Structure => "S".to_owned(),
+        pdfce_core::edit::PageTabs::ArrayOrder => "A".to_owned(),
+        pdfce_core::edit::PageTabs::WidgetOrder => "W".to_owned(),
+        pdfce_core::edit::PageTabs::Other(name) => name.clone(),
+        _ => "?".to_owned(),
+    };
+    match &outcome.tabs {
+        pdfce_core::edit::PageTabs::Row
+        | pdfce_core::edit::PageTabs::Column
+        | pdfce_core::edit::PageTabs::Structure => {
+            eprintln!(
+                "pdfce-cli: {}: page {page} declares /Tabs /{tabs_label}, so a reader tabs by {} — NOT by the array order you just arranged. The array is reordered (paint order changed as asked); the tab order is not, and /Tabs was left as it was.",
+                input.display(),
+                match &outcome.tabs {
+                    pdfce_core::edit::PageTabs::Row => "row (geometry)",
+                    pdfce_core::edit::PageTabs::Column => "column (geometry)",
+                    _ => "the structure tree",
+                }
+            );
+        }
+        pdfce_core::edit::PageTabs::Absent => {
+            eprintln!(
+                "pdfce-cli: {}: page {page} has no /Tabs entry, so the file does not STATE a tab order; readers generally use /Annots order, which is now the order you gave. /Tabs was not written.",
+                input.display()
+            );
+        }
+        pdfce_core::edit::PageTabs::WidgetOrder => {
+            eprintln!(
+                "pdfce-cli: {}: page {page} declares /Tabs /W: widgets are tabbed in the array order you just arranged. What follows them is contested inside ISO 32000-2 itself (Table 31 says array order, 12.5.1 says row order); pdfce reads Table 31.",
+                input.display()
+            );
+        }
+        pdfce_core::edit::PageTabs::Other(name) => {
+            eprintln!(
+                "pdfce-cli: {}: page {page} declares /Tabs /{name}, which is not a value ISO 32000 permits (R, C, S; A and W in PDF 2.0) — a producer defect, reported verbatim and left as it was.",
+                input.display()
+            );
+        }
+        _ => {}
+    }
+    if !pinned_indices.is_empty() {
+        let list: Vec<String> = pinned_indices.iter().map(ToString::to_string).collect();
+        eprintln!(
+            "pdfce-cli: {}: {} annotation(s) at index {} are direct dictionaries inside /Annots, not indirect objects — they have no identity to reorder by and stayed at their original position; the others were arranged around them.",
+            input.display(),
+            pinned_indices.len(),
+            list.join(",")
+        );
+    }
+    if outcome.non_widgets_moved > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} of the {} annotation(s) that moved are not form widgets. /Annots order is also PAINT order, so where a link or markup overlaps another annotation, which one draws on top has changed.",
+            input.display(),
+            outcome.non_widgets_moved,
+            outcome.moved
+        );
+    }
+    if outcome.array_copied {
+        eprintln!(
+            "pdfce-cli: {}: this page shared its /Annots array with another page; the array was copied before reordering so the other page keeps its order.",
+            input.display()
+        );
+    }
+    if outcome.trap_net_pinned {
+        eprintln!(
+            "pdfce-cli: {}: page {page} carries a trap network annotation (/TrapNet), which ISO 32000-1 12.5.6.21 requires to be the LAST entry; it was held in place and the other annotations were arranged around it.{}",
+            input.display(),
+            if outcome.annot_states_permuted {
+                " Its /AnnotStates array was permuted alongside so the two stay parallel (Table 366)."
+            } else {
+                ""
+            }
+        );
+    }
+    if outcome.goto_e_targets_reindexed > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} embedded-file link target(s) (/GoToE, ISO 32000-1 Table 202) elsewhere in this document named an annotation on page {page} by its /Annots index; each was re-indexed to the annotation's new position so it still points at the same annotation.",
+            input.display(),
+            outcome.goto_e_targets_reindexed
+        );
+    }
+    if outcome.moved == 0 {
+        eprintln!(
+            "pdfce-cli: {}: the order given is the order page {page} already had; nothing changed and nothing was recorded.",
+            input.display()
+        );
+    }
+
+    let saved = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(saved) => saved,
+        Err(code) => return code,
+    };
+
+    println!(
+        "reorder-annotations {} page={page} mode={} -> {}; annotations={count} moved={} non_widgets_moved={} pinned={} tabs={tabs_label} array_copied={} trap_net_pinned={} annot_states_permuted={} goto_e_reindexed={} {}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        outcome.moved,
+        outcome.non_widgets_moved,
+        outcome.pinned,
+        u32::from(outcome.array_copied),
+        u32::from(outcome.trap_net_pinned),
+        u32::from(outcome.annot_states_permuted),
+        outcome.goto_e_targets_reindexed,
+        edit_metrics(&saved)
+    );
+    finish_edit(input, &saved)
+}
+
 fn cmd_move_annotation(
     input: &Path,
     page: usize,

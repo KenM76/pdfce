@@ -1215,8 +1215,28 @@ for line in preset.disclosures() { /* show off-canvas */ }
 `Evidence::{Sourced, Implied, BestEffort, NotApplicable}`. A control labelled
 `ISO 15930-7` carries that standard's authority whether or not you intended it
 to, so the interesting column is not the value — it is how much weight the
-value can bear. For PDF/X-4, **one of six** entries is a claim about the
-standard at all, and it is `Implied` rather than `Sourced`.
+value can bear. For PDF/X-4, **two of seven** entries are a claim about the
+standard at all, and both are `Implied` rather than `Sourced`.
+
+**★ Axis 7 — `PresetKey::SpotColorantDeviceModel` (`Pass 237.0`, asked by
+pdfceGUI 2026-09-02).** Every PDF/X level pins
+`PresetAction::SpotModel(SimulateSeparations)` at tier `Implied`; every PDF/A
+level and PDF/UA leave it alone (`Sourced` — ISO 19005's Scope excludes
+rendering). This is the one axis pinned **without a clause that reaches it**:
+no ISO 15930 part says a word about a device colorant model. It is pinned
+anyway because the two values render visibly differently (a spot under an
+overprinting white is preserved under one and knocked out under the other)
+and a control labelled `ISO 15930-7` carries the expectation "show me what
+the press will get" — leaving it alone would silently ship whatever global
+override the operator last set into a view read as authoritative. The
+inference is ISO 15930-1 §6.3.1 (print elements exchanged as *separation*
+colour data for one printing condition ⇒ the target device carries the
+separations ⇒ ISO 32000-1 §8.6.6.4 keeps the spot on that device). **Show
+the entry's `why` beside the control** — it names the device, not the
+setting, and ends *"No ISO 15930 clause requires this"*. Because the pinned
+value is pdfce's shipped default, `apply()` reports the key as changed only
+when it corrected a stale global override. Spec corpus:
+`pdfx__ref__conformance_and_rendering_axes.md` Axis 7.
 
 **★ `PresetAction::LeaveAlone` is a real state and your UI needs it.** Roughly
 a third of the grid is axes a standard does not reach — the complete clause

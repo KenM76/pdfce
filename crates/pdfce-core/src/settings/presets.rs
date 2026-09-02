@@ -85,6 +85,7 @@
 
 use super::{
     CmykIntent, MaskResample, MeshPatchPadding, MinifyFilter, PageBlendSpaceSource, Settings,
+    SpotColorantDeviceModel,
 };
 use crate::pageops::separation::SeparationPolicy;
 
@@ -268,6 +269,8 @@ pub enum PresetKey {
     CmykIntent,
     /// [`Settings::separations`].
     Separations,
+    /// [`Settings::spot_colorant_device_model`] — axis 7, added `Pass 237.0`.
+    SpotColorantDeviceModel,
 }
 
 impl PresetKey {
@@ -281,6 +284,7 @@ impl PresetKey {
             Self::ImageMinify => "image_minify",
             Self::CmykIntent => "cmyk_intent",
             Self::Separations => "separations",
+            Self::SpotColorantDeviceModel => "spot_colorant_device_model",
         }
     }
 }
@@ -301,6 +305,8 @@ pub enum PresetAction {
     Cmyk(CmykIntent),
     /// Set [`Settings::separations`].
     Separations(SeparationPolicy),
+    /// Set [`Settings::spot_colorant_device_model`].
+    SpotModel(SpotColorantDeviceModel),
     /// **Change nothing**, and say so.
     ///
     /// The state that makes a preset honest. See the module docs: writing a
@@ -338,6 +344,7 @@ impl PresetAction {
             Self::Minify(v) => format!("{v:?}"),
             Self::Cmyk(v) => format!("{v:?}"),
             Self::Separations(v) => format!("{v:?}"),
+            Self::SpotModel(v) => format!("{v:?}"),
             Self::LeaveAlone => "-".to_owned(),
         }
     }
@@ -436,6 +443,11 @@ impl RenderPreset {
                 PresetAction::Separations(v) => {
                     let was = settings.separations;
                     settings.separations = v;
+                    was != v
+                }
+                PresetAction::SpotModel(v) => {
+                    let was = settings.spot_colorant_device_model;
+                    settings.spot_colorant_device_model = v;
                     was != v
                 }
                 PresetAction::LeaveAlone => false,
@@ -680,6 +692,7 @@ fn entries_for(standard: RenderStandard) -> Vec<PresetEntry> {
             K::ImageMinify,
             K::CmykIntent,
             K::Separations,
+            K::SpotColorantDeviceModel,
         ]
         .into_iter()
         .map(|key| PresetEntry {
@@ -691,7 +704,7 @@ fn entries_for(standard: RenderStandard) -> Vec<PresetEntry> {
         .collect();
     }
 
-    let mut out = Vec::with_capacity(6);
+    let mut out = Vec::with_capacity(7);
 
     // --- 1. the blending colour space ---------------------------------------
     out.push(if standard.forbids_transparency() {
@@ -822,6 +835,74 @@ fn entries_for(standard: RenderStandard) -> Vec<PresetEntry> {
         }
     });
 
+    // --- 7. the spot-colorant device model -----------------------------------
+    //
+    // ★★ THE ONE AXIS PINNED WITHOUT A CLAUSE THAT REACHES IT, and the
+    // exception has to be argued rather than assumed (`Pass 237.0`, asked by
+    // `pdfceGUI` 2026-09-02; sourced in the spec corpus
+    // `pdfx__ref__conformance_and_rendering_axes.md` Axis 7, `PXC-15`..`PXC-21`).
+    //
+    // The conformance answer is "no restriction reaches this axis": the
+    // vocabulary (`OPM`, `simulat`, `proof`) is absent from every reachable
+    // line of every obtained ISO 15930 preview, ISO 15930-9's subclause-
+    // complete TOC has no clause about it, and PDF/A's Scope excludes
+    // rendering outright. By this module's own rule that would mean
+    // `LeaveAlone`.
+    //
+    // It does not, for PDF/X, because the rule guards against a preset
+    // IMPLYING A REQUIREMENT — and on this axis the two values render
+    // VISIBLY differently (a spot under an overprinting white is preserved
+    // under one and knocked out under the other) while a control labelled
+    // `ISO 15930-7` carries an operator expectation of "show me what the
+    // press will get". Leaving it alone would not decline to answer; it would
+    // silently ship whatever global override the operator last set, into a
+    // view they will read as authoritative. That is a rule-4 problem.
+    //
+    // The inference, stated so it can be checked: ISO 15930-1 §6.3.1 has
+    // print elements exchanged as "CMYK data, gray scale data, or separation
+    // colour data" for a single characterized printing condition — the PDF/X
+    // target device CARRIES the separations — so on that device ISO 32000-1
+    // §8.6.6.4's colorant test succeeds and the spot survives overprint by a
+    // `shall`. Simulating that device is what the label promises. X-6 is the
+    // strongest row (ISO 15930-9 §5 delegates to ISO 32000-2, whose §10.8.3
+    // defines the simulation); X-4 the weakest (its §6.4 Colour and §6.13
+    // ExtGState are unread). All are `Implied`: NO ISO 15930 clause requires
+    // it, and the shipped sentence must say so.
+    //
+    // Note also that `SimulateSeparations` is pdfce's shipped default, so the
+    // pin moves no pixels for an operator who never overrode it; its value is
+    // documentation plus protection against a stale global override.
+    //
+    // ★ The counter-argument is recorded, not dismissed: `Alternate-
+    // SpaceSubstitution` is the only value with an ISO 32000-1 basis, and an
+    // explicitly edition-scoped "ISO 32000-1 strict" preset — if one is ever
+    // shipped — should pin THAT. A PDF/X preset optimises for predicting the
+    // press, not for never being callable non-conforming; this is the one
+    // axis where those objectives diverge.
+    out.push(if standard.is_pdf_x() {
+        PresetEntry {
+            key: K::SpotColorantDeviceModel,
+            action: PresetAction::SpotModel(SpotColorantDeviceModel::SimulateSeparations),
+            evidence: Implied,
+            why: "pdfce simulates a device that has this file's spot inks, because PDF/X \
+                  targets a press that does (ISO 15930-1 §6.3.1 exchanges print elements as \
+                  separation colour data for one characterized printing condition, and on \
+                  such a device ISO 32000-1 §8.6.6.4 keeps the spot as its own colorant). \
+                  Spot inks are shown on their own plates, as the printer will image them; \
+                  a composite viewer such as Acrobat's default view will show some of these \
+                  areas knocked out. No ISO 15930 clause requires this",
+        }
+    } else {
+        PresetEntry {
+            key: K::SpotColorantDeviceModel,
+            action: LeaveAlone,
+            evidence: Sourced,
+            why: "ISO 19005's Scope clause, every part from 2005 to 2020, excludes the \
+                  operational details of rendering, and none of its rules names a device \
+                  colorant model; how a spot ink is shown on screen is not a PDF/A question",
+        }
+    });
+
     out
 }
 
@@ -846,6 +927,7 @@ mod tests {
             PresetKey::ImageMinify,
             PresetKey::CmykIntent,
             PresetKey::Separations,
+            PresetKey::SpotColorantDeviceModel,
         ];
         for &std in RenderStandard::all() {
             let preset = RenderPreset::for_standard(std);
@@ -903,6 +985,17 @@ mod tests {
                             | RenderStandard::PdfA2
                             | RenderStandard::PdfA4,
                         PresetKey::PageBlendSpaceSource
+                    ) | (
+                        // Axis 7, `Pass 237.0`: every PDF/X level, `Implied`
+                        // only — the inference is ISO 15930-1 §6.3.1's
+                        // separation-data exchange plus ISO 32000-1 §8.6.6.4,
+                        // and no ISO 15930 clause states it. See `entries_for`.
+                        RenderStandard::PdfX1a
+                            | RenderStandard::PdfX3
+                            | RenderStandard::PdfX4
+                            | RenderStandard::PdfX5g
+                            | RenderStandard::PdfX6,
+                        PresetKey::SpotColorantDeviceModel
                     )
                 );
                 assert!(
@@ -916,6 +1009,65 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Axis 7: every PDF/X level pins `SimulateSeparations` at tier
+    /// `Implied` and never higher; no PDF/A level sets it; and because the
+    /// pinned value is the shipped default, applying a PDF/X preset to fresh
+    /// settings does NOT report the key as changed — while applying it over
+    /// a stale global override does.
+    #[test]
+    fn pdf_x_pins_the_spot_device_model_and_pdf_a_leaves_it_alone() {
+        for &std in RenderStandard::all() {
+            let e = RenderPreset::for_standard(std)
+                .entries()
+                .iter()
+                .copied()
+                .find(|e| e.key == PresetKey::SpotColorantDeviceModel)
+                .expect("axis 7 covered");
+            if std.is_pdf_x() {
+                assert_eq!(
+                    e.action,
+                    PresetAction::SpotModel(SpotColorantDeviceModel::SimulateSeparations),
+                    "{}",
+                    std.title()
+                );
+                assert_eq!(e.evidence, Evidence::Implied, "{}", std.title());
+                assert!(
+                    e.why.contains("No ISO 15930 clause requires this"),
+                    "the reading must be labelled a reading: {}",
+                    e.why
+                );
+            } else {
+                assert!(
+                    matches!(e.action, PresetAction::LeaveAlone),
+                    "{} pinned axis 7",
+                    std.title()
+                );
+            }
+        }
+        let preset = RenderPreset::for_standard(RenderStandard::PdfX4);
+        let mut fresh = Settings::default();
+        assert!(
+            !preset
+                .apply(&mut fresh)
+                .contains(&PresetKey::SpotColorantDeviceModel),
+            "the pin equals the default and must not be reported as a change"
+        );
+        let mut overridden = Settings {
+            spot_colorant_device_model: SpotColorantDeviceModel::AlternateSpaceSubstitution,
+            ..Settings::default()
+        };
+        assert!(
+            preset
+                .apply(&mut overridden)
+                .contains(&PresetKey::SpotColorantDeviceModel),
+            "a stale global override is corrected and reported"
+        );
+        assert_eq!(
+            overridden.spot_colorant_device_model,
+            SpotColorantDeviceModel::SimulateSeparations
+        );
     }
 
     /// PDF/UA changes nothing at all, and that is the answer rather than a
@@ -932,7 +1084,11 @@ mod tests {
             "PDF/UA moved a render setting: {changed:?}"
         );
         assert_eq!(settings, before, "PDF/UA changed the settings");
-        assert_eq!(preset.left_alone().len(), 6, "all six axes are left alone");
+        assert_eq!(
+            preset.left_alone().len(),
+            7,
+            "all seven axes are left alone"
+        );
 
         // And it SAYS so — an empty preset that stayed silent would be
         // indistinguishable from a broken one.

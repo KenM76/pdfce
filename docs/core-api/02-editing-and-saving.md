@@ -10,7 +10,7 @@ answers *"I want to do X — what do I call, in what order, and what will bite m
 | **Date** | 2026-08-29 |
 | **Verified against** | `5c37c7c` (`git rev-parse --short HEAD`) — *"he gave no reason" was a claim, and it has been corrected* |
 | **Primary subject** | `crates/pdfce-core/src/edit.rs` (35655) |
-| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 187 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
+| **Covers** | `EditSession` end to end: construction, the command/undo/redo model, **all 188 public methods**, the `EditError` taxonomy, the save path (incremental vs full rewrite), the guard/refusal model (encryption, certification, sidecar version, `/Size` suppression), object allocation and byte staging |
 | **Does NOT cover** | Document loading and the read-only object model → **`01-reading-and-model.md`**. Per-feature capability guides (ce dimensions, forms, annotations, redaction, OCR, printing) → **`03-capabilities.md`**. This document covers the *session mechanics* those features flow through; part 3 covers the features. |
 | **Terminology** | Project rule 15. **ce dimensions** = the dimension objects pdfce authors (`/Line` + `/IT /LineDimension` + baked `/AP` + `/PieceInfo` sidecar). **pdf dimensions** = dimensions already present in the page content, exported by CAD. Never bare "dimension". This document only concerns ce dimensions. |
 
@@ -61,9 +61,9 @@ Five consequences a GUI author must internalise before writing any code:
 
 ---
 
-## 1. Verb index — all 187 public `EditSession` methods
+## 1. Verb index — all 188 public `EditSession` methods
 
-**Count: 187.** Established by brace-matched extraction of the four
+**Count: 188.** Established by brace-matched extraction of the four
 `impl EditSession` blocks, matching `pub fn` / `pub const fn`, and checked
 on every run by `tools/check-core-api-verbs.py` — which is what caught this
 figure at 120 when `add_outline_item` landed.
@@ -1465,7 +1465,7 @@ always errors.
 | Why a flatten would refuse, before attempting it | `flatten_refusal(&self) -> Option<EditError>` | 13915 | `None` when a flatten would proceed. |
 | Where a page's widgets are | `widget_rects(&self, page_index: usize) -> Vec<(ObjId, [f64; 4])>` | 17893 | Annotation id and `/Rect`. A **query**, not an edit — useful for hit-testing and for reporting orphans (see `insert_pages`). |
 
-### 1.15 Annotations (13) — detail in part 3
+### 1.15 Annotations (14) — detail in part 3
 
 | I want to… | Call | Line | Returns |
 |---|---|---|---|
@@ -1480,6 +1480,7 @@ always errors.
 | **Resize** any annotation | `resize_annotation(&mut self, annot_id, anchor: (f64, f64), sx, sy, opts: &ResizeOptions) -> Result<AnnotationResize, EditError>` | 17442 | `Pass 151.0`. Scales `/Rect` **and every geometry key** about `anchor`. `/RD` scales by default; `/BS /W` does not — both are flags. **Re-authors the `/AP` only where pdfce drew it**, refusing rather than distorting a foreign one. Same two refusals as `move_annotation`. |
 | **Rotate** any annotation | `rotate_annotation(&mut self, annot_id, anchor: (f64, f64), degrees: f64) -> Result<AnnotationRotate, EditError>` | 17429 | `Pass 155.0`. Turns geometry keys AND composes the rotation into the appearance's own `/Matrix` (§12.5.5 step a), so a FOREIGN appearance rotates correctly and nothing is redrawn. No options type — a rotation is an isometry, so no stroke can distort. `/Rect` grows to the upright box that bounds the result, which §12.5.2 requires. **★ The angle is applied AS GIVEN and the result is never snapped** — see below. |
 | Preview an annotation deletion | `annotation_deletion_preview(&self, annot_id) -> Result<AnnotationDeletion, EditError>` | 11316 | Pure `&self` query. |
+| **Reorder** a page's annotations — the tab order | `reorder_annotations(&mut self, page_index: usize, new_order: &[ObjId]) -> Result<AnnotsReorder, EditError>` | — | `Pass 237.0`. Permutes the page's `/Annots` array, **moving references and nothing else** — no annotation dictionary is read or written, so every widget keeps its id, its field, its `/Parent` chain and its `/AA`. ONE undo entry. `new_order` is the page's indirect entries **by id**, each once; refuses `AnnotsNotAPermutation` (naming missing / unknown / repeated ids), `AnnotsDuplicateReference`, `TrapNetMustStayLast`, `AnnotStatesMismatch`. Honours the three `shall`s a permutation can break (TrapNet-last, `/AnnotStates`, `/GoToE` `/A`). **Reads `/Tabs`, never writes it** — see below. |
 
 > #### ★ `rotate_annotation` never snaps, and a caller comparing floats must expect that
 >
@@ -1795,6 +1796,77 @@ reason `MarkupStyle` is not: it is an INPUT struct a consumer *constructs*,
 and `#[non_exhaustive]` would make it unbuildable from outside `pdfce-core`.
 Adding a field is a breaking change; that is the honest price, paid here
 rather than pushed onto every consumer as an unconstructable type.
+
+> #### ★★ `reorder_annotations` — what the outcome is telling you, and the one thing it refuses to do for you (`Pass 237.0`)
+>
+> **Why ids, not indices.** `reorder_pages` takes indices because a page has
+> no other stable name. An annotation has one, and the index a shell holds is
+> almost never a raw `/Annots` index — `page_annotations` skips null and
+> non-dictionary entries, so the two numberings diverge on exactly the
+> malformed files where a wrong guess costs most. Pass the ids you already
+> have; the verb checks them against the array rather than trusting them.
+>
+> **`AnnotsReorder`** (`#[non_exhaustive]`, all fields disclosures):
+>
+> | field | what it means for the operator |
+> |---|---|
+> | `entries` | length of `/Annots` after — equal to before; this verb never adds or drops one |
+> | `moved` | how many references changed index. `0` ⇒ the order given was the order the page had; **no command was recorded**, `can_undo()` is unchanged |
+> | `non_widgets_moved` | of `moved`, how many are not `/Widget`. `/Annots` order is also **paint order**, so a `/Link` or markup moved past another changes which draws on top where they overlap — a side effect of arranging a tab order that a list of fields cannot show. Zero is the common case |
+> | `pinned` | entries that are **direct dictionaries** (Table 164 allows them; producers rarely write them). They have no id to be named by, stay at the index they had, and the references are laid into the remaining slots in your order. **Non-zero is the "the list did not fully take" signal — say so** |
+> | `tabs: PageTabs` | the page's `/Tabs` entry **as found**: `Absent`, `Row`, `Column`, `Structure`, `ArrayOrder` (2.0 `/A`), `WidgetOrder` (2.0 `/W`), `Other(name)`. `PageTabs::array_order_governs()` → `ArrayOrderGoverns::{Nothing, Widgets, Everything}` — `Everything` only for `/A`; `Widgets` for `/W`, because ISO 32000-2 **contradicts itself** about what follows the widgets under `/W` (Table 31: array order; §12.5.1: row order — spec corpus `TAB-A1`, no erratum) and a `bool` cannot carry that |
+> | `array_copied` | the page shared an indirect `/Annots` array with another page and pdfce copied it first (X7 copy-on-write), so the other page keeps its order |
+> | `trap_net_pinned` | the page has a `/TrapNet` annotation. **§12.5.6.21: it shall be the last `/Annots` entry**, so it is held in its slot and is not part of the permutation. A caller may list its id **last** (accepted, ignored) or omit it; anywhere else → `TrapNetMustStayLast` |
+> | `annot_states_permuted` | the trap network carried `/AnnotStates` (Table 366 / 2.0 Table 403 — *"shall be listed in the same order as the annotations in the page's `Annots` array"*) and it was permuted alongside. **The one case in which this verb writes an annotation dictionary.** A present array of the wrong length → `AnnotStatesMismatch` |
+> | `goto_e_targets_reindexed` | how many `/GoToE` **target dictionaries** anywhere in the document had an integer `/A` — *"the index (zero-based) of the annotation in the `Annots` array of the page specified by `P`"* (Table 202 / 2.0 Table 205) — aimed at this page, and were re-indexed to the annotation's new slot. Only the **first-level** target is a page of *this* document; nested `/T`s describe the embedded file and are left alone. A string `/A` (an `/NM`) is permutation-immune and untouched. Zero is overwhelmingly the common case |
+>
+> **★ The tab-order disclosure is load-bearing.** Under `/Tabs /R`, `/C` or
+> `/S` a reader does not tab by array order at all — the array is still
+> reordered (the caller asked for the array, and paint order changed as
+> asked), but the order the operator arranged is **not** the order a reader
+> will use, and a shell must say so rather than let the operator find out by
+> tabbing. Under `Absent` the file *states* no order; readers generally fall
+> back to `/Annots`, so the arranged order will usually be honoured, but the
+> file does not say it will.
+>
+> **`/Tabs` is read and never written**, and the reasons are now sourced
+> (spec corpus `iso32000__ref__annots_array_order.md` §8,
+> `pdfua__ref__tab_order.md`): **(1)** `/A` is a **PDF 2.0** value (Table 31),
+> so writing it into the 1.4–1.7 file almost every form is makes a
+> version-inconsistent file, or forces a header bump as a side effect of a
+> drag; **(2)** **PDF/UA-1 (ISO 14289-1 §7.18.3) requires `/Tabs /S`** on
+> every annotated page — Matterhorn 28-009 fires on any other value — so
+> writing `/A` turns a conforming document into a non-conforming one
+> (PDF/UA-2 §8.9.3.3 widened this to `A`, `W` or `S`; **never write one
+> `is_pdfua ⇒ S` predicate over both parts**); **(3)** nothing anywhere
+> *requires* a writer to state a tab order — leaving `/Tabs` absent after a
+> permutation is fully conforming; **(4)** the parity reference agrees:
+> Acrobat's *manual* tab order is an `/Annots` permutation with **no
+> `/Tabs` written**. Recording the order is a separate, explicit act with its
+> own (future) `set_page_tabs` verb, which is where `/A`/`/W` can be offered
+> to an operator who knows the cost. **Never rewrite `/S` → `/A` to make a
+> drag stick** — that is the shape rule 4 was narrowed twice to forbid.
+>
+> **What a shell should say, per value:** `Absent` → *"this page states no
+> tab order; most readers follow the array, so your order will usually be
+> honoured, but the file does not say so"*; `/S` → *"tabs by structure; your
+> order changed paint order, not tab order"* — and the sharper half, already
+> disclosed at field creation: an **untagged** annotation under `/S` has **no
+> defined tab position at all**, not "last"; `/R`/`/C` → *"computed from
+> geometry; to change the tab order here, move the fields"*; `/A` → **affirm,
+> do not warn**; `/W` → widgets stated, tail contested; `Other` → report the
+> value verbatim, it is a producer defect.
+>
+> **Refusals, all before any mutation.** `CertificationForbidsChange`;
+> `PageOutOfRange`; `AnnotsNotAnArray` (`/Annots` present but neither an
+> array nor a reference to one); `AnnotsDuplicateReference` (the page lists
+> one object twice — malformed, and de-duplicating it under a reorder's name
+> would be a delete nobody asked for); `AnnotsNotAPermutation` with three
+> lists — `missing` (on the page, not in your order), `unknown` (in your
+> order, not on the page), `repeated` — so the shell can point at the row.
+>
+> **The CLI twin** is `pdfce-cli reorder-annotations --page N --order 2,0,1`,
+> taking `list-annotations` indices and mapping them to ids on the way in.
 
 ### 1.16 Search-driven redaction marking (5)
 
@@ -2722,6 +2794,7 @@ Grep target for "what does this return actually contain".
 | `RegenOutcome` | 5809 | `regenerated`, `need_appearances_cleared`, `applied_autosize`, `unencodable_chars` |
 | `ImportOutcome` | 5824 | `applied`, `skipped` |
 | `WidgetMove` | 5847 | `from: Rect`, `to: Rect`, `siblings_left_behind: usize` |
+| `AnnotsReorder` | — | `entries`, `moved`, `non_widgets_moved`, `pinned`, `tabs: PageTabs`, `array_copied`, `trap_net_pinned`, `annot_states_permuted`, `goto_e_targets_reindexed` — `Pass 237.0`, §1.15 |
 | `AnnotationDeletion` | 5936 | `subtype: String`, `route: AnnotationDeletionRoute`, `popup_removed`, `parent_popup_cleared`, `replies_orphaned`, `group_members_promoted`, **`appearance_streams_removed`** |
 | `FieldDeletion` | 6052 | `widgets_removed`, `field_removed`, `selection_cleared`, `emptied_parents` |
 | `TextMatch` | 6080 | `page_index`, `quad: Quad`, `text: String` |
@@ -3828,7 +3901,7 @@ borrow it (`tests/image_placement.rs:238-247`).
 ### 6.7 The `EditError` taxonomy
 
 `edit.rs:2300`, `#[derive(Debug, Clone, thiserror::Error)]`, `#[non_exhaustive]`.
-**114 variants** at `Pass 191.1`, counted at depth 1 inside `pub enum EditError`.
+**118 variants** at `Pass 237.0`, counted at depth 1 inside `pub enum EditError`.
 No inherent `impl EditError` block and **no `is_*` classification helpers**
 (`NOT FOUND — searched `impl EditError` in `edit.rs`); callers discriminate with
 `matches!`.
