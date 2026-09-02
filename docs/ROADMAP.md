@@ -119676,6 +119676,37 @@ INSTALL THIS ROLE HAS NO ACCESS TO. Operator-question ceiling moves
   §12 decision 119 for the full spec sourcing and `NEXT_SESSION.md` for
   where the diagnosis currently stands.
 
+  > **★ RESOLVED 2026-09-02 (same day), 374th filing — CLOSED, the
+  > question DISSOLVES rather than being answered by the named operator
+  > action.** `pdfce-spec-librarian`'s re-adjudication found a fourth
+  > mechanism (`R4`, ISO 32000-1/2 §8.6.6.4, a `shall` in both editions —
+  > `ARCHITECTURE.md` §12 decision **120**): when the output device lacks
+  > the named spot colorant, the reader substitutes the alternate colour
+  > space **before §8.6.7 is ever consulted**, which explains Acrobat's
+  > white **regardless of whether `Use Overprint Preview` is on or off**.
+  > **Both pdfce's green and Acrobat's white conform** — a
+  > device-colorant-set model divergence (2.0 §10.8.3's optional
+  > separation-simulation branch vs. §8.6.6.4's mandatory alternate-space
+  > branch), not a bug on either side. **Re-generating the Acrobat
+  > reference renders with the preference forced on is therefore no
+  > longer a diagnostic prerequisite** — `PCS 3.0` and `PCS 4.0`'s
+  > remaining traps move from "confirmed pdfce defect, cause suspect" to
+  > "not a defect on either render; a harness-oracle design question."
+  > That question — the print-conformance harness needs a **per-device-
+  > model** expected value for any spot-overprint fixture rather than one
+  > absolute RGB, and `docs/suite-patch-reference.md` may need the
+  > qualifier if it states one — is **owed to the engineer as follow-on
+  > work**, flagged in this filing's report rather than actioned here
+  > (out of this librarian's five storage tiers). `OP-A7` /
+  > `spot_colorant_device_model` ships as a setting (default
+  > `simulate_separations`) per decision 120; implementation reported
+  > in progress by the engineer as of this filing. The re-dispatch's own
+  > `R1` experiment (toggle the preference, diff region counts) is
+  > separately recorded as **inconclusive, not confirming, not
+  > refuting** — see `C:\personal_rag\pdf\`'s dated amendment to the
+  > `acrobats_overprint_preview_defaults_to_pdfx_only` lesson and the new
+  > `a_region_count_metric_is_topologically_blind_to_hole_filling` lesson.
+
 ---
 
 **★★★★★ NEW 2026-09-01 (361st filing) — ONE QUESTION, AND IT IS ABOUT

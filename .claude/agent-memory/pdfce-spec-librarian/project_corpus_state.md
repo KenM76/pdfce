@@ -5365,3 +5365,185 @@ totals line, no manifest row** (contrast 61h/64h's five-edit new-file path).
 Post-EC3 errata checked with a **positive control** (63d): the clause-11 errata
 page listed **11.3.5 / 11.4.8 / 11.6.5.2 / 11.6.6** and **nothing** for 11.7.x ⇒
 the negative is measured, not un-searched.
+
+
+---
+
+## 67. ★★★ THE **REFUTATION-ROUND** DISPATCH — *"your three routes are all dead; find the fourth or retract"* (2026-09-02, same-day re-dispatch of item 66; `iso32000__s__8.6.7.md` UPDATE 2026-09-02 SECOND FILING)
+
+**Shape.** Item 66's deliverable was a verdict (*the standard says PRESERVE, pdfce
+is right*) plus **`R1`/`R2`/`R3`, a ranked ladder of ways Acrobat could reach
+white without contradicting the tables**, each with a named falsification. The
+engineer **ran all three** and returned them dead, with an explicit *"I would
+rather retract a Pass than defend one."* **A fourth mechanism existed, it was a
+`shall`, and it inverted the FRAMING of the verdict while leaving its OUTCOME
+intact.** This is the highest-yield dispatch shape encountered so far, and it only
+happens because item 66 named cheap experiments — **the ladder is what generated
+the next round of evidence.**
+
+### 67a. ★★★ WHEN THE EXPLANATION SPACE IS EMPTY, THE FOURTH MECHANISM IS ONE CLAUSE-FAMILY **UPSTREAM**: *does the entity EXIST on this device?*
+
+`R1`/`R2`/`R3` were all **mode** hypotheses (was overprint on? was it a group? was
+`/op` set?) — all inside or adjacent to the dispatched clause. **`R4` was an
+EXISTENCE hypothesis**, and it lived in the **colour-space definition**, firing at
+**colour-space-set time, before §8.6.7 or Table 148 is ever consulted**:
+
+> §8.6.6.4, **both editions**, body text: *"the conforming reader **shall determine
+> whether the device has an available colorant** corresponding to the name of the
+> requested space"* … *"**If** the colorant name … **does not correspond to a
+> colorant available on the device**, the conforming reader **shall arrange for
+> subsequent painting operations to be performed in an alternate colour space**."*
+
+⇒ On a device without the colorant, the spot backdrop **is not a spot colorant at
+all** — the tint transform already made it process CMYK — so the *"Spot colorant"*
+row is **never selected**; the cell is *"Any process colour space"* × ***Process
+colorant*** = **`Paint source` in all three columns** ⇒ **white, with overprint
+fully honoured.**
+
+**★★ THE LADDER IS THREE RUNGS, NOT TWO.** 66d generalised *"read the clause that
+DEFINES the objects, not only the one that USES them."* **That was one rung short.**
+
+> **EXISTENCE (does E exist on this device?) → DEFINITION (what is E?) → USE (what
+> does rule R do to E?).**
+
+Item 66 read **definition** (§11.7.3) and **use** (§11.7.4 / Tables 148/149) and
+stopped. **When a dispatch says *"implementation I does X to entity E and we do
+Y"*, the first question is not what the rule says about E — it is whether E is on
+I's device at all.** Generalises well beyond colour: fonts not installed,
+colorants not present, optional-content groups not in the config, annotation types
+not supported. **Every one of those has a `shall` that substitutes something else
+BEFORE the interesting rule runs.**
+
+### 67b. ★★★ **GRADE THE REFUTATIONS — DO NOT ACCEPT THEM.** A falsification run whose POSITIVE CONTROL also did not move is INCONCLUSIVE, not negative
+
+The engineer reported `R1` refuted: overprint preview set to `Always`, re-captured,
+**9 green regions → 9, identical positions; positive control 10 → 10.** **Two
+independent defects, and both are reusable:**
+
+1. **THE POSITIVE CONTROL FAILED.** The control was *a CMYK-plus-spot overprint
+   patch* — **precisely** the content whose appearance the feature exists to
+   change. If the **control** did not move either, the economical reading is **the
+   preference never reached the renderer**, not *"the feature is a no-op on
+   overprint content."* **A control that does not move is a control that did not
+   control** — and a null result on the test case is then uninterpretable.
+   ⇒ **63d's positive-control discipline applies to EXPERIMENTS, not only to web
+   resources.** Always ask *"and did the control move?"*, and treat "no" as
+   invalidating the run.
+2. **THE METRIC WAS BLIND TO THE CHANGE UNDER TEST.** Counting connected green
+   **regions** cannot detect a white **hole** being filled with green: an annulus
+   and a filled disc are **both one component**. `9 → 9` is consistent with both
+   outcomes. **An alignment-free COUNT was the right instinct for comparing two
+   `PrintWindow` captures and the wrong STATISTIC for a colour-of-one-cell
+   question.** ⇒ **Check that the metric can, in principle, register the flip.**
+   Cheapest correct probes, in order: **the pixel at the cell's own coordinates**;
+   **total green AREA** (hole-filling moves area, never count); then re-controls.
+
+**★ And the payoff:** `R4` **predicts** `9 → 9`. Under `R4` the render is white
+with preview on *or* off. **So the engineer's own worry — *"maybe the originals
+already had preview ON, which would mean Acrobat IS simulating and still renders
+white"* — was not a problem for the answer; it was the clue that pointed at it.**
+⇒ **When a dispatch flags its own weakest link, treat that flag as a HYPOTHESIS
+GENERATOR, not just a caveat to discount.**
+
+### 67c. ★★ A REFUTATION CAN DESTROY YOUR **OWN SUPPORT**, NOT ONLY THE ROUTE IT TARGETED — and the engineer will not notice, because it is not their file
+
+`R2` was refuted by *"**0 `/Group`, 0 `/S /Transparency`, 0 `/SMask`** in either
+patch."* That kills `R2`. **It also kills two of my own six supports**, because it
+proves the document is **purely opaque-model** and therefore **§11.7 does not apply
+at all**:
+
+- `OPSP-2` quoted §11.7.3's *"every object paints **every existing colour
+  component**, both process and spot"* — but that sentence's paragraph opens *"Only
+  a single shape value and opacity value shall be maintained at each point in the
+  **computed group results**"*. **Domain: transparency-group results. There are no
+  groups.**
+- **and *"every EXISTING colour component"* is scoped by availability anyway** —
+  *"a spot colour component **that is available in the output device**"* (§11.7.3),
+  *"any **available** spot colorants"* (§11.7.4.2). The qualifier appears **5 times
+  across 4 clauses**; item 66 quoted the sentence **without it**, from a file that
+  already carried it verbatim.
+
+⇒ **A measurement offered to refute one of YOUR routes is evidence about the whole
+case. Re-run your own supports against it before accepting the refutation.** The
+dispatcher is testing your ladder, not auditing your reasoning — nobody else will
+do this.
+
+### 67d. ★★★ THE STRANDED FINDING, **FIFTH INSTANCE** — and this time it was in the file my own frontmatter calls the **MANDATORY COMPANION**
+
+`iso32000__s__11.7.md` already quoted *"available in the output device"* verbatim,
+and already concluded — in its own words — ***"pdfce, being an additive device with
+no spot colorants, is always on branch 2"*** (branch 2 = alternate-space
+substitution = Acrobat's answer). `color__separation.md` already carried the whole
+**`S1`–`S5`** resolution ladder including the two `shall`s. `iso32000__s__10.8.md`
+already carried **`SEP-5`** (NOTE 7's ranking) and §8.6.7's 2.0 intro making
+separation simulation optional for any device (clause citation only — 2.0 wording
+is licensed). **Three files. All in
+`related_files`. One of them labelled "mandatory companion" in the very frontmatter
+I edited.**
+
+⇒ **Before writing a verdict, `Grep` your OWN `related_files` list for the
+question's nouns.** 66b said grep the corpus for the dispatched *question*; **this
+extends it to the dispatched ANSWER'S mechanism** — the finding that refutes you
+is more likely to be filed under the *other* clause's vocabulary (*"available on
+the device"*) than under the dispatched clause's (*"overprint"*).
+
+**Corollary, and it is why this keeps happening:** the corpus's older files record
+pdfce's capabilities **as of their writing date**. `iso32000__s__11.7.md`'s
+"pdfce has no spot colorants" was **true when written and false after `Pass 97.x`
+built an n-channel compositor**. ⇒ **A corpus sentence about what pdfce IS, is a
+dated measurement, not a standing fact** — same caution the memory system carries
+about repo-state snapshots. Both stale lines were struck-through with dated
+corrections this session, not deleted.
+
+### 67e. ★★★ **"BOTH CONFORM" IS A REAL VERDICT** — and for an implementation divergence it is often the right one. Look for the DEVICE-MODEL axis.
+
+Item 66 framed the choice as *"either pdfce is wrong despite the tables, or there is
+a fourth mechanism."* **There was a third option neither round proposed: the rule is
+determinate but is evaluated against a DIFFERENT DEVICE.**
+
+| | Reached by | Result | Conformance |
+|---|---|---|---|
+| **A** alternate-space substitution | §8.6.6.4 `S2` fails ⇒ `S5`'s **`shall`** | spot knocked out (**white**) | **both editions** |
+| **B** simulated separations | **ISO 32000-2 §10.8.3** (a *simulated* device that may carry spot colourants) + **2.0 §8.6.7 intro** (separation simulation is optional, for any device) — **wording is `licensed_primary_private_rag`; cite by clause, quotes are in the private corpus file** | spot preserved (**green**) | **ISO 32000-2 ONLY** |
+
+**★ The standard even RANKS them without mandating either** — §8.6.6.4 **NOTE 7**:
+the alternate path *"does not correctly represent the interactions between an object
+and its backdrop … when overprinting … is enabled"* (**1.7, `free_primary`**), and
+**2.0's NOTE 7 adds that separation simulation yields better results under
+overprint** (clause citation only — 2.0 wording is licensed). **A NOTE calling a branch
+"not correct" is NOT calling it non-conforming — the `shall` is body text, the
+criticism is informative.** ⇒ **Do not read a critical NOTE as a prohibition; read
+it as the standard telling you which of two permitted branches it prefers.**
+
+**And note the asymmetry, because it is what a careless summary would flatten:**
+pdfce's branch has **no ISO 32000-1 basis at all** (1.7 has no separation
+simulation — `OP-N1`), while Acrobat's conforms under both. **"pdfce is on the
+recommended branch of an OPTIONAL, 2.0-only feature" is a very different sentence
+from "pdfce is the conforming one", and only one of them is true.**
+
+### 67f. ★★ THE HARNESS CONSEQUENCE — an oracle's expected value can be **per device model**, never one absolute RGB
+
+Because both branches conform, **Acrobat cannot serve as an oracle for ANY
+spot-overprint cell unless it is first confirmed to be in separation-simulation
+mode.** A render-parity fixture holding **one** absolute expected RGB for such a
+cell **encodes an unstated device assumption** and will "fail" correct code
+whenever the oracle's preferences drift. ⇒ **When a divergence resolves to
+"both conform", the deliverable includes a TEST-DESIGN correction, not only a
+verdict.** This was the most actionable item in the whole two-round exchange and
+it is not a spec fact at all.
+
+### 67g. Filing mechanics — a SECOND promotion on the same finding, same day; outcome survived, reasoning did not
+
+**Seven edits, zero recounts:** the clause file's new UPDATE + a **`SUPERSEDED IN
+PART` banner spliced into the FIRST filing's §A heading** (so a reader landing on
+the old verdict is redirected in one line), frontmatter `keywords` + `related_files`,
+the consolidator's `OP-N3` row, `index.md`'s `OP-N3` row **+ a new trigger-topic
+row + a new search recipe**, the register's **§11a intake** (`OP-A7`), and dated
+strike-throughs in `iso32000__s__11.7.md` and `color__separation.md`. **§11a intake
+again avoided touching §2/§3's count arithmetic** (the 2026-08-10 convention).
+
+★ **The shape to reuse: when a verdict's OUTCOME survives but its REASONING dies,
+AMEND — do not rewrite and do not retract.** Keep the struck wording legible, say
+which half died, and put the redirect at the **top of the superseded section**
+rather than only at the bottom of the file. **A reader who greps and lands
+mid-file must be told in the first line they read.**

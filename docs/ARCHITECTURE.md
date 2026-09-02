@@ -29574,6 +29574,18 @@ ceiling `R239` — UNCHANGED**, next free `R240`; no rule minted this filing
 
 ### 2026-09-02 (372nd filing) — decision 119: **TABLE 148/149 (1.7) / TABLE 146 (2.0) ARE DETERMINATE FOR "ANY PROCESS COLOUR SPACE × SPOT COLORANT": `OP true` MEANS PRESERVE, IN BOTH OVERPRINT-MODE COLUMNS, IN BOTH EDITIONS — pdfce'S RENDER IS THE CONFORMING ONE, AND A DIVERGENCE FROM AN ACROBAT REFERENCE RENDER ON THIS CELL IS NOT EVIDENCE OF A pdfce DEFECT**
 
+> **★★ SUPERSEDED IN PART, SAME DAY — READ DECISION 120 BELOW FIRST.**
+> `pdfce-spec-librarian` re-adjudicated with new evidence (a re-dispatch that
+> tested this decision's own §E hypotheses) and found a **fourth mechanism**,
+> `iso32000__s__8.6.7.md` UPDATE 2026-09-02 (SECOND FILING) §H–§P. Every
+> quotation and table cell below is still correct, and the **outcome does
+> not change** (pdfce does not change its render; `Pass 97.x` is not
+> retracted). What changes: this decision's claim that pdfce's render is
+> **"the conforming one"** — implying Acrobat's is not — is **over-read**.
+> **Both renders conform**, on two different device-colorant-set models;
+> see the struck sentences below and decision 120 for the corrected
+> framing, the new `OP-A7` setting, and the harness consequence.
+
 **Context.** A print-conformance patch cell: a spot-colorant backdrop
 (`/Separation` over `/DeviceCMYK`), a white `DeviceGray` object (`1 g`, i.e.
 CMYK `0 0 0 0`) painted over it with `/OP true`. **Acrobat's reference render
@@ -29582,10 +29594,14 @@ shows pure white (spot knocked out); pdfce renders the spot green,
 `pdfce-spec-librarian` on the working premise that pdfce's render was the
 defect. **It came back against that premise.**
 
-**The verdict (`iso32000__s__8.6.7.md` UPDATE 2026-09-02, §A).** There is no
+**The verdict (`iso32000__s__8.6.7.md` UPDATE 2026-09-02, §A).** ~~There is no
 reading of either edition under which `OP true` erases an unnamed spot
-colorant on a process-space source. Six independent supports converge on the
-same cell (§B): §8.6.7's own prose (*"anything previously painted in other
+colorant on a process-space source.~~ **★ CORRECTED by the second filing
+(§H–§K): this is true only of a device that HAS the spot colorant. A device
+that does not is routed to an alternate colour space by §8.6.6.4's own
+`shall`, at colour-space-set time, before this cell is ever consulted — see
+decision 120.** Six independent supports converge on the same cell (§B),
+**given that premise**: §8.6.7's own prose (*"anything previously painted in other
 colorants is left undisturbed"*), §11.7.3 (*"every object paints every
 existing colour component, both process and spot… unspecified components take
 an additive value of 1.0"* — the `DeviceCMYK`/`ICCBased`-source case is the
@@ -29596,7 +29612,12 @@ against both source PDFs, character-identical on this row — §11.7.4.5 NOTE 1
 between the opaque and transparent imaging models), and the fact that `OPM 0`
 and `OPM 1` are **identical** on this row (the zero-tint carve-out that
 distinguishes them exists only in row 1's `DeviceCMYK`-direct cell). **No
-edition delta.** ⇒ **pdfce's green is the conforming render.**
+edition delta.** ⇒ ~~**pdfce's green is the conforming render.**~~ **★
+CORRECTED: pdfce's green is A conforming render** — the one this decision's
+title calls out, reached via ISO 32000-2 §10.8.3's optional
+separation-simulation branch. **Acrobat's white is also a conforming
+render**, reached via §8.6.6.4's mandatory alternate-space-substitution
+branch, on a device without the named spot colorant. See decision 120.
 
 **The internal paraphrase pdfce carries — *"a colorant not named in the
 source colour space is left to the backdrop under `OP true`"* — reaches the
@@ -29632,17 +29653,29 @@ columns, `OP true` included) and needs checking independently of `R1`.
 NOT "fix" pdfce to match the white.** Doing so would contradict five sourced
 1.7 provisions (four in 2.0) and would break the `Separation`/`DeviceN` rows
 through the same code path — the same shape of scope error already corrected
-once in `OP-A5` (2026-08-31). If `R1` is confirmed, the correct downstream
+once in `OP-A5` (2026-08-31). ~~If `R1` is confirmed, the correct downstream
 action is regenerating the Acrobat reference renders with Overprint Preview
-forced on, not editing `overprint.rs`.
+forced on, not editing `overprint.rs`.~~ **★ CORRECTED — see decision 120:
+`R1`'s own experiment came back INCONCLUSIVE (a positive control that did
+not move, and a region-count metric structurally blind to hole-filling),
+and it turned out not to matter — `R4` (decision 120) explains Acrobat's
+white regardless of whether overprint preview is on or off. This sentence's
+conclusion (do not edit `overprint.rs`) still holds; its stated reason does
+not.**
 
-**Consequence for the conformance ledger.** The two remaining traps on
+**Consequence for the conformance ledger.** ~~The two remaining traps on
 `PCS 3.0`/`PCS 4.0` (`ROADMAP.md`, 371st filing) were being treated as
 confirmed pdfce defects. At least the spot-preservation half of that reading
-is now suspect — **an operator action (re-generate the Acrobat oracle with
+is now suspect — an operator action (re-generate the Acrobat oracle with
 `Use Overprint Preview` = `Always`) is owed before either trap is diagnosed
-further as a pdfce-side bug.** See `ROADMAP.md` open operator question
-**(cb)**.
+further as a pdfce-side bug.~~ **★ CORRECTED — see decision 120: the
+spot-preservation half of the `PCS 3.0`/`PCS 4.0` reading is not merely
+suspect, it is settled — neither render is a defect, the divergence is a
+device-colorant-set model, and re-generating the Acrobat oracle at a
+different preference setting is no longer a diagnostic prerequisite (though
+it may still be useful for deciding what the harness's own oracle should
+assume — see decision 120's harness-rule consequence). `ROADMAP.md` open
+operator question **(cb)** closed accordingly.**
 
 **Sourcing.** `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md`,
 UPDATE 2026-09-02, §A–§G (verdict, six supports, the crux-question rejection,
@@ -29657,5 +29690,151 @@ consequence) is filed separately, per the spec RAG's own §F instruction not
 to hold real-world viewer behaviour in the standards corpus:
 `C:\personal_rag\pdf\lesson_20260902_acrobats_overprint_preview_defaults_to_pdfx_only_so_op_true_renders_as_op_false.md`.
 
-**Decision ceiling moves `118` → `119`; next free `120`.** **Standing rules
-ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing.
+**Decision ceiling moves `118` → `119`; next free `120` (superseded in part
+same day — see decision 120 immediately below).** **Standing rules ceiling
+`R239` — unchanged**, next free `R240`; no rule minted this filing.
+
+### 2026-09-02 (374th filing) — decision 120: **THE MISSING FOURTH MECHANISM — §8.6.6.4 CONVERTS AN UNAVAILABLE SPOT COLORANT TO THE ALTERNATE SPACE *BEFORE* §8.6.7 IS EVER CONSULTED (a `shall`, both editions) — BOTH pdfce'S GREEN AND ACROBAT'S WHITE CONFORM, ON TWO DIFFERENT DEVICE-COLORANT-SET MODELS; `OP-A7` / `spot_colorant_device_model` BECOMES A SHIPPED SETTING**
+
+**Context.** Decision 119 (same day, immediately above) adjudicated the
+identical cell on the premise that both renders were reached by *reading*
+§8.6.7 differently. `pdfce-spec-librarian` was re-dispatched to test decision
+119's own §E hypotheses (`R1` Acrobat not simulating overprint, `R2` the
+white object is a transparency group) empirically. Both were run down, and
+the result forced a search for a mechanism neither this project nor the
+first filing had located.
+
+**What the re-dispatch established (`iso32000__s__8.6.7.md` UPDATE 2026-09-02
+SECOND FILING, §H–§L).**
+
+- **`R2` (transparency group) — REFUTED on the file bytes**: 0 `/Group`, 0
+  `/S /Transparency`, 0 `/SMask` in either patch. This is worth more than the
+  route it closed: it confirms the document is **purely opaque-model**, which
+  removes §11.7 (the transparent-imaging-model clause family) from the case
+  entirely.
+- **`R3` (an `/op` override in the same dict) — REFUTED.** Accepted without
+  reservation.
+- **`R1` (Acrobat not simulating overprint) — NOT REFUTED, INCONCLUSIVE.**
+  The engineer's own experiment (toggle `Use Overprint Preview` to `Always`,
+  re-capture, compare connected-green-region counts: `9 → 9`, control patch
+  `10 → 10`) has two independent defects: (1) **the positive control did not
+  move either** — the control was chosen precisely because toggling the
+  preference is supposed to change its appearance, so a run in which the
+  control is also inert indicates the preference never reached the renderer
+  in the captured process, not that the feature is a no-op; (2) **a connected
+  -region COUNT cannot detect the transformation being tested** — filling a
+  white hole inside a green region with green does not change the region
+  count (an annulus and a filled disc are both one component), so `9 → 9` is
+  consistent with either outcome. **A control that does not move is a control
+  that did not control**, and a count invariant under the tested
+  transformation is not a measurement of it.
+
+**`R4` — the fourth mechanism, found in two files already in the corpus.**
+ISO 32000-1 §8.6.6.4 (unchanged in substance in ISO 32000-2, `conforming
+reader` → `PDF processor`, `colorant` → `colourant`):
+
+> "At the moment the colour space is set to a `Separation` space, the
+> conforming reader **shall determine whether the device has an available
+> colorant** corresponding to the name of the requested space. **If so**...
+> subsequent painting operations... **shall apply the designated colorant
+> directly**... **If the colorant name... does not correspond to a colorant
+> available on the device, the conforming reader shall arrange for
+> subsequent painting operations to be performed in an alternate colour
+> space.**"
+
+This substitution happens **at colour-space-set time — before any painting
+operation runs, and therefore before §8.6.7 or Table 148/149/146 is ever
+consulted.** On a device without the named spot colorant, the backdrop is
+**never a spot colorant on the page**; the tint transform has already turned
+it into process CMYK. The white `1 g` object then lands on Table 148's *"any
+process colour space × process colorant"* row — `Paint source` in **all
+three** overprint columns, `OP true` included. Source `0 0 0 0` renders pure
+white, **with overprint fully simulated and fully honoured**. The
+*spot-colorant* row decision 119 rested on is never selected on this device.
+
+**Two conforming device models, not one right reading and one wrong one:**
+
+| model | reached via | Table-148 row for the backdrop | result | conforms under |
+|---|---|---|---|---|
+| **A — `alternate_space_substitution`** | §8.6.6.4's `shall` (device lacks the colorant) | process colorant | white — spot knocked out | **both editions** |
+| **B — `simulate_separations`** (pdfce, `Pass 97.x`) | ISO 32000-2 §10.8.3's `may` (a simulated device that supports spot colours) | spot colorant | green — spot preserved | **2.0 only** |
+
+**★ The edition asymmetry, stated so it cannot be mis-read as "pdfce is
+wrong":** model B has **no ISO 32000-1 basis at all** for a non-separating
+device — it is 2.0-only and 2.0 makes it optional. Model A conforms under
+both editions. But §8.6.6.4 NOTE 7 (both editions) and §10.8.3's own worked
+example (cyan-then-yellow overprinted gives green under separation
+simulation, yellow on an overprint-ignoring device — *"dramatically
+different colours,"* the standard's own words) rank model B as producing
+**better results under overprint**. **pdfce is on the recommended branch of
+an optional 2.0 feature; Acrobat's default composite view is on the
+universally available branch. Neither is a defect.**
+
+**Correction to decision 119's reasoning (outcome unchanged).** Struck
+in-place in decision 119, above: the claim that "there is no reading of
+either edition under which `OP true` erases an unnamed spot colorant" and
+"pdfce's green is the conforming render" both over-read a narrower true
+claim — *given a device that has the spot colorant*, the standard draws no
+distinction between "not named in the source space" and "cannot be
+addressed by the source space," and pdfce is right about that narrower
+claim. What does not survive: the leap to "therefore Acrobat's white is
+non-normative." **Do not change pdfce's render. Do not retract `Pass 97.x`
+or any Pass built on it.**
+
+**`OP-A7` / `spot_colorant_device_model` — new setting, shipped as of this
+decision.** Neither edition specifies *how* a processor answers §8.6.6.4's
+device-colorant-availability test, nor whether it may declare a simulated
+device with more colorants than a physical one is entitled to. Both
+branches are legitimately available, so this is a **setting**, not a
+hard-coded choice, per the project's own standing "spec ambiguity is a
+setting" directive:
+
+- **Key:** `spot_colorant_device_model`
+- **Options:** `simulate_separations` (**default — pdfce's current,
+  unchanged behaviour**) / `alternate_space_substitution`
+- **Blast radius: RENDER only.** Never changes emitted bytes.
+- **Implementation status: IN PROGRESS as of this filing** — the engineer
+  reported starting it in the same dispatch that produced this decision. A
+  follow-on librarian filing (Pass shipped) is owed once the commit lands;
+  no Pass ID has been assigned by this filing, and none is minted here.
+
+**★★★ Harness consequence — the most actionable finding, and it is a design
+correction, not a bugfix.** **Acrobat cannot serve as an oracle for any
+spot-colorant overprint cell unless it is first confirmed to be in
+separation-simulation mode** — in composite mode it is measuring a
+*different device*, and the standard says a different device legitimately
+gets a different answer on this cell. The correct expected value for such a
+fixture is **not a single colour; it is a colour per device model.** A
+harness or reference file that records one absolute expected RGB for a
+spot-overprint cell is encoding an unstated device assumption and will fail
+correct code whenever the oracle's own capture mode drifts — the `9 → 9`
+non-result in this very adjudication is the first symptom of exactly that.
+**Flagged to the engineer: check whether `docs/suite-patch-reference.md`
+(not one of this role's five storage tiers, so not edited here) states
+absolute expected RGBs for `PCS 3.0`/`PCS 4.0`-class spot-overprint cells;
+if so, it needs the per-device-model qualifier.**
+
+**Consequence for `ROADMAP.md` open operator question `(cb)`.** The question
+as filed asked whether the operator would re-generate Acrobat reference
+renders with `Use Overprint Preview` forced on, to diagnose two conformance
+traps. That diagnostic premise is now moot: neither render is a defect, so
+there is nothing left to diagnose by re-capturing. **Closed** — see the
+resolution note added in place at `(cb)`'s own entry, below.
+
+**Sourcing.** `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md`,
+UPDATE 2026-09-02 (SECOND FILING), §H–§P — the re-dispatch's grading of `R1`/
+`R2`/`R3`, the `R1` inconclusiveness argument, the `R4` derivation (`OPSP-7`,
+`OPSP-8`), the availability-qualifier survey (five instances, four clauses),
+the `OP-A7` table, the correction to §C's over-read crux answer (§K), and the
+harness-design consequence (§M.4). Empirical half (Acrobat's composite-view
+behaviour and the failed positive-control run) belongs in
+`C:\personal_rag\pdf\` per the spec RAG's own §F instruction, not here — see
+the dated amendment to
+`lesson_20260902_acrobats_overprint_preview_defaults_to_pdfx_only_so_op_true_renders_as_op_false.md`
+and the new
+`lesson_20260902_a_region_count_metric_is_topologically_blind_to_hole_filling.md`.
+
+**Decision ceiling moves `119` → `120`; next free `121`.** **Standing rules
+ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing
+(the region-count-instrument finding is filed as a personal_rag/pdf lesson,
+not proposed as a new standing rule — see this role's report).

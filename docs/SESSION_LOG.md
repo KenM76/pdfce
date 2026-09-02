@@ -86116,3 +86116,136 @@ invariant redefinition; `ARCHITECTURE.md` §12 not touched.
   the new `R217` working order, not just "a filing landed recently."
 - Backup/push state: not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (374th filing) — `pdfce-spec-librarian` RE-ADJUDICATED decision 119 WITH NEW EVIDENCE AND FOUND A FOURTH MECHANISM; decision 119's REASONING corrected in place (outcome unchanged, no Pass retracted); decision 120 minted; `OP-A7` / `spot_colorant_device_model` becomes a shipped setting (engineer reports implementation in progress); open operator question `(cb)` CLOSED — dissolved, not answered
+
+**Sourcing.** No shell this filing. Relayed by the engineer from
+`pdfce-spec-librarian`'s second filing at
+`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__8.6.7.md`, `UPDATE
+2026-09-02 (SECOND FILING)` §H–§P — read directly by this role before
+amending anything, not taken on the relay's paraphrase alone.
+
+**Shipped:** nothing by this filing itself — this is a documentation/
+decision-log correction plus RAG capture. The engineer separately reports
+starting the `OP-A7` implementation; no commit hash or Pass ID supplied
+yet, so none is recorded here. A follow-on "Pass shipped" filing is owed
+once that lands.
+
+**Decisions made this session:**
+
+- **`ARCHITECTURE.md` §12 decision 119 corrected IN PLACE** (struck
+  wording kept legible, per house style — this is the second correction
+  to the same finding in one day, following the same pattern already used
+  throughout this document for amended figures/claims). The **outcome is
+  unchanged**: pdfce does not change its render, `Pass 97.x` is not
+  retracted. What was struck: the claim that pdfce's green is "the
+  conforming render" and that there is "no reading of either edition"
+  under which `OP true` erases an unnamed spot colorant — both true only
+  of a device that *has* the spot colorant, which is exactly the premise
+  ISO 32000-1/2 §8.6.6.4 leaves to the implementation.
+- **`ARCHITECTURE.md` §12 decision 120 minted** — the fourth mechanism
+  (`R4`, §8.6.6.4, a `shall` in both editions): an output device without
+  the named spot colorant substitutes the alternate colour space **at
+  colour-space-set time, before §8.6.7 is ever consulted**, so the
+  backdrop is never a spot colorant on that device at all. This explains
+  Acrobat's white independently of whether `Use Overprint Preview` is on
+  or off. **Two conforming device-colorant-set models, not a right
+  reading and a wrong one**: pdfce (green) on ISO 32000-2 §10.8.3's
+  optional separation-simulation branch (2.0-only, ranked better under
+  overprint by §8.6.6.4 NOTE 7); Acrobat (white) on §8.6.6.4's mandatory
+  alternate-space branch (conforms under both editions).
+- **`OP-A7` / `spot_colorant_device_model` decided as a genuine shipped
+  SETTING** — default `simulate_separations` (pdfce's current,
+  unchanged behaviour), alternative `alternate_space_substitution`, blast
+  radius RENDER only. Per the project's own standing "spec ambiguity is a
+  setting, never hard-coded" directive — neither edition specifies how a
+  processor answers §8.6.6.4's device-colorant-availability test.
+- **`ROADMAP.md` open operator question `(cb)` CLOSED**, in place, with a
+  resolution blockquote (same convention as `(bh)`'s prior closure). The
+  question as filed asked whether the operator would re-generate Acrobat
+  reference renders with the preference forced on, to diagnose two
+  conformance traps. **That diagnostic premise is now moot** — neither
+  render is a defect, so nothing is left to diagnose by re-capturing.
+
+**Findings + decisions:**
+
+- **The `R1` experiment that prompted the original working assumption
+  (Acrobat white ⇒ overprint preview off) is INCONCLUSIVE, not
+  confirmed**, for two independent reasons: (1) the positive control did
+  not move either, which should have invalidated the run on its own —
+  *a control that does not move is a control that did not control*; (2)
+  the chosen metric (connected-green-region count) is **topologically
+  invariant under hole-filling** — a white hole filling in with green
+  does not change a region count, so `9 → 9` is consistent with both
+  outcomes. Written up as its own methodology lesson (below) because the
+  general form — *check whether the predicted true-positive signature is
+  representable in the chosen metric before reading a null result as a
+  refutation* — is reusable well beyond this one adjudication.
+- **Harness design consequence, the most actionable item, flagged to the
+  engineer rather than actioned here (out of this role's five storage
+  tiers):** the print-conformance harness cannot use Acrobat as an oracle
+  for any spot-colorant overprint cell without first confirming which
+  device-colorant model the reference render was captured under. The
+  correct expected value for such a fixture is a colour **per device
+  model**, not one absolute RGB. `docs/suite-patch-reference.md` may need
+  this qualifier if it states an absolute expected RGB for `PCS
+  3.0`/`PCS 4.0`-class cells — not checked by this role, not one of the
+  five storage tiers.
+- **`PCS 3.0`/`PCS 4.0`'s remaining traps are reclassified**: from
+  "confirmed pdfce defect, cause suspect" to "not a defect on either
+  render; a harness-oracle design question," per the corrected decision
+  119/120.
+
+**`personal_rag/pdf` — one lesson amended, one lesson written, both
+indexed (subject + master):**
+
+- `C:\personal_rag\pdf\lesson_20260902_acrobats_overprint_preview_defaults_to_pdfx_only_so_op_true_renders_as_op_false.md`
+  — dated amendment section added (the "very likely" hedge in the
+  original filing was correctly hedged; the hedge held). Not rewritten —
+  the original body stays legible, per the corrections-are-claims
+  discipline (hard rule 10's corollary): the amendment names its
+  world-source (`pdfce-spec-librarian`'s second filing) rather than just
+  asserting "corrected."
+- `C:\personal_rag\pdf\lesson_20260902_a_region_count_metric_is_topologically_blind_to_hole_filling.md`
+  — new, methodology/HIGH. Judgment call made per this role's own remit
+  (asked to decide whether this is a dated instance of an existing
+  "instrument cannot see" family or distinct enough to earn its own
+  entry): **written as a new, standalone lesson**, not folded into
+  `R192`/`R180`'s pdfce-code-gate family (those are about a gate
+  disclosing its own blindness; this is about a researcher's chosen
+  *metric* being blind to the transformation under test — a different
+  failure site) and not merged with
+  `lesson_20260829_a_spec_table_row_can_make_a_test_fixture_non_discriminating.md`
+  (there the STANDARD entails the null result; here the METRIC cannot
+  register a true result — cross-referenced, not merged). **No new
+  `ROADMAP.md` standing rule proposed** — left to the engineer's judgment
+  whether this warrants an `R`-number; noted in this role's report
+  rather than minted unilaterally.
+
+**Still in flight / open:**
+
+- `OP-A7`'s implementation — engineer reports starting it, no commit or
+  Pass ID yet. Owed: a "Pass shipped" filing once it lands, and (per
+  `R151`, core-only-capability discipline) a check that whatever CLI/GUI
+  surface exists for render settings actually exposes the new key rather
+  than leaving it reachable only in-process.
+- The `docs/suite-patch-reference.md` per-device-model-qualifier check —
+  flagged to the engineer, not verified by this role.
+- Step 4 of the spot-plane arc (images + knockout groups) — unchanged
+  from the 373rd filing, still open.
+
+**For next session:**
+
+- Confirm `OP-A7`'s shipped commit and file it (Shipped section + this
+  log) once the engineer reports it.
+- Check whether `docs/suite-patch-reference.md` needs the per-device-model
+  qualifier decision 120 calls for.
+- The 373rd filing's own "For next session" bullet about re-generating
+  Acrobat references *if/when the operator answers `(cb)`* is superseded
+  by this filing — `(cb)` is closed and dissolved, not answered, so that
+  action is no longer a diagnostic prerequisite. Re-generating with the
+  preference on may still be worth doing to determine what the harness's
+  default oracle mode should be (a design choice now), not to diagnose a
+  defect (there is none).
+- Backup/push state: not independently checked by this role, no shell
+  this filing.
