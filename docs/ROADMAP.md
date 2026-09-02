@@ -96,6 +96,76 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 382nd filing, 2026-09-02 — ONE COMMIT (`b5f5554`), NO PASS:
+`verify-release.py`'S CI CHECK NOW ACCEPTS A GREEN RUN AT A DOCS-ONLY
+DESCENDANT OF THE TAG ON `origin/main` WHEN THE TAG ITSELF HAS NO
+WORKFLOW RUN OF ITS OWN — CLOSING A GAP THAT FAILED **EVERY** RELEASE CUT
+MADE UNDER THE PROJECT'S OWN "PUSH CODE AND ITS FILING TOGETHER" RULE.
+`v0.22.0`'S OWN "PENDING" `verify-release.py` MARK, LEFT OPEN BY THE
+381st FILING BELOW, NOW RESOLVES CLEAN.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hash, the change
+it makes, and the post-fix `verify-release.py v0.22.0` output are relayed
+verbatim by the engineer in the dispatch prompt, not independently
+confirmed via `git show`/`git log`. Not pushed as of this filing — pushed
+together with this filing's own commit, per standing practice.
+
+### `b5f5554` — CI runs once per push, on the tip; a release tag is never the tip
+
+`tools/verify-release.py`'s CI check demanded a workflow run **at the
+tagged commit itself**, printing `no workflow run found for this commit`
+whenever there wasn't one. There never can be one, under the project's own
+working order (the `R217` family: commit the code, dispatch the librarian,
+commit the filing, push both together) — GitHub runs CI **once per push,
+on the tip**, and the tip of a push carrying a release tag is always the
+filing commit that follows it, never the tagged commit itself. `v0.22.0`
+was the first release cut to hit this: tagged at `1611119`, pushed with
+the 381st filing's own commit (`26a0b20`) on top; CI ran green at
+`26a0b20`; the verifier reported one FAIL at `1611119` regardless, on
+every run, unfixable by re-running anything.
+
+**Fix.** When no run exists at the tagged commit, the script now looks
+for a run at a **descendant of the tag on `origin/main` whose diff from
+the tag touches none of the code prefixes** `crates/ tools/ fixtures/
+.github/ fuzz/` (the same prefix list `check-commits-filed.py` already
+uses to decide what counts as code). If such a descendant has a run, that
+run's verdict is treated as the tag's verdict — the binaries CI built
+there are the tag's binaries — and the script prints a `note` naming the
+descendant and the non-code file count. A descendant that **does** differ
+in code is still refused, by name: that would be verifying a different
+release than the one actually tagged.
+
+**Verified against `v0.22.0` itself, not reasoned about.**
+`python tools/verify-release.py v0.22.0`, re-run after CI went green at
+`26a0b20`: every check ok — tag pushed and found on origin, `origin/main`
+contains the tag, **CI GREEN at a docs-only descendant (`26a0b20`, 9
+non-code files changed)**, CLI `0.22.0` present on OneDrive slot
+`pdfce1`, previous `0.21.0` still on `pdfce2`. The one non-clean line was
+"working tree clean," and only because this very fix sat uncommitted at
+measurement time.
+
+**Resolves the 381st filing's own "pending" mark**, in place, per the
+append-only discipline — see the two inline amendment notes added to that
+entry's text, below, rather than a rewrite of it.
+
+`docs/FEATURES.md`: untouched — a release-gate fix, not a capability.
+
+**Standing rules.** `R217` gains a **seventh amendment note** (below, in
+*Standing rules*) rather than a new number: this is `R217`'s own subject
+— what a release tag's CI check may accept as evidence — extended to a
+mechanism the rule's own family (the "push code and filing together"
+working order) had already made structurally necessary.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | unchanged — no Pass ships from this filing |
+| Decisions | ceiling `123`, next free `124` | unchanged |
+| Standing rules | ceiling `R239`, next free `R240` | unchanged — `R217` gains a seventh amendment note, no new number |
+
+---
+
 **★★ 381st filing, 2026-09-02 — THREE COMMITS, NONE CARRYING A NEW PASS:
 `docs/NEXT_SESSION.md` REWRITTEN (ENGINEER-OWNED), `iccce` RE-PINNED FROM A
 TAG TO A REV AT THE SIBLING PROJECT'S OWN REQUEST (DECISION 123), AND A
@@ -107,6 +177,12 @@ gate results, packaging output and deploy log details relayed verbatim by
 the engineer in the dispatch prompt, not independently confirmed via
 `git show`/`git log`. `verify-release.py v0.22.0` is stated as pending,
 to run after the push, and is **not** claimed here as passed.
+
+**★ RESOLVED 2026-09-02, 382nd filing (`b5f5554`) — see the entry
+directly above.** The verifier's CI check could never pass at the tagged
+commit under this project's own push discipline (a release tag is never
+the push tip); fixed to accept a docs-only descendant's run instead.
+`verify-release.py v0.22.0` now reports every check ok.
 
 ### `f8c4183` — `docs: NEXT_SESSION.md rewritten`
 
@@ -192,6 +268,12 @@ session at 15:44Z — that session's own log said packaging/deploy were
 "not recorded as done", which this filing corrects: **they were done.**
 `verify-release.py v0.22.0` **is pending**, to run after the push; not
 claimed as passed here.
+
+**★ RESOLVED 2026-09-02, 382nd filing (`b5f5554`) — see the new top
+*Shipped* entry.** `verify-release.py v0.22.0`, re-run after CI went
+green at `26a0b20`: **every check ok**, including CI (accepted at a
+docs-only descendant, per the fix) and both OneDrive slots (`pdfce1` =
+`0.22.0`, `pdfce2` = `0.21.0`).
 
 **What the release carries.** `Pass 237.0`, `Pass 238.0`, `Pass 239.0`
 (all already filed as *Shipped*, above/below). Conformance sweep: **5 FAIL
@@ -135463,6 +135545,48 @@ same cause (hashes exist only at commit time), two different failure modes.
   > position-dependence of the deferral window, sharpened a second time the
   > same day it was sharpened once already. **Ceiling unaffected: rules
   > `R239`, next free `R240`; decisions `120`, next free `121`.**
+
+  > **★ SEVENTH AMENDMENT NOTE, 2026-09-02, 382nd filing (`b5f5554`) — A
+  > RELEASE TAG IS *NEVER* THE PUSH TIP UNDER THIS RULE'S OWN WORKING
+  > ORDER, SO A CI CHECK THAT DEMANDS A RUN *AT THE TAG* IS UNSATISFIABLE
+  > BY CONSTRUCTION FOR EVERY RELEASE — THE SAME SHAPE THE RULE ITSELF
+  > NAMES IN ITS OPENING SENTENCE, FOUND IN A DIFFERENT INSTRUMENT. NO NEW
+  > NUMBER; `tools/verify-release.py` FIXED, NOT THIS RULE.**
+  >
+  > **Six amendment notes above sharpen when and how to satisfy `R217`'s
+  > deferral window; none had noticed that `tools/verify-release.py`'s own
+  > CI check enforces a stricter, unsatisfiable version of the same join
+  > this rule exists to relax.** The script asked "did CI run at the
+  > tagged commit," and under `R217`'s own working order (commit the code,
+  > dispatch the librarian, commit the filing, push both together) the tip
+  > of that push is always the filing commit, never the tag — GitHub runs
+  > CI once per **push**, on the **tip**. So the tagged commit never has a
+  > run of its own, by the same construction `R217`'s opening sentence
+  > describes for a commit citing a hash only a later commit can create:
+  > *"unsatisfiable by construction… not merely strict."* `v0.22.0` was the
+  > first release to hit it — tagged at `1611119`, pushed with `26a0b20`
+  > (the 381st filing's own commit) on top, CI green at `26a0b20` — and the
+  > verifier failed with `no workflow run found for this commit`, on every
+  > re-run, because re-running checks out the tag, where no run will ever
+  > exist.
+  >
+  > **The fix mirrors `R217`'s own mechanism rather than reapplying it
+  > directly** — there is no later commit to defer *to* here, because the
+  > tag itself never moves. Instead: when no run exists at the tag, accept
+  > a run at a **descendant on `origin/main` whose diff from the tag
+  > touches none of the code prefixes** `crates/ tools/ fixtures/ .github/
+  > fuzz/` — the same prefix list `check-commits-filed.py` already uses to
+  > decide what counts as code. A docs-only descendant's binaries are the
+  > tag's binaries; a code-differing descendant is refused by name, because
+  > accepting it would verify a different release than the one tagged.
+  > Verified against the real `v0.22.0`, not reasoned about: clean after
+  > the fix, at `26a0b20` (9 non-code files changed from the tag).
+  >
+  > **No new rule number** — this is `R217`'s own subject (what a gate may
+  > accept as evidence when it cannot demand the literal thing it wants),
+  > restated at a second instrument that had independently reinvented the
+  > unsatisfiable join. **Ceiling unaffected: rules `R239`, next free
+  > `R240`; decisions `123`, next free `124`.**
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 

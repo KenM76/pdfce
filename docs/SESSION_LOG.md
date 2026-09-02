@@ -86840,3 +86840,61 @@ banner literal.
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (382nd filing) — `verify-release.py` fixed to accept a docs-only descendant's CI run when the tag itself has none; `v0.22.0`'s "pending" mark from the 381st filing now resolves clean
+
+**Shipped:**
+- No new Pass. `b5f5554` — `tools/verify-release.py`'s CI check demanded
+  a workflow run **at the tagged commit itself**, which is unsatisfiable
+  by construction under this project's own working order (commit code,
+  dispatch the librarian, commit the filing, push both together — the
+  `R217` family): GitHub runs CI once per push, on the tip, and the tip
+  of a release push is always the filing commit, never the tag. `v0.22.0`
+  was the first release cut to hit it — tagged `1611119`, pushed with the
+  381st filing's own commit `26a0b20` on top, CI green at `26a0b20` — and
+  the verifier failed with "no workflow run found for this commit" on
+  every re-run. Fixed: when no run exists at the tag, accept a run at a
+  descendant on `origin/main` whose diff from the tag touches none of the
+  code prefixes `crates/ tools/ fixtures/ .github/ fuzz/`; print a `note`
+  naming the descendant and the non-code file count; a code-differing
+  descendant is still refused by name.
+
+**Decisions made this session:**
+- None. This is a release-gate fix, not an architectural choice — no
+  `ARCHITECTURE.md` §12 entry.
+
+**Findings + decisions:**
+- **`verify-release.py v0.22.0`, re-run after the fix and after CI went
+  green at `26a0b20`: every check ok** — tag pushed and found on origin,
+  `origin/main` contains the tag, CI GREEN at a docs-only descendant
+  (`26a0b20`, 9 non-code files changed from the tag), CLI `0.22.0` on
+  OneDrive slot `pdfce1`, previous `0.21.0` still on `pdfce2`. The only
+  non-clean line at measurement time was "working tree clean," and only
+  because this fix itself sat uncommitted.
+- Backup bundle refreshed and verified: `D:\Dev\pdfce-backups\pdfce-
+  20260902-26a0b20-full.bundle`.
+- `R217` given a **seventh amendment note** (`ROADMAP.md`, *Standing
+  rules*) rather than a new number: the same unsatisfiable-join shape
+  `R217`'s opening sentence names, found independently in
+  `verify-release.py`'s CI check rather than in `check-commits-filed.py`/
+  `check-passes-filed.py`. Fix is at the instrument, not the rule.
+
+**`docs/FEATURES.md`:** untouched — a release-gate fix, not a capability.
+
+**`ROADMAP.md`:** new top *Shipped* entry for `b5f5554`; two inline
+"★ RESOLVED" amendment notes added to the 381st filing's own entry (both
+prior "pending" mentions), per the append-only discipline — nothing in
+that entry's original text removed or rewritten; `R217`'s seventh
+amendment note appended under *Standing rules*.
+
+**Still in flight:**
+- The build-provenance-banner literal correction flagged by the 381st
+  filing (three sites: two in `crates/`, one in `docs/FEATURES.md`) —
+  still owed to the engineer; unrelated to this filing's fix and not
+  touched by it.
+
+**For next session:**
+- This commit (`b5f5554`) and this filing's own commit are pushed
+  together, per the working order `R217`'s own family describes.
+  Backup/push state for anything beyond that not independently checked
+  by this role beyond the bundle noted above.
