@@ -6263,12 +6263,41 @@ impl Interpreter<'_> {
         // reconstructed from an sRGB composite on every pixel. Here they
         // are simply read. Same rules, same coverage, same rasteriser --
         // only the backdrop stops being a guess.
+        // ★★★ THE SPOT HALF, `Pass 229.0`. Until this existed, a spot
+        // colorant under overprint could only be PRESERVED, never PAINTED —
+        // Table 149 puts every component of a spot-only source in the "not
+        // named in source space" column, which under `OP true` is `c_b`, so
+        // the paint marked nothing in the four process planes and the mark
+        // simply was not there.
+        //
+        // The comment block above records that as measured-best-of-three and
+        // says, in as many words, *"the real fix is the per-colorant buffer,
+        // filed and not reachable from here."* It is reachable now. The
+        // backdrop is still preserved in every process plane the source does
+        // not name — nothing about that changes — and the source's own
+        // colorant now lands in its own plane instead of nowhere.
+        let spot_inks = self.authored_spot_inks(stroking);
         if let Some(buf) = canvas.cmyk_mut() {
+            // `None` means "this source does not name that colorant", which
+            // Table 149 answers with the backdrop. A colorant refused a
+            // plane stays `None` and therefore keeps being preserved rather
+            // than painted -- the same conservative direction the refusal
+            // above chose, and the one that cannot knock anything out.
+            let mut spots: [Option<f32>; crate::compositor::MAX_SPOTS] =
+                [None; crate::compositor::MAX_SPOTS];
+            for ink in &spot_inks {
+                if let Some(plane) = buf.spot_index(&ink.colorant, || (*ink.lut).clone())
+                    && let Some(slot) = spots.get_mut(plane)
+                {
+                    *slot = Some(ink.tint);
+                }
+            }
             let changed = buf.composite_overprint(
                 &coverage,
                 region,
                 rules,
                 source_cmyk,
+                spots,
                 alpha.clamp(0.0, 1.0),
             );
             self.diag.overprint_composited += 1;

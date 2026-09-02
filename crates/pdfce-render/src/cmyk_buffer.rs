@@ -1591,6 +1591,7 @@ impl CmykBuffer {
         region: (u32, u32, u32, u32),
         rules: [crate::overprint::ComponentRule; 4],
         source: [Chan; 4],
+        spots: [Option<Chan>; crate::compositor::MAX_SPOTS],
         alpha: Chan,
     ) -> u32 {
         debug_assert_eq!(
@@ -1624,21 +1625,32 @@ impl CmykBuffer {
                 for i in 0..4 {
                     mixed[i] = t.mul_add(out[i] - before.c[i], before.c[i]);
                 }
+                // ★★ TABLE 149's SPOT RULE, both halves.
+                //
+                // A colorant the source NAMES is painted; one it does not
+                // name is left to the backdrop. `spots[i]` carries exactly
+                // that distinction — `Some(tint)` for a plane this source
+                // states, `None` for every other, which passes through.
+                //
+                // The `None` half built a fresh `[0.0; MAX_SPOTS]` until the
+                // deposit landed. Harmless while no plane ever held ink; a
+                // defect the instant one did, because an overprinting grey
+                // then WIPED the spot backdrop it exists to preserve. Caught
+                // by `grey_overprint`'s four preservation tests. The sibling
+                // `composite_overprint_varying` was already correct, because
+                // it starts from `before` rather than constructing a pixel.
+                let mut spot_out = before.s;
+                for (slot, stated) in spot_out.iter_mut().zip(spots.iter()) {
+                    if let Some(tint) = *stated {
+                        // Same coverage-and-alpha weighting the process
+                        // channels get two blocks up: the rule decides WHICH
+                        // tint competes, `t` decides how much of it lands.
+                        *slot = t.mul_add(tint - *slot, *slot);
+                    }
+                }
                 let after = PixelCmyk {
                     c: mixed,
-                    // ★★ TABLE 149's SPOT RULE: a source that does not NAME a
-                    // colorant leaves that colorant to the backdrop. This
-                    // path's source states process tints only, so every spot
-                    // plane is preserved untouched.
-                    //
-                    // This built a fresh `[0.0; MAX_SPOTS]` until the deposit
-                    // landed, which was harmless while no plane ever held ink
-                    // and became a defect the instant one did: an overprinting
-                    // grey WIPED the spot backdrop it was supposed to preserve.
-                    // Caught by `grey_overprint`'s four preservation tests --
-                    // the sibling `composite_overprint_varying` was already
-                    // correct by construction because it starts from `before`.
-                    s: before.s,
+                    s: spot_out,
                     a: t.mul_add(1.0 - before.a, before.a),
                 };
                 if after != before {
@@ -3409,6 +3421,116 @@ roster is full, because a refused colorant has no plane to be recognised by"
             (out.s[0] - 0.75).abs() < 1e-6,
             "expected 0.75 from Multiply on two half tints, got {}",
             out.s[0]
+        );
+    }
+
+    /// Would catch: [`CmykBuffer::composite_overprint`] failing to PAINT a
+    /// spot colorant the source names — the gap `Pass 229.0` closed.
+    ///
+    /// ## Why this test exists rather than a suite measurement
+    ///
+    /// The conformance corpus does not exercise it. Probed on the patch
+    /// this work targets: `composite_overprint` runs 29 times and **every
+    /// one has zero spot inks** — that patch's spot fill is not
+    /// overprinting, so it reaches the ordinary paint path instead. Code
+    /// that a suite cannot reach is code a suite cannot verify, and
+    /// shipping it on "the numbers did not move" would be shipping it
+    /// untested.
+    ///
+    /// ★ Before `Pass 229.0` a spot colorant under overprint could only be
+    /// PRESERVED, never painted: Table 149 puts every component of a
+    /// spot-only source in the *not named in source space* column, which
+    /// under `OP true` is the backdrop, so the paint marked nothing in the
+    /// four process planes and the mark was simply absent. The refusal that
+    /// documented this said *"the real fix is the per-colorant buffer,
+    /// filed and not reachable from here"* — this is that fix arriving.
+    #[test]
+    fn overprint_paints_a_spot_the_source_names_and_preserves_one_it_does_not() {
+        use crate::overprint::ComponentRule;
+        let mut b = CmykBuffer::new(1, 1, CmykIntent::Calibrated, None).unwrap();
+        let named = b
+            .spot_index(b"named", || flat_lut([0.0, 1.0, 0.0]))
+            .unwrap();
+        let other = b
+            .spot_index(b"other", || flat_lut([1.0, 0.0, 0.0]))
+            .unwrap();
+        // A backdrop carrying BOTH inks, so "preserved" and "painted" are
+        // distinguishable rather than both reading as "unchanged".
+        let mut backdrop = [0.0; crate::compositor::MAX_SPOTS];
+        backdrop[named] = 0.25;
+        backdrop[other] = 0.75;
+        b.set_pixel(
+            0,
+            PixelCmyk {
+                c: [0.0, 0.0, 0.0, 0.2],
+                s: backdrop,
+                a: 1.0,
+            },
+        );
+
+        let mut spots: [Option<Chan>; crate::compositor::MAX_SPOTS] =
+            [None; crate::compositor::MAX_SPOTS];
+        spots[named] = Some(1.0);
+        b.composite_overprint(
+            &full_mask(1, 1),
+            (0, 0, 1, 1),
+            // Every process channel left to the backdrop, which is what a
+            // spot-only source's Table 149 row says.
+            [ComponentRule::Backdrop; 4],
+            [0.0; 4],
+            spots,
+            1.0,
+        );
+
+        let after = b.pixel(0);
+        assert!(
+            (after.s[named] - 1.0).abs() < 1e-6,
+            "the NAMED colorant must be painted, got {}",
+            after.s[named]
+        );
+        assert!(
+            (after.s[other] - 0.75).abs() < 1e-6,
+            "the colorant the source does not name must be left to the backdrop -- Table 149's whole rule, got {}",
+            after.s[other]
+        );
+        assert!(
+            (after.c[3] - 0.2).abs() < 1e-6,
+            "and every process channel this source left to the backdrop is untouched, got {:?}",
+            after.c
+        );
+    }
+
+    /// Would catch: the overprint path ignoring coverage and alpha on the
+    /// spot planes while honouring them on the process ones — a spot edge
+    /// that is hard where every other edge in the renderer is soft.
+    #[test]
+    fn a_spot_painted_under_overprint_honours_partial_alpha() {
+        use crate::overprint::ComponentRule;
+        let mut b = CmykBuffer::new(1, 1, CmykIntent::Calibrated, None).unwrap();
+        let plane = b.spot_index(b"ink", || flat_lut([0.0, 0.0, 1.0])).unwrap();
+        b.set_pixel(
+            0,
+            PixelCmyk {
+                c: [0.0; 4],
+                s: [0.0; crate::compositor::MAX_SPOTS],
+                a: 1.0,
+            },
+        );
+        let mut spots: [Option<Chan>; crate::compositor::MAX_SPOTS] =
+            [None; crate::compositor::MAX_SPOTS];
+        spots[plane] = Some(1.0);
+        b.composite_overprint(
+            &full_mask(1, 1),
+            (0, 0, 1, 1),
+            [ComponentRule::Backdrop; 4],
+            [0.0; 4],
+            spots,
+            0.5,
+        );
+        assert!(
+            (b.pixel(0).s[plane] - 0.5).abs() < 1e-6,
+            "half alpha over no ink must land half the tint, got {}",
+            b.pixel(0).s[plane]
         );
     }
 }
