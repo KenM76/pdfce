@@ -13,16 +13,9 @@ commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
 run `python tools/check-ledger-numbers.py`.** As of writing it reports
-highest Pass **224.0**, next rule **R240**, next decision **118**, next
-filing **366**.
-
-⚠️ **The tool derives the Pass ceiling from the DOCUMENTS, and `Pass 225.0`
-is committed (`16eaaa2`) but NOT YET FILED** — so the tool says 224.0 while
-225.0 is already used in a commit message. **The next free Pass is 226.0.**
-Verify with `git log --oneline -10` before minting a number. Once the
-librarian files 225.0 the tool agrees again and this warning can be deleted.
-`check-commits-filed.py` naming `16eaaa2` is the ONLY expected gate failure on
-arrival; everything else was green at `61c3735`.
+highest Pass **225.0**, next rule **R240**, next decision **119**, next
+filing **367**. The tool and the commit log AGREE — every code commit is
+filed, so the next free Pass is **226.0** with no caveat.
 
 ---
 
@@ -101,7 +94,7 @@ complete by construction.
 
 ### The measured target, already attributed — do not re-diagnose it
 
-`PCS 3.0` (`2_GWG030…`), traps at device `(27, 68)` and `(28, 135)`, both
+`PCS 3.0`, traps at device `(27, 68)` and `(28, 135)`, both
 `0 0 0 .5 k` and `.5 g` **fills**. `docs/suite-patch-reference.md` §3 carries
 the full attribution, measured with `--probe-ink`:
 
@@ -172,16 +165,18 @@ function of one scalar.
 
 ## §B STATE OF THE TREE — verified 2026-09-02
 
-- `HEAD` = `61c3735`, **pushed; 0 unpushed at the time of writing.**
-  Verify with `git log --oneline origin/main..HEAD` rather than trusting
-  this line — it is the fastest-staling fact in this file. Pushing `main`
-  is standing-authorized, so a non-zero count here is something to fix, not
-  something to ask about.
+- **Push state: run `git log --oneline origin/main..HEAD`.** This file
+  deliberately does NOT name a tip hash — an earlier draft did, and it went
+  stale inside the same session, twice, because the commit that updates the
+  handoff necessarily changes the thing the handoff just measured. Pushing
+  `main` is standing-authorized, so a non-zero count is something to fix,
+  not something to ask about.
+- The measurements in this section were taken at `1c448e7` (the 366th
+  filing). Anything after that is this file's own commit.
 - Version **0.19.0**, tag `v0.19.0` at `d19d4e4`.
-- **`Pass 225.0` (`16eaaa2`) is UNFILED.** `python tools/check-commits-filed.py`
-  names it. Dispatch `pdfce-librarian` with its full commit message — it is
-  long and carries the design change, the two spec findings and the two
-  sabotage results, none of which a subject line can supply.
+- **Every code commit is FILED.** `python tools/check-commits-filed.py` is
+  clean; `Pass 225.0` was filed as the 366th filing, which also minted
+  **decision 118** (lazy spot-plane allocation replaces the pre-pass roster).
 - Conformance standing: **7 FAIL / 37 pass / 7 UNRESOLVED of 51**, unchanged
   across this whole session by construction
   (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir
