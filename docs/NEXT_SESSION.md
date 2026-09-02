@@ -13,9 +13,9 @@ commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
 run `python tools/check-ledger-numbers.py`.** As of writing it reports
-highest Pass **225.0**, next rule **R240**, next decision **119**, next
-filing **367**. The tool and the commit log AGREE — every code commit is
-filed, so the next free Pass is **226.0** with no caveat.
+highest Pass **227.0**, next rule **R240**, next decision **119**, next
+filing **369**. The tool and the commit log AGREE — every code commit is
+filed, so the next free Pass is **228.0** with no caveat.
 
 ---
 
@@ -28,7 +28,8 @@ This is where the first pixel moves. Steps 1 and 2 are in and both were
 |---|---|---|---|
 | 1 — the `PixelCmyk::s` carrier | 217.0 | `643e270` | in, inert |
 | 2 — storage, allocation, blending, collapse | 225.0 | `16eaaa2` | in, inert |
-| **3 — the deposit + Table 149's spot rule** | — | — | **next** |
+| 3a — the spot-tint READER | 227.0 | `983b438` | in, inert |
+| **3b — the DEPOSIT + Table 149's spot rule** | — | — | **next** |
 | 4 — images, shadings, knockout groups | — | — | later |
 
 ### Why this is the top item
@@ -71,26 +72,76 @@ any colorant it *missed* would be flattened **silently**, because a roster is
 only checkable against the render it was built for. Lazy allocation is
 complete by construction.
 
-### What step 3 has to do
+### Step 3a is DONE (`Pass 227.0`, `983b438`) — the reader
 
-1. **`interpret.rs`** — beside `authored_tints`, produce the SPOT half: for a
-   `SourceKind::SeparationOrDeviceN`, the `(colorant_bytes, tint)` pairs whose
-   names are **not** process channels. `overprint::authored_tints` currently
-   drops exactly these on the floor (`process_channel(name)` returns `None` and
-   the tint is discarded) — that discard is the defect.
-2. **Carry them to the paint call.** `composite_mask` takes `colour: [Chan; 4]`
-   and needs the spot pairs alongside. The production call site for the
-   ordinary path is the one to find first — `interpret.rs:6226` is the
-   **non-separable-blend** path only, not the general fill.
-3. **Build each plane's `SpotLut`** from the space's own tint transform: render
-   the colorant alone on white at 256 tints. `SpotLut::transparent()` is the
-   documented fallback when the transform will not evaluate — **white, not
-   black**, because white is multiply's identity and black would paint a solid
-   rectangle nobody asked for.
-4. **Table 149's spot rule under overprint**: a source that does not NAME a
+`overprint::authored_spots(&SourceKind, &[f32]) -> Vec<(&[u8], f32)>` and
+`overprint::names_a_spot_colorant(&SourceKind) -> bool`, with eight tests and
+the three §8.6.6.4 identity rules (`/None` and `/All` never become planes; a
+process-colorant name is not a spot). Nothing calls them; no pixel moved.
+
+### Step 3b is next — the DEPOSIT, and the call chain is TRACED
+
+Do not re-derive this; it cost a session's tracing. The ordinary fill reaches
+the ink buffer through exactly this chain:
+
+```text
+interpret::solid_authored          (interpret.rs, builds the paint)
+  -> BrushSpec::with_cmyk          (canvas.rs:204)
+  -> BrushSpec.cmyk: Option<[f32;4]>
+  -> cmyk_paint.rs:244-252         (the ONLY consumer)
+  -> CmykBuffer::composite_mask
+```
+
+`cmyk_paint.rs:244` is the single place that decides authored-vs-reconstructed
+(`let bridged = brush.cmyk.is_none()`), and `:252` is the only production call
+to `composite_mask`. **That is where a spot tint has to arrive.**
+
+The other three `canvas.cmyk_mut()` sites are NOT the general fill and should
+not be touched first: `interpret.rs:4831` and `:6408` are shadings (bridged
+through an sRGB scratch by design), `:6222` is the non-separable-blend path.
+`interpret.rs:6095` is the OVERPRINT fill — `composite_overprint` — and it is
+the one that fixes `PCS 3.0`, but the ordinary path should land first so the
+two can be measured apart.
+
+### ★★ THE OPEN DESIGN QUESTION, and it is the whole of step 3b
+
+**How does the `SpotLut` reach `cmyk_paint.rs`?**
+
+Building it needs the tint transform, which lives on the *colour space* and is
+known only in `interpret.rs`. Consuming it happens in `cmyk_paint.rs`, which
+sees only a `BrushSpec`. Four options, with what is wrong with each:
+
+1. **Build the LUT in the interpreter and put it on `BrushSpec`.** 256 samples
+   per paint. `BrushSpec` is `Clone` and is cloned per paint — this is the
+   obvious design and it is the one the whole `SpotLut` type exists to avoid.
+2. **Carry `Arc<SpotLut>` on `BrushSpec`, with a per-document cache in the
+   interpreter keyed on the colorant name.** Clone is a refcount bump; the
+   transform is sampled once per colorant per document. **This is the
+   recommended one.** The cache key must be the raw name BYTES, for the same
+   §7.3.5 NOTE 4 reason `SpotPlane` uses.
+3. **Resolve the plane index in the interpreter** and put `(index, tint)` on
+   the spec. Needs `&mut CmykBuffer` at spec-construction time, which
+   `solid_authored` does not have.
+4. **Pass a builder closure through.** Makes `BrushSpec` non-`Clone` or
+   requires boxing; fights the type for no gain over (2).
+
+Whichever is chosen, the LUT must be **the colorant alone on white** —
+§10.8.3 step (b)'s *"background matte of all white"* — because step (c)'s
+multiply treats each entry as a transmittance. `SpotLut::transparent()` is the
+documented fallback when a transform will not evaluate: **white, not black**,
+because white is multiply's identity and black paints a solid rectangle nobody
+asked for.
+
+### Then, in order
+
+1. `composite_mask` gains the spot tints and writes them into `PixelCmyk::s`.
+2. **Table 149's spot rule under overprint** — a source that does not NAME a
    colorant leaves that colorant's plane alone. This is the half that fixes
-   `PCS 3.0`.
-5. **Take the `#[allow(dead_code)]`s off.**
+   `PCS 3.0`, and it belongs in `composite_overprint`, not `composite_mask`.
+3. **Take the `#[allow(dead_code)]`s off** — they are on `SpotPlane`,
+   `SpotLut`, `spot_index`, `spots_flattened` and the `spots_flattened` field.
+4. Re-run the conformance sweep. **This is the first step where the numbers
+   are allowed to move**, and the two traps to watch are named below.
 
 ### The measured target, already attributed — do not re-diagnose it
 
