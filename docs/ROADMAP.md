@@ -96,6 +96,141 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 371st filing, 2026-09-02 — `Pass 230.0` (`2cf325c`).**
+
+**Sourcing (hard rule 8).** No shell this filing. The full commit body was
+supplied verbatim as a scratch file (`D:\Dev\pdfce\.librarian-230.txt`) by
+the engineer, not read via `git log` directly. Every claim naming a live-code
+location was independently cross-checked by `Read`/`Grep`:
+`Interpreter::overprint_would_change`
+(`crates/pdfce-render/src/interpret.rs:5268`) now takes a `spot_planes: usize`
+parameter, threaded from `canvas.spot_plane_count()` at all three call sites
+(`:4026`, `:4030`, `:8249-8258`). Its in-line comment (`:5292-5333`) states
+the defect and its own second-instance framing verbatim, matching the commit
+message: *"A SPOT PLANE MAKES 'OVERPRINT CHANGES NOTHING' FALSE, whatever the
+source space says, and this is the second time a shortcut written for four
+channels has been falsified by a fifth"* — and cites the exact trap-centre
+pixel figures the commit reports, `(147,149,152)` against a surround of
+`(82,115,37)`. The new gate (`:5334-5345`) asks `crate::overprint::classify`
+rather than re-testing the scope, and its comment (`:5326-5333`) names `R221`
+and explains why `OtherProcess` under `device_cmyk_only` correctly leaves a
+spot plane unrescued. The pre-existing `DeviceCmyk` arm's comment — *"Mode 1
+only: at mode 0 all four components are specified and the blend degenerates
+to Normal"* — is confirmed still present, unedited, at `:5347-5351`, which is
+exactly the shape the commit describes: that sentence stayed true for the
+four process channels, and the new gate above it is what now also asks the
+fifth-plane question. No `Cargo.toml` change mentioned or found on
+inspection, so GUI-core separation is not implicated. Round-trip/minimal-diff
+is not implicated — the change is paint-routing logic, not document-writing
+code. **Not independently re-measured this filing**: the trap counts (`PCS
+3.0`/`PCS 4.0` 3 → 1 each, corpus-wide 16 → 12 of the conformance corpus),
+the unchanged FAIL/pass/UNRESOLVED totals (7/37/7 of 51), and the ablation
+result (disabling the gate restores all three traps on both patches;
+re-enabling removes them again) are the engineer's own figures, relayed
+rather than re-run — no shell this filing, flagged per hard rule 8.
+
+### Pass 230.0 (`2cf325c`, 2026-09-02) — "overprint changes nothing" was true for four channels and false for five: the ROUTING defect downstream of `Pass 229.0`'s deposit
+
+**Closes the "downstream of the deposit" question the 370th filing's own
+handoff left open.** `Pass 229.0` confirmed `composite_overprint`'s deposit
+itself was correct (backdrop at 0.5 K in process, spot at full tint in its
+own plane) and narrowed `PCS 3.0`'s three remaining traps to somewhere
+downstream. This Pass finds that somewhere: `overprint_would_change`, the
+predicate that decides whether a paint is routed to the overprint composite
+at all.
+
+**The defect.** Its `DeviceCmyk` arm read *"Mode 1 only: at mode 0 all four
+components are specified and the blend degenerates to Normal"* — true for
+the four PROCESS channels a `DeviceCMYK` source names, false the instant a
+fifth (spot) plane exists, because a `DeviceCMYK` source never names the
+page's spot colorant, and Table 149 puts an unnamed colorant at the backdrop
+under `OP true` in **both** overprint-mode columns. An overprinting `0 0 0
+.5 k` over a spot backdrop was therefore routed to the ordinary paint path —
+the one path proven, since `Pass 228.0`, to deposit its own empty spot array
+and erase whatever plane was already there.
+
+**Measured: `PCS 3.0` 3 traps → 1, `PCS 4.0` 3 traps → 1, corpus-wide traps
+16 → 12.** FAIL/pass/UNRESOLVED totals hold at 7/37/7 of 51 — both patches
+need zero traps, not one fewer, to flip a verdict. Full workspace tests
+green, clippy clean.
+
+**★ Ablation-verified, which matters specifically because `R219` is about a
+diagnosis naming the wrong route.** Disabling the new gate and rebuilding
+restores all three traps on both `PCS 3.0` and `PCS 4.0`; re-enabling
+returns them to one each. The change is the whole of the movement, not a
+change that happened to be present while something else did the work.
+
+**★ How the routing defect was found — a measurement that read clean because
+the extent of what it was measuring was unknown.** `--probe-ink` at the
+reported trap centre showed the mark and its surround as identical, which
+read as "already fixed." Both sample points were in fact **inside** the
+mark: the trap detector reports an X's centre with a 49×49 bounding box, so
+two points that agree prove nothing until the extent of the thing being
+measured is known. Segmenting the box by exact colour settled it — 607 px of
+green against 262 px of grey `(147,149,152)`, 50 % K with the spot gone,
+against a surround well outside the box that was still green. **This is a
+dated instance of the same family as `Pass 137.0`/`Pass 137.1`'s "a crop
+rectangle chosen by eye is a measurement instrument"** (*Shipped*, 286th–287th
+filings) — there the instrument was a hand-picked swatch bound, here it is a
+detector's own bounding box; both cases are an unverified measurement extent
+reporting a defect as absent. Recorded as a dated instance, not a new mint,
+per hard rule 3.
+
+**★★ The first fix was too blunt, and silently disabled a whole setting.**
+It returned `true` for every overprinting paint on a page with a spot plane,
+short-circuiting the scope logic entirely — so `overprint_zero_tint_scope`
+stopped doing anything at all. Three `grey_overprint` tests went red
+together, and the sharpest of them asserts *the widest scope must differ
+from the narrowest* and got identical pixels. A test written to prove an
+enum variant is reachable is exactly the test that catches a predicate that
+stopped consulting it — worth keeping as a general argument for that shape
+of test, not only as this incident's postmortem.
+
+**The shipped gate asks `classify()` rather than re-testing the scope —
+`R221`**, the same function the neighbouring `DeviceGray`/`DeviceRgb` arm
+already consults: a grey source is promoted to `DeviceCmykDirect` under
+`grey_as_k_only` and left at `OtherProcess` under `device_cmyk_only`, and
+`OtherProcess` is the "overprint does not reach this source" answer, so a
+spot plane correctly does not rescue it either.
+
+**★ Two instances of one shape, noted rather than named.** This is the
+second time in this arc a four-process-channel-complete assumption has been
+falsified by a fifth (spot) plane — the first was `composite_overprint`
+zeroing `s` on construction (`Pass 228.0`). Considered and **declined** to
+mint a family or standing rule for it: the two defects sit in different
+functions with different failure shapes (a construction default vs. a
+routing predicate), so fixing one would not have prevented the other — the
+"would fixing one have prevented the others?" test this project already
+applies to pattern-naming judgment calls says no. Recorded here as a plain
+two-instance observation instead.
+
+**Cost, and why it is near zero.** Gated on the page having at least one
+spot plane, measured at 1.4 % of a 4,023-file corpus. Every other page
+reaches the identical decision it always did, through the identical code.
+`Canvas::spot_plane_count` stays a read-only peek — its one caller is a
+`&self` predicate, and handing it a `&mut` buffer to answer a question about
+a count would let a predicate paint.
+
+**Tests:** full workspace suite green, `cargo clippy -D warnings` clean
+(engineer's report, not independently re-run — no shell this filing).
+**Invariant checks:** GUI-core separation not implicated (no `Cargo.toml`
+change); round-trip/minimal-diff not implicated (paint-routing logic only).
+**Packaging smoke test:** not applicable — no packaging change.
+
+**`docs/FEATURES.md`: no box moves, no row found stale.** This is a fidelity
+improvement to the overprint-simulation path, not a new operator-facing
+capability — the same category as `Pass 228.0`/`Pass 229.0` immediately
+below. Checked specifically for the failure mode those two Passes' entries
+warned about (a row claiming the overprint path cannot yet honour Table 149's
+spot row at `OPM 0`/mode 0): the *Subtractive (colorant) compositing buffer*
+row, the *Overprint SIMULATION* row, the *Choose whether a grey fill knocks a
+spot backdrop out or preserves it* row and the *Per-colorant (n-channel)
+compositing buffer* *Planned* row were all re-read in full — none makes a
+claim this Pass falsifies. The one incidental `overprint_would_change`
+mention already in the *Overprint SIMULATION* row (about `/Indexed` sources
+resolving before Table 149 classifies them) is a different claim, about a
+different arm, and remains true.
+
 **★ ONE COMMIT, 370th filing, 2026-09-02 — `Pass 229.0` (`f97c15b`).**
 
 **Sourcing (hard rule 8).** No shell this filing. The full commit body was

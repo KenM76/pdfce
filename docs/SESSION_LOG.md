@@ -85810,3 +85810,99 @@ three struck and dated rather than silently edited.
   itself is confirmed correct, is a smaller, separable side task.
 - Backup/push state: not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (371st filing) — `Pass 230.0` (`2cf325c`) SHIPPED — "overprint changes nothing" was true for four channels and false for five; the ROUTING defect downstream of `Pass 229.0`'s deposit; a RELEASE follows this filing on an explicit, current go-ahead
+
+**Sourcing.** No shell this filing. The commit body was supplied verbatim as
+a scratch file (`.librarian-230.txt`) by the engineer, not read via `git
+log`. Every claim naming a live-code location was independently
+cross-checked by `Read`/`Grep` — `Interpreter::overprint_would_change`'s new
+`spot_planes: usize` parameter and its in-line comment
+(`crates/pdfce-render/src/interpret.rs:5268-5351`) match the commit
+message's description verbatim, including the exact trap-centre pixel
+figures and the `R221` citation in the new gate's own comment. See the
+filing header in `ROADMAP.md`'s *Shipped* section for the full citation
+list.
+
+**Shipped:**
+
+- **`Pass 230.0`** (`2cf325c`) — closes the "downstream of the deposit"
+  question `Pass 229.0`'s own handoff left open. `overprint_would_change`'s
+  `DeviceCmyk` arm said mode 0's blend degenerates to Normal because all
+  four components are specified — true for the four process channels a
+  `DeviceCMYK` source names, false once a fifth (spot) plane exists, since
+  such a source never names the spot colorant and Table 149 leaves an
+  unnamed colorant to the backdrop in both overprint-mode columns. The
+  overprinting mark that had to preserve the spot was being routed to the
+  ordinary paint path, which erases the plane (`Pass 228.0`'s deposit
+  defect, on a route that had not previously been asked to reach it).
+  **Measured: `PCS 3.0` 3 traps → 1, `PCS 4.0` 3 traps → 1, corpus-wide
+  traps 16 → 12.** FAIL/pass/UNRESOLVED totals hold at 7/37/7 of 51 — both
+  patches need zero traps, not one fewer, to flip. Full workspace tests
+  green, clippy clean (engineer's report, not independently re-run this
+  filing). **Ablation-verified**: disabling the new gate restores all three
+  traps on both patches; re-enabling removes them again.
+
+**Decisions made this session:** none — no crate boundary, library choice
+or invariant redefinition; `ARCHITECTURE.md` §12 not touched.
+
+**Findings + decisions:**
+
+- **A measurement read clean because the extent of what it measured was
+  unknown.** `--probe-ink` at the trap centre showed mark and surround as
+  identical — both sample points were in fact *inside* the mark, because the
+  trap detector reports an X's centre with a 49×49 bounding box. Segmenting
+  the box by exact colour settled it: 607 px of green against 262 px of grey
+  with the spot gone. Filed as a dated instance of `Pass 137.0`/`137.1`'s "a
+  crop rectangle chosen by eye is a measurement instrument" family
+  (`ROADMAP.md`, 286th–287th filings), not a new mint.
+- **The first fix was too blunt and silently disabled a whole setting** — it
+  returned `true` for every overprinting paint on a spot-plane page,
+  short-circuiting `overprint_zero_tint_scope` entirely. Three
+  `grey_overprint` tests went red together, including one asserting the
+  widest scope must differ from the narrowest. A test written to prove an
+  enum variant is reachable is exactly the test that catches a predicate
+  that stopped consulting it.
+- **The shipped fix asks `classify()` rather than re-testing the scope —
+  `R221`** — the same function the neighbouring `DeviceGray`/`DeviceRgb` arm
+  already consults.
+- **Ablation confirms the change is the whole of the movement — `R219`'s
+  lesson applied to its own successor.**
+- **Two instances of one shape (a four-process-channel-complete assumption
+  falsified by a fifth plane — the first was `Pass 228.0`'s `s: [0.0;
+  MAX_SPOTS]`), considered for a named family and declined**: the two
+  defects sit in different functions with different failure shapes, so
+  fixing one would not have prevented the other. Recorded as a plain
+  two-instance observation in `ROADMAP.md` rather than minted.
+
+**`docs/FEATURES.md`: no box moves, no row found stale.** A fidelity
+improvement to the overprint path, not a new operator-facing capability —
+same category as `Pass 228.0`/`229.0`. Re-read the *Subtractive (colorant)
+compositing buffer*, *Overprint SIMULATION*, *Choose whether a grey fill
+knocks a spot backdrop out or preserves it* and *Per-colorant (n-channel)
+compositing buffer* rows specifically for a now-stale claim about the
+overprint path at `OPM 0`/mode 0; none makes one.
+
+**Still in flight / open:**
+
+- **Step 4 — images (`composite_srgb`) and knockout groups still flatten
+  every spot colorant entirely.** Unchanged, still the only remaining scope
+  on the per-colorant-buffer arc.
+- **`PCS 3.0` and `PCS 4.0` each carry one remaining trap**, cause not yet
+  diagnosed.
+- **`D:` operational state — still OPEN**, carried forward, not re-measured
+  this filing (no shell).
+
+**For next session:**
+
+- Step 4 (images + knockout groups) is the scoped next task on this arc.
+- Diagnosing the one remaining trap on each of `PCS 3.0`/`PCS 4.0` is a
+  smaller, separable side task.
+- **A release follows this filing.** The operator's go-ahead ("release asap
+  when done") was explicit and current at time of asking, per rule 8 — this
+  is autonomous continuation of the same session, not a fresh request that
+  needs re-asking. Version bump, tag, portable build and OneDrive CLI slot
+  deploy are the engineer's to execute; this role has no shell to verify any
+  of it landed and will report only what a future filing's dispatch relays.
+- Backup/push state: not independently checked by this role, no shell this
+  filing.
