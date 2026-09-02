@@ -96,6 +96,149 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 380th filing, 2026-09-02 — `Pass 239.0` (`6e9513c` + `12aaedb`) SHIPS THE
+SPOT-COLORANT PLANE'S STEP 5: AXIAL/RADIAL/FUNCTION SHADINGS, SHADING PATTERNS
+AND TRANSPARENCY/KNOCKOUT GROUPS NOW DEPOSIT SPOT PLANES — MESH SHADINGS
+(TYPES 4–7) ARE THE ONE REMAINING FLATTENED ROUTE. A GROUP-MERGE-BY-INDEX
+DEFECT FOUND WHILE WRITING THE FIXTURES HAD AFFECTED EVERY SPOT COLORANT
+INSIDE EVERY BUFFERED TRANSPARENCY GROUP SINCE `Pass 228.0`, AND IS ALSO
+FIXED.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, dates and
+substance relayed verbatim by the engineer in the dispatch prompt, not
+independently confirmed via `git show`. Conformance-sweep figures
+(`tools/suite-check.py`) reported as measured by the engineer, not
+independently re-run by this role. `12aaedb` is a same-day follow-up adding
+the four spot-shading fixtures' `PROVENANCE.md` rows omitted from `6e9513c`;
+both commits are pushed together with this filing.
+
+### Pass 239.0 (`6e9513c` + `12aaedb`, 2026-09-02) — the spot-colorant plane, step 5: shadings + transparency/knockout groups deposit spot planes
+
+**Origin.** The named remainder of `Pass 238.0` (below, *Shipped*) — filed
+under *Next up* in the 379th filing, now shipped in full for shadings and
+groups; mesh shadings alone are split out below as new Backlog scope.
+
+#### 1. Shadings deposit spot planes
+
+`ColorRamp` now carries authored process tints AND spot tints per sample,
+plus the shading's own space's spot colorants with their curves
+(`spot_colorants()`, `at_authored()`). `Shading::paint_cmyk` takes resolved
+plane indices and composites authored tints + planes via
+`composite_overprint_varying_spots` when every colorant in the shading's
+space got a plane, falling back to the flattened route otherwise —
+all-or-nothing, the same rule the fill and image routes already apply.
+**Mesh shadings (types 4–7) still flatten — disclosed as the one remaining
+route** (Backlog entry below).
+
+#### 2. `sh` resolves planes once; two prior rescues switch off with a plane present
+
+`overprint::resolve_spot_planes` resolves planes once, all-or-nothing, for
+both native shading routes (the overprint route and the `Pass 137.0`
+native-ink route). With planes present, the `Pass 201.0` `ink_reach`
+narrowing and the `Pass 130.3` spot-only refusal both switch off — both
+existed as rescues for a spot colorant with no plate, which is no longer the
+case once a plane exists.
+
+#### 3. Shading PATTERN fills reach a native ink route for the first time
+
+A shading used as a fill pattern (`scn` naming a `PatternType 2`) previously
+always bridged through sRGB even after `sh` itself gained native routes
+(`Pass 122.6`/`Pass 137.0`). It now shares the same plane-aware route. The
+print-conformance suite's "shading" cells are pattern fills, not `sh` calls
+— which is why closing this closes them.
+
+#### 4. Transparency/knockout groups — found while writing the fixtures, larger than the shading half
+
+A spot colorant inside any buffered transparency group on an ink page could
+change colorant identity or vanish entirely — affecting every such document
+since `Pass 228.0` (2026-09-02) shipped fill-side spot planes, undetected
+until a discriminating fixture was built for this Pass:
+
+- `composite_buffer` merged a child's spot planes into the parent BY INDEX
+  rather than by colorant identity — wrong colorant, or dropped outright by
+  `set_pixel`'s surplus zip when the rosters disagreed in length.
+- Knockout initial backdrops carried no spot planes at all;
+  `composite_element_knockout_cmyk` and `finish_knockout` wrote
+  `s: [0.0; MAX]` unconditionally.
+- `composite_non_isolated` built its own source with an empty spot array.
+- `child_from_backdrop` and `give_back_child` handled the four process
+  planes and never touched spots.
+
+Fixed with a name-keyed roster: `spot_map_from` + `remap_spots` map by
+colorant NAME, allocating in the parent on first sight (a colorant the
+parent refuses to allocate is dropped and counted in `spots_flattened`);
+`KnockoutPlanes::initial_spots` seeds the knockout backdrop; the knockout
+recurrence and the §11.4.4 backdrop-removal walk now run per spot plane, not
+just per process plane; the non-isolated path's remap + removal follow the
+same rule; `child_from_backdrop` copies the roster forward and
+`give_back_child` clears spots and roster on return.
+
+#### 5. `tools/suite-check.py` — a detector ordering fix
+
+A mark-criterion patch (checking that a check mark IS present) is now
+routed to `MARK?` BEFORE the cross detector runs. A check mark is
+geometrically two diagonal strokes, and on `PCS 8.1` the cross detector had
+been counting pdfce's own correct check marks as crosses (4 detected) while
+the reference image tripped 0 at a slightly different contrast threshold —
+the two renders are visually indistinguishable.
+
+#### Tests and gates
+
+`shading_ink.rs` +4: a spot-shading/spot-pattern-vs-fill-on-white pair
+(pins no-double-ink but cannot distinguish deposit from flatten — recorded
+reason: the plane's own curve is sampled through the same conversion the
+flattened route takes) and a discriminating pair over a `0 0 0 0.5 k` mark
+under `/OP true`, which a sabotage run turned red.
+`the_overprinting_shading_actually_paints_and_ramps` moved its witness pixel
+from blue to red (the named channel). New `group_spot_planes.rs` +3,
+fixtures from new `tools/gen-group-spot-fixtures.py` — each fixture's first
+version passed even under sabotage and was rebuilt for a discriminating
+reason: a decoy spot painted first so the two rosters disagree on index;
+the group painted BEFORE the direct fill so its colorant is new to the
+parent; Multiply used inside the group and on the knockout element, because
+under Normal the backdrop-removal step exactly hides a missing initial spot
+and a Normal interior never takes the two-walk route
+(`groups_backdrop_reruns=0`). Each of the four group-merge fixes was then
+sabotaged individually and caught. `PROVENANCE.md` extended in both
+`fixtures/synthetic/shading` and `fixtures/synthetic/transparency` (the
+four spot-shading fixtures' rows were omitted from `6e9513c` and added by
+the same-day follow-up `12aaedb`). `cargo test --workspace` green;
+`tools/run-gates.sh` PASS, 31/31 — two first-sweep findings again (a wrapped
+string literal, a doc block orphaned by an insertion — the same two
+recurring lesson shapes as `Pass 238.0`), both fixed before commit. **No
+`Cargo.toml` touched** — GUI-core separation invariant unaffected by
+construction.
+
+#### Measured (`tools/suite-check.py`, 51 patches)
+
+`PCS 2.0` fully clean, all ten cells. `PCS 8.0`/`8.1` gradient bars (the
+shading-pattern cells `Pass 238.0` left failing) now show their check
+marks. Suite total: **5 FAIL / 38 pass / 8 unresolved of 51**, up from
+7 / 37 / 7 at the start of the session. Remaining FAIL: `PCS 3.0` and `4.0`
+(device-model adjudication, open operator question (cb)), `PCS 13.0` and
+`17.2` (ICC RGB images, `docs/NEXT_SESSION.md` §A items 1–2), `PCS 22.1`
+(Lab). The operator's own multipage render was regenerated at his request
+into `C:\Users\Ken\OneDrive\pdfTests\GhentImages` (`page-1..6.png`); page 4
+(the spot page) is now clean except `3.0 k` / `4.0.1 k`.
+
+#### `docs/FEATURES.md`
+
+*Subtractive (colorant) compositing buffer* and *Overprint SIMULATION* rows
+(both *Implemented*) amended in place: spot planes now hold for fills,
+stencils, images, axial/radial/function shadings, shading patterns, and
+through transparency + knockout groups. *Per-colorant (n-channel)
+compositing buffer* (*Planned*) narrowed a fifth time — mesh shadings
+(types 4–7) are the row's only remaining scope; the row does not move to
+*Implemented* because that remainder is real, not rounded away.
+
+#### Standing rules — no new mint
+
+No new decision or standing rule from this filing. **Decision ceiling
+unchanged at `122`; next free `123`. Standing-rules ceiling unchanged at
+`R239`; next free `R240`.**
+
+---
+
 **★★ 379th filing, 2026-09-02 — `Pass 238.0` (`8ce0507`) SHIPS THE IMAGE HALF OF
 THE SPOT-COLORANT PLANE'S STEP 4: `Separation`/`DeviceN` IMAGES (DIRECT OR
 BEHIND `/Indexed`) AND STENCIL MASKS ON AN INK PAGE NOW DEPOSIT ONE PLANE PER
@@ -101058,41 +101201,6 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### Pass 239.0 — the spot-colorant plane, step 5 (the arc's remainder after `Pass 238.0`'s image half): shadings + knockout-group backdrops deposit spot planes — filed 2026-09-02 (379th filing), NOT STARTED
-
-**Origin.** The named remainder of `Pass 238.0` (above, *Shipped*) and of
-`docs/NEXT_SESSION.md` §0's step 4 ("images, shadings, knockout groups") —
-the image and stencil-mask halves shipped as `Pass 238.0`; this is what is
-still owed.
-
-**Scope:**
-
-- **Axial/radial shadings (types 2–3) first.** `ColorRamp::at_cmyk`
-  (`Pass 122.6`) already carries native CMYK samples per ramp step — extend
-  it to carry a spot-plane sample the same way the image path just gained
-  one.
-- **Mesh shadings (types 4–7) next.** Per-vertex colour, native ink already
-  lands via `Pass 137.1` — extend per-vertex colour resolution to spot
-  planes.
-- **Both shading routes need the deposit**: the overprint route
-  (`composite_overprint_varying_spots`, new this Pass) and the `Pass 137.0`
-  native-ink (non-overprint) route — a shading can reach either, and only
-  one currently has any spot-plane awareness to extend.
-- **Knockout groups' initial backdrop** needs to carry `s` (the spot planes)
-  alongside the four process planes it already snapshots — see *Implemented
-  → Subtractive (colorant) compositing buffer*'s own note that a knockout
-  group holds a full copy of its initial backdrop.
-- `overprint::names_a_process_colorant`'s spot-only refusal on the shading
-  route becomes UNNECESSARY once shading planes exist — the same shape as
-  the image refusal `Pass 238.0` narrowed away. Predicted here so it is not
-  re-derived as a fresh finding when it happens.
-
-**Acceptance.** `PCS 2.0` cell `j` and the `PCS 8.0`/`8.1` gradient bars are
-the conformance-sweep targets `Pass 238.0`'s own measurement named as still
-failing for exactly this reason (see *Shipped*, `Pass 238.0`).
-
----
-
 > ★★★ **`Pass 184.0` SHIPPED and has left this section, 2026-08-30 (346th
 > filing).** It sat here through the 345th filing while only criterion A was
 > delivered; `b62e069` delivered C, D and G, **withdrew B on argument** (the
@@ -112635,6 +112743,39 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+> ★★ **ONE ITEM ADDED 2026-09-02 (380th filing), `Pass 239.0`'s NAMED
+> REMAINDER — mesh shadings (types 4–7) are now the ONLY route still
+> flattening spot colorants; every other spot-plane route (fills, stencils,
+> images, axial/radial/function shadings, shading patterns, transparency +
+> knockout groups) now deposits.** `FEATURES.md`'s *Per-colorant (n-channel)
+> compositing buffer* row narrowed a fifth time to this single remaining
+> scope; no box moves.
+
+### Unscoped — ★★ MESH SHADINGS (TYPES 4–7) STILL FLATTEN SPOT COLORANTS — THE ONE ROUTE `Pass 239.0` LEFT OPEN — filed 2026-09-02 (380th filing, `Pass 239.0`'s named remainder)
+
+**Status: NOT STARTED.** `Pass 239.0` (*Shipped*, above) gave axial/radial/
+function shadings (types 2–3) and shading patterns a spot-plane deposit,
+mirroring the fill/stencil/image routes `Pass 228.0`/`Pass 238.0` already
+shipped, and additionally fixed a spot-plane merge-by-index defect in
+transparency and knockout groups. Mesh shadings (types 4–7) were named
+explicitly as out of scope for that Pass and still flatten every named spot
+colorant into the alternate space before painting.
+
+**The shape of the remaining work, per `Pass 239.0`'s own dispatch:**
+per-vertex colour resolution — which already lands native CMYK ink via
+`Pass 137.1` — needs to carry a spot-plane sample the same way
+`ColorRamp::at_cmyk` (types 2–3) and the image path already gained one.
+Both mesh routes that currently resolve native ink (the overprint route and
+the `Pass 137.0` non-overprint native route) need the extension.
+
+**Acceptance.** No suite patch currently exercises a spot-coloured mesh
+under overprint, so a purpose-built fixture (mirroring
+`tools/gen-group-spot-fixtures.py`'s discriminating-construction lesson from
+`Pass 239.0` — a fixture that passes even with the feature absent proves
+nothing) is the acceptance evidence, not the conformance sweep.
+
+---
 
 > ★★★★★ **FIVE ITEMS ADDED 2026-09-01 (361st filing), ALL FROM THE
 > `Pass 203.0`–`207.0` CLUSTER.** Item 3 is **not a new proposal** — it is

@@ -86638,6 +86638,129 @@ own compositing routes, not producer behaviour.
   role does not own it (engineer-owned handoff, outside the five storage
   tiers) but it is worth the engineer's own overwrite pass.
 
+## 2026-09-02 (380th filing) — `Pass 239.0` (`6e9513c` + `12aaedb`) SHIPPED — the spot-colorant plane, step 5: shadings + shading patterns deposit; a group-merge-BY-INDEX defect affecting every spot inside every buffered transparency group since `Pass 228.0` found and fixed; mesh shadings alone remain, split out to Backlog
+
+**Sourcing.** No shell this filing. Commit hashes, dates and substance
+relayed verbatim by the engineer in the dispatch prompt, not read via
+`git show`. Conformance-sweep figures (`tools/suite-check.py`, 51 patches)
+reported as measured by the engineer, not independently re-run by this
+role. `12aaedb` is a same-day follow-up adding the four spot-shading
+fixtures' `PROVENANCE.md` rows omitted from `6e9513c`; both commits are
+pushed together with this filing.
+
+**Shipped:**
+- `Pass 239.0` (`6e9513c`) — `ColorRamp` carries authored process tints AND
+  spot tints per sample, plus the space's spot colorants with curves
+  (`spot_colorants()`, `at_authored()`); `Shading::paint_cmyk` composites
+  authored tints + planes via `composite_overprint_varying_spots` when
+  every colorant got a plane, else the flattened route as before. Meshes
+  (types 4–7) still flatten.
+- Same Pass — `overprint::resolve_spot_planes` resolves planes once,
+  all-or-nothing, for both native shading routes; with planes present the
+  `Pass 201.0` `ink_reach` narrowing and the `Pass 130.3` spot-only refusal
+  both switch off (both were rescues for a spot with no plate).
+- Same Pass — a shading PATTERN fill reaches a native ink route for the
+  first time; it had always bridged through sRGB even after `sh` gained
+  native routes (`122.6`/`137.0`). The suite's "shading" cells are pattern
+  fills, which is why this closes them.
+- Same Pass, larger than the shading half — found while writing the
+  fixtures: `composite_buffer` merged child spot planes BY PLANE INDEX
+  (wrong colorant, or dropped by `set_pixel`'s surplus zip) instead of by
+  colorant NAME; knockout initial backdrops carried no spot planes at all;
+  `composite_element_knockout_cmyk`/`finish_knockout` wrote `s: [0.0;
+  MAX]` unconditionally; `composite_non_isolated` built its source with an
+  empty spot array; `child_from_backdrop`/`give_back_child` handled
+  process planes only. This affected every spot colorant inside every
+  buffered transparency group on an ink page since `Pass 228.0` shipped
+  (an Illustrator file with a Pantone swatch at partial opacity, changed
+  colorant or vanished). Fixed with a name-keyed `spot_map_from`/
+  `remap_spots` roster (a refused colorant dropped and counted in
+  `spots_flattened`), `KnockoutPlanes::initial_spots`, and the same
+  per-plane treatment threaded through the knockout recurrence, §11.4.4
+  removal, non-isolated remap, and child give/take.
+- Same session — `tools/suite-check.py`: a mark-criterion patch is now
+  routed to `MARK?` before the cross detector runs; a check mark IS two
+  diagonal strokes, and the cross detector had been counting pdfce's own
+  correct check marks as crosses on `PCS 8.1` while the reference tripped
+  at a different contrast threshold — the two renders are visually
+  indistinguishable.
+- Tests: `shading_ink.rs` +4 (a no-double-ink pair that cannot itself
+  distinguish deposit from flatten, recorded as such; a discriminating
+  pair over a `0 0 0 0.5 k` mark under `/OP true`, sabotage-verified);
+  `the_overprinting_shading_actually_paints_and_ramps` moved its witness
+  pixel from blue to red. New `group_spot_planes.rs` +3, fixtures from new
+  `tools/gen-group-spot-fixtures.py` — each fixture's FIRST version passed
+  even under sabotage and was rebuilt for a discriminating construction
+  (a decoy spot painted first so rosters disagree on index; the group
+  painted before the direct fill so its colorant is new to the parent;
+  Multiply used inside the group/on the knockout element, because under
+  Normal the backdrop-removal step exactly hides a missing initial spot).
+  Each of the four group-merge fixes then sabotaged individually and
+  caught. `PROVENANCE.md` extended in `fixtures/synthetic/shading` and
+  `/transparency` (the four spot-shading rows landed in the `12aaedb`
+  follow-up, omitted from `6e9513c`). `cargo test --workspace` green;
+  `tools/run-gates.sh` PASS, 31/31 — two first-sweep findings again (a
+  wrapped string literal, a doc block orphaned by an insertion — the same
+  two recurring lesson shapes as `Pass 238.0`), fixed before commit. No
+  `Cargo.toml` touched.
+
+**Findings + decisions:**
+- No new architectural decision or standing rule this filing.
+- Worth naming as a pattern (not a new rule — see the "shared mechanism,
+  not shared moral" precedent from the 181st filing): three fixtures in
+  this one Pass passed under sabotage on first writing, each for the same
+  underlying reason now recorded in its own generator — a fixture built
+  from default/zero values cannot falsify a carry, because the carry and
+  the default happen to agree. Each was rebuilt to make the two paths
+  disagree before it was trusted.
+- The group-merge-by-index defect was found only because a discriminating
+  fixture was demanded for `Pass 239.0`'s own acceptance — it had shipped
+  silently inside `Pass 228.0` (2026-09-02, earlier the same day) and no
+  test or conformance patch had seen it in the meantime.
+
+**Measured on the conformance sweep (`tools/suite-check.py`, 51 patches):**
+- `PCS 2.0`: fully clean, all ten cells.
+- `PCS 8.0`/`8.1`: gradient bars (the shading-pattern cells `Pass 238.0`
+  left failing) now show their check marks.
+- Suite total: **5 FAIL / 38 pass / 8 unresolved of 51**, up from 7/37/7
+  at the start of the session. Remaining FAIL: `PCS 3.0`/`4.0`
+  (device-model adjudication, open question `(cb)`), `PCS 13.0`/`17.2`
+  (ICC RGB images, `docs/NEXT_SESSION.md` §A items 1–2), `PCS 22.1` (Lab).
+- The operator's own multipage render regenerated at his request into
+  `C:\Users\Ken\OneDrive\pdfTests\GhentImages` (`page-1..6.png`); page 4
+  (the spot page) is clean except `3.0 k`/`4.0.1 k`.
+
+**`docs/FEATURES.md`:** *Subtractive (colorant) compositing buffer* and
+*Overprint SIMULATION* rows (both Implemented) amended in place: spot
+planes now hold for fills, stencils, images, axial/radial/function
+shadings, shading patterns, and through transparency + knockout groups.
+*Per-colorant (n-channel) compositing buffer* (Planned) narrowed a fifth
+time — mesh shadings alone remain its scope; row does not move to
+Implemented, the mesh remainder is real.
+
+**`ROADMAP.md`:** `Pass 239.0` moved from *Next up* to *Shipped* (top, no
+remnant left in *Next up*); a new Backlog entry filed for the mesh-shading
+spot-plane remainder, pointing back at this Pass.
+
+**`C:\personal_rag\pdf\`:** nothing added — the findings are about pdfce's
+own compositing routes, not producer behaviour.
+
+**Still in flight:**
+- Mesh shadings (types 4–7) are the one remaining route that flattens spot
+  colorants — `ROADMAP.md` *Backlog*, filed this session. Not started.
+- `docs/NEXT_SESSION.md` is stale (predates `Pass 233.0`–`239.0`) — this
+  role does not own it (engineer-owned handoff, outside the five storage
+  tiers) but it is worth the engineer's own overwrite pass.
+
+**For next session:**
+- The per-colorant spot-plane arc (steps 1–5, `Pass 217.0`→`239.0`) is now
+  complete for every paint route except mesh shadings — a small, bounded
+  remainder rather than an open architecture question.
+- Open operator questions from prior filings (ICC RGB images,
+  `docs/NEXT_SESSION.md` §A items 1–2; device-model adjudication `(cb)`,
+  closed per decision 119/120) remain the other named FAIL causes on the
+  conformance sweep.
+
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
