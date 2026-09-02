@@ -86249,3 +86249,68 @@ indexed (subject + master):**
   defect (there is none).
 - Backup/push state: not independently checked by this role, no shell
   this filing.
+
+## 2026-09-02 (375th filing) — `Pass 233.0` (`047a6d8`) SHIPPED — `OP-A7` / `spot_colorant_device_model`, the setting decision 120 specified, closing that decision's own "IN PROGRESS" note; `FEATURES.md` row moved Planned → Implemented; a SIXTH `R217` amendment note, a different failure shape from the fifth
+
+**Sourcing.** No shell this filing. Full commit body relayed verbatim as a
+scratch file (`D:\Dev\pdfce\.librarian-233.txt`, 83 lines) by the engineer,
+not read via `git log`. Independently cross-checked against live source by
+`Read`/`Grep` before filing — see `ROADMAP.md`'s `Pass 233.0` entry for the
+full list of spans checked (settings enum + parse/as_str + doc-tested round
+trip, the write-back path, the CLI override, the GUI control, and the single
+`authored_spot_inks` branch feeding both the ordinary paint call and
+`composite_overprint`'s own deposit).
+
+**Shipped:**
+- `Pass 233.0` (`047a6d8`) — `spot_colorant_device_model` (`OP-A7`), two
+  values, default `simulate_separations` (pdfce's existing, unchanged
+  render behaviour). ISO 32000-1 §8.6.6.4's `shall` and ISO 32000-2
+  §10.8.3's `may` are both conforming answers to "which device colorant set
+  does this render assume", and they render a spot backdrop under
+  `/OP true` differently — the standard does not choose, so this is a
+  setting, not a fix. Blast radius RENDER only, never emitted bytes.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §12 decision 120's "Implementation status: IN
+  PROGRESS" note CLOSED**, struck in place and replaced with the shipped
+  record (commit, files, behaviour, measurement) — kept legible per house
+  style rather than deleted. The loop the operator asked this filing to
+  close.
+
+**Findings + decisions:**
+- **The measurement that justifies the default.** Trap marks across the
+  four spot patches, same binary, one flag apart: `simulate_separations` 9,
+  `alternate_space_substitution` 16. The corpus's traps exist to catch a
+  composite renderer, so they fire nearly twice as often under the model
+  that flattens — evidence for the shipped default on this corpus, and
+  equally evidence that an engine in composite mode is not the oracle this
+  suite intends (decision 120's harness consequence, unaffected).
+- **A SIXTH `R217` amendment note, mechanically distinct from the fifth.**
+  The engineer ran `check-commits-filed.py`, saw `047a6d8` correctly
+  DEFERRED as the tip (`exit=0`), then committed the *previous* Pass's own
+  filing commit into the same batch before pushing — which removed
+  `047a6d8`'s deferral, because it was no longer the tip at push time, and
+  the gate's answer changed between the check and the push with nothing
+  about `047a6d8` itself having changed. The fifth note's failure was a
+  mismatched filing commit the gate would have caught if run; this one had
+  the gate run correctly and still go stale, because the fact it reports is
+  about POSITION, and position moved after the check. Added as a sixth
+  amendment note under `R217` in `ROADMAP.md`'s Standing rules (no new
+  number — this is `R217`'s own subject): run the gate immediately AFTER
+  the last commit intended for a push, never before it, including when that
+  last commit is a filing for an earlier Pass.
+
+**`docs/FEATURES.md`:** the `spot_colorant_device_model` row moved *Planned*
+→ *Implemented*, boxes `[x]` / `[x]` / `[x]` / `?` (core, cli, gui all ship;
+`?` for Acrobat unchanged — this role has not measured whether Acrobat
+exposes an equivalent device-model choice).
+
+**Still in flight:**
+- Step 4 of the spot-plane arc (images + knockout groups) — unchanged,
+  still open.
+- The `docs/suite-patch-reference.md` per-device-model-qualifier check
+  decision 120 flagged — still not verified by this role.
+
+**For next session:**
+- Backup/push state not independently checked by this role, no shell this
+  filing.

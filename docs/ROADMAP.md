@@ -96,6 +96,109 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 375th filing, 2026-09-02 — `Pass 233.0` (`047a6d8`) SHIPS
+`OP-A7` / `spot_colorant_device_model`, THE SETTING DECISION 120 SPECIFIED,
+CLOSING THAT DECISION'S OWN `IN PROGRESS` IMPLEMENTATION-STATUS NOTE; A SIXTH
+`R217` AMENDMENT NOTE RECORDS A FAILURE SHAPE DIFFERENT FROM THE FIFTH — THE
+GATE'S OWN ANSWER CAN GO STALE BETWEEN THE CHECK AND THE PUSH.**
+
+**Sourcing (hard rule 8).** No shell this filing. Full commit body supplied
+verbatim as a scratch file (`D:\Dev\pdfce\.librarian-233.txt`, 83 lines) by
+the engineer, not read via `git log`. Independently cross-checked by
+`Read`/`Grep` against live source rather than taken on the commit text alone:
+
+- `crates/pdfce-core/src/settings/mod.rs:953-975` — `SpotColorantDeviceModel`,
+  `#[non_exhaustive]`, two variants (`SimulateSeparations` default,
+  `AlternateSpaceSubstitution`).
+- `crates/pdfce-core/src/settings/mod.rs:977-1010` — `parse`/`as_str`, with a
+  doc-tested round trip (`Model::parse(m.as_str()) == Some(m)` for both
+  variants).
+- `crates/pdfce-core/src/settings/mod.rs:2416-2430` — settings-file parse
+  arm: an unknown token is a NOTE and the default stands, the same
+  discipline every neighbouring arm follows.
+- `crates/pdfce-core/src/settings/mod.rs:2803-2808` — `write_to_string`
+  persists the key, with the fork's own rationale written into the emitted
+  file (`# catch a composite renderer, so the corpus expects the default.`)
+  — confirms the setting is written back, not merely read.
+- `crates/pdfce-core/src/settings/mod.rs:3491-3519` —
+  `every_setting_round_trips_through_the_file`, the non-default
+  `AlternateSpaceSubstitution` value included in the fixture per the
+  module's own "state the non-default deliberately" discipline.
+- `crates/pdfce-cli/src/main.rs:11594-11610` — `render-page
+  --spot-colorant-device-model`: applied over the saved setting for this
+  render only (`"your saved setting is unchanged"`), an unknown token
+  refused by name (`"unknown --spot-colorant-device-model {token:?} —
+  known: simulate_separations, alternate_space_substitution"`).
+- `crates/pdfce-gui/src/settings_panel.rs:499-511` — a real settings-window
+  control, both values offered.
+- `crates/pdfce-render/src/interpret.rs:6055-6059` — the one behavioural
+  branch, in `authored_spot_inks`, doc-commented `★★ OP-A7`; feeds **both**
+  the ordinary paint call (`:5997`) and `composite_overprint`'s own deposit
+  (`:6369`) — confirms the commit's claim that overprint still runs in full
+  under either model; it simply has nothing spot-coloured to act on when
+  the branch returns empty.
+
+No `Cargo.toml` change found or mentioned — GUI-core separation not
+implicated; the setting is a plain enum with no new dependency. Round-trip/
+minimal-diff not implicated — the setting's own doc comment states blast
+radius RENDER only, never emitted bytes, and no document-writing code path
+was touched. **Not independently re-measured this filing**: the trap-mark
+count (`simulate_separations` 9, `alternate_space_substitution` 16, across
+the four spot patches, same binary, one flag apart) is the engineer's own
+account, relayed rather than re-run — no shell this filing, flagged per
+hard rule 8.
+
+**`docs/FEATURES.md`: the *Planned* row decision 120's filing added (374th
+filing) is MOVED to *Implemented*, boxes `[x]` / `[x]` / `[x]` / `?`** —
+core, cli and gui all ship; `?` for Acrobat is unchanged from the Planned
+row, because this role has not measured whether Acrobat exposes an
+equivalent device-model choice (the nearest surface, `Use Overprint
+Preview`, is a different abstraction — see the `personal_rag/pdf` lesson
+decision 120 cites).
+
+### Pass 233.0 (`047a6d8`, 2026-09-02) — two conforming device models, and the standard picks neither
+
+**Why this is a setting and not a fix.** ISO 32000-1 §8.6.6.4 contains a
+`shall` that fires the moment a `Separation` colour space is *set*, before
+overprint is ever consulted: the reader shall determine whether the device
+has an available colorant of that name; if not, it shall arrange for
+subsequent painting operations to be performed in an alternate colour
+space. A screen has no physical spot plate — read literally, a composite
+device must substitute the alternate space, after which the ink is
+ordinary process colour and overprint cannot preserve it, because there is
+no spot colorant left on the page to preserve. ISO 32000-2 §10.8.3
+separately *permits* separation simulation: render as if for a device that
+does have the colorant — a `may`, and 2.0-only. **Both answers are
+conformant and they render differently; the standard does not choose, so
+pdfce must not pretend it did** (`ARCHITECTURE.md` §12, decision 120).
+
+**★ The measurement, and why it is the reason the default is the default.**
+Trap marks across the four spot patches, same binary, one flag apart:
+`simulate_separations` 9, `alternate_space_substitution` 16. The corpus's
+traps exist to catch a composite renderer, so they fire nearly twice as
+often under the model that flattens — evidence FOR the default on this
+corpus, and equally evidence that an engine in composite mode is NOT the
+oracle this suite intends, the harness consequence decision 120 already
+carries.
+
+**Implementation.** One branch, in `authored_spot_inks`: under the
+composite model it returns nothing, so no plane is allocated, `deposit` is
+false, and the paint falls through to the flattened tint transform — which
+IS the alternate space. Overprint still runs in full; it simply has
+nothing spot-coloured to act on.
+
+**Three gates caught three real omissions**, each on a change that looked
+finished: `every_setting_round_trips_through_the_file` (parsing added,
+writing forgotten — the setting would have silently reverted on save);
+`check-settings-consumed.py` (*"a setting is a promise; storing one that
+does nothing breaks it silently"*); `every_setting_the_store_carries_can_be_reached_from_this_window`
+(no settings-window control, hand-edit-only).
+
+**Closes decision 120's own `IN PROGRESS` implementation-status note** —
+see `ARCHITECTURE.md` §12, amended in place this filing.
+
+---
+
 **★★ TWO COMMITS, 373rd filing, 2026-09-02 — `Pass 232.0` (`86b83f4`) corrects
 the derivation the previous three Passes' comments carried (behaviour
 unchanged); the `v0.20.0` release (`599dec6` + the tag/build/deploy chain) is
@@ -134338,6 +134441,48 @@ same cause (hashes exist only at commit time), two different failure modes.
   > the sequence the fourth amendment note already opened (timing) and this
   > one closes (verification). **Ceiling unaffected: rules `R239`, next free
   > `R240`; decisions `119`, next free `120`.**
+
+  > **★ SIXTH AMENDMENT NOTE, 2026-09-02, 375th filing — THE GATE'S ANSWER IS
+  > A PROPERTY OF THE CURRENT TIP, AND A LATER COMMIT IN THE SAME BATCH CAN
+  > MAKE A CLEAN CHECK STALE BEFORE THE PUSH THAT FOLLOWS IT. RUN THE GATE
+  > AFTER THE LAST COMMIT INTENDED FOR THE PUSH, NEVER BEFORE IT. NO NEW
+  > NUMBER; ONE WORKING ORDER SHARPENED AGAIN.**
+  >
+  > **A different mechanism from the fifth amendment note, not a repeat of
+  > it.** `Pass 233.0` (`047a6d8`) shipped `OP-A7`. The engineer ran
+  > `tools/check-commits-filed.py`, saw `exit=0` with `047a6d8` correctly
+  > **DEFERRED** as the tip, and then committed the *previous* Pass's own
+  > filing (the 373rd filing's librarian commit) into the same batch before
+  > pushing. `check-commits-filed.py` defers exactly the tip on every run —
+  > a commit cannot cite its own hash, so the gate skips it and checks it in
+  > full the moment anything lands on top. **`047a6d8` was the tip when the
+  > gate ran clean; committing on top of it removed the deferral**, because
+  > it was no longer the tip at push time — and the gate's answer changed
+  > between the check and the push with nothing about `047a6d8` itself
+  > having changed.
+  >
+  > **Why this is not the fifth amendment note's shape.** The fifth note's
+  > failure was a push containing *a* filing commit that was not *the*
+  > filing commit for the commits sitting at the tip — a mismatch the gate
+  > would have caught immediately, had it been run. **Here the gate WAS run,
+  > correctly, and still went stale**, because the fact it reports —
+  > "is the current tip filed" — is a fact about POSITION, and position
+  > moved after the check ran.
+  >
+  > **The added clause:** ***run `tools/check-commits-filed.py` immediately
+  > AFTER the last commit intended for a push, never before it — including
+  > when that last commit is a filing for an EARLIER Pass.*** The fifth
+  > amendment note's working order ("run the gate immediately before every
+  > push") is **necessary but not sufficient** once the push batches more
+  > than one commit after the check: the deferral window the gate reports is
+  > a property of the tip **at the moment it is asked**, and any further
+  > commit — including an unrelated filing for a different Pass — moves that
+  > tip and can flip a clean answer to a stale one before the push happens.
+  >
+  > **No new rule number** — this is `R217`'s own subject, the width and
+  > position-dependence of the deferral window, sharpened a second time the
+  > same day it was sharpened once already. **Ceiling unaffected: rules
+  > `R239`, next free `R240`; decisions `120`, next free `121`.**
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 

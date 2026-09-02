@@ -29793,10 +29793,31 @@ setting" directive:
 - **Options:** `simulate_separations` (**default — pdfce's current,
   unchanged behaviour**) / `alternate_space_substitution`
 - **Blast radius: RENDER only.** Never changes emitted bytes.
-- **Implementation status: IN PROGRESS as of this filing** — the engineer
+- ~~**Implementation status: IN PROGRESS as of this filing** — the engineer
   reported starting it in the same dispatch that produced this decision. A
   follow-on librarian filing (Pass shipped) is owed once the commit lands;
-  no Pass ID has been assigned by this filing, and none is minted here.
+  no Pass ID has been assigned by this filing, and none is minted here.~~
+  **★ SHIPPED 2026-09-02 (375th filing) — `Pass 233.0`, `047a6d8`.** Enum
+  `pdfce_core::settings::SpotColorantDeviceModel` (`SimulateSeparations`
+  default / `AlternateSpaceSubstitution`), persisted in `settings.txt` with
+  the fork's rationale written in-line, `render-page
+  --spot-colorant-device-model` (per-render override, never written back,
+  an unknown token refused by name), and a settings-window control — all
+  three shells reach the key. One behavioural branch, in
+  `authored_spot_inks`: under the composite model it returns no spot inks,
+  so no plane is allocated and the paint falls through to the already-
+  flattened tint transform, which **is** the alternate space; overprint
+  still runs in full on both call sites (`authored_spot_inks` feeds the
+  ordinary paint AND `composite_overprint`'s own deposit), it simply has
+  nothing spot-coloured left to act on under the composite model. **Measured
+  on the suite's four spot patches, same binary, one flag apart:
+  `simulate_separations` 9 trap marks fire, `alternate_space_substitution`
+  16** — the corpus's traps are built to catch a composite renderer, so
+  this is evidence for the shipped default on this corpus, and equally
+  evidence that an engine in composite mode is not the oracle the suite
+  intends (the harness consequence this decision already records, above,
+  is unaffected). See `ROADMAP.md`'s `Pass 233.0` Shipped entry for the
+  full cross-checked sourcing.
 
 **★★★ Harness consequence — the most actionable finding, and it is a design
 correction, not a bugfix.** **Acrobat cannot serve as an oracle for any
