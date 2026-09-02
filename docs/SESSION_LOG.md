@@ -86952,6 +86952,136 @@ capability.
 eighth amendment note appended under *Standing rules*, directly below
 the seventh.
 
+## 2026-09-02 (384th filing) — `Pass 240.0` (`f978291`) makes ICCBased RGB colour-managed on every route and retracts a `Pass 214.0` "measured and explicitly refused" conclusion that was a defect in an untested path; `Pass 241.0` (`75a17ac`) gives a render preset's SET claims their own why
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, the
+changes they make, and every measurement below are relayed verbatim by
+the engineer in the dispatch prompt, not independently confirmed via
+`git show`/`git log`. Both commits already on `main`, not yet pushed —
+pushed together with this filing's own commit, per standing practice.
+
+**Shipped:**
+- `Pass 240.0` (`f978291`) — `ICCBased /N 3` (RGB) is now colour-managed
+  through its own embedded profile to `iccce`'s constructed sRGB
+  destination, for fills/strokes/text, direct images,
+  `/Indexed`-over-`ICCBased` images, and JPX images with an embedded
+  profile and no `/ColorSpace`, on BOTH additive and subtractive pages;
+  a subtractive page carrying an output intent also deposits the ink
+  bridge's CMYK output for an RGB image, matching the vector path.
+  Only N 1 (Gray) remains refused. Conformance sweep 5 FAIL / 38 pass /
+  8 unresolved → **3 FAIL / 40 pass / 8 unresolved of 51**.
+- `Pass 241.0` (`75a17ac`) — `RenderPreset::disclosures()` now emits the
+  `why` for a SET entry whose evidence is a claim about the standard
+  (previously only LEAVE-ALONE entries got one); closes a pdfceGUI
+  boundary note about `spot_colorant_device_model`'s invisible
+  reasoning; also narrows a stale "COLORIMETRIC … pdfce does not apply
+  it" disclosure sentence.
+
+**Decisions made this session:**
+- No new `ARCHITECTURE.md` §12 decision. One correction added IN PLACE
+  to decision 115's body text (not a new decision number): the
+  "`DeviceRGB` is NOT managed" paragraph had been readable as covering
+  `ICCBased /N 3` too, and it never should have been — an `ICCBased`
+  space carries its own source characterisation (its embedded profile),
+  `DeviceRGB` does not. `Pass 240.0` makes that distinction concrete by
+  actually managing `ICCBased /N 3`.
+- Standing rules: considered minting a rule for *"a measured negative
+  that routes through an untested intermediate measures the
+  intermediate's defect, not the route"* — **not minted**. Recorded as
+  a named candidate at n = 1 in `Pass 240.0`'s own `ROADMAP.md` entry;
+  this project's bar is two occurrences and this is the first instance
+  of this exact shape (a cousin of, not the same as, `R217`'s "moving
+  tip" family or the "a correct fix can be unreachable" finding).
+
+**Findings + decisions:**
+- **The retraction, and how it was found.** `Pass 214.0` (2026-09-01)
+  had measured a 3×/1.8× regression from extending ICC management to
+  RGB (N 3) images and recorded it as a deliberate, measured refusal.
+  An ink probe (`--probe-ink`) run on print-conformance patch `PCS
+  13.0`, on a matched vector/image pair of the SAME authored colour,
+  found: vector cell `c=0.850 m=0.030 y=1.000 k=0.150`; image cell
+  (through the pre-fix N-3 bridge) `c=1.0 m=0 y=1.0 k=0.396`. The image
+  cell's numbers have the shape of a naive `rgb_to_cmyk` applied to
+  already-resolved RGB, not a profile conversion at all — which sent
+  the search to the texel loop directly, where the raw-comps ink arm
+  was found, sitting outside the cached `tinting` route the vector path
+  used. Moving `Icc` (N 4) / `IccRgb` (N 3) onto that same cached route
+  reversed the regression to an improvement: `19.98→19.51`,
+  `17.39→15.95` on the identical two patches. The N-4 case had carried
+  the identical defect since `Pass 214.0` but it was invisible by
+  construction — CMYK samples genuinely ARE C,M,Y,K, so the no-op ink
+  arm happened to be correct.
+- **A companion finding about Acrobat's own reference-render route.** On
+  PDF/X patch `PCS 13.0`, `lcms2` converting the image's embedded
+  profile directly to sRGB gives `(0,154,0)`; Acrobat's reference render
+  shows `(10,141,49)` — the answer you get routing through the page's
+  output-intent CMYK first. On a PDF/X page carrying an output intent,
+  the CMYK route IS the reference behaviour; direct-to-sRGB is only
+  correct where no output intent exists to route through. Both findings
+  graduated to `C:\personal_rag\pdf\` (two new lessons, subject index
+  updated, master index updated) — this is empirical producer/viewer
+  behaviour, not canonical spec text, so it stayed out of the spec RAG
+  per this role's hard rule 6.
+- **Gotchas for future sessions, relayed by the engineer:** ~~heredoc
+  through the Bash tool mangles non-ASCII characters in Python source —
+  write a script FILE instead of a heredoc when the source has
+  non-ASCII.~~ **CORRECTED 2026-09-02, within the same filing, engineer's
+  own measurement:** that diagnosis was wrong. Non-ASCII arrives intact
+  through the heredoc (`len("a — b") == 5`, code points correct). What
+  the Bash-tool heredoc actually does is deliver ONE backslash where the
+  Python source had `\\` (an escaped backslash) — so an `old` anchor
+  written to match a Rust string's line-continuation backslash no longer
+  matched and `s.count(old)` was 0. This is the SAME class as two earlier
+  instances (backslash escapes eaten in transit, 2026-08-11 and
+  2026-08-28), not a new one — the misdiagnosis blamed the most VISIBLE
+  character on the failing line (the em dash) rather than the one the
+  known class predicts. **Corrected rule: any patch script containing a
+  backslash goes through the Write tool to a file under `D:\Dev\temp\`,
+  then `python <file>`** — the non-ASCII-content trigger is retracted.
+  Pillow ignores the `icc_profile` kwarg on JPEG 2000
+  (`.jp2`) save and does not read a JP2 `colr` ICC box back on load —
+  `tools/gen-icc-rgb-fixtures.py` has to rewrite the `colr` box itself
+  rather than relying on Pillow's ICC handling.
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather
+  than inferred.
+
+**Still in flight:**
+- N 1 (Gray) and N 4 (CMYK) on the DISPLAY path remain unmeasured for
+  the same defect-in-untested-path pattern `Pass 240.0` found — worth a
+  quick audit before either is trusted as settled.
+- Shadings and meshes in an `ICCBased` RGB space are now the one
+  remaining unmanaged `ICCBased` route — filed to `ROADMAP.md` *Backlog*
+  this filing (0/51 patches, corpus exposure unmeasured).
+- `PCS 3.0 k` / `4.0 k` (device-model adjudication, open operator
+  question `(cb)`) and `PCS 22.1` (Lab) remain the suite's other FAILs.
+
+**For next session:**
+- Consider whether N 1/N 4 display-path management is worth a quick
+  re-probe before the next colour-management Pass, given `Pass 240.0`'s
+  own lesson that an aggregate regression can hide a defect in an
+  untested branch rather than reveal a real cost.
+- This filing's own commit and both code commits (`f978291`, `75a17ac`)
+  push together, per standing practice.
+
+**`docs/FEATURES.md`:** five rows amended in place — *Colour spaces and
+PDF functions*, `/OutputIntents`-aware CMYK conversion, `/ICCBased`
+colour spaces (major rewrite + retraction), Rendering intent, and
+Per-standard render presets.
+
+**`ROADMAP.md`:** new top *Shipped* entry (384th filing) for `Pass
+240.0` + `Pass 241.0`; `Pass 214.0`'s entry amended in place with a
+retraction note; new *Backlog* entry for shadings/meshes in `ICCBased`
+RGB.
+
+**`ARCHITECTURE.md`:** decision 115's body text corrected in place (not
+a new decision) — the `DeviceRGB`-is-not-managed paragraph narrowed to
+name what it actually covers now that `ICCBased /N 3` is managed.
+
+**`C:\personal_rag\pdf\`:** two new lessons (ink-probe diagnostic
+method; Acrobat's output-intent routing for `ICCBased` RGB images on
+PDF/X), subject index updated, master index updated.
+
 **Still in flight:**
 - The build-provenance-banner literal correction flagged by the 381st
   filing (three sites: two in `crates/`, one in `docs/FEATURES.md`) —

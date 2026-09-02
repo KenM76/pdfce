@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 append-only record (`ROADMAP.md`, `SESSION_LOG.md`).
 
-Written **2026-09-02**, at the end of a session that shipped **Passes 237.0
-through 239.0**. Everything below was measured with a shell in that session;
+Written **2026-09-02**, at the end of a session that shipped **Passes 240.0
+and 241.0**. Everything below was measured with a shell in that session;
 commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
@@ -16,68 +16,55 @@ run `python tools/check-ledger-numbers.py`.** Do not mint from memory.
 
 ---
 
-## §0 THE SPOT-COLORANT PLANE ARC IS DONE ON THE PAINT ROUTES — one corner left
+## §0 THE ICC ARC IS DONE FOR FILLS, TEXT AND IMAGES — shadings and meshes are the corner left
 
-Every paint route now deposits a spot colorant into its own plane and the
-planes survive every group construct:
+`ICCBased` colour is now converted through its own embedded profile on these
+routes, and the routes agree with each other (the four-ways fixture,
+`crates/pdfce-render/tests/icc_rgb.rs`):
 
-| route | Pass | note |
-|---|---|---|
-| path fill, stroke, text | 228.0 / 229.0 / 230.0 | |
-| stencil mask (`/ImageMask`) | 238.0 | painted as a fill with the image's shape |
-| sampled `Separation`/`DeviceN` image, direct or `/Indexed` | 238.0 | |
-| process-space image under `/OP true` | 238.0 | leaves the spot planes standing (`SpotSource::Preserve`) |
-| `sh` shading, types 1–3 | 239.0 | |
-| shading PATTERN fill | 239.0 | first native ink route this site ever had |
-| isolated / non-isolated / knockout group merge | 239.0 | planes mapped by **colorant name**, never by index |
-| **mesh shading, types 4–7** | **owed** | still flattens through the tint transform; `mesh::paint_cmyk` has no ramp-shaped spot half. Small, rare in the corpus (0.6 %), disclosed in the render-page paragraph |
+| route | display (→ sRGB) | ink (→ `/OutputIntent`) | Pass |
+|---|---|---|---|
+| fill / stroke / text, `N 3` | managed | managed | 240.0 / 199.2 |
+| fill / stroke / text, `N 4` | Table 66 fallback (`from_cmyk`) | managed | 199.2 |
+| image, `N 3` — direct, `/Indexed`, JPX `colr` | managed | managed | 240.0 |
+| image, `N 4` — direct | fallback | **managed (was raw samples — see §D 1)** | 240.0 |
+| image, `N 4` — `/Indexed` | fallback | managed | 214.0 |
+| `N 1`, any route | fallback | managed with an intent | — |
+| **shading, mesh, any `N`** | **fallback** | **unmanaged** | **owed** |
 
-**Conformance standing: 5 FAIL / 38 pass / 8 unresolved of 51** — from
-7 / 37 / 7 at the start of the session
+**Conformance standing: 3 FAIL / 40 pass / 8 unresolved of 51** — from
+5 / 38 / 8 at the start of the session
 (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir D:/Dev/temp/acro-refs`).
-`PCS 2.0` is clean in all ten cells; `PCS 3.1` renders its own "Correct"
-reference; `PCS 8.0` and `8.1` show every check mark, images and gradient
-bars alike.
+`PCS 13.0` and `PCS 17.2` pass; every ICC patch's whole-image error fell or
+held (the table is in `f978291`'s message).
 
-★ **`tools/suite-check.py` changed:** a mark-criterion patch (check marks that
-should be PRESENT) is routed to `MARK?` **before** the cross detector. A
-check mark IS two diagonal strokes; on `8.1` the detector was counting
-pdfce's correct marks as crosses. `MARK?` is not a pass — look at the render.
-
-### The five that remain, and what each actually is
+### The three that remain
 
 | patch | what it is | who owns it |
 |---|---|---|
-| `3.0` cell k, `4.0` cell k | **the device-model adjudication** — decision 119, `ARCHITECTURE.md` §12, open operator question `(cb)`. Both renders conform; pdfce is on the separation-simulation branch (2.0 §10.8.3), the reference is on alternate-space substitution (§8.6.6.4's `shall`). **Do not spend a Pass on either.** §D item 4 below has the measured negative for the scope setting | operator |
-| `13.0` cell b | an `/Indexed` over `ICCBased /N 3` **image** whose profile is deliberately not sRGB; the same colour as a vector ICCBased fill (cell a) renders green because the fill is colour-managed and the image is not | **§1 below** |
-| `17.2` | JPEG 2000 with an `ICCBased` RGB profile; same gap as 13.0 b plus `codestream_space` discarding the profile | §1 below |
-| `22.1` | a Lab `L*=60` swatch renders `(35,31,32)` against `(100,101,100)`; a Lab fill under a form XObject + ExtGState, cause NOT diagnosed | §A |
+| `3.0` cell k, `4.0` cell k | **the device-model adjudication** — decision 119, open operator question `(cb)`. Both renders conform. **Do not spend a Pass on either.** | operator |
+| `22.1` | a Lab `L*=60` swatch renders `(35,31,32)` against `(100,101,100)`; a Lab fill under a form XObject + ExtGState. **Not diagnosed.** Start by probing the pixel with and without the ExtGState, then with `--probe-ink`. | **§1 below** |
 
 ---
 
-## §1 NEXT: colour-manage `ICCBased /N 3` IMAGES to sRGB — and NOT through the ink path
+## §1 NEXT: `PCS 22.1` — the Lab swatch
 
-**Read §D item 1 first**, because it looks like it forbids this and it does
-not. That measured negative routed RGB images **onto the ink path** (manage →
-CMYK → the terminal CMYK→sRGB conversion, which is separately ~10 levels
-off), and got 3× worse. The route that fixes `13.0 b` is different: the
-image's embedded profile → **sRGB directly** (iccce exposes a built-in sRGB
-*destination*; `icc.rs` documents that it deliberately does not expose a
-built-in sRGB *source*, which is the right asymmetry). An RGB image stays on
-the RGB path; only its numbers get the meaning the document gave them.
+It is the last patch on the sweep that is pdfce's to fix, and nobody has
+looked at it yet. Do not assume it is a Lab conversion error: the same Lab
+values as a plain fill are within a few levels (`color.rs`'s Lab tests). The
+suspects, in order of cheapness to eliminate: the ExtGState (a soft mask or
+`/CA` that darkens), the form XObject's group (a Lab fill entering a
+subtractive buffer through `rgb_to_cmyk` — a Lab space has no ink answer, so
+it bridges), and only then the conversion itself.
 
-Where it goes: `image.rs` `Space::Icc` already carries the profile for
-`/N 4` (`Pass 214.0`); the `/N 3` case falls to `Space::Rgb` and loses it.
-`resolve_indexed` needs the same for an `/Indexed` over such a base (that is
-`13.0 b`'s exact shape — measured: `[/Indexed [/ICCBased 25 0 R (N 3, 346
-bytes)] 255 …]`). The vector cell (a) is the oracle: same page, same profile,
-same authored colour, and it is already green.
-
-`17.2` then needs `codestream_space` to stop discarding the profile the same
-way the image path did before `Pass 214.0`.
-
-**Do not touch `cmyk_intent`, and do not route through the output intent** —
-that is §D item 2.
+Second candidate, if 22.1 turns out to be `(cb)`-shaped: **shadings and
+meshes in an ICCBased RGB space** (§0's last row). Their colour is resolved
+inside `shading.rs:543` / `mesh.rs:677` through `ColorSpace::to_rgb`, which
+still reinterprets. The cache and the intent live on the interpreter;
+`Interpreter::display_bridge` is the predicate to reuse. 0 of 51 patches;
+corpus exposure unmeasured — **measure it before spending the Pass**
+(`tools/census` or a grep of the corpus for `/ShadingType` under an
+`ICCBased` `/ColorSpace`).
 
 ---
 
@@ -85,12 +72,11 @@ that is §D item 2.
 
 | # | Item | Measured exposure |
 |---|---|---|
-| 1 | **`PCS 22.1`** — the Lab swatch. Not diagnosed. Start by probing the pixel with and without the ExtGState. | 1 patch, operator-visible |
-| 2 | **Mesh shadings deposit spot planes** — the last flattening route (§0 table). `mesh::paint_cmyk` takes `rules` and no planes; `Shade::Rgb` per-vertex colour has nowhere to put colorants. Two type 7 meshes on the operator's sheet are also the two still-wrong shading pairs (`Pass 137.0`'s measurement). | 0.6 % of corpus |
-| 3 | **`set_page_tabs(page, PageTabs)`** — the verb `Pass 237.0` deliberately did not build. Gated: refuse `A`/`W` below PDF 2.0 and on a PDF/UA-1 file; offer `W` as the more expressive value with `TAB-A1` disclosed. Filed in Backlog with its sourcing (`iso32000__ref__annots_array_order.md` §8.3). pdfceGUI has not asked for it yet. | one shell request away |
-| 4 | **Three stale worked examples** quote the provenance banner as `0.3.0 (tag v0.3.0, a4d9003b, …)` — `crates/pdfce-core/build.rs:272`, `crates/pdfce-core/src/build.rs:32` and `:109` — and the live banner now prints `rev a4d9003b…` because the printer derives from `Cargo.lock` (verified 2026-09-02 with `pdfce-cli --version`). Fix in the first code Pass of the next session; a worked example is a claim. `FEATURES.md`'s *Build provenance stamp* row quotes the same string — librarian. | rule 6 |
-| 5 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. The gate stops it growing. | rule 6 |
-| 6 | Make `sh` shadings selectable objects; resolve `/OC` in the decomposer. | 0.6 % / 0 files |
+| 1 | **Mesh shadings deposit spot planes** — the last flattening route of the spot arc. `mesh::paint_cmyk` takes `rules` and no planes. Two type 7 meshes on the operator's sheet are the two still-wrong shading pairs. | 0.6 % of corpus |
+| 2 | **`set_page_tabs(page, PageTabs)`** — deliberately not built in `Pass 237.0`; filed in Backlog with its sourcing. pdfceGUI has not asked. | one shell request away |
+| 3 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. The gate stops it growing. | rule 6 |
+| 4 | Make `sh` shadings selectable objects; resolve `/OC` in the decomposer. | 0.6 % / 0 files |
+| 5 | **`N 1` on the display path** — one-line widening of `components == 3` in `image::resolve_space_array` and `display_bridge`; unmeasured, no patch fails on it. Measure `PCS 18.2` before and after if it is ever tried. | 0 patches |
 
 ---
 
@@ -99,21 +85,16 @@ that is §D item 2.
 - **Push state: run `git log --oneline origin/main..HEAD`.** Pushing `main`
   is standing-authorized; a non-zero count is something to fix.
 - **Release state: run `git tag --sort=-v:refname | head -1` and compare with
-  `Cargo.toml`'s `version`.** Releasing is standing-authorized since decision
-  121 (tag, package, fresh-folder smoke test, OneDrive deploy,
-  `verify-release.py`) — but it does not skip the gates. **`v0.21.0` was
-  tagged last session with packaging / smoke / deploy / verify NOT recorded as
-  done.** If this session's `v0.22.0` did not complete all five steps, finish
-  them before anything else: `python tools/package-portable.py`, copy the
-  folder somewhere fresh and launch both binaries, `python
-  tools/deploy-onedrive.py`, `python tools/verify-release.py v0.22.0`.
+  `Cargo.toml`'s `version`.** Releasing is standing-authorized (decision 121)
+  — tag, `python tools/package-portable.py`, fresh-folder smoke test of both
+  binaries, `python tools/deploy-onedrive.py`, `python tools/verify-release.py
+  vX.Y.Z` — and it does not skip the gates.
 - **iccce is pinned to a `rev`** (`a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3`,
-  which IS the `v0.3.0` tag's commit) as of 2026-09-02, at iccce's own request
-  (`iccce_FeatureRequests/open/reply_depend_on_a_pinned_rev_and_the_four_intent_rules_are_accepted.md`).
-  Both lockfiles (`Cargo.lock`, `fuzz/Cargo.lock`) moved with it. The
-  dependency SET did not change, so `THIRD_PARTY_LICENSES.md` did not.
+  the `v0.3.0` tag's commit). The banner prints `iccce: 0.3.0 (rev a4d9003b,
+  committed …)` since `Pass 240.0` (it printed the 40-char pin AND the
+  abbreviation before). Dependency SET unchanged since v0.22.0.
 - **Every code commit is FILED** — `python tools/check-commits-filed.py`.
-- **Backups:** the last verified bundle predates this session. Refresh with
+- **Backups:** refresh with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
   then `git bundle verify` on it.
 
@@ -122,75 +103,81 @@ that is §D item 2.
 ## §C THINGS A NEW SESSION MUST KNOW BEFORE TOUCHING ANYTHING
 
 - **Run `bash tools/run-gates.sh` in the FOREGROUND**, and let the harness
-  background it. **Run it on the FINAL tree** — a sweep certifies the tree it
-  ran on. This session ran it twice per Pass because both first sweeps caught
-  the same two shapes: a wrapped string literal with a run of spaces, and a
-  doc block orphaned by an insertion between `///` and its item. **Those two
-  are now four-for-four across two Passes.** Insert BEFORE a doc block, never
-  between it and its `fn`; never continue a string literal with `\` from a
-  Python heredoc.
-- **★ Never type a bare `git checkout -- <file>` in a command chain.** This
-  session lost the uncommitted group-merge half of `Pass 239.0` to one that
-  was typed as a "no-op" after a sabotage run. It was re-applied from the
-  script that had generated it — which is the only reason it was cheap. Keep
+  background it (it takes ~20 min; the harness moves it after 10). **Run it
+  on the FINAL tree** — a sweep certifies the tree it ran on.
+- **★ Never type a bare `git checkout -- <file>` in a command chain.** Keep
   every multi-line edit in a script file under `D:\Dev\temp\` until it is
-  committed; a heredoc edit cannot be re-run.
-- **A sabotage that survives is a fixture question before it is a code
-  question.** Three fixtures in `Pass 239.0` passed under sabotage on first
-  writing, each for a construction reason: on white paper a deposited and a
-  flattened spot collapse to the same sRGB *by construction*; a colorant the
-  parent already holds at the child's index merges correctly *by luck*; under
-  Normal blend a knockout's backdrop removal hides a missing initial spot
-  *exactly*. Each generator records its own reason. Demand the discriminating
-  geometry before believing green.
-- **Never put prose through a Bash heredoc.** Use `Write`/`Edit`, and
-  `git commit -F <file>`. Python one-liners must stay ASCII.
+  committed; a heredoc edit cannot be re-run. Every sabotage must ASSERT it
+  applied (`assert s.count(old) == 1`) and restore from a backup copy, not
+  from git.
+- **★ A Python heredoc through the Bash tool eats one level of
+  backslashes in the script's own source** — an `old` anchor written as
+  `\\` (to match a Rust string's line-continuation `\`) arrives as `\`, and
+  `s.count(old)` returns 0 against a file that visibly contains the text.
+  Non-ASCII is NOT the problem (tested: `len("a — b") == 5`), and the first
+  diagnosis this session blamed it anyway. Any patch script containing a
+  backslash goes through the `Write` tool to a file, then `python <file>`.
+  Cost: one failed patch, caught by its own `assert s.count(old) == 1`.
+- **Pillow cannot write or read an ICC profile in a JP2** (`icc_profile` is
+  ignored on JPEG2000 save; `.info` never carries a `colr` profile back).
+  `tools/gen-icc-rgb-fixtures.py` rewrites the `colr` box itself and
+  re-walks the boxes to verify.
 - **READ CI'S COLOUR FROM GITHUB, EVERY SESSION, EARLY.**
   `gh run list --limit 10 --json status,conclusion,headSha,createdAt`.
 - **Push a code commit and its filing commit together.** CI runs one job per
   push, on the tip.
 - **Stage by path. Never `git add -A`.**
 - **A licensed conformance suite's NAME must never appear in any repo file.**
-  `python tools/check-suite-name-absent.py && git push`.
+  `python tools/check-suite-name-absent.py && git push`. The temp folders
+  under `D:\Dev\temp\suite-patches` carry it in their FILE NAMES — never
+  paste a listing of that folder into a commit message or a dispatch.
 - **Check BOTH feature-request channels every session.**
   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` and
-  `…\iccce_FeatureRequests\open\`. Two pdfce requests were answered this
-  session (replies in `open/`, awaiting pdfceGUI's consumption); the iccce
-  pinning reply is now actioned (§B). The second iccce reply
-  (`reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`) was
-  **not read** by this session.
+  `…\iccce_FeatureRequests\open\`. This session answered pdfceGUI's
+  `disclosures()` note (`reply_disclosures_now_carries_the_why_of_a_set_claim_delete_your_workaround.md`,
+  awaiting their consumption). The iccce reply
+  `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`
+  (409 lines) has **still not been read** by any pdfce session.
 - **`docs/core-api/` is engineer-owned and must move in the SAME Pass** as
-  any `pub` change to `EditSession`. `python tools/check-core-api-verbs.py`
-  also checks the line and clause counts in `index.md`.
+  any `pub` change to `EditSession`. Neither Pass this session touched it.
 
 ---
 
 ## §D ★★ MEASURED NEGATIVES — DO NOT RE-DERIVE THESE
 
-1. **Do NOT colour-manage ICCBased images with `/N != 4` ONTO THE INK PATH.**
-   Measured 3× and 1.8× worse on two patches (`20.59 → 62.51`,
-   `17.87 → 31.50`). The failure was the route (image → CMYK → the terminal
-   CMYK→sRGB conversion), not the management. §1 above is the other route.
+1. **★★ RETRACTED 2026-09-02 (`Pass 240.0`): "Do NOT colour-manage
+   ICCBased images with `/N != 4` onto the ink path — measured 3× worse".**
+   The numbers (`20.59 → 62.51`, `17.87 → 31.50`) were real and measured a
+   DEFECT: a direct `Space::Icc` image was outside the texel loop's
+   `tinting` route, so its ink arm wrote the RAW samples as C, M, Y, K. For
+   `N 3` that was RGB written as ink. With `Icc` and `IccRgb` on the cached
+   route the same two patches read `19.98 → 19.51` and `17.39 → 15.95`, and
+   on `PCS 13.0` the image cell's ink equals the vector cell's at the probe
+   (`c=0.850 m=0.030 y=1.000 k=0.150`). **The lesson replaces the rule:** a
+   negative measured through an untested intermediate measures the
+   intermediate; probe it (`render-page --probe-ink X,Y` on a vector/image
+   pair of one authored colour) before recording a route as refused.
+   **Also measured this session:** for a PDF/X page the ink route IS the
+   reference's behaviour — Acrobat converts an ICC RGB image through the
+   output intent (`(10,141,49)`), not profile→sRGB directly (`(0,154,0)`,
+   which is what lcms2 and iccce both give). Direct-to-sRGB is right only on
+   a page without an output intent.
 2. **Do NOT rewire the terminal CMYK→sRGB display conversion to iccce.**
    Best intent through the document's `/OutputIntent`: mean error 8.0 vs
    today's 10.3, and every intent clips red to 0 where both pdfce and the
-   reference are non-zero.
+   reference are non-zero. (This is why `N 4` stays on `from_cmyk` for
+   display; an embedded CMYK profile → sRGB is the same class of transform.)
+   The residual on the two ICC patches that pass is this conversion: on
+   `17.2` the `DeviceCMYK` surround is `(13,169,76)` against the reference's
+   `(77,175,48)`.
 3. **Do NOT extend `Pass 201.0`'s shading `ink_reach` narrowing to images.**
-   Measured `23.90 → 28.68`. (With planes the narrowing is off for shadings
-   too — `Pass 239.0` — so this item is now about a route that no longer
-   exists for plated spots; it stays for the plane-less fallback.)
+   Measured `23.90 → 28.68`. Stays for the plane-less fallback.
 4. **`OverprintZeroTintScope`: LEAVE THE DEFAULT ALONE.** Per-patch trap
    counts with the spot plane in place: `grey_as_k_only` (default) 2,
-   `all_process_spaces` 2, `device_cmyk_only` 4. The literal reading is twice
-   as bad and moves the traps rather than removing them.
-   ★ **And the scope no longer reaches a SPOT at all** (`Pass 238.0`): under
-   every scope a spot plane is Table 149's `c_b`; the scope decides the four
-   process rules only. The grey-over-spot fixtures pin preservation now; the
-   scope discriminators are over process ink (`OP-N3`).
+   `all_process_spaces` 2, `device_cmyk_only` 4.
 5. **The `cmyk_group_rules` mixed-source widening to `[Source; 4]` is
    correct WITHOUT planes and wrong WITH them.** `cmyk_group_rules_with_planes`
-   carries the switch. Do not delete the widening: shadings without planes
-   (meshes, refused rosters) still need it.
+   carries the switch. Do not delete the widening.
 6. **The §11.7.4.2 non-separable guard in `blend_spots` is REDUNDANT** —
    sabotage-verified; kept for legibility.
 
@@ -199,34 +186,20 @@ that is §D item 2.
 ## §E ITEMS OWED BY THE OPERATOR
 
 - **Open question `(cb)`** — the device-model adjudication behind `3.0 k`
-  and `4.0 k` (§0 table). Both renders conform; the choice is his.
+  and `4.0 k`. Both renders conform; the choice is his.
 - **Open question `(ca)`** — 82 published commit messages carry the licensed
-  suite's name; removing them means rewriting published history. The gate
-  stops the count growing (`Pass 208.0`).
-- **The `set_page_tabs` verb** needs no ruling — but PDF/UA-1 forbids `/A`
-  outright, so a shell offering it must know the file's conformance target.
-  That is a product question for when pdfceGUI asks.
+  suite's name; the gate stops the count growing.
+- **The `set_page_tabs` verb** needs no ruling until pdfceGUI asks.
 
 ---
 
-## §F THE PATTERN THIS SESSION KEPT HITTING
+## §F THE PATTERN THIS SESSION HIT
 
-**A fix on one route exposes the same defect's twin on a route that had
-looked correct.** Three times in one day, each found by an agreement test
-between two routes rather than by a reference:
-
-- The image path deposited a `/Indexed` spot correctly and rendered WHITE,
-  because the FILL path had been depositing the palette **index** as the tint
-  and building the plane's curve from the index space — two wrongs that
-  cancelled on their own route for eleven Passes.
-- The image path's mixed-`DeviceN` rules were the table's, and the FILL
-  path's were the `Pass 195.0` widening; the duotone showed which.
-- The shading path deposited its spot and the group merge dropped it,
-  because every buffered group had been merging spot planes by **index**
-  since the planes existed — invisible until something outside a group put
-  a different colorant at index 0.
-
-⇒ **An agreement test's failing half is not always the new code.** Probe
-both sides before assuming; the ink probe (`render-page --probe-ink X,Y`,
-which reports spot planes since `Pass 231.0`) settled each of these in one
-run.
+**A measured negative can be a measurement of the wrong thing.** `Pass
+214.0` tried the right route, measured 3×, and wrote a refusal — into its
+commit, into `FEATURES.md`, and into this file's §D — that stood for a day.
+The route had never been probed one level down; the agreement test between
+the vector and image cells of one patch, plus one `--probe-ink` on each,
+found the defect in under an hour. **An agreement test's failing half is not
+always the new code, and a measured negative's cause is not always the thing
+that was changed.** Probe the intermediate before recording a refusal.

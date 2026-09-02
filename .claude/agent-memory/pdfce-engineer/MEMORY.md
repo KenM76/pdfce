@@ -89,3 +89,4 @@
 - [Write overwrites — check the verb](feedback_write_overwrites_check_the_verb.md) — "updated" not "created" is the only warning; it ate three committed tests and a fixture generator, and a green suite hid it
 - [Repo-scoped gates run before every PUSH](feedback_repo_scoped_gates_run_before_every_push.md) — I published a licensed name to the public repo; standing push authority removed the pause that used to catch it
 - [Never type a reverting git verb in a chain](feedback_never_type_a_reverting_git_verb_in_a_chain.md) — a `git checkout -- file` typed "as a no-op" reverted an hour of uncommitted work; keep edits in re-runnable scripts until committed
+- [A measured negative can measure a defect](feedback_a_measured_negative_can_measure_a_defect.md) — a prior session's "3x worse, refused" measured raw samples written as ink; probe the intermediate before believing a refusal

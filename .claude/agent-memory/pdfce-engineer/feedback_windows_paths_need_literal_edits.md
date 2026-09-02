@@ -495,3 +495,18 @@ first.** All four changes were finished, tested and green before the sabotage.
 A throwaway commit costs nothing and is reversible; a checkout is not. The rule
 above already says this. Sabotage AFTER committing, restore with `git checkout`
 freely, and the whole class disappears.
+
+**A THIRD INSTANCE, 2026-09-02, and I first blamed the wrong thing.** A
+patch script fed through the Bash tool as a `python - <<'EOF'` heredoc had
+`\\` (an escaped backslash, to match a Rust line-continuation `\`) inside
+its `old` anchor. (Writing THIS paragraph through a heredoc reproduced the
+fault a third time — the `\\` above arrived as `\` and was fixed with Edit.) The transport delivered ONE backslash, so the anchor no
+longer matched and `s.count(old)` returned 0. I wrote a memory saying the
+cause was cp1252 decoding of the em dash on the same line; a direct test
+showed non-ASCII arrives intact (`len("a — b") == 5`) and that a literal
+`'\'` reaches Python as `''` (a SyntaxError on an unterminated string
+proved it). Same class as the two instances above — a backslash through the
+Bash tool is never literal — and the fix is the same: any patch script with
+a backslash in it goes through the `Write` tool to a file, then
+`python <file>`. Note the shape of the misdiagnosis: the wrong cause was the
+most VISIBLE character on the failing line, not the one the class predicts.

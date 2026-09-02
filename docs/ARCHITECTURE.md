@@ -29274,6 +29274,19 @@ hard-code an intent because a fixture scores well under it, and it should be
 read as the standing shape of pdfce's colour policy rather than as this
 Pass's local scope.
 
+**★ CORRECTED 2026-09-02 (`Pass 240.0`, `f978291`, 384th filing, this role's
+own hard-rule-11 sweep — not a new architectural decision).** This paragraph
+is about `DeviceRGB` (a device colour space with no source characterisation
+the document supplies) and remains true of it. But `ICCBased /N 3` is a
+DIFFERENT case this paragraph had been read as covering too — an
+`ICCBased` RGB space DOES carry a source characterisation (its own embedded
+profile), so "pdfce is not entitled to invent a source characterisation the
+document never made" never applied to it. `Pass 240.0` extended management
+to `ICCBased /N 3` on every route (fills, strokes, text, images, both page
+kinds); only `DeviceRGB` and `ICCBased /N 1` (Gray) remain refused. See
+`ROADMAP.md` `Pass 240.0` (*Shipped*) for the mechanism and the retraction
+of a separate measured-negative claim this same boundary had produced.
+
 **Also deliberately unchanged: `overprint::rgb_to_cmyk` stays on the
 round-trip path.** It is an **invertible** max-GCR formula that exists so
 `snapshot_srgb_backdrop` and `composite_srgb` return where they started.

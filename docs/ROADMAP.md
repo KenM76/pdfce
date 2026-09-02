@@ -96,6 +96,188 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 384th filing, 2026-09-02 — TWO PASSES SHIPPED: `Pass 240.0`
+(`f978291`) MAKES ICCBASED RGB COLOUR-MANAGED ON EVERY ROUTE AND
+RETRACTS A `Pass 214.0` "MEASURED AND EXPLICITLY REFUSED" CONCLUSION
+THAT WAS ACTUALLY A DEFECT IN AN UNTESTED PATH; `Pass 241.0` (`75a17ac`)
+GIVES A RENDER PRESET'S SET CLAIMS THEIR OWN WHY.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, the
+changes they make, and every measurement below are relayed verbatim by
+the engineer in the dispatch prompt, not independently confirmed via
+`git show`/`git log`. Both commits are already on `main`, not yet
+pushed — pushed together with this filing's own commit, per standing
+practice (the `R217` family).
+
+### Pass 240.0 (`f978291`, 2026-09-02) — ICCBased RGB is colour-managed on every route, and the 'measured negative' was a defect
+
+**What shipped.** `ICCBased /N 3` (RGB) is now colour-managed through
+its own embedded profile to the SCREEN (`iccce`'s constructed sRGB
+destination, `Destination::None`) for fills/strokes/text (new
+`Interpreter::display_managed_rgb`/`display_bridge` at `cs`/`sc`), for
+direct images, `/Indexed`-over-`ICCBased` images, and JPX images whose
+codestream carries the profile with no `/ColorSpace` (§7.4.9). New
+`image::Space::IccRgb { display, ink }`; new `IccBridge::build_to_srgb`,
+`convert_to_rgb`, `IccBridgeCache::get_srgb`; `BridgeDest` joins the
+cache key; the cache key now compares profile BYTES (was `Arc::ptr_eq`
+only, which missed on every image decode and every `cs`). On a
+subtractive page carrying an `/OutputIntents` output intent, the RGB
+image ALSO deposits the ink bridge's CMYK output — the same ink the
+vector path deposits.
+
+**★★ RETRACTION — a measured negative was a defect in an untested path,
+not the route.** `docs/NEXT_SESSION.md` §D item 1 and `Pass 214.0`'s own
+*Shipped* entry (below, amended in place) recorded "managing N 3 images
+onto the ink path is 3× worse (`20.59→62.51`, `17.87→31.50`)". That
+number measured a DEFECT, not the route: a direct `Space::Icc` image
+was OUTSIDE the texel loop's cached `tinting` route, so its ink arm
+wrote the RAW SAMPLES as C,M,Y,K — for N 4 that was silently unmanaged
+ink under `icc_managed: true` since `Pass 214.0` (invisible because
+CMYK samples already ARE C,M,Y,K); for N 3 it was RGB written as ink
+(the 3×). The bridge ran once per image in the `yields_cmyk` probe,
+never per texel. `/Indexed` was unaffected (its palette is already
+built through `to_cmyk`). Fixed by putting `Icc` and `IccRgb` on the
+cached (`tinting`) route. Re-measured on the identical two patches:
+`19.98→19.51` and `17.39→15.95` — the opposite sign.
+
+**Diagnosis.** An ink probe on a matched vector/image pair of the same
+authored colour on `PCS 13.0`: the vector cell's ink `c=0.850 m=0.030
+y=1.000 k=0.150` against the image cell's post-"fix" ink `c=1.0 m=0
+y=1.0 k=0.396` — the unmistakable shape of a naive `rgb_to_cmyk` applied
+to already-resolved RGB, not a profile conversion. Reading the texel
+loop directly then found the raw-comps ink arm, not a bridge call, on
+that path.
+
+**Rendering intent now consumed for images, not merely counted.** Image
+decode is ALWAYS given a managed `IccContext` (was subtractive-only),
+carrying the image's own resolved `/Intent` (Table 89) — "counted, not
+yet consumed" since `Pass 199.1`, consumed now.
+
+**Counters.** `icc_managed_paints` now means "converted through its
+embedded profile, to ink OR to the screen" (was ink-only); an N 3 paint
+on a page WITHOUT an output intent now counts managed (was unmanaged);
+images tick the counter on every page (was subtractive-only); a JPX
+with no `/ColorSpace` counts from `decoded.icc_managed`. `color.rs`'s
+`IccBased` doc comment ("pdfce substitutes unconditionally") and the
+CLI note ("these spaces were NOT colour-managed") corrected.
+
+**Provenance banner.** `rev <40 chars>, a4d9003b` under a `rev` pin
+printed the same revision twice; now `rev a4d9003b`. The three stale
+worked examples flagged by `docs/NEXT_SESSION.md` §A item 4
+(`crates/pdfce-core/build.rs`, `src/build.rs`) corrected.
+
+**Measured (`tools/suite-check.py`, 51 patches).** Conformance sweep
+**5 FAIL / 38 pass / 8 unresolved → 3 FAIL / 40 pass / 8 unresolved of
+51**. `PCS 13.0` and `PCS 17.2` now pass. Remaining FAIL: `PCS 3.0 k`
+and `4.0 k` (device-model adjudication, open operator question `(cb)`),
+`PCS 22.1` (Lab). Whole-image error improved on every ICC patch (table
+in the commit, not reproduced here); no non-ICC patch changed a pixel.
+16-bit ICC images render in ~230–310 ms.
+
+#### Tests and gates
+
+`crates/pdfce-render/tests/icc_rgb.rs` (**5 tests**) over new
+`fixtures/synthetic/icc-rgb/` (generator `tools/gen-icc-rgb-fixtures.py`,
+`PROVENANCE.md`): one colour drawn four ways through a generated
+matrix/TRC profile with red/green colorants SWAPPED, three pages
+(additive / subtractive-no-intent / subtractive with a synthetic CMYK
+output intent copied byte-for-byte from `iccce`'s own MIT fixture
+`v2-cmyk-chromatic-neutral.icc`). Closed-form expected pixel
+`(48,102,205)` confirmed by `lcms2` on the same bytes; unmanaged is
+`(102,51,204)` — 54 levels apart (`R225`). Six sabotages, each asserted
+applied, none survived. `fmt`/`clippy -D warnings` clean; full
+`tools/run-gates.sh` PASS (31 commands) on the committed tree.
+`cargo tree -p pdfce-render` no GUI deps; dependency SET unchanged so
+`THIRD_PARTY_LICENSES.md` unchanged.
+
+#### Deliberately NOT done
+
+N 1 and N 4 on the display path (unmeasured — `docs/NEXT_SESSION.md` §D
+item 2); shadings and meshes in `ICCBased` RGB (still reinterpreted —
+0/51 patches, corpus exposure unmeasured — filed to *Backlog*, below); a
+colour set then `ri` changed then painted reads display intent at set
+time, ink intent at paint time.
+
+#### `docs/FEATURES.md`
+
+*Colour spaces and PDF functions*, `/OutputIntents`-aware CMYK
+conversion, `/ICCBased` colour spaces, and Rendering intent rows all
+amended in place. The `/ICCBased` row's core box stays `◐` (Gray and
+shadings/meshes remain unmanaged).
+
+#### Standing rules — recorded as a NAMED CANDIDATE at n = 1, not minted
+
+*A measured negative that routes through an untested intermediate
+measures the intermediate's defect, not the route; before recording a
+route as refused, probe the intermediate (here, ink at a pixel) on a
+matched pair.* This is a real, generalizable diagnostic principle and
+this project's bar for a standing rule is two occurrences. This is the
+first instance of this exact shape — a cousin of, not the same as, the
+personal_rag finding "a correct fix can be unreachable," and a cousin of
+`R217`'s "an instrument reading a property of a moving tip" family, but
+neither is the SAME shape (this one is about an untested code path
+corrupting a measurement, not a moving target or an unreachable fix). If
+a second measured-negative-through-an-untested-path turns up, this is
+the entry to cite and promote.
+
+**★ Retraction noted in `Pass 214.0`'s own entry, below** (append-only
+discipline — a dated note, not a rewrite).
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | `Pass 240.0` ships |
+| Decisions | ceiling `123`, next free `124` | unchanged |
+| Standing rules | ceiling `R239`, next free `R240` | unchanged — recorded as a named candidate at n=1, not minted |
+
+---
+
+### Pass 241.0 (`75a17ac`, 2026-09-02) — a render preset's SET claims carry their why out of the crate; the output-intent sentence is narrowed
+
+**What shipped.** Closes pdfceGUI's boundary note of 2026-09-02
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\note_disclosures_drops_the_why_of_every_value_a_preset_sets.md`).
+`RenderPreset::disclosures()` emitted a `why` only for LEAVE-ALONE
+entries; every SET entry's reasoning was discarded — invisible until
+`Pass 237.0` because every set value up to then was `BestEffort`
+(summarised by count), but `spot_colorant_device_model` is `Implied` and
+its `why` is the only sentence telling an operator that a composite
+viewer shows knockouts where pdfce keeps ink — a visible divergence that
+reads as a bug without it. `disclosures()` now emits `render preset:
+\`{key}\` set ({evidence}) — {why}` for a set entry whose evidence is a
+claim about the standard; `BestEffort` entries stay summarised by count.
+Rustdoc states the curation rule. Test pins both halves; sabotage
+verified.
+
+**Narrowing.** The "`COLORIMETRIC` … pdfce does not apply it" disclosure
+sentence had been false since `Pass 199.2`; narrowed to name exactly
+what remains unapplied — `DeviceCMYK` content and the final CMYK→screen
+table.
+
+**Reply filed to pdfceGUI:**
+`open/reply_disclosures_now_carries_the_why_of_a_set_claim_delete_your_workaround.md`.
+
+#### `docs/FEATURES.md`
+
+*Per-standard render presets* row (*Implemented*) amended in place —
+set-entry disclosure sentence added.
+
+#### Standing rules — no new mint
+
+No new decision or standing rule from this filing. **Decision ceiling
+unchanged at `123`; next free `124`. Standing-rules ceiling unchanged at
+`R239`; next free `R240`.**
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | `Pass 241.0` ships |
+| Decisions | ceiling `123`, next free `124` | unchanged |
+| Standing rules | ceiling `R239`, next free `R240` | unchanged |
+
+---
+
 **★★★ 383rd filing, 2026-09-02 — ONE COMMIT (`9228cad`), NO PASS: THE
 382nd FILING'S OWN FIX LOOKED AT WHICHEVER COMMIT SAT AT THE TIP OF
 `origin/main`, AND THE VERY NEXT PUSH (ITS OWN FILING COMMIT) PUT A CODE
@@ -2941,6 +3123,25 @@ terminal CMYK→sRGB conversion is separately ~10 levels from Acrobat; a
 CMYK image was already ink-bound so the profile is pure gain, but an RGB
 image was not and pays more than it gains. The 4-component restriction is
 therefore the measured-correct boundary, not an unfinished edge.
+
+**★★ RETRACTED 2026-09-02 (`Pass 240.0`, `f978291`, 384th filing).** The
+3×/1.8× regression measured here was a DEFECT in an UNTESTED path, not a
+property of managing RGB ink: a direct `Space::Icc` image sat outside the
+texel loop's cached `tinting` route, so its ink arm wrote the raw decoded
+samples as C,M,Y,K rather than converting them through the profile — for
+this Pass's `/N 4` case that arm was already correct BY CONSTRUCTION
+(CMYK samples ARE C,M,Y,K), which is exactly why the defect stayed
+invisible while N 3 alone regressed 3×. Diagnosed with an ink probe on
+the same two patches: the vector cell's authored ink (`c=0.850 m=0.030
+y=1.000 k=0.150`) against the image cell's post-"fix" ink (`c=1.0 m=0
+y=1.0 k=0.396`) has the unmistakable shape of `rgb_to_cmyk` applied to
+already-resolved RGB, not a profile conversion. Fixed by moving
+`Icc`/`IccRgb` onto the same cached route the vector paint already used;
+re-measured on the identical two patches: `19.98→19.51` and
+`17.39→15.95` — an IMPROVEMENT, the opposite sign from the number this
+entry recorded. See `Pass 240.0` (*Shipped*, above) for the full
+account. This entry's title and body are left exactly as filed, per the
+append-only discipline — the correction is this note, not a rewrite.
 
 **`FEATURES.md`:** row 380 (the existing `/ICCBased` colour-space row under
 *Fonts & rendering*) rewritten in place — was "An ICCBased IMAGE is NOT
@@ -112992,6 +113193,12 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+> ★★ **ONE ITEM ADDED 2026-09-02 (384th filing), `Pass 240.0`'s NAMED
+> REMAINDER — shadings and meshes in an `ICCBased` RGB colour space are the
+> LAST unmanaged ICCBased route** after `Pass 240.0` made fills, strokes,
+> text and images colour-managed on every page kind. `FEATURES.md`'s
+> `/ICCBased` row stays `◐` core; no box moves.
+
 > ★★ **ONE ITEM ADDED 2026-09-02 (380th filing), `Pass 239.0`'s NAMED
 > REMAINDER — mesh shadings (types 4–7) are now the ONLY route still
 > flattening spot colorants; every other spot-plane route (fills, stencils,
@@ -112999,6 +113206,31 @@ nothing gets forgotten, not as a commitment to build in this order.
 > knockout groups) now deposits.** `FEATURES.md`'s *Per-colorant (n-channel)
 > compositing buffer* row narrowed a fifth time to this single remaining
 > scope; no box moves.
+
+### Unscoped — ★★ SHADINGS AND MESHES IN AN ICCBased RGB SPACE STILL REINTERPRET RATHER THAN COLOUR-MANAGE — THE LAST UNMANAGED ICCBased ROUTE — filed 2026-09-02 (384th filing, `Pass 240.0`'s named remainder)
+
+**Status: NOT STARTED.** `Pass 240.0` (*Shipped*, above) made an
+`ICCBased` RGB (N 3) paint colour-managed on every OTHER route — fills,
+strokes, text, direct images, `/Indexed`-over-`ICCBased` images, and JPX
+images with an embedded profile and no `/ColorSpace` — on both additive
+and subtractive (with an output intent) pages. A shading (`sh`, a shading
+pattern, or a mesh, types 4–7) drawn in an `ICCBased` RGB space is still
+a Table 66 §8.6.5.5 reinterpretation through `/Alternate`, on both the
+display path and the ink path — unmanaged.
+
+**Corpus exposure unmeasured.** 0 of 51 print-conformance patches
+exercise this construct; no measurement has been taken of how common an
+`ICCBased`-RGB-space shading or mesh is in the wild. Scoping this Pass
+needs that census before an acceptance criterion can be written the way
+`Pass 240.0`'s own fixtures were (a discriminating construction, not a
+suite patch that happens to pass).
+
+**The shape of the remaining work.** `ColorRamp`'s per-sample colour
+resolution and the mesh per-vertex colour resolution both currently ask
+`ColorSpace::to_cmyk`/the RGB conversion path directly rather than
+through `iccce`'s bridge; both would need the same `IccBridge`/cache
+plumbing `Pass 240.0` built for the paint and image routes, keyed the
+same way (profile bytes, not `Arc::ptr_eq`).
 
 ### Unscoped — ★★ MESH SHADINGS (TYPES 4–7) STILL FLATTEN SPOT COLORANTS — THE ONE ROUTE `Pass 239.0` LEFT OPEN — filed 2026-09-02 (380th filing, `Pass 239.0`'s named remainder)
 
