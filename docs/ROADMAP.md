@@ -96,6 +96,126 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 369th filing, 2026-09-02 — `Pass 228.0` (`9a18510`).**
+
+**Sourcing (hard rule 8).** No shell this filing. The full commit body was
+supplied verbatim as a scratch file (`D:\Dev\pdfce\.librarian-228.txt`) by
+the engineer, not read via `git log` directly. Every claim naming a live-code
+location was independently cross-checked by `Read`/`Grep`: `BrushSpec`
+(`crates/pdfce-render/src/canvas.rs:128`) carries `spots: Vec<SpotInk>` and a
+new third colour field `process_tints: Option<[f32; 4]>` (`:157`, `:186`),
+whose own doc comment (`:158-186`) states, verbatim, the exact defect and
+arithmetic the commit message reports — *"the first cut of the deposit did
+exactly this, and `devicen_image_ink`'s agreement tests caught it as `(97,
+169, 135)` against an expected `(158, 208, 186)`. The arithmetic is decisive
+— `158² / 255 = 97.9`"* — confirming the finding was written into the code
+itself, not only reported. `composite_overprint`
+(`crates/pdfce-render/src/cmyk_buffer.rs:1588`) and
+`composite_overprint_varying` (`:1540`) both exist; `composite_overprint`'s
+own in-line comment (`:1629-1640`) states the fix and names
+`composite_overprint_varying` as *"already correct by construction because
+it starts from `before`"* — independently confirmed by reading
+`composite_overprint_varying`'s body, which assigns `let mut out = before;`
+(`:1567`) before any per-channel work, while `composite_overprint`'s fixed
+line now reads `s: before.s` (`:1641`). `devicen_image_ink` is referenced
+from three sites (`canvas.rs:175`, `image.rs:3057`, `cmyk_paint.rs:251`),
+confirming it is the shared regression anchor the commit message describes
+rather than a one-off test. No `Cargo.toml` change mentioned or found on
+inspection, so GUI-core separation is not implicated. Round-trip/minimal-diff
+is not implicated — the change is paint-time compositing arithmetic, not
+document-writing code. **Not independently re-measured this filing**: the
+`PCS 2.0` trap count (7 → 4) and the conformance-sweep totals (7/37/7,
+unchanged) are the engineer's own figures, relayed rather than re-run — no
+shell this filing, flagged per hard rule 8.
+
+### Pass 228.0 (`9a18510`, 2026-09-02) — the spot-colorant plane, step 3b of ~4: the DEPOSIT — spot ink reaches its own plane, and two traps stop firing
+
+**The first Pass in this arc that moves a pixel.** Steps 1 (`Pass 217.0`,
+`643e270`) and 2 (`Pass 225.0`, `16eaaa2`) built the carrier and the storage/
+blending/collapse machinery, both **proved inert by measurement** — byte-
+identical conformance sweeps before and after. This step wires
+`interpret::solid_authored` through `overprint::authored_spots` (`Pass
+227.0`, the reader) into `BrushSpec::spots`/`process_tints`, `cmyk_paint.rs`
+(resolves planes, decides deposit), `CmykBuffer::composite_mask` (writes
+`PixelCmyk::s`) and `CmykBuffer::fold_spots_srgb` (`Pass 225.0`'s collapse) —
+so a `Separation`/`DeviceN` fill naming a spot colorant now deposits into its
+own plane instead of being flattened into CMYK before it ever reaches the
+buffer.
+
+**Measured: conformance sweep, `PCS 2.0`: 7 traps → 4 (2 of 6 named trap
+positions stop firing).** Every other patch is unchanged; the FAIL/pass/
+UNRESOLVED totals hold at **7 / 37 / 7 of 51** because `PCS 2.0` needs zero
+traps to flip from FAIL to pass. No regressions: full workspace tests green,
+clippy clean. Each spot colorant's tint curve is sampled once per content
+stream into an `Arc<SpotLut>` cached on the interpreter and shared by
+refcount, so a drawing filling two thousand shapes in one ink evaluates its
+tint transform 256 times, not half a million.
+
+**★★ Three defects found, all by existing tests, none newly written for this
+Pass.**
+
+**1. The ink was laid down TWICE.** `authored_cmyk` returns a `/Separation`'s
+*flattened* colour — its tint transform's own `DeviceCMYK` output, which
+`Pass 140.1` deliberately established as correct and which is what makes a
+spot fill and a spot image agree. Depositing into a plane on top of that
+applies the same ink through both routes at once. `devicen_image_ink`'s
+existing agreement tests caught it instantly — a fill rendered `(97, 169,
+135)` against an expected `(158, 208, 186)`, and **the arithmetic identified
+the cause before any code was read**: `158² / 255 = 97.9`, exactly what a
+value multiplied by itself looks like. Fixed by giving `BrushSpec` a third
+colour field: `cmyk` answers *"what does this flatten to"* (used when no
+plane is granted); the new `process_tints` answers *"which process channels
+did this source NAME"* (used when every spot got one) — a spot-only source
+answers `[0,0,0,0]` there, which is the truth.
+
+**2. Overprint WIPED the spot backdrop it exists to preserve.**
+`composite_overprint` built its result pixel with `s: [0.0; MAX_SPOTS]` —
+harmless while no plane ever held ink, a defect the instant one did.
+`grey_overprint`'s four preservation tests went red together. Fix is Table
+149 itself: a source that does not NAME a colorant leaves it to the
+backdrop, so the spot planes pass through untouched. **★ Its sibling
+`composite_overprint_varying` was already correct** — it starts from
+`before` rather than constructing a fresh pixel, so it preserved by
+construction. Two functions, one rule, and only one of them had to be told.
+
+**3. My own plan's ordering was wrong.** `docs/NEXT_SESSION.md` scoped the
+deposit and Table 149's spot rule as separate, sequenceable steps. They are
+not separable: depositing without the rule regresses four tests, because the
+ink now exists for overprint to destroy. **Same family as `Pass 97.0`/`Pass
+97.1a`/`Pass 97.1b`** (*Shipped*, below, two-hundred-and-seventeenth filing,
+`docs/compositor-plan.md` §7) — that entry's own words, *"the dependency
+between the plan's two items runs the opposite way round from how the plan
+ordered them"* and *"two for two is a property of the PLAN, not of the two
+Passes"* — apply unchanged here. No standing rule found for this specific
+shape under that name; recorded as a third dated instance of the same
+compositor-plan family rather than minted, per hard rule 3's "check first"
+discipline and the engineer's own request.
+
+**All-or-nothing, deliberately.** If any spot in a paint is refused a plane
+(roster cap or byte ceiling), the paint keeps today's flattening entirely and
+deposits nothing. A partial split would double-count the ones that got
+planes while the flattening still carries all of them — defect 1 again, in a
+harder-to-see form.
+
+**What is still not deposited, and why the totals did not move further.**
+`composite_overprint` — the OVERPRINT paint path — takes no spot tints yet.
+It now *preserves* planes but cannot *fill* one. `PCS 3.0`'s backdrop is
+itself an overprinting `/DeviceN [/Black <spot>]` fill, so its spot never
+reaches a plane and its three traps are unchanged — that is step 3c, and it
+is the next thing. Images (`composite_srgb`, the CMYK-image path) and
+knockout groups also still flatten; those are step 4.
+
+**`docs/FEATURES.md`: no box ticked, three rows corrected in place** — this
+is a fidelity improvement, not a new operator-facing capability (the
+operator could always render a spot fill; it rendered less accurately). The
+*Subtractive (colorant) compositing buffer* row's stale "spot colorants are
+still flattened" claim, the *Overprint SIMULATION* row's identical claim
+(narrowed to the overprint path specifically, which remains true there), and
+the *Per-colorant (n-channel) compositing buffer* *Planned* row's stale "step
+3, the DEPOSIT… is what still closes this row; nothing here is yet reachable
+by any shell" were all corrected in place, struck rather than silently
+edited, and dated to this filing.
+
 **★ ONE COMMIT, 368th filing, 2026-09-02 — `Pass 227.0` (`983b438`).**
 
 **Sourcing (hard rule 8).** No shell this filing. The full commit body was
@@ -133574,6 +133694,53 @@ same cause (hashes exist only at commit time), two different failure modes.
   > times; every occurrence was a compliance or measurement failure, not a rule
   > failure.** **Ceiling unaffected: rules `R235`, next free `R236`; decisions
   > `108`, next free `109`.**
+
+  > **★ FOURTH AMENDMENT NOTE, 2026-09-02, 369th filing — CI'S UNIT OF
+  > EVALUATION IS THE *PUSH*, NOT THE COMMIT, WHICH IS THE MECHANISM `R217`
+  > RELIED ON BUT HAD NEVER STATED. NO NEW NUMBER; ONE WORKING ORDER
+  > SHARPENED.**
+  >
+  > **Measured 2026-09-02** (`docs/NEXT_SESSION.md` §C, `gh run list --limit
+  > 10 --json status,conclusion,headSha,createdAt`): **CI was red for roughly
+  > nineteen hours — 34 of the last 40 runs, unbroken from 2026-09-01 08:10Z —
+  > across the whole of the prior session and about twenty pushed commits.**
+  > It went green only when a later session happened to fix the two causes
+  > for unrelated reasons (nine unfiled commits, three baked-in string gaps),
+  > found by running the LOCAL sweep, not by reading CI. **Nobody looked** —
+  > the rule to check was already in this file and in `CLAUDE.md` rule 8; a
+  > green local sweep read as "everything is fine" while the remote had been
+  > saying otherwise since the morning.
+  >
+  > **Separately, two 2026-09-02 pushes (`983b438`, `78958ff`) went red for
+  > the exact non-defect this rule's deferral window exists to tolerate,**
+  > because each code commit was pushed ALONE rather than paired with its
+  > filing commit in the same push. **Evidence the pairing is what fixes it,
+  > not an assumption:** the push `9d43079..61c3735` carried two commits
+  > (`16eaaa2` code + `61c3735` filing) and produced **exactly one** CI run,
+  > on the tip, green. **GitHub runs one job per PUSH, on the tip — not one
+  > per commit.** Every other push that session carried a single commit, so
+  > that two-commit push is the only observation distinguishing the two, and
+  > it is the one that settles it.
+  >
+  > **⇒ The working order gains its missing operational half — WHEN to push,
+  > not only what may be at the tip when CI runs: commit the code, dispatch
+  > the librarian, commit the filing, THEN push — both commits in the SAME
+  > `git push`, not "push as soon as each commit lands."** `R217`'s existing
+  > orders (`code → file, then stop`; never two unfiled commits at the tip)
+  > were never wrong; a push that satisfies them can still go red for a
+  > tick's worth of nothing if it fires mid-way through the pair, and that is
+  > what happened twice.
+  >
+  > **Also recorded, same evidence, same session:** read CI's colour from
+  > GitHub every session, early — a green local sweep does not mean the
+  > remote agrees, and this project went unwatched for roughly nineteen
+  > hours while it did not.
+  >
+  > **No new rule number** — this is `R217`'s own subject, the width and
+  > timing of the deferral window, restated with the mechanism (one CI run
+  > per push) that explains why a technically-compliant commit order still
+  > produced red runs. **Ceiling unaffected: rules `R239`, next free `R240`;
+  > decisions `118`, next free `119`.**
 
   **Ceiling moves `R216` → `R217`; next free `R218`.**
 

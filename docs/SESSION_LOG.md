@@ -85603,3 +85603,105 @@ or invariant redefinition; `ARCHITECTURE.md` §12 not touched.
   decision to relocate `target/` off `D:`.
 - Backup/push state: not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (369th filing) — `Pass 228.0` (`9a18510`) SHIPPED — the spot-colorant plane, step 3b of ~4 (the DEPOSIT): a spot fill now composites into its own plane and TWO TRAPS STOP FIRING, the first pixel this arc has moved; three defects found and fixed by existing tests; a CI-mechanism finding (one job per PUSH, not per commit) added to `R217` as a fourth amendment note
+
+**Sourcing.** No shell this filing. The commit body was supplied verbatim as
+a scratch file (`.librarian-228.txt`) by the engineer, not read via `git
+log`. Every claim naming a live-code location was independently
+cross-checked by `Read`/`Grep` — `BrushSpec`'s new `process_tints` field and
+its doc comment (`crates/pdfce-render/src/canvas.rs:128-186`) state the
+`158² / 255 = 97.9` arithmetic verbatim; `composite_overprint`'s in-line
+comment (`crates/pdfce-render/src/cmyk_buffer.rs:1588-1651`) states the fix
+and names `composite_overprint_varying` as already-correct, independently
+confirmed by reading both function bodies. See the filing header in
+`ROADMAP.md`'s *Shipped* section for the full citation list.
+
+**Shipped:**
+
+- **`Pass 228.0`** (`9a18510`) — the spot-colorant plane, step 3b: the
+  DEPOSIT. `interpret::solid_authored` now hands a `Separation`/`DeviceN`
+  fill's colorant names and tints through `overprint::authored_spots`
+  (`Pass 227.0`, the reader) into `BrushSpec::spots`/`process_tints`,
+  `cmyk_paint.rs`, `CmykBuffer::composite_mask` and `Pass 225.0`'s
+  `fold_spots_srgb` collapse. **Measured: conformance sweep, `PCS 2.0`: 7
+  traps → 4** (2 of 6 named trap positions stop firing); every other patch
+  unchanged, totals hold at **7 / 37 / 7 of 51** because `PCS 2.0` needs zero
+  traps to flip from FAIL. No regressions: full workspace tests green,
+  clippy clean. **First step in this arc to move a pixel** — steps 1
+  (`Pass 217.0`) and 2 (`Pass 225.0`) were both proved inert by measurement.
+
+**Decisions made this session:** none — no crate boundary, library choice or
+invariant redefinition; `ARCHITECTURE.md` §12 not touched.
+
+**Findings + decisions:**
+
+- **Three defects found, all by EXISTING tests, none newly written for this
+  Pass.** (1) The ink was laid down twice: `authored_cmyk` returns a
+  `/Separation`'s FLATTENED colour (`Pass 140.1`'s deliberate design, what
+  makes a spot fill and a spot image agree), and depositing into a plane on
+  top of that applied the same ink through both routes — caught by
+  `devicen_image_ink`'s agreement tests rendering `(97, 169, 135)` against an
+  expected `(158, 208, 186)`, with `158² / 255 = 97.9` identifying the cause
+  (a value multiplied by itself) before any code was read. Fixed with a
+  third `BrushSpec` colour field (`process_tints`) answering "which process
+  channels did this source NAME", distinct from `cmyk`'s "what does this
+  flatten to". (2) Overprint wiped the spot backdrop it exists to preserve —
+  `composite_overprint` built its result with `s: [0.0; MAX_SPOTS]`,
+  harmless while no plane held ink, a defect the instant one did;
+  `grey_overprint`'s four preservation tests caught it. Fixed by Table 149
+  itself. Its sibling `composite_overprint_varying` was **already correct**
+  — it starts from the backdrop rather than constructing a fresh pixel — so
+  only one of two functions needed telling, a shape worth recording on its
+  own. (3) The engineer's own plan's ordering was wrong: `docs/
+  NEXT_SESSION.md` scoped the deposit and Table 149's spot rule as separate,
+  sequenceable steps; they are not — depositing without the rule regresses
+  four tests. **Same family as `Pass 97.0`/`Pass 97.1a`/`Pass 97.1b`**
+  (two-hundred-and-seventeenth filing, `docs/compositor-plan.md` §7) —
+  checked against that entry before filing here, per hard rule 3's "check
+  first, don't mint" discipline; recorded as a third dated instance, no new
+  standing rule.
+- **A CI-mechanism finding, added as a fourth amendment note under `R217`
+  (`ROADMAP.md`, *Standing rules*) rather than a new mint.** CI was measured
+  red for roughly nineteen hours (34 of the last 40 runs) across the whole
+  of the prior session, unnoticed because nobody read CI's colour from
+  GitHub — a green local gate sweep does not mean the remote agrees. Two
+  same-day pushes (`983b438`, `78958ff`) separately went red for the exact
+  non-defect `R217`'s deferral window exists to tolerate, because each code
+  commit was pushed alone rather than paired with its filing commit.
+  Evidence the pairing is the fix: a two-commit push (`16eaaa2` code +
+  `61c3735` filing) produced exactly one CI run, on the tip, green — GitHub
+  runs one job per PUSH, not one per commit. Full record: `docs/
+  NEXT_SESSION.md` §C and `ROADMAP.md`'s `R217` fourth amendment note.
+
+**`docs/FEATURES.md`: no box ticked, three rows corrected in place rather
+than left stale.** This is a fidelity improvement, not a new operator-facing
+capability (the operator could always render a spot fill; it rendered less
+accurately). Corrected: the *Subtractive (colorant) compositing buffer*
+row's stale "spot colorants are still flattened" claim; the *Overprint
+SIMULATION* row's identical claim, narrowed to the overprint path
+specifically (which remains true there); and the *Per-colorant (n-channel)
+compositing buffer* *Planned* row's stale "nothing here is yet reachable by
+any shell" closing sentence. All three struck and dated rather than
+silently edited.
+
+**Still in flight / open:**
+
+- **Step 3c — `composite_overprint`'s own deposit — is next.** It now
+  *preserves* spot planes but cannot *fill* one. `PCS 3.0`'s backdrop is
+  itself an overprinting `/DeviceN [/Black <spot>]` fill, so its spot never
+  reaches a plane and its three traps are unchanged.
+- **Step 4 — images (`composite_srgb`) and knockout groups still flatten
+  every spot colorant entirely.**
+- **`D:` operational state — still OPEN, carried forward from the 368th
+  filing**, not re-measured this filing (no shell).
+
+**For next session:**
+
+- Step 3c (overprint's own spot deposit) is the scoped next task; target
+  remains `PCS 3.0`'s three traps.
+- **Push discipline sharpened this filing**: pair a code commit with its
+  filing commit in the SAME `git push` — see `R217`'s fourth amendment note
+  and `docs/NEXT_SESSION.md` §C.
+- Backup/push state: not independently checked by this role, no shell this
+  filing.
