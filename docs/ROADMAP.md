@@ -218,7 +218,7 @@ marks. Suite total: **5 FAIL / 38 pass / 8 unresolved of 51**, up from
 (device-model adjudication, open operator question (cb)), `PCS 13.0` and
 `17.2` (ICC RGB images, `docs/NEXT_SESSION.md` §A items 1–2), `PCS 22.1`
 (Lab). The operator's own multipage render was regenerated at his request
-into `C:\Users\Ken\OneDrive\pdfTests\GhentImages` (`page-1..6.png`); page 4
+into the operator's OneDrive `pdfTests` output folder (`page-1..6.png`); page 4
 (the spot page) is now clean except `3.0 k` / `4.0.1 k`.
 
 #### `docs/FEATURES.md`

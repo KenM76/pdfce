@@ -86727,7 +86727,7 @@ pushed together with this filing.
   (device-model adjudication, open question `(cb)`), `PCS 13.0`/`17.2`
   (ICC RGB images, `docs/NEXT_SESSION.md` §A items 1–2), `PCS 22.1` (Lab).
 - The operator's own multipage render regenerated at his request into
-  `C:\Users\Ken\OneDrive\pdfTests\GhentImages` (`page-1..6.png`); page 4
+  the operator's OneDrive `pdfTests` output folder (`page-1..6.png`); page 4
   (the spot page) is clean except `3.0 k`/`4.0.1 k`.
 
 **`docs/FEATURES.md`:** *Subtractive (colorant) compositing buffer* and
