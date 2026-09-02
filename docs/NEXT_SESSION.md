@@ -211,7 +211,21 @@ function of one scalar.
   share the working tree.
 - **A licensed conformance suite's NAME must never appear in any repo file.**
   Use opaque ids (`PCS 3.0`). `tools/check-suite-name-absent.py` enforces it
-  for the work tree and for unpushed commit messages.
+  for the work tree, for STAGED content, and for unpushed commit messages.
+
+  ★★ **RUN IT BEFORE EVERY PUSH, NOT BEFORE EVERY BUILD.** It was run before
+  every code commit last session and clean each time; it was NOT run before
+  the two DOCS commits, and the handoff you are reading leaked a patch
+  filename into the **public** repository that way. The gate had become
+  associated with *shipping code* rather than with *pushing anything*, and
+  pushing `main` is standing-authorized, so nothing paused to ask.
+
+  ★ It also reads **untracked files and your own commit message**. Both
+  tripped while writing the incident report for the leak — an explanation of
+  a leaked name is itself a place the name leaks, and quoting the string to
+  describe the mistake is not an exemption from the rule the mistake broke.
+
+  Practical form: `python tools/check-suite-name-absent.py && git push`.
 - **Check BOTH feature-request channels every session.**
   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\` and `…\iccce_FeatureRequests\`.
   They are outside the repo, so no gate can contradict a stale "it's empty".
