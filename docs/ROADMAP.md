@@ -96,6 +96,112 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 381st filing, 2026-09-02 — THREE COMMITS, NONE CARRYING A NEW PASS:
+`docs/NEXT_SESSION.md` REWRITTEN (ENGINEER-OWNED), `iccce` RE-PINNED FROM A
+TAG TO A REV AT THE SIBLING PROJECT'S OWN REQUEST (DECISION 123), AND A
+DOCS SCRUB FOR A LEAK THIS ROLE ITSELF CAUSED — THEN `v0.22.0` CUT, TAGGED,
+PACKAGED, SMOKE-TESTED AND DEPLOYED.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, dates,
+gate results, packaging output and deploy log details relayed verbatim by
+the engineer in the dispatch prompt, not independently confirmed via
+`git show`/`git log`. `verify-release.py v0.22.0` is stated as pending,
+to run after the push, and is **not** claimed here as passed.
+
+### `f8c4183` — `docs: NEXT_SESSION.md rewritten`
+
+Engineer-owned handoff document, outside this role's five storage tiers —
+noted for the record only, not filed against.
+
+### `e868d36` — `chore: v0.22.0` — version bump + `iccce` re-pinned tag → rev
+
+Mechanical version bump; both lockfiles moved. Alongside it,
+`crates/pdfce-render/Cargo.toml`'s `iccce-profile`/`iccce-cmm` declarations
+move from `{ git = "…", tag = "v0.3.0" }` to `{ git = "…", rev =
+"a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3" }` — **the same commit** the tag
+resolved to, at `iccce`'s own request
+(`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\reply_depend_on_a_pinned_rev_and_the_four_intent_rules_are_accepted.md`,
+2026-09-01): a `rev` is reproducible without asking `iccce` to cut a
+release it cannot promise on pdfce's schedule, and a **tag can be moved**
+by the repository that owns it while a resolved commit cannot. Dependency
+**set** unchanged; `cargo about` regenerated `THIRD_PARTY_LICENSES.md` with
+**no** diff; `cargo tree -p pdfce-render` / `-p pdfce-core` re-verified
+GUI-free.
+
+**Closes a `docs/NEXT_SESSION.md` §E item flagged as "may already be
+satisfied — not verified."** It was **not** satisfied before this commit
+(the manifest said `tag`, not `rev`) and **is now**.
+
+**★★ Decision `123` minted (`ARCHITECTURE.md` §12) — extends decision
+115's pin-form reasoning to the rev re-pin without revising it**; §9's
+`iccce` paragraph updated in the same edit.
+
+**★ A downstream literal is now stale and is flagged, not fixed, here.**
+`iccce_provenance()`'s printed build-provenance banner derives its pin
+description from the resolved `Cargo.lock` source string, so it
+self-corrects to the new `"(rev …)"` form without a code change — but its
+own doc-comment worked example (`crates/pdfce-core/build.rs:272`,
+`crates/pdfce-core/src/build.rs:32,109`) and `docs/FEATURES.md`'s *Build
+provenance stamp* row (*Persisted state* table) both still quote the
+pre-re-pin literal `"iccce: 0.3.0 (tag v0.3.0, a4d9003b, committed …)"` as
+current output. **Not corrected in this filing** — no shell this session,
+and this role will not assert an unmeasured output string (hard rule 8).
+**Owed to the engineer**: verify the live `--version` banner text and
+correct all three sites (two in `crates/`, out of this role's remit to
+edit; one in `docs/FEATURES.md`, left to the engineer here because the
+correct replacement text needs a measured banner, not an inference).
+
+### `1611119` — `docs: scrub` — a dispatch to this role is a THIRD leak vector for the licensed suite's name
+
+`tools/check-suite-name-absent.py`, re-run on the release tree before any
+push, caught a leaked path component naming the licensed print-conformance
+suite in `ROADMAP.md`'s own `Pass 239.0` *Shipped* entry and in
+`SESSION_LOG.md`'s 380th-filing entry — both describing the operator's
+OneDrive output folder by its literal path, whose last component is the
+suite's own name. **The leak was this role's own**: the 380th filing's
+dispatch prompt named the path verbatim and this role filed it faithfully.
+Both lines now read *"the operator's OneDrive `pdfTests` output folder"*.
+
+**Recorded as a dated instance under the existing 2026-08-25 name-ban
+ruling (open question `(bt)`), not a new standing rule** — full reasoning
+in `ARCHITECTURE.md` §12's matching 381st-filing entry. That ruling's own
+record already names two leak vectors the gate structurally cannot see —
+commit messages and an untracked file outside its scan; **a dispatch to a
+documentation agent is a third**, because it is text that becomes a
+tracked file only once the addressed agent files it, and this role did
+exactly that without first reading the dispatch text against the gate's
+own forbidden terms. **Binding correction for this role going forward**:
+scan dispatch text for the name **before** filing it, not only run the
+gate afterward.
+
+### `v0.22.0` release (`e868d36` bump, tag at `1611119`) — packaged, smoke-tested, deployed
+
+`tools/run-gates.sh` **PASS, 31/31** at `e868d36`; the name gate
+(`check-suite-name-absent.py`) re-run **clean** on `1611119` after the
+scrub above. Binaries rebuilt on the clean tagged tree — the first package
+build predated the bump commit landing and reported
+`v0.21.0-7-g12aaedb-dirty`; that build was **deleted** and rebuilt, and
+`--version` now reports `v0.22.0` clean, no `-dirty` marker.
+`tools/package-portable.py` wrote `D:\builds\pdfce-20260902-1648-1611119`.
+**Fresh-folder smoke test**: the packaged folder copied to a temp path,
+`pdfce-cli --version`, a `render-page` (2,358-byte PNG) and a
+`reorder-annotations` run there, and `pdfce-gui.exe` launched and
+confirmed alive after 6 s. `tools/deploy-onedrive.py` wrote slot `pdfce1`
+(`0.20.0` → `0.22.0`); `pdfce2` keeps `0.21.0`, deployed by the prior
+session at 15:44Z — that session's own log said packaging/deploy were
+"not recorded as done", which this filing corrects: **they were done.**
+`verify-release.py v0.22.0` **is pending**, to run after the push; not
+claimed as passed here.
+
+**What the release carries.** `Pass 237.0`, `Pass 238.0`, `Pass 239.0`
+(all already filed as *Shipped*, above/below). Conformance sweep: **5 FAIL
+/ 38 pass / 8 unresolved of 51**, up from **7 / 37 / 7** at `v0.21.0`.
+
+`docs/FEATURES.md`: untouched — no capability shipped this filing (a
+version bump, a dependency re-pin and a docs correction, not a Pass).
+
+---
+
 **★★ 380th filing, 2026-09-02 — `Pass 239.0` (`6e9513c` + `12aaedb`) SHIPS THE
 SPOT-COLORANT PLANE'S STEP 5: AXIAL/RADIAL/FUNCTION SHADINGS, SHADING PATTERNS
 AND TRANSPARENCY/KNOCKOUT GROUPS NOW DEPOSIT SPOT PLANES — MESH SHADINGS

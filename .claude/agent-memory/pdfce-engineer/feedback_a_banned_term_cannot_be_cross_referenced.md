@@ -61,3 +61,12 @@ phrase into a librarian dispatch. It landed in `docs/ROADMAP.md` twice and in
 Related: [[read-architecture-every-session]],
 [[a-claim-about-callers-is-a-measurement]],
 [[an-unticked-box-is-unfalsifiable]].
+
+**2026-09-02 — a third leak surface: DISPATCH TEXT.** I named the operator's
+OneDrive output folder verbatim in a librarian dispatch; its last path
+component contains the licensed suite's name; the librarian filed it
+faithfully into ROADMAP.md and SESSION_LOG.md, and only the release-tree
+gate sweep caught it (before the push). A commit message, an untracked file
+and now a subagent prompt: anything a documentation agent will copy into a
+tracked file is a publication surface. Describe the folder ("the operator's
+OneDrive `pdfTests` output folder"), never spell its path.

@@ -86764,3 +86764,79 @@ own compositing routes, not producer behaviour.
 **For next session:**
 - Backup/push state not independently checked by this role, no shell this
   filing.
+
+## 2026-09-02 (381st filing) — three commits, no new Pass: `docs/NEXT_SESSION.md` rewritten, `iccce` re-pinned tag → rev at the sibling project's own request (decision 123), a docs scrub for a leak this role itself caused, then `v0.22.0` cut, packaged and deployed
+
+**Shipped:**
+- No new Pass. `chore: v0.22.0` (`e868d36`) — version bump, both lockfiles,
+  `crates/pdfce-render/Cargo.toml`'s `iccce-profile`/`iccce-cmm` re-pinned
+  from `{ git = "…", tag = "v0.3.0" }` to `{ git = "…", rev =
+  "a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3" }` — the same commit the tag
+  resolved to. Dependency set unchanged; `cargo about` regenerated
+  `THIRD_PARTY_LICENSES.md` with no diff; `cargo tree -p pdfce-render`/`-p
+  pdfce-core` re-verified GUI-free.
+- `docs: NEXT_SESSION.md rewritten` (`f8c4183`) — engineer-owned, noted
+  only.
+- `docs: scrub` (`1611119`) — corrected a leaked OneDrive path naming the
+  licensed print-conformance suite in `ROADMAP.md` and `SESSION_LOG.md`
+  (both from the 380th filing).
+- `v0.22.0` released: `run-gates.sh` PASS 31/31 at `e868d36`; name gate
+  re-run clean on `1611119`; binaries rebuilt on the clean tagged tree
+  after a first build (predating the bump commit) reported
+  `v0.21.0-7-g12aaedb-dirty` and was deleted; `package-portable.py` wrote
+  `D:\builds\pdfce-20260902-1648-1611119`; fresh-folder smoke test passed
+  (`--version`, a 2,358-byte `render-page` PNG, `reorder-annotations`,
+  `pdfce-gui.exe` alive after 6 s); `deploy-onedrive.py` wrote slot
+  `pdfce1` (`0.20.0`→`0.22.0`), `pdfce2` keeps `0.21.0` (deployed by the
+  prior session at 15:44Z — that session's log wrongly said this was "not
+  recorded as done"). `verify-release.py v0.22.0` pending, to run after
+  the push. Release carries `Pass 237.0`/`238.0`/`239.0`. Conformance
+  sweep: 5 FAIL / 38 pass / 8 unresolved of 51, up from 7/37/7 at
+  `v0.21.0`.
+
+**Decisions made this session:**
+- **Decision 123** (`ARCHITECTURE.md` §12) — the `iccce` pin form moves
+  from `tag` to `rev`, at `iccce`'s own request, reasoning: a `rev` is
+  reproducible without asking the sibling project to cut a release on
+  pdfce's schedule, and a tag can be moved by its owning repository while
+  a resolved commit cannot. Extends decision 115's pin-form choice
+  (git dependency, pinned, not vendored, not path) without revising it.
+
+**Findings + decisions:**
+- **A downstream literal is now stale and flagged, not fixed, this
+  filing.** `iccce_provenance()`'s printed banner self-corrects from the
+  resolved `Cargo.lock` source string (it will now print `"(rev …)"`
+  instead of `"(tag v0.3.0, …)"`), but its own doc-comment worked example
+  (`crates/pdfce-core/build.rs:272`, `crates/pdfce-core/src/build.rs:32,109`)
+  and `docs/FEATURES.md`'s *Build provenance stamp* row still quote the
+  pre-re-pin literal as current output. Owed to the engineer — this role
+  has no shell this session and will not assert an unmeasured output
+  string.
+- **A dispatch to a documentation agent is a third leak vector for the
+  licensed suite's name, after a commit message and an untracked file.**
+  The 380th filing's dispatch prompt named an OneDrive path verbatim, this
+  role filed it faithfully into `ROADMAP.md` and `SESSION_LOG.md`, and
+  `check-suite-name-absent.py` caught it on the release-tree sweep before
+  any push. Recorded as a dated instance under the existing 2026-08-25
+  name-ban ruling (question `(bt)`), not a new standing rule. Binding
+  correction for this role going forward: scan dispatch text for the name
+  before filing it, not only run the gate afterward.
+
+**`docs/FEATURES.md`:** untouched — no capability shipped this filing.
+
+**`ROADMAP.md`:** new *Shipped* entry filed at the top for the three
+commits and the `v0.22.0` release; no *Next up*/*Backlog* entries moved.
+
+**`ARCHITECTURE.md`:** §12 gains decision 123; §9's `iccce` paragraph
+updated in the same edit to describe the rev pin and flag the stale
+banner literal.
+
+**Still in flight:**
+- The build-provenance-banner literal correction (three sites: two in
+  `crates/`, one in `docs/FEATURES.md`) — owed to the engineer, needs a
+  measured live `--version` output before any of the three is edited.
+- `verify-release.py v0.22.0` — pending, to run after the push.
+
+**For next session:**
+- Backup/push state not independently checked by this role, no shell this
+  filing.

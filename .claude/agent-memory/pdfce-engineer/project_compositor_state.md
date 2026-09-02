@@ -80,3 +80,19 @@ existing additive path rather than a design.
 
 See [[a-correct-fix-can-be-unreachable]] and
 [[feedback_a_gate_that_underreports_looks_green]].
+
+## 2026-09-02 — the spot-colorant plane arc closed on the paint routes
+
+Passes 228.0–239.0: every paint route deposits a spot into its own plane
+(fills/strokes/text, stencil masks, sampled images direct and /Indexed,
+axial/radial/function shadings, shading PATTERNS — the pattern site had
+never had a native ink route at all), a process-space image under /OP true
+preserves the planes, and the planes survive isolated, non-isolated and
+knockout group merges BY COLORANT NAME (they had been merged by index, or
+dropped, since the planes existed). The one remaining flattening route is
+MESH shadings (types 4–7). Suite: 5 FAIL / 38 pass / 8 unresolved of 51; the
+five that remain are the device-model adjudication (3.0, 4.0 — operator's
+question (cb)), ICC RGB images (13.0 b, 17.2 — the next Pass; do NOT route
+them onto the ink path, that is the measured negative), and a Lab swatch
+(22.1, undiagnosed). `tools/suite-check.py` routes mark-criterion patches
+past the cross detector now — a check mark IS two diagonal strokes.

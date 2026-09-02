@@ -88,8 +88,9 @@ that is §D item 2.
 | 1 | **`PCS 22.1`** — the Lab swatch. Not diagnosed. Start by probing the pixel with and without the ExtGState. | 1 patch, operator-visible |
 | 2 | **Mesh shadings deposit spot planes** — the last flattening route (§0 table). `mesh::paint_cmyk` takes `rules` and no planes; `Shade::Rgb` per-vertex colour has nowhere to put colorants. Two type 7 meshes on the operator's sheet are also the two still-wrong shading pairs (`Pass 137.0`'s measurement). | 0.6 % of corpus |
 | 3 | **`set_page_tabs(page, PageTabs)`** — the verb `Pass 237.0` deliberately did not build. Gated: refuse `A`/`W` below PDF 2.0 and on a PDF/UA-1 file; offer `W` as the more expressive value with `TAB-A1` disclosed. Filed in Backlog with its sourcing (`iso32000__ref__annots_array_order.md` §8.3). pdfceGUI has not asked for it yet. | one shell request away |
-| 4 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. The gate stops it growing. | rule 6 |
-| 5 | Make `sh` shadings selectable objects; resolve `/OC` in the decomposer. | 0.6 % / 0 files |
+| 4 | **Three stale worked examples** quote the provenance banner as `0.3.0 (tag v0.3.0, a4d9003b, …)` — `crates/pdfce-core/build.rs:272`, `crates/pdfce-core/src/build.rs:32` and `:109` — and the live banner now prints `rev a4d9003b…` because the printer derives from `Cargo.lock` (verified 2026-09-02 with `pdfce-cli --version`). Fix in the first code Pass of the next session; a worked example is a claim. `FEATURES.md`'s *Build provenance stamp* row quotes the same string — librarian. | rule 6 |
+| 5 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. The gate stops it growing. | rule 6 |
+| 6 | Make `sh` shadings selectable objects; resolve `/OC` in the decomposer. | 0.6 % / 0 files |
 
 ---
 

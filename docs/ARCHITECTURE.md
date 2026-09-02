@@ -6906,26 +6906,50 @@ separate, deferred deliverable rather than a smaller slice of the same
 one. `THIRD_PARTY_LICENSES.md` regenerated via `cargo-about`.
 
 **Fifth dependency, and the first that is a SIBLING PROJECT rather than a
-third-party crate: `iccce-profile` + `iccce-cmm`, pinned to tag `v0.3.0`
-(2026-09-01, `Pass 199.2`, `3194f1b`; see §12 decision 115, which extends
-decision 064).** pdfce's **first ICC colour-management engine**, declared in
-`crates/pdfce-render/Cargo.toml` — **`pdfce-core` does not depend on it**, so
+third-party crate: `iccce-profile` + `iccce-cmm`** — declared in
+`crates/pdfce-render/Cargo.toml`, **`pdfce-core` does not depend on it**, so
 the object model stays free of a colour engine. **MIT**, verified against
 `iccce`'s own `Cargo.toml` at adoption time rather than relayed from an
 earlier reading; permissive, so rule 13's escalation trigger did not fire and
 no operator licence call was needed. `THIRD_PARTY_LICENSES.md` regenerated via
 `cargo-about`.
 
-★ **The form is a GIT dependency PINNED TO A TAG, and both halves are
-deliberate.** A **path** dependency (`../../../iccce`) resolves only on the
-author's machine and would be a broken build for anyone cloning the public
-repository; **pinning to a tag** keeps colour output reproducible, because an
-unpinned git dependency would let a sibling-project commit change what pdfce
-renders between two builds of the same pdfce commit — silently, in the one
-area where a silent change stays invisible until a conformance figure moves.
-A **vendored copy** was considered and rejected: a fork's maintenance burden
-with none of a fork's purpose. Reversible if the operator prefers crates.io
-publication; decision 115 names it as such.
+★★ **RE-PINNED 2026-09-02 (`Pass` untracked, `e868d36`; see §12 decision
+123, which amends decision 115's pin form without disturbing its reasoning)
+from `tag = "v0.3.0"` to `rev = "a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"`
+— the SAME commit the tag pointed at, at `iccce`'s own request** (its reply
+in `D:\Dev\FeatureRequests\iccce_FeatureRequests\open\reply_depend_on_a_pinned_rev_and_the_four_intent_rules_are_accepted.md`,
+2026-09-01): a `rev` is reproducible without asking the sibling project to
+cut a release it cannot promise on pdfce's schedule, and — the reason this
+is a decision and not a formatting change — **a tag can be MOVED** by the
+tag-owning repository, while a `rev` cannot. Dependency **set** unchanged;
+both lockfiles moved; `cargo about` regenerated `THIRD_PARTY_LICENSES.md`
+with no change.
+
+★ **The form is a GIT dependency PINNED, and pinning (now by commit, not by
+tag) is what stays deliberate.** A **path** dependency (`../../../iccce`)
+resolves only on the author's machine and would be a broken build for anyone
+cloning the public repository; **pinning** keeps colour output reproducible,
+because an unpinned git dependency would let a sibling-project commit change
+what pdfce renders between two builds of the same pdfce commit — silently,
+in the one area where a silent change stays invisible until a conformance
+figure moves. A **vendored copy** was considered and rejected: a fork's
+maintenance burden with none of a fork's purpose. Reversible if the operator
+prefers crates.io publication; decision 115 names it as such.
+
+★ **A downstream literal is now stale and is flagged, not fixed, here** —
+this section documents the dependency, not the build-provenance banner.
+`iccce_provenance()` (`crates/pdfce-core/build.rs`) derives its printed pin
+description (`"tag v0.3.0"` vs `"rev …"`) from the resolved `Cargo.lock`
+source string, so it self-corrects to the new form without a code change —
+but its own doc comment's worked example (`build.rs:272`,
+`crates/pdfce-core/src/build.rs:32,109`) and `docs/FEATURES.md`'s *Build
+provenance stamp* row still quote the pre-re-pin literal
+(`"iccce: 0.3.0 (tag v0.3.0, a4d9003b, committed …)"`) as current output.
+Owed to the engineer: verify the live `--version` banner text and correct
+those three sites — not corrected in this filing because this role has no
+shell this session and will not assert an unmeasured output string
+(hard rule 8).
 
 ★★ **`iccce` has ZERO external dependencies and sets `unsafe_code = "deny"`
 in its own `Cargo.toml`**, which is why it is admissible without any of the
@@ -30006,3 +30030,94 @@ independently read by this role.
 
 **Decision ceiling moves `121` → `122`; next free `123`.** **Standing rules
 ceiling `R239` — unchanged**, next free `R240`; no rule minted this filing.
+
+### 2026-09-02 (381st filing, `e868d36`) — decision 123: **`iccce` RE-PINNED FROM `tag = "v0.3.0"` TO `rev = "a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"` — THE SAME COMMIT, AT `iccce`'s OWN REQUEST; EXTENDS DECISION 115'S PIN FORM WITHOUT REVISING ITS REASONING**
+
+**(librarian filing, 381st, no shell — relayed by the engineer, `e868d36`,
+part of the `v0.22.0` version bump.)**
+
+**What changed and what did not.** `crates/pdfce-render/Cargo.toml`'s
+`iccce-profile`/`iccce-cmm` declarations move from `{ git = "…", tag =
+"v0.3.0" }` to `{ git = "…", rev =
+"a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3" }` — the identical commit the
+tag resolved to at adoption time (decision 115). **Nothing about what is
+managed, what is refused, or the GUI-core boundary changes** — this is a
+pin-FORM decision, exactly as decision 115 itself framed the git-vs-path-
+vs-vendored choice as separable from the boundary question decision 064
+settled. Both lockfiles regenerated; dependency **set** unchanged;
+`cargo about` regenerated `THIRD_PARTY_LICENSES.md` with **no** diff;
+`cargo tree -p pdfce-render` / `-p pdfce-core` re-verified GUI-free.
+
+**Why — at `iccce`'s own request, and the request is the operative fact.**
+`iccce`'s reply (2026-09-01,
+`D:\Dev\FeatureRequests\iccce_FeatureRequests\open\reply_depend_on_a_pinned_rev_and_the_four_intent_rules_are_accepted.md`)
+accepted depending on a pinned `rev` rather than a `tag`. Two reasons, both
+the sibling project's: a `rev` is reproducible **without** committing
+`iccce` to cutting a release on pdfce's schedule — a promise it cannot make
+— and **a tag can be moved** by the repository that owns it, while a
+resolved commit hash cannot. Decision 115 picked pinning **at all** over an
+unpinned dependency for exactly this reproducibility reason; this decision
+picks the pin form that removes the one channel (tag re-pointing) through
+which that reproducibility could still be defeated without pdfce's own
+`Cargo.lock` changing.
+
+**Closes a `docs/NEXT_SESSION.md` §E item this role cannot itself verify
+against.** That handoff flagged the rev-pin question as *"may already be
+satisfied — not verified"*. It was **not** satisfied before this commit
+(the manifest said `tag`, not `rev`) and **is now**, per the engineer's
+relayed diff.
+
+**★ Downstream literal now stale, flagged not fixed here — see §9's own
+note on this same block.** `iccce_provenance()`'s printed banner
+self-corrects from the `Cargo.lock` source string, but its own doc-comment
+example and `docs/FEATURES.md`'s *Build provenance stamp* row both quote
+the pre-re-pin `"(tag v0.3.0, …)"` literal as current output. Not corrected
+here — no shell this filing, and this role will not assert an unmeasured
+output string (hard rule 8). Owed to the engineer.
+
+**Body-section update.** `ARCHITECTURE.md` §9's `iccce` paragraph, updated
+in the same edit as this entry.
+
+**Decision ceiling moves `122` → `123`; next free `124`.** **Standing
+rules ceiling `R239` — unchanged**, next free `R240`; no rule minted this
+filing — the finding below is recorded as a dated instance under the
+existing 2026-08-25 name-ban ruling (open question `(bt)`), not a new
+number.
+
+### 2026-09-02 (381st filing, `1611119`) — a documentation-agent DISPATCH is a THIRD leak vector for the licensed suite's name, after a commit message and an untracked file
+
+`tools/check-suite-name-absent.py`, re-run on the release tree before any
+push, caught a leaked path component naming the licensed print-conformance
+suite inside `ROADMAP.md` (this file's own *Shipped* entry for `Pass
+239.0`) and `SESSION_LOG.md` (the 380th filing's entry) — both describing
+the operator's OneDrive output folder by its actual path, which contains
+the suite's own name as its last component.
+
+**The leak was this role's own**, not the engineer's: the 380th filing's
+dispatch prompt named the path verbatim, and it was filed faithfully. Both
+lines now read *"the operator's OneDrive `pdfTests` output folder"*
+(`ROADMAP.md` line 221; `SESSION_LOG.md` line 86730 as of the correction).
+
+**Recorded, not newly numbered, under the 2026-08-25 operator ruling (open
+question `(bt)`) that already governs `tools/check-suite-name-absent.py`.**
+That ruling's own record already names two leak vectors the gate cannot
+see structurally: **commit messages** (83 occurrences found 2026-08-25, 82
+already published) and an **untracked file** the gate does check but a
+careless writer could still create outside its scan root. **A dispatch to
+a documentation agent is a third**, and the mechanism is different from
+both: the gate scans the *work tree*, and a dispatch prompt is neither a
+tracked file, an untracked file, nor a commit — it is text that becomes a
+tracked file only once the agent it addresses files it, which is exactly
+what happened here.
+
+**Binding correction for this role going forward:** a dispatch prompt is
+not a trusted source merely because it is faithfully transcribed. This
+role must read any dispatch text for the gate's own forbidden terms before
+filing it into an editable document, not only run the gate afterward —
+running it afterward is what caught this instance, but only after the
+false text had already been committed twice.
+
+**No standing rule minted** — this is a dated instance of an existing
+ruling's enforcement surface, the same disposition the 368th and 369th
+filings gave the "sweep-spelling" and CI-mechanism families before either
+crossed this project's two-occurrence bar for a new number.

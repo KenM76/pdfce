@@ -51,7 +51,7 @@
 - [Form-XObject text editing state](project_form_xobject_editing.md) — shipped 2026-08-20; shared forms edit IN PLACE by decision 076; the real CAD file found two defects 20 green tests could not
 - [A correct fix can be unreachable](feedback_a_correct_fix_can_be_unreachable.md) — A/B the counters on a pre-fix binary; a plan's ORDERING of two items is its least-checked claim
 - [`git add -A` is unsafe with live subagents](feedback_git_add_all_is_unsafe_with_live_subagents.md) — their scratch files and mid-flight doc edits land in your code commit, and this repo is public
-- [Compositor state](project_compositor_state.md) — 2026-08-21 evening: the CMYK colorant buffer SHIPPED; wrong-space blends 107→0; the harness's own pass count is an OVER-COUNT (it implements one of the suite's two criteria)
+- [Compositor state](project_compositor_state.md) — 2026-09-02: the spot-plane arc is DONE on every paint route and through groups; meshes are the one flattening corner; 5 FAIL / 38 pass on the suite
 - [The banana scale demo is a showpiece AND an instrument](project_banana_scale_demo.md) — Ken's own artefact with a personal easter egg; it found a renderer defect and two silent geometry bugs in one session
 - [f32 and no threads in the engine](project_compositor_element_type_and_threading.md) — decided 2026-08-21; `rayon` and `std::thread` BOTH compile for wasm32, so the wasm gate cannot catch a threading regression
 - [Security defaults lean safe, plus a stricter mode](feedback_security_defaults_lean_safe_plus_stricter_mode.md) — he takes the safe default AND adds restrictions himself; offer the posture ladder, not a yes/no
@@ -88,3 +88,4 @@
 - [Rotate, don't tunnel](feedback_rotate_dont_tunnel.md) — Ken 2026-08-31: work queued independent defects in rotation or parallel; zero-progress-after-hours is the failure mode he's guarding against
 - [Write overwrites — check the verb](feedback_write_overwrites_check_the_verb.md) — "updated" not "created" is the only warning; it ate three committed tests and a fixture generator, and a green suite hid it
 - [Repo-scoped gates run before every PUSH](feedback_repo_scoped_gates_run_before_every_push.md) — I published a licensed name to the public repo; standing push authority removed the pause that used to catch it
+- [Never type a reverting git verb in a chain](feedback_never_type_a_reverting_git_verb_in_a_chain.md) — a `git checkout -- file` typed "as a no-op" reverted an hour of uncommitted work; keep edits in re-runnable scripts until committed

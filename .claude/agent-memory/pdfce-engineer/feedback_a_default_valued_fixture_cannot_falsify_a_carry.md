@@ -42,3 +42,26 @@ defaults, generate a new one (`tools/gen-*-fixtures.py`, byte-authored, plus a
 [[feedback_a_test_can_become_vacuous_later]] and
 [[feedback_sabotage_catches_false_comments]] — the question is always *what
 would still pass if the feature were absent?*
+
+**Three more instances in one Pass, 2026-09-02 (Pass 239.0), each a
+different construction and each found only by sabotaging the code under
+the green test:**
+- a spot shading vs a spot fill **on white paper** cannot tell a deposited
+  plane from a flattened tint -- the plane's curve is sampled through the
+  very conversion the flattened route takes, so both collapse to the same
+  sRGB by construction. The discriminator is the same pair OVER A PROCESS
+  MARK under overprint, where a deposit preserves the mark and a flatten
+  knocks it out.
+- a spot painted inside a group whose colorant the parent already holds at
+  the same index merges correctly BY LUCK; a decoy colorant painted first,
+  and the group painted BEFORE the direct fill, is what makes the merge
+  have to allocate and map.
+- under Normal blend a knockout group's backdrop removal hides a missing
+  initial spot EXACTLY, and a non-isolated group with a Normal interior
+  never takes the two-walk route at all (`groups_backdrop_reruns=0`).
+  Multiply, which reads the backdrop, is what makes either route matter.
+
+**How to apply:** before believing a new agreement test, ask what the
+WRONG implementation would render for this fixture. If the answer is "the
+same thing", the fixture is not measuring; change the geometry, not the
+threshold.
