@@ -145,6 +145,25 @@ asked for.
 4. Re-run the conformance sweep. **This is the first step where the numbers
    are allowed to move**, and the two traps to watch are named below.
 
+### ★★ WHERE THE TWO REMAINING TRAPS ACTUALLY ARE — measured 2026-09-02
+
+After `Pass 230.0` each of `PCS 3.0` and `PCS 4.0` is down to **one** trap,
+and they are **different defects**, not one:
+
+- **`PCS 4.0` at `(440,137)`** renders `(142,198,63)` on a white surround.
+  That is the `OverprintZeroTintScope` value named in §D item 4 — and §D now
+  records that flipping the scope makes things **worse**, so this trap is not
+  the setting's fault. It is a real remaining defect on process geometry.
+- **`PCS 3.0` at `(434,136)`** renders the X **green** on a **grey** surround,
+  where the reference shows the whole cell neutral grey. So a paint is
+  depositing spot ink into a cell whose backdrop is CMYK. Per
+  `docs/suite-patch-reference.md` §3's truth table that cell is *"50 % Sep/Black
+  over CMYK"* — and `/Separation /Black` names a PROCESS colorant, which
+  `authored_spots` excludes, so it should deposit **nothing**.
+  ★ Two nearly-identical greens are present inside the box —
+  `(82,115,37)` and `(76,117,31)`, 630 px and 616 px — which suggests two
+  overlapping composites rather than one paint. Start there.
+
 ### ★★ THE TARGET IS NARROWER NOW — MEASURED 2026-09-02, do not start over
 
 `Passes 228.0`/`229.0` shipped the deposit. `PCS 2.0` went **7 traps → 4**.
@@ -372,11 +391,32 @@ Each cost a full ablation. Every one looked obviously right first.
    Measured `23.90 → 28.68`, a regression. A shading sits OVER a thin mark, so
    handing an untouched channel back restores it; a photograph COVERS an area,
    so handing back its untouched channels makes it partly transparent.
-4. **`OverprintZeroTintScope`'s default is NOT "the reference's reading"** —
-   measured false on process geometry. It is trap-neutral (17 → 17) because it
-   corrects one cell and breaks another that passes only through a
-   compensating error. The honest fix is the literal row assignment
-   **together with** the spot plane.
+4. **`OverprintZeroTintScope`: LEAVE THE DEFAULT ALONE. The "retry it with the
+   spot plane" hypothesis is now REFUTED, measured 2026-09-02.**
+
+   This entry used to end *"the honest fix is the literal row assignment
+   **together with** the spot plane"* — i.e. the earlier trap-neutral result
+   (17 → 17) was blamed on the plane not existing yet. **The plane exists now
+   (`Passes 225.0`–`230.0`), so the condition was met and the experiment was
+   run.** Per-patch trap counts on the two patches this setting reaches, using
+   `render-page --overprint-zero-tint-scope`:
+
+   | scope | `PCS 3.0` | `PCS 4.0` | total |
+   |---|---|---|---|
+   | `grey_as_k_only` (**the shipped default**) | 1 | 1 | **2** |
+   | `all_process_spaces` | 1 | 1 | **2** |
+   | `device_cmyk_only` (the literal §8.6.7 reading) | 2 | 2 | **4** |
+
+   ⇒ The literal reading is **twice as bad**, and it moves the traps to
+   *different* cells (`28,135` and `373,136` instead of `434,136`) rather than
+   removing any. The default is not merely defensible, it is the best of the
+   three on this corpus.
+
+   ★ Note what made this checkable at all: the setting has a per-render CLI
+   override, so three readings were measured on the shipped binary in under a
+   minute with **no code change and no default flipped**. A setting whose
+   alternatives can only be reached by editing a constant is a setting nobody
+   re-measures.
 5. **The §11.7.4.2 non-separable guard in `blend_spots` is REDUNDANT** —
    sabotage-verified. `blend_separable`'s own final arm already answers `cs`
    for a non-separable mode. It is kept for legibility and both sites say so;
