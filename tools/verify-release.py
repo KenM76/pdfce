@@ -286,27 +286,41 @@ def main(tag: str) -> int:
             # the run's verdict is the tag's verdict. A descendant that
             # differs in code is NOT accepted: that would be verifying a
             # different release.
+            # ★ And not only the CURRENT tip: the tip moves on. The first
+            # version of this looked at `origin/main` alone, and the very
+            # next push after v0.22.0 -- this file's own fix -- put a CODE
+            # commit on the tip, so the verifier refused a release it had
+            # accepted an hour earlier. Walk every descendant on `origin/main`
+            # in order, stop at the first that touches code, and take the
+            # newest of the docs-only ones that CI actually ran on.
             code_prefixes = ("crates/", "tools/", "fixtures/", ".github/", "fuzz/")
             tip = git("rev-parse", "origin/main")
-            changed = git("diff", "--name-only", tagged, tip).split()
-            code_changed = [f for f in changed if f.startswith(code_prefixes)]
-            tip_runs = []
-            if tip and tip != tagged and not code_changed:
-                gh_tip = subprocess.run(
-                    ["gh", "run", "list", "--commit", tip, "--limit", "20",
+            descendants = git("rev-list", "--reverse", f"{tagged}..origin/main").split()
+            candidate = None      # (sha, non-code file count, runs)
+            code_changed: list[str] = []
+            for sha in descendants:
+                changed = git("diff", "--name-only", tagged, sha).split()
+                code_changed = [f for f in changed if f.startswith(code_prefixes)]
+                if code_changed:
+                    break
+                gh_d = subprocess.run(
+                    ["gh", "run", "list", "--commit", sha, "--limit", "20",
                      "--json", "status,conclusion,name"],
                     capture_output=True, text=True,
                 )
                 try:
-                    tip_runs = json.loads(gh_tip.stdout or "[]") if gh_tip.returncode == 0 else []
+                    d_runs = json.loads(gh_d.stdout or "[]") if gh_d.returncode == 0 else []
                 except json.JSONDecodeError:
-                    tip_runs = []
-            if tip_runs:
-                print(f"  note  no run at the tagged commit; using origin/main "
-                      f"{tip[:7]}, which differs from the tag only in "
-                      f"{len(changed)} non-code file(s)")
-                runs = tip_runs
-                where = f"a docs-only descendant ({tip[:7]})"
+                    d_runs = []
+                if d_runs:
+                    candidate = (sha, len(changed), d_runs)
+            if candidate:
+                sha, n_files, d_runs = candidate
+                print(f"  note  no run at the tagged commit; using descendant "
+                      f"{sha[:7]}, which differs from the tag only in "
+                      f"{n_files} non-code file(s)")
+                runs = d_runs
+                where = f"a docs-only descendant ({sha[:7]})"
             else:
                 # No run at all is reported, not passed. A tagged commit that
                 # CI never saw -- and no docs-only descendant it saw either --
@@ -315,7 +329,7 @@ def main(tag: str) -> int:
                       "no workflow run found for this commit or for a docs-only "
                       "descendant on origin/main -- it has never been checked "
                       "by CI at all"
-                      + (f" (origin/main {tip[:7]} differs in code: "
+                      + (f" (the first descendant differing in code touches "
                          + ", ".join(code_changed[:3]) + ")" if code_changed else ""))
         else:
             where = "the tagged commit"
