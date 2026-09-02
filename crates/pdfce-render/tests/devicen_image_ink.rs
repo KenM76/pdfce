@@ -188,6 +188,88 @@ fn a_duotone_image_and_fill_of_one_palette_entry_agree() {
     );
 }
 
+/// ★★ The MIXED duotone — `/Indexed` over `/DeviceN [/Black /SpotGreen]`
+/// (`Pass 238.0`), the shape the print-conformance suite's duotones take.
+///
+/// This is the test that found two fill-path bugs the single-colorant
+/// duotone above could not see. The fill read the palette INDEX as its
+/// operand for both the spot deposit (`authored_spot_inks`) and the authored
+/// process tints (`process_tints_only`), so it built the spot's curve from
+/// the Indexed space — whose domain is indices — and stated `K = 0` where the
+/// palette entry says `K = 0.5`. Two wrongs cancelled on the fill route and it
+/// looked right alone; the first image to deposit a true tint into that plane
+/// rendered white, and the disagreement was the information.
+#[test]
+fn a_mixed_duotone_image_and_fill_of_one_palette_entry_agree() {
+    let page = render("duotone2-image-vs-fill-cmyk.pdf");
+    let (fill, image) = fill_and_image(&page);
+    let d = mean_abs(fill, image);
+    assert!(
+        d <= 1.5,
+        "fill {fill:?} vs image {image:?}, mean |diff| {d:.2}. If only this \
+         page fails, one route is reading an /Indexed operand as a tint \
+         instead of resolving the palette entry first"
+    );
+    // And the colour is the palette entry's, not the index's: K 0.5 over the
+    // spot's green must be a DARK green, not the pale green of tint alone.
+    let (_, g, _) = fill;
+    assert!(
+        g < 160.0,
+        "K = 0.5 must darken the entry; a fill that read the index (0) as K \
+         paints the spot alone: {fill:?}"
+    );
+}
+
+/// A STENCIL MASK painted in the spot agrees with a path fill of the same
+/// tint (`Pass 238.0`). §8.9.6.2: an image mask "designates places where the
+/// current colour shall be painted" — so on an ink page the stencil must
+/// carry the fill's spot to its plane exactly as the path does. Before this
+/// Pass the stencil route pre-tinted its texels in sRGB and bridged them
+/// back, and measured 13+ levels apart from the fill beside it.
+#[test]
+fn a_stencil_mask_and_fill_of_one_spot_tint_agree_on_a_subtractive_page() {
+    let page = render("stencil-spot-vs-fill-cmyk.pdf");
+    let (fill, stencil) = fill_and_image(&page);
+    let d = mean_abs(fill, stencil);
+    assert!(
+        d <= 1.5,
+        "fill {fill:?} vs stencil {stencil:?}, mean |diff| {d:.2}. A stencil \
+         is a fill with an image's shape; on an ink page it must take the \
+         fill's route"
+    );
+}
+
+/// The OVERPRINT shape the suite's duotone patches test (`Pass 238.0`): a
+/// `1 0 1 .5 k` process mark, then the mixed duotone image over it under
+/// `/OP true`. Table 149 for a `[/Black <spot>]` source: K takes the image,
+/// C and Y stay from the mark, the spot deposits. So the right box must
+/// differ from the left (the mark alone) — the image painted — and must
+/// still carry the mark's cyan and yellow, which a knockout would have
+/// erased along with the check marks the suite draws in that ink.
+#[test]
+fn an_overprinting_mixed_duotone_image_keeps_the_process_mark_beneath_it() {
+    let page = render("duotone2-op-image-over-cmyk-mark.pdf");
+    let (mark_alone, mark_under_image) = fill_and_image(&page);
+    assert!(
+        mean_abs(mark_alone, mark_under_image) > 5.0,
+        "the image painted nothing over the mark: {mark_alone:?} vs {mark_under_image:?}"
+    );
+    // The mark alone is `1 0 1 .5 k`: a dark green. Under the image its C and
+    // Y survive and K rises to the image's 0.5 (the same), and the spot's
+    // green multiplies in — so the result is a DARKER green, never a neutral
+    // and never lighter than the mark.
+    let (r0, g0, b0) = mark_alone;
+    let (r1, g1, b1) = mark_under_image;
+    assert!(
+        g1 > r1 && g1 > b1,
+        "the mark's cyan and yellow must survive as green beneath the image: {mark_under_image:?}"
+    );
+    assert!(
+        r1 + g1 + b1 <= r0 + g0 + b0 + 3.0,
+        "an overprinting image over ink cannot LIGHTEN it: {mark_alone:?} -> {mark_under_image:?}"
+    );
+}
+
 /// The additive control, and it is what identified WHICH half was wrong.
 ///
 /// With no page group there is no colorant buffer, so neither the fill nor the

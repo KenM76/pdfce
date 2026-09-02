@@ -664,6 +664,15 @@ impl<'a> Canvas<'a> {
         path: &Path,
         texels: &Pixmap,
         ink: Option<&crate::image::CmykTexels>,
+        // The image's colour AS AUTHORED — process tints plus one plane per
+        // spot colorant — when the interpreter wants the spots deposited
+        // (`Pass 238.0`). `None` under the composite device model, and for
+        // every image whose space names no spot. Taken in preference to
+        // `ink` when EVERY spot gets a plane; see the Cmyk arm.
+        authored: Option<&crate::image::OverprintSource>,
+        // What to do to the spot planes this image does NOT name. Only a
+        // colorant buffer reads it; every other destination has no planes.
+        spot_source: crate::cmyk_buffer::SpotSource,
         quality: FilterQuality,
         image_to_user: Transform,
         blend: BlendMode,
@@ -738,6 +747,87 @@ impl<'a> Canvas<'a> {
                 //
                 // The bridge below still runs for every other image, where
                 // sRGB genuinely is all there is.
+                //
+                // ★★ THE SPOT ROUTE (`Pass 238.0`), taken before the ink
+                // route because it is the same information one level less
+                // flattened. `authored.tints` are the process tints the
+                // FILE stated — all zero for a pure spot — and each
+                // `authored.spots` plane is one colorant's tint. If every
+                // colorant gets a plane, those are rasterised through the
+                // identical shader and composited together; if any is
+                // refused (roster cap, byte ceiling), the whole image falls
+                // through to `ink`, which is the tint transform's output
+                // and already contains every spot as process ink. Never
+                // both: that lays the ink down twice, the defect the fill
+                // path's agreement tests caught on day one.
+                if let Some(src) = authored
+                    && !src.spots.is_empty()
+                {
+                    let mut planes: Vec<usize> = Vec::with_capacity(src.spots.len());
+                    for spot in &src.spots {
+                        match b.spot_index(&spot.colorant, || (*spot.lut).clone()) {
+                            Some(plane) => planes.push(plane),
+                            None => break,
+                        }
+                    }
+                    if planes.len() == src.spots.len()
+                        && let (Some(mut cmy), Some(mut k)) = (
+                            Pixmap::new(b.width(), b.height()),
+                            Pixmap::new(b.width(), b.height()),
+                        )
+                    {
+                        let draw = |src_px: &Pixmap, dst: &mut Pixmap| {
+                            let paint = Paint {
+                                shader: Pattern::new(
+                                    src_px.as_ref(),
+                                    SpreadMode::Pad,
+                                    quality,
+                                    1.0,
+                                    image_to_user,
+                                ),
+                                blend_mode: BlendMode::SourceOver,
+                                anti_alias,
+                                force_hq_pipeline: false,
+                            };
+                            dst.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
+                        };
+                        draw(&src.tints.cmy, &mut cmy);
+                        draw(&src.tints.k, &mut k);
+                        let mut spot_pix: Vec<Pixmap> = Vec::with_capacity(src.spots.len());
+                        let mut all = true;
+                        for spot in &src.spots {
+                            match Pixmap::new(b.width(), b.height()) {
+                                Some(mut px) => {
+                                    draw(&spot.tint, &mut px);
+                                    spot_pix.push(px);
+                                }
+                                None => {
+                                    all = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if all {
+                            let pairs: Vec<(usize, &Pixmap)> =
+                                planes.iter().copied().zip(spot_pix.iter()).collect();
+                            if let Some(region) =
+                                device_region(fill_bounds(path, ctm), 1.0, b.width(), b.height())
+                            {
+                                b.composite_cmyk_image(
+                                    &cmy,
+                                    &k,
+                                    &pairs,
+                                    region,
+                                    1.0,
+                                    crate::compositor::Blend::from_tiny_skia(blend)
+                                        .unwrap_or(crate::compositor::Blend::Normal),
+                                    spot_source,
+                                );
+                            }
+                            return;
+                        }
+                    }
+                }
                 if let Some(ink) = ink
                     && let (Some(mut cmy), Some(mut k)) = (
                         Pixmap::new(b.width(), b.height()),
@@ -772,10 +862,12 @@ impl<'a> Canvas<'a> {
                         b.composite_cmyk_image(
                             &cmy,
                             &k,
+                            &[],
                             region,
                             1.0,
                             crate::compositor::Blend::from_tiny_skia(blend)
                                 .unwrap_or(crate::compositor::Blend::Normal),
+                            spot_source,
                         );
                     }
                     return;
@@ -805,12 +897,13 @@ impl<'a> Canvas<'a> {
                     scratch.fill_path(path, &paint, FillRule::Winding, ctm, clip.mask);
                     let region = device_region(fill_bounds(path, ctm), 1.0, b.width(), b.height());
                     if let Some(region) = region {
-                        b.composite_srgb(
+                        b.composite_srgb_with(
                             &scratch,
                             region,
                             1.0,
                             crate::compositor::Blend::from_tiny_skia(blend)
                                 .unwrap_or(crate::compositor::Blend::Normal),
+                            spot_source,
                         );
                     }
                 }
@@ -882,6 +975,13 @@ impl<'a> Canvas<'a> {
         &mut self,
         path: &Path,
         tints: &crate::image::CmykTexels,
+        // The image's spot planes (`Pass 238.0`), each already resolved to
+        // a plane index by the interpreter — empty when the image names no
+        // spot, or when any of them was refused a plane. Under overprint a
+        // plane the source names takes the source's tint and every other
+        // plane keeps the backdrop, which is Table 149's `Separation` /
+        // `DeviceN` row applied to the planes it was written for.
+        spots: &[(usize, &crate::image::SpotTexel)],
         rules: [crate::overprint::ComponentRule; 4],
         quality: FilterQuality,
         image_to_user: Transform,
@@ -902,6 +1002,10 @@ impl<'a> Canvas<'a> {
         let (Some(mut cmy), Some(mut k)) = (Pixmap::new(w, h), Pixmap::new(w, h)) else {
             return None;
         };
+        let mut spot_pix: Vec<(usize, Pixmap)> = Vec::with_capacity(spots.len());
+        for (plane, _) in spots {
+            spot_pix.push((*plane, Pixmap::new(w, h)?));
+        }
         // The identical shader/transform/quality/clip pair `fill_image`'s ink
         // branch uses. `SourceOver` into a transparent scratch: the blend
         // mode belongs to the composite below, and letting `tiny_skia` apply
@@ -925,6 +1029,9 @@ impl<'a> Canvas<'a> {
             };
             draw(&tints.cmy, &mut cmy);
             draw(&tints.k, &mut k);
+            for ((_, spot), (_, dst)) in spots.iter().zip(spot_pix.iter_mut()) {
+                draw(&spot.tint, dst);
+            }
         }
         let region = device_region(fill_bounds(path, ctm), 1.0, w, h)?;
         // Un-premultiply by the alpha both planes were multiplied by — the
@@ -947,7 +1054,26 @@ impl<'a> Canvas<'a> {
             ))
         };
         if let Some(b) = self.cmyk_mut() {
-            return Some(b.composite_overprint_varying(region, rules, alpha, source_at));
+            if spot_pix.is_empty() {
+                return Some(b.composite_overprint_varying(region, rules, alpha, source_at));
+            }
+            let spot_at = |x: u32, y: u32| {
+                let idx = (y * w + x) as usize;
+                let mut out: [Option<f32>; crate::compositor::MAX_SPOTS] =
+                    [None; crate::compositor::MAX_SPOTS];
+                for (plane, px) in &spot_pix {
+                    if let (Some(slot), Some(p)) = (out.get_mut(*plane), px.pixels().get(idx)) {
+                        let a = f32::from(p.alpha()) / 255.0;
+                        *slot = (a > 0.0).then(|| f32::from(p.red()) / 255.0 / a);
+                    }
+                }
+                out
+            };
+            return Some(
+                b.composite_overprint_varying_spots(region, rules, alpha, |x, y| {
+                    source_at(x, y).map(|(c, a)| (c, spot_at(x, y), a))
+                }),
+            );
         }
         // Every other destination reads back as sRGB. `pixmap_mut` handles
         // the knockout accumulator's disclosure itself and answers `None`

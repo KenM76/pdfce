@@ -215,17 +215,31 @@ fn grey_matches_the_cmyk_k_only_reference_exactly() {
 // 2. THE SETTING MOVES THE PIXEL, IN THE DIRECTION EACH READING PREDICTS
 // ---------------------------------------------------------------------------
 
+/// ★★ THIS TEST WAS `the_literal_reading_knocks_the_spot_out`, AND THAT
+/// EXPECTATION WAS PDFCE'S REPRESENTATION, NOT THE STANDARD'S (`Pass 238.0`).
+///
+/// `OverprintZeroTintScope`'s own docs said so before the change: *"a
+/// conforming engine preserves that spot backdrop whichever way this setting
+/// is read. The reason pdfce's two settings differ here at all is that pdfce
+/// flattens a spot into C, M and Y … it will change when the n-colorant
+/// buffer lands."* It has landed. Table 149's *"any process colour space ×
+/// spot colorant"* row is `c_b` under `OP true` in BOTH mode columns, with no
+/// scope in sight — so under the literal reading the grey now paints all four
+/// PROCESS components (the reading's actual content) and the spot survives in
+/// its own plane. What the two readings disagree about is the process
+/// channels, and `grey_over_a_process_backdrop_separates_the_two_readings`
+/// is where that is pinned.
 #[test]
-fn the_literal_reading_knocks_the_spot_out() {
+fn the_literal_reading_paints_the_process_channels_and_the_spot_survives() {
     let page = render(
         "grey_op_over_spot.pdf",
         OverprintZeroTintScope::DeviceCmykOnly,
     );
     assert!(
-        is_neutral(mark(&page)),
-        "§8.6.7 to the letter: a DeviceGray source gets no zero-tint rule, so \
-         it writes all four components and the spot is gone. Expected a \
-         neutral grey, got {:?}",
+        is_greenish(mark(&page)),
+        "§8.6.7 to the letter governs the four process components; the spot \
+         plane is Table 149's `c_b` under every scope. Expected the green spot \
+         to survive under the grey, got {:?}",
         mark(&page)
     );
 }
@@ -423,9 +437,18 @@ fn a_grey_image_is_never_upgraded_whatever_the_scope() {
         "and neither must AllProcessSpaces — the guard is on the image, not \
          on the space"
     );
+    // ★ `Pass 238.0`: this asserted `is_neutral` — "the grey image covers
+    // the spot under every scope" — and that was the missing spot plane on
+    // the image path, counted for a Pass as
+    // `overprint_process_images_unsupported` and then fixed. A grey IMAGE
+    // under `/OP true` writes its process channels and leaves every spot
+    // plane to the backdrop (Table 149, process source × spot colorant ⇒
+    // `c_b`), exactly as the grey FILL beside it does. The property this
+    // test exists for — scope-independence — is unchanged and still pinned
+    // by the two equalities above.
     assert!(
-        is_neutral(mark(&a)),
-        "the grey image covers the spot under every scope: {:?}",
+        is_greenish(mark(&a)),
+        "the grey image leaves the spot standing under every scope: {:?}",
         mark(&a)
     );
 }
@@ -446,15 +469,22 @@ fn a_grey_image_is_never_upgraded_whatever_the_scope() {
 /// Pure red converts to `C=0, M=1, Y=1, K=0`, so exactly one component is
 /// zero and the backdrop's **cyan** is what is at stake. Under
 /// `AllProcessSpaces` it survives; under the other two it does not.
+/// ★ `Pass 238.0` moved this test from `rgb_op_over_spot.pdf` to
+/// `rgb_op_over_cmyk.pdf`. Over a SPOT backdrop the three scopes now render
+/// identically — correctly: the spot lives in its own plane and is preserved
+/// under every scope, and a pure spot states no process ink, so there is no
+/// cyan in C for `AllProcessSpaces` to preserve differently. `OP-N3` said the
+/// discriminating case is over PROCESS components; `rgb_op_over_spot`'s new
+/// job is `an_rgb_source_leaves_the_spot_standing_under_every_scope`.
 #[test]
 fn all_process_spaces_reaches_rgb_and_the_narrower_scopes_do_not() {
     let literal = render(
-        "rgb_op_over_spot.pdf",
+        "rgb_op_over_cmyk.pdf",
         OverprintZeroTintScope::DeviceCmykOnly,
     );
-    let grey_only = render("rgb_op_over_spot.pdf", OverprintZeroTintScope::GreyAsKOnly);
+    let grey_only = render("rgb_op_over_cmyk.pdf", OverprintZeroTintScope::GreyAsKOnly);
     let all = render(
-        "rgb_op_over_spot.pdf",
+        "rgb_op_over_cmyk.pdf",
         OverprintZeroTintScope::AllProcessSpaces,
     );
 
@@ -476,5 +506,34 @@ fn all_process_spaces_reaches_rgb_and_the_narrower_scopes_do_not() {
         "preserving the backdrop's cyan must DARKEN the red, not lighten it:          {:?} -> {:?}",
         mark(&grey_only),
         mark(&all)
+    );
+}
+
+/// The spot half of the same fixture family (`Pass 238.0`): a `DeviceRGB`
+/// source under `/OP true` over a spot backdrop leaves the spot's plane
+/// standing under all three scopes, and the three agree with each other. The
+/// scope governs the process channels; it never reaches a spot plane.
+#[test]
+fn an_rgb_source_leaves_the_spot_standing_under_every_scope() {
+    let a = render(
+        "rgb_op_over_spot.pdf",
+        OverprintZeroTintScope::DeviceCmykOnly,
+    );
+    let b = render("rgb_op_over_spot.pdf", OverprintZeroTintScope::GreyAsKOnly);
+    let c = render(
+        "rgb_op_over_spot.pdf",
+        OverprintZeroTintScope::AllProcessSpaces,
+    );
+    assert_eq!(mark(&a), mark(&b));
+    assert_eq!(mark(&b), mark(&c));
+    // Red ink laid over green ink multiplies to near-black (§10.8.3 step
+    // (c)): measured (34, 17, 12). A KNOCKED-OUT spot would leave the red
+    // alone at its saturated (237, 28, 36). So the red channel is the
+    // witness: dark means the green survived underneath.
+    let (r, _, _) = mark(&a);
+    assert!(
+        r < 120,
+        "the spot plane must survive an overprinting RGB source, darkening the red through the green it sits on: {:?}",
+        mark(&a)
     );
 }

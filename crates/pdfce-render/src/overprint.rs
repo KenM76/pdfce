@@ -143,7 +143,50 @@
 //! [`ComponentRule`] for where that choice is made visible.
 
 use crate::color::{ColorSpace, Colorant};
-use pdfce_core::settings::OverprintZeroTintScope;
+use pdfce_core::settings::{CmykIntent, OverprintZeroTintScope};
+
+/// One spot colorant's tint curve — the colorant ALONE on white paper,
+/// sampled across `0..=1` through the space's own tint transform.
+///
+/// # Why this is one function and not two
+///
+/// The interpreter builds this curve for a path fill and the image decoder
+/// builds it for a `Separation`/`DeviceN` image, and the two MUST agree:
+/// `CmykBuffer::spot_index` runs the builder only on the first allocation of
+/// a colorant on a page, so whichever caller gets there first defines the
+/// curve every later paint of that colorant collapses through. Two
+/// implementations that differed by a rounding step would make a spot fill
+/// and a spot image of the same tint disagree — the exact defect
+/// `devicen_image_ink`'s agreement tests exist to catch.
+///
+/// `component` is the colorant's index in the space's declaration order and
+/// `arity` the space's operand count; every other operand is held at `0.0`,
+/// which is §10.8.3 step (b)'s *"background matte of all white"*. A transform
+/// that will not evaluate answers white, not black — white is multiply's
+/// identity, so an unevaluable colorant paints nothing rather than a solid
+/// black rectangle nobody asked for (`SpotLut::transparent` documents the
+/// same choice).
+#[must_use]
+pub(crate) fn spot_lut(
+    space: &ColorSpace,
+    component: usize,
+    arity: usize,
+    intent: CmykIntent,
+) -> crate::cmyk_buffer::SpotLut {
+    crate::cmyk_buffer::SpotLut::build(|t| {
+        let mut probe = vec![0.0_f32; arity.max(component + 1)];
+        if let Some(slot) = probe.get_mut(component) {
+            *slot = t;
+        }
+        // Diagnostics discarded on purpose: the probe is not a paint, and a
+        // transform that fails here fails identically for the paint that
+        // follows, which is where it is counted.
+        let mut scratch = crate::color::ColorDiagnostics::default();
+        space
+            .to_rgb(&probe, intent, &mut scratch)
+            .map_or([1.0, 1.0, 1.0], |rgb| [rgb.r, rgb.g, rgb.b])
+    })
+}
 
 /// Which of Table 149's source-space rows applies.
 ///
@@ -1002,6 +1045,43 @@ pub fn cmyk_group_rules(
     op: bool,
     opm: u8,
 ) -> [ComponentRule; 4] {
+    cmyk_group_rules_with_planes(source, source_cmyk, op, opm, false)
+}
+
+/// [`cmyk_group_rules`] for a caller that knows whether the source's SPOT
+/// colorants have **planes of their own** (`Pass 238.0`).
+///
+/// # Why the table needs to be told
+///
+/// The mixed-case widening at the bottom of the `SeparationOrDeviceN` arm —
+/// `[Source; 4]` for a source naming both a process colorant and a spot —
+/// exists because, with no plane, a spot's ink can only reach the page
+/// flattened into the process channels, and `Backdrop` rules would throw it
+/// away (`Pass 195.0`'s measured missing green). Its own comment says the
+/// per-channel version *"belongs with the per-spot-colorant plane, where the
+/// paint colour is in scope."*
+///
+/// With `spots_plated == true` the spot's ink is going to its plane, so the
+/// widening is no longer a rescue — it is a knockout of backdrop C, M and Y
+/// the source never named. Table 149's row is applied as written: named
+/// process channels `Source`, unnamed process channels `Backdrop` (or `Zero`
+/// with overprint off), and the spot handled by the plane. Measured on a
+/// print-conformance duotone (`[/DeviceN [/Black <spot>]]` image under
+/// `/OP true`): with the widening the image knocked out the cyan and yellow
+/// of the check marks beneath it and the spot never landed, because the
+/// all-`Source` rules made the caller take the flattened route; without it
+/// the marks survive and the spot deposits.
+///
+/// `false` reproduces [`cmyk_group_rules`] exactly, for callers that do not
+/// deposit spot planes yet (shadings, meshes).
+#[must_use]
+pub fn cmyk_group_rules_with_planes(
+    source: &SourceKind,
+    source_cmyk: [f32; 4],
+    op: bool,
+    opm: u8,
+    spots_plated: bool,
+) -> [ComponentRule; 4] {
     match source {
         // Reverts to Normal in every column — no consideration of op/opm.
         SourceKind::Group => [ComponentRule::Source; 4],
@@ -1117,7 +1197,11 @@ pub fn cmyk_group_rules(
             // the backdrop for a spot-only paint is the decided behaviour this
             // module documents at length; this widening is scoped to the mixed
             // case that behaviour was never written for.
-            if named_process && named_unplatable_spot {
+            // ★ And with a plane, the spot is no longer unplatable — see
+            // `cmyk_group_rules_with_planes`. The widening was the reachable
+            // answer for a four-plane buffer; the table's own answer is
+            // reachable now.
+            if named_process && named_unplatable_spot && !spots_plated {
                 return [ComponentRule::Source; 4];
             }
             out

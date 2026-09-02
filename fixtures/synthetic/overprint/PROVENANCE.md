@@ -135,11 +135,12 @@ These are about §8.6.7's `OPM 1` meeting a source space that is not
 
 | file | source | `/OP` | claim |
 |---|---|---|---|
-| `grey_op_over_spot.pdf` | `DeviceGray` 0.5 | true | the discriminator: preserved under `grey_as_k_only`, knocked out under `device_cmyk_only` |
+| `grey_op_over_spot.pdf` | `DeviceGray` 0.5 | true | ~~the discriminator: preserved under `grey_as_k_only`, knocked out under `device_cmyk_only`~~ — since `Pass 238.0` the spot survives under BOTH (its plane is Table 149's `c_b`); the scopes separate over process ink (`grey_op_over_cmyk.pdf`) |
 | `cmyk_k_op_over_spot.pdf` | `DeviceCMYK` `0 0 0 0.5` | true | the reference the grey must MATCH exactly |
 | `grey_noop_over_spot.pdf` | `DeviceGray` 0.5 | false | control: no scope may move it |
-| `grey_image_op_over_spot.pdf` | `DeviceGray` image | true | control: a sampled image is never upgraded |
-| `rgb_op_over_spot.pdf` | `DeviceRGB` red | true | separates `all_process_spaces` from `grey_as_k_only` |
+| `grey_image_op_over_spot.pdf` | `DeviceGray` image | true | control: a sampled image is never upgraded — and since `Pass 238.0` it leaves the spot standing like the fill beside it |
+| `rgb_op_over_spot.pdf` | `DeviceRGB` red | true | ~~separates `all_process_spaces` from `grey_as_k_only`~~ — since `Pass 238.0` the spot lives in its own plane and survives under every scope, so this pins preservation; the separation moved to the row below |
+| `rgb_op_over_cmyk.pdf` | `DeviceRGB` red over `0.5 0 1 0 k` | true | separates `all_process_spaces` from `grey_as_k_only` — over PROCESS ink, the only geometry that can (`OP-N3`; `Pass 238.0`) |
 
 The spot backdrop is a `/Separation /Spot /DeviceCMYK` whose tint transform is
 deliberately CHROMATIC (C=0.8 M=0.2 Y=0.9 K=0). A neutral backdrop would make

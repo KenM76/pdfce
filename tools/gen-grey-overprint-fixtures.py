@@ -265,6 +265,17 @@ def main() -> int:
         # every space left the whole suite GREEN. A setting whose values
         # cannot be told apart is three names for one behaviour.
         "rgb_op_over_spot.pdf": build(source="rgb", overprint=True),
+        # ★ `Pass 238.0`: the SPOT version above can no longer discriminate
+        # the scopes, and that is a correctness gain rather than a loss. Once
+        # a spot has a plane of its own, Table 149's "any process colour
+        # space × spot colorant" row preserves it under EVERY scope, and the
+        # backdrop's PROCESS channels are all zero (a pure spot states none)
+        # -- so there is nothing left for `AllProcessSpaces` to preserve
+        # differently. `OP-N3` said it first: the discriminating case is over
+        # PROCESS components. This is that case for the RGB source: red
+        # (C=0, M=1, Y=1, K=0) over `0.5 0 1 0 k`, where the backdrop's cyan
+        # is real process ink and survives only under the widest scope.
+        "rgb_op_over_cmyk.pdf": build(source="rgb", overprint=True, backdrop="cmyk"),
     }
     for name, data in files.items():
         (OUT / name).write_bytes(data)

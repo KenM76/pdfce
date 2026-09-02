@@ -563,11 +563,15 @@ pub struct DecodedImage {
     /// preservation of a spot colorant in the backdrop, and painting it
     /// normally is conforming only when there is no spot beneath it.
     ///
-    /// `None` here is therefore a REAL SHORTFALL rather than a
-    /// correctly-empty case, and it is now disclosed as one
-    /// (`Diagnostics::overprint_process_images_unsupported`). Closing it needs
-    /// the per-spot-colorant plane; nothing in this structure can express a
-    /// component pdfce has no plane for.
+    /// `None` here was therefore a REAL SHORTFALL rather than a
+    /// correctly-empty case, and was disclosed as one
+    /// (`Diagnostics::overprint_process_images_unsupported`) until
+    /// `Pass 238.0` closed it — not by putting anything in this structure,
+    /// but by telling the compositor to leave the spot planes alone
+    /// (`SpotSource::Preserve`) when a process-space image paints under
+    /// `/OP true`. A process source states no spot tint, so there is nothing
+    /// per-texel to carry; the whole of its spot behaviour is one policy. The
+    /// counter is kept on the metrics line, at zero, for script stability.
     ///
     /// # ★ Why this is a SECOND set of planes rather than [`Self::ink`]
     ///
@@ -617,6 +621,51 @@ pub struct OverprintSource {
     /// The authored process tints, packed exactly as [`CmykTexels`] packs
     /// ink so the same rasteriser can carry both.
     pub tints: CmykTexels,
+    /// The authored **spot** tints, one plane per spot colorant the space
+    /// names, in the space's declaration order (`Pass 238.0`).
+    ///
+    /// # Why these live here and not on [`DecodedImage::ink`]
+    ///
+    /// Together with [`Self::tints`] they are the image's colour **as the
+    /// file stated it**: process tints in the four process channels, each
+    /// spot in its own plane. [`DecodedImage::ink`] is the same colour
+    /// **flattened** — the tint transform's output, which already contains
+    /// every spot's contribution as process ink. A spot colorant's ink can
+    /// arrive by exactly one of those two routes; carrying both at once lays
+    /// it down twice. So the compositor uses `tints` + `spots` when every
+    /// spot got a plane, and `ink` alone when any was refused — the same
+    /// all-or-nothing rule `cmyk_paint` applies to a fill, and the reason a
+    /// spot fill and a spot image of the same tint agree.
+    ///
+    /// Empty when the space names no spot colorant (a `DeviceN` of process
+    /// names only), and empty under the composite device model — the
+    /// interpreter decides that, not the decoder, by ignoring these.
+    pub spots: Vec<SpotTexel>,
+}
+
+/// A spot colorant's name and its tint curve — the pair a plane is
+/// allocated from (`Pass 238.0`).
+pub(crate) type SpotColorant = (
+    std::sync::Arc<[u8]>,
+    std::sync::Arc<crate::cmyk_buffer::SpotLut>,
+);
+
+/// One spot colorant's per-texel tint, packed for rasterisation.
+///
+/// The tint is replicated across the red, green and blue channels and
+/// premultiplied by the image's own alpha — the identical packing
+/// [`CmykTexels::k`] uses, for the identical reason: any channel is the
+/// right channel, so the writer and the reader cannot disagree about which.
+#[derive(Debug)]
+pub struct SpotTexel {
+    /// The colorant name, `#xx`-decoded — the comparison form §7.3.5
+    /// specifies, and the key `CmykBuffer::spot_index` allocates planes by.
+    pub colorant: std::sync::Arc<[u8]>,
+    /// This colorant alone on white, sampled across the tint range, from
+    /// the image's own space through [`crate::overprint::spot_lut`].
+    pub(crate) lut: std::sync::Arc<crate::cmyk_buffer::SpotLut>,
+    /// The tint plane.
+    pub tint: Pixmap,
 }
 
 /// A `DeviceCMYK` image's colorants, packed for rasterisation.
@@ -1343,6 +1392,44 @@ fn decode_sampled(
         } => Some(&o.entries),
         _ => None,
     };
+    // The spot colorants this image can deposit (`Pass 238.0`): for an
+    // `/Indexed` image the palette-build already resolved names, curves and
+    // per-entry tints; for a direct `Separation`/`DeviceN` image the tints
+    // are the texel's own components at the resolved component indices, and
+    // the curves are built here, once per image.
+    let palette_spot_table: Option<&Vec<Vec<f32>>> = match &space {
+        Space::Indexed {
+            base_icc_managed: false,
+            overprint: Some(o),
+            ..
+        } => Some(&o.spot_entries),
+        _ => None,
+    };
+    let (spot_colorants, spot_components): (Vec<SpotColorant>, Vec<usize>) =
+        match (&space, &op_kind) {
+            (
+                Space::Indexed {
+                    overprint: Some(o), ..
+                },
+                Some(_),
+            ) => (o.spot_colorants.clone(), Vec::new()),
+            (Space::Special(cs), Some(kind)) => {
+                let slots = crate::overprint::authored_spots(kind, &vec![0.0_f32; readable]);
+                let colorants = slots
+                    .iter()
+                    .map(|(component, name, _)| {
+                        (
+                            std::sync::Arc::from(*name),
+                            std::sync::Arc::new(crate::overprint::spot_lut(
+                                cs, *component, readable, intent,
+                            )),
+                        )
+                    })
+                    .collect();
+                (colorants, slots.iter().map(|(c, _, _)| *c).collect())
+            }
+            _ => (Vec::new(), Vec::new()),
+        };
 
     // §8.9.6.4's ranges are counted against the IMAGE's colour space, so
     // the component count is the one resolved above — 1 for `Indexed`
@@ -1491,6 +1578,25 @@ fn decode_sampled(
     } else {
         None
     };
+    // One tint plane per spot colorant, on the same all-or-nothing terms:
+    // if any plane cannot be allocated none are kept, and the image then
+    // flattens every spot exactly as it did before this Pass. A partial set
+    // would deposit some colorants and flatten others, and the flattened
+    // ink already contains the deposited ones -- double ink, the defect the
+    // fill path's agreement tests caught.
+    let mut spot_planes: Vec<Pixmap> = Vec::with_capacity(spot_colorants.len());
+    if op_planes.is_some() {
+        for _ in &spot_colorants {
+            match Pixmap::new(width, height) {
+                Some(p) => spot_planes.push(p),
+                None => {
+                    spot_planes.clear();
+                    break;
+                }
+            }
+        }
+    }
+    let spots_carried = !spot_colorants.is_empty() && spot_planes.len() == spot_colorants.len();
     let mut out_of_range = false;
     // ★ ALL-OR-NOTHING, and it is the safety net under `Space::yields_cmyk`'s
     // probe. Set the moment a texel's `to_cmyk` answers `None` on an image
@@ -1518,6 +1624,8 @@ fn decode_sampled(
             // `palette_ink` because the two tables answer different questions
             // — see `Space::Indexed::overprint`.
             let mut palette_op: Option<[f32; 4]> = None;
+            // And the palette entry's spot tints, one per colorant.
+            let mut palette_spots: Option<&Vec<f32>> = None;
             // This texel's own colorants, for a DIRECT `Separation`/`DeviceN`
             // image (row 3 of `carries_ink`'s list). Produced by the same
             // `TintCache` entry as the sRGB beside it, so the two cannot come
@@ -1564,6 +1672,7 @@ fn decode_sampled(
                     // later it has become a colour.
                     palette_ink = palette_ink_table.and_then(|t| t.get(index).copied());
                     palette_op = palette_op_table.and_then(|t| t.get(index).copied());
+                    palette_spots = palette_spot_table.and_then(|t| t.get(index));
                     match table.get(index) {
                         Some(&c) => c,
                         None => {
@@ -1705,6 +1814,23 @@ fn decode_sampled(
                 };
                 write_ink(planes, at, tint, a);
             }
+            // The spot tints, texel for texel, one plane per colorant. Read
+            // from the palette row for an `/Indexed` image and from the
+            // texel's own components for a direct one -- the same two
+            // sources the process tints above come from.
+            if spots_carried {
+                for (i, plane) in spot_planes.iter_mut().enumerate() {
+                    let tint = match palette_spots {
+                        Some(row) => row.get(i).copied().unwrap_or(0.0),
+                        None => spot_components
+                            .get(i)
+                            .and_then(|c| last_comps.get(*c))
+                            .copied()
+                            .unwrap_or(0.0),
+                    };
+                    write_tint(plane, at, tint, a);
+                }
+            }
         }
     }
     notes.palette_out_of_range = out_of_range;
@@ -1763,11 +1889,36 @@ fn decode_sampled(
         // Both halves or neither: a row-3 classification with no planes
         // behind it would let the caller compute rules and then read tints
         // that do not exist.
-        overprint: op_kind
-            .zip(op_planes)
-            .map(|(kind, tints)| OverprintSource { kind, tints }),
+        overprint: op_kind.zip(op_planes).map(|(kind, tints)| OverprintSource {
+            kind,
+            tints,
+            spots: if spots_carried {
+                spot_colorants
+                    .into_iter()
+                    .zip(spot_planes)
+                    .map(|((colorant, lut), tint)| SpotTexel {
+                        colorant,
+                        lut,
+                        tint,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+        }),
         notes,
     })
+}
+
+/// Write one texel's spot tint into its plane — [`write_ink`]'s packing for
+/// a single channel, replicated across all three and premultiplied by the
+/// same alpha, so the compositor reads it back with the identical
+/// un-premultiply it applies to the process planes.
+fn write_tint(plane: &mut Pixmap, at: usize, tint: f32, alpha: u8) {
+    let t = tint.clamp(0.0, 1.0);
+    if let Some(slot) = plane.pixels_mut().get_mut(at) {
+        *slot = premultiplied(Rgb::from_rgb(t, t, t), alpha);
+    }
 }
 
 /// Write one texel's authored `DeviceCMYK` tint into the ink planes.
@@ -2077,6 +2228,15 @@ pub(crate) struct IndexedOverprint {
     pub kind: crate::overprint::SourceKind,
     /// Authored process tints, one per palette entry.
     pub entries: Vec<[f32; 4]>,
+    /// The base's spot colorants — name and tint curve — in declaration
+    /// order (`Pass 238.0`). Empty when the base names none.
+    pub spot_colorants: Vec<(
+        std::sync::Arc<[u8]>,
+        std::sync::Arc<crate::cmyk_buffer::SpotLut>,
+    )>,
+    /// Authored spot tints, one row per palette entry, one column per
+    /// `spot_colorants` entry. Same index discipline as `entries`.
+    pub spot_entries: Vec<Vec<f32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -2867,6 +3027,32 @@ fn resolve_indexed(
     let mut op_table = op_kind
         .as_ref()
         .map(|_| Vec::<[f32; 4]>::with_capacity(hival + 1));
+    // The base's spot colorants, resolved ONCE: which components they are
+    // and what each looks like alone on white. Per-entry tints are read in
+    // the loop below by component index, so no per-entry name search.
+    let spot_slots: Vec<(usize, std::sync::Arc<[u8]>)> = match (&op_kind, &base) {
+        (Some(kind), Space::Special(_)) => {
+            crate::overprint::authored_spots(kind, &vec![0.0_f32; m])
+                .into_iter()
+                .map(|(component, name, _)| (component, std::sync::Arc::from(name)))
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let spot_colorants: Vec<SpotColorant> = match &base {
+        Space::Special(cs) => spot_slots
+            .iter()
+            .map(|(component, name)| {
+                (
+                    std::sync::Arc::clone(name),
+                    std::sync::Arc::new(crate::overprint::spot_lut(cs, *component, m, intent)),
+                )
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let mut spot_table: Vec<Vec<f32>> =
+        Vec::with_capacity(if spot_slots.is_empty() { 0 } else { hival + 1 });
     // ★ EXACTLY `m` COMPONENTS, AND THE BUFFER IS SIZED FROM `m`.
     //
     // This was a fixed `[0.0f32; 4]` passed whole to `to_rgb`, and it was
@@ -2920,6 +3106,14 @@ fn resolve_indexed(
         if let (Some(op), Some(kind)) = (op_table.as_mut(), op_kind.as_ref()) {
             op.push(crate::overprint::authored_tints(kind, &comps).unwrap_or([0.0; 4]));
         }
+        if !spot_slots.is_empty() {
+            spot_table.push(
+                spot_slots
+                    .iter()
+                    .map(|(component, _)| comps.get(*component).copied().unwrap_or(0.0))
+                    .collect(),
+            );
+        }
         table.push(base.to_rgb(intent, &comps, &mut palette_diag));
     }
     // All-or-nothing, discharged. A short lookup table breaks the loop early
@@ -2935,7 +3129,12 @@ fn resolve_indexed(
         ink: ink_table,
         overprint: op_kind
             .zip(op_table)
-            .map(|(kind, entries)| IndexedOverprint { kind, entries }),
+            .map(|(kind, entries)| IndexedOverprint {
+                kind,
+                entries,
+                spot_colorants,
+                spot_entries: spot_table,
+            }),
     })
 }
 

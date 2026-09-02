@@ -232,6 +232,29 @@ pub(crate) fn paint_solid_into_cmyk(
         buf.put_coverage(cov);
         return;
     }
+    paint_brush_coverage_into_cmyk(buf, &cov, region, brush);
+    buf.put_coverage(cov);
+}
+
+/// Composite one [`BrushSpec`] through an **already-rasterised** coverage
+/// mask — the colour half of [`paint_solid_into_cmyk`], split out in
+/// `Pass 238.0` so a STENCIL MASK can take it.
+///
+/// A stencil (`/ImageMask true`, §8.9.6.2) "designates places where the
+/// current colour shall be painted": its shape is an image, its colour is
+/// the graphics state's. Before this split the stencil route rasterised its
+/// texels pre-tinted with the fill's sRGB and bridged them back through
+/// `rgb_to_cmyk`, so a spot fill through a stencil lost its plane and a
+/// `DeviceCMYK` fill lost its authored ink — while the same fill through a
+/// path kept both. Two paints in the same colour landing differently is the
+/// defect; one composite reached two ways is the fix. `cov` is whatever the
+/// caller rasterised, clip already intersected.
+pub(crate) fn paint_brush_coverage_into_cmyk(
+    buf: &mut CmykBuffer,
+    cov: &Mask,
+    region: (u32, u32, u32, u32),
+    brush: &BrushSpec,
+) {
     let blend = Blend::from_tiny_skia(brush.blend).unwrap_or(Blend::Normal);
     match &brush.brush {
         Brush::Solid { rgba } => {
@@ -309,7 +332,7 @@ pub(crate) fn paint_solid_into_cmyk(
                     f32::from(rgba[2]) / 255.0,
                 ),
             };
-            let painted = buf.composite_mask(&cov, region, colour, spots, alpha, blend);
+            let painted = buf.composite_mask(cov, region, colour, spots, alpha, blend);
             if bridged {
                 buf.record_bridged_solid(painted);
             }
@@ -320,7 +343,6 @@ pub(crate) fn paint_solid_into_cmyk(
             buf.note_unbridged_image();
         }
     }
-    buf.put_coverage(cov);
 }
 
 #[cfg(test)]

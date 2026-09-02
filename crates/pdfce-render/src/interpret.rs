@@ -337,11 +337,20 @@ pub struct Diagnostics {
     pub icc_unmanaged_paints: usize,
     /// Process-space sampled images painted under `/OP true` onto a
     /// subtractive buffer, where Table 149's SPOT sub-row could not be
-    /// honoured because the IMAGE path does not deposit into a spot plane.
+    /// honoured.
+    ///
+    /// ★★ **ALWAYS ZERO SINCE `Pass 238.0`, and kept on the metrics line
+    /// for script stability.** The image path now preserves the spot
+    /// planes under `/OP true` (`SpotSource::Preserve`), which is exactly
+    /// the sub-row this counted the absence of. Under the composite device
+    /// model there are no planes to preserve, and that is the model, not a
+    /// shortfall — so nothing increments this any more. A non-zero value
+    /// from an older build meant the shape of the problem was present; from
+    /// this build on the number answers a question that no longer arises.
     ///
     /// ★ Said "because pdfce has no spot plane" until 2026-09-02. Planes
-    /// landed in `Pass 225.0` and a path FILL uses them; the image path is
-    /// the remaining half.
+    /// landed in `Pass 225.0` and a path FILL uses them; the image path
+    /// followed in `Pass 238.0`.
     ///
     /// ★ THE COUNTER EXISTS BECAUSE THREE SOURCE COMMENTS CLAIMED NOTHING WAS
     /// OWED HERE, and that claim was false. §11.7.4.3 Table 149's row for
@@ -477,11 +486,12 @@ pub struct Diagnostics {
     /// PDF/X files, so a PDF/X-4 document's EXPECTED appearance includes it.
     ///
     /// **What is still missing**, and why this counter is not a success
-    /// measure: the four PROCESS colorants survive, and since `Pass 228.0` a
-    /// spot colorant painted by a PATH FILL keeps a plane of its own and is
-    /// left standing the way a press leaves it — but a spot painted by an
-    /// IMAGE or a SHADING still flattens through its tint transform and
-    /// cannot be. That half is owed.
+    /// measure: the four PROCESS colorants survive, and a spot colorant
+    /// painted by a PATH FILL (`Pass 228.0`), a STENCIL MASK or a SAMPLED
+    /// IMAGE (`Pass 238.0`) keeps a plane of its own and is left standing
+    /// the way a press leaves it — but a spot painted by a SHADING still
+    /// flattens through its tint transform and cannot be. That half is
+    /// owed.
     ///
     /// ★ Said "a SPOT colorant has no plane of its own" unconditionally
     /// until 2026-09-02, and survived the sweep that narrowed six sibling
@@ -2634,6 +2644,24 @@ pub(crate) fn run_form_at_on(
 /// the blend function for an overprinting paint — so a blend mode in this
 /// struct would be a field one of its two consumers must remember to ignore,
 /// which is the shape of a future defect rather than a convenience.
+/// The colour half of a §11.7.4.3 composite, computed once per paint by
+/// [`Interpreter::overprint_plan`] and consumed by
+/// [`Interpreter::overprint_composite`] (`Pass 238.0`).
+struct OverprintPlan {
+    /// Table 149's row for the source.
+    kind: crate::overprint::SourceKind,
+    /// The source colour as subtractive tints, Table 149's operand.
+    source_cmyk: [f32; 4],
+    /// Table 149 per group component, from the source's colorant names,
+    /// computed WITHOUT knowledge of spot planes — the answer every additive
+    /// destination uses, and the answer `overprint_would_change` counted.
+    rules: [crate::overprint::ComponentRule; 4],
+    /// `/OP` (or `/op`) for this paint.
+    op: bool,
+    /// `/OPM`, as `cmyk_group_rules` takes it.
+    opm: u8,
+}
+
 struct ImageGeometry {
     /// §8.9.4's user-space unit square, the region the image is filled into.
     path: Path,
@@ -5359,12 +5387,33 @@ impl Interpreter<'_> {
         // `OtherProcess` under `device_cmyk_only`. `OtherProcess` is the
         // "overprint does not reach this source" answer, so a spot plane
         // does not rescue it.
+        //
+        // ★★★ AND `OtherProcess` IS NO LONGER EXCLUDED (`Pass 238.0`). The
+        // paragraph above said *"`OtherProcess` is the 'overprint does not
+        // reach this source' answer, so a spot plane does not rescue it"* --
+        // and that was the FLATTENED representation talking. With a spot
+        // plane on the page, Table 149's *"any process colour space × spot
+        // colorant"* row is `c_b` under `OP true` for a `DeviceGray` source
+        // under EVERY scope; the scope decides the four PROCESS rules and
+        // nothing else. `OverprintZeroTintScope`'s own docs said so in
+        // advance: *"a conforming engine preserves that spot backdrop
+        // whichever way this setting is read … it will change when the
+        // n-colorant buffer lands."* Routing an `OtherProcess` source here
+        // gives it all-`Source` process rules -- an ordinary paint of the
+        // process channels, exactly what the ordinary path did -- and
+        // `None` for every spot, which is the preservation. The three
+        // scope tests still discriminate, because they discriminate on the
+        // process channels (`OP-N3`).
+        //
+        // `Group` stays out: Table 149 reverts a transparency group to
+        // Normal in every column, spot planes included.
         if spot_planes > 0
             && matches!(
                 crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope),
                 Some(
                     crate::overprint::SourceKind::DeviceCmykDirect
                         | crate::overprint::SourceKind::ProcessCmykIndirect
+                        | crate::overprint::SourceKind::OtherProcess
                         | crate::overprint::SourceKind::SeparationOrDeviceN { .. }
                 )
             )
@@ -6032,6 +6081,17 @@ impl Interpreter<'_> {
     /// for the measurement that caught it.
     fn process_tints_only(&self, stroking: bool) -> Option<[f32; 4]> {
         let (space, comps) = self.color.device_color(stroking)?;
+        // §8.6.6.3: resolve an `Indexed` operand to its palette entry first,
+        // as `authored_spot_inks` does — the two halves of one paint must be
+        // read from the same operands. Found in `Pass 238.0` beside the same
+        // omission there: an `/Indexed` fill over `[/DeviceN [/Black <spot>]]`
+        // deposited its spot correctly and stated K = 0, because the INDEX
+        // (0) was read as the Black tint. The image of the same palette
+        // entry carried K = 0.502, and the two disagreed.
+        let resolved = space.indexed_entry(comps);
+        let (space, comps) = resolved
+            .as_ref()
+            .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
         let kind = crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)?;
         crate::overprint::authored_tints(&kind, comps)
     }
@@ -6090,6 +6150,23 @@ impl Interpreter<'_> {
         let Some((space, comps)) = self.color.device_color(stroking) else {
             return Vec::new();
         };
+        // §8.6.6.3: an `Indexed` operand is an INDEX, not a tint. Resolve it
+        // to the palette entry in the base space BEFORE anything reads it as
+        // a colorant value -- the same step `paint_overprint` takes.
+        //
+        // ★ Found by `Pass 238.0`'s image route, not by a fill test. An
+        // `/Indexed` fill over a `Separation` base deposited the INDEX (1.0)
+        // as the spot's tint and built the colorant's curve from the Indexed
+        // space, whose domain is indices -- so the plane's LUT mapped
+        // `1.0 -> the entry-1 colour` and `0.4 -> white`. The fill looked
+        // right (its wrong tint hit the wrong curve at the right colour) and
+        // the first image to deposit a true tint of 0.4 into that plane came
+        // out white. Two wrongs cancelling on one route is exactly the shape
+        // an agreement test between two routes exists to catch.
+        let resolved = space.indexed_entry(comps);
+        let (space, comps) = resolved
+            .as_ref()
+            .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
         let Some(kind) =
             crate::overprint::classify(space, false, self.policy.overprint_zero_tint_scope)
         else {
@@ -6130,18 +6207,14 @@ impl Interpreter<'_> {
         if let Some(found) = self.spot_luts.borrow().get(name) {
             return Arc::clone(found);
         }
-        let intent = self.policy.cmyk_intent;
-        let built = Arc::new(crate::cmyk_buffer::SpotLut::build(|t| {
-            let mut probe = vec![0.0_f32; arity.max(component + 1)];
-            if let Some(slot) = probe.get_mut(component) {
-                *slot = t;
-            }
-            // Discarded on purpose -- see `authored_spot_inks`.
-            let mut scratch = crate::color::ColorDiagnostics::default();
-            space
-                .to_rgb(&probe, intent, &mut scratch)
-                .map_or([1.0, 1.0, 1.0], |rgb| [rgb.r, rgb.g, rgb.b])
-        }));
+        // One builder for every caller -- see `overprint::spot_lut` for why
+        // the image decoder and this cache must not each have their own.
+        let built = Arc::new(crate::overprint::spot_lut(
+            space,
+            component,
+            arity,
+            self.policy.cmyk_intent,
+        ));
         self.spot_luts
             .borrow_mut()
             .insert(name.into(), Arc::clone(&built));
@@ -6171,11 +6244,78 @@ impl Interpreter<'_> {
         stroking: bool,
         canvas: &mut Canvas<'_>,
     ) -> bool {
-        use crate::overprint;
-
-        let Some((space, comps)) = self.color.device_color(stroking) else {
+        let Some(plan) = self.overprint_plan(stroking) else {
             return false;
         };
+        // Coverage: the path, rasterised exactly as tiny_skia would have
+        // rasterised it for a normal paint, then intersected with the clip.
+        // Using the same rasteriser is what keeps an overprinted edge
+        // identical in shape to a non-overprinted one.
+        let ctm = self.gs.current.ctm;
+        let Some(mut coverage) = Mask::new(canvas.width(), canvas.height()) else {
+            return false;
+        };
+        if let Some(r) = rule {
+            coverage.fill_path(path, r, true, ctm);
+        } else {
+            let Some(stroked) = path.clone().stroke(&self.stroke_params(), 1.0) else {
+                return false;
+            };
+            coverage.fill_path(&stroked, FillRule::Winding, true, ctm);
+        }
+        if let Some(old) = self.gs.current.clip.as_deref() {
+            let old_data = old.data().to_vec();
+            for (n, o) in coverage.data_mut().iter_mut().zip(old_data.iter()) {
+                *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
+            }
+        }
+
+        // Restrict the scan to the path's device-space bounds; outside them
+        // coverage is zero and the per-pixel CMYK round trip would be pure
+        // waste. A full-page scan is ~8x slower on a typical patch.
+        let Some(device_path) = path.clone().transform(ctm) else {
+            return false;
+        };
+        let b = device_path.bounds();
+        // A stroke extends beyond the path's own bounds by half the line
+        // width, and the join/cap can add more. Padding by the full width
+        // is cheap and cannot under-cover.
+        let pad = if rule.is_some() {
+            1.0
+        } else {
+            self.gs.current.line_width.mul_add(0.5, 2.0)
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let region = (
+            (b.left() - pad).floor().max(0.0) as u32,
+            (b.top() - pad).floor().max(0.0) as u32,
+            ((b.right() + pad).ceil().max(0.0) as u32).min(canvas.width()),
+            ((b.bottom() + pad).ceil().max(0.0) as u32).min(canvas.height()),
+        );
+        if region.0 >= region.2 || region.1 >= region.3 {
+            // Entirely off-page. The composite ran correctly and touched
+            // nothing, which is a success, not a fallback.
+            return true;
+        }
+
+        self.overprint_composite(&plan, &coverage, region, stroking, canvas)
+    }
+
+    /// Everything §11.7.4.3 needs to know about the CURRENT colour before
+    /// any coverage exists: Table 149's row, the source tints, and the four
+    /// [`ComponentRule`](crate::overprint::ComponentRule)s.
+    ///
+    /// Split out of [`Self::paint_overprint`] in `Pass 238.0` so a STENCIL
+    /// MASK — whose coverage comes from an image, not a path — composites
+    /// through the identical rules and the identical source. Two copies of
+    /// this computation would be two places for Table 149 to be transcribed,
+    /// and the fill and the stencil painted in the same colour must not be
+    /// able to disagree. `None` means the colour is not classifiable (a
+    /// pattern, an unresolved operand), and the caller paints normally.
+    fn overprint_plan(&self, stroking: bool) -> Option<OverprintPlan> {
+        use crate::overprint;
+
+        let (space, comps) = self.color.device_color(stroking)?;
         // §8.6.6.3: an `Indexed` operand is an INDEX, not a colour. Resolve
         // it to the palette entry in the base space before anything asks a
         // question about colorants — see `ColorSpace::indexed_entry`, and
@@ -6186,10 +6326,7 @@ impl Interpreter<'_> {
         let (space, comps) = resolved
             .as_ref()
             .map_or((space, comps), |(b, c)| (*b, c.as_slice()));
-        let Some(kind) = overprint::classify(space, false, self.policy.overprint_zero_tint_scope)
-        else {
-            return false;
-        };
+        let kind = overprint::classify(space, false, self.policy.overprint_zero_tint_scope)?;
 
         // The source colour as SUBTRACTIVE TINTS, which is what Table 149
         // is written in. The rule lives in `overprint::authored_tints`
@@ -6296,57 +6433,34 @@ impl Interpreter<'_> {
         // and `authored_cmyk`. That made a spot invisible on a subtractive
         // page even with overprint OFF, which no reading of Table 149
         // sanctions.
-        // Coverage: the path, rasterised exactly as tiny_skia would have
-        // rasterised it for a normal paint, then intersected with the clip.
-        // Using the same rasteriser is what keeps an overprinted edge
-        // identical in shape to a non-overprinted one.
-        let ctm = self.gs.current.ctm;
-        let Some(mut coverage) = Mask::new(canvas.width(), canvas.height()) else {
-            return false;
-        };
-        if let Some(r) = rule {
-            coverage.fill_path(path, r, true, ctm);
-        } else {
-            let Some(stroked) = path.clone().stroke(&self.stroke_params(), 1.0) else {
-                return false;
-            };
-            coverage.fill_path(&stroked, FillRule::Winding, true, ctm);
-        }
-        if let Some(old) = self.gs.current.clip.as_deref() {
-            let old_data = old.data().to_vec();
-            for (n, o) in coverage.data_mut().iter_mut().zip(old_data.iter()) {
-                *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
-            }
-        }
+        Some(OverprintPlan {
+            kind,
+            source_cmyk,
+            rules,
+            op,
+            opm: u8::from(self.gs.current.overprint_mode == 1),
+        })
+    }
 
-        // Restrict the scan to the path's device-space bounds; outside them
-        // coverage is zero and the per-pixel CMYK round trip would be pure
-        // waste. A full-page scan is ~8x slower on a typical patch.
-        let Some(device_path) = path.clone().transform(ctm) else {
-            return false;
-        };
-        let b = device_path.bounds();
-        // A stroke extends beyond the path's own bounds by half the line
-        // width, and the join/cap can add more. Padding by the full width
-        // is cheap and cannot under-cover.
-        let pad = if rule.is_some() {
-            1.0
-        } else {
-            self.gs.current.line_width.mul_add(0.5, 2.0)
-        };
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let region = (
-            (b.left() - pad).floor().max(0.0) as u32,
-            (b.top() - pad).floor().max(0.0) as u32,
-            ((b.right() + pad).ceil().max(0.0) as u32).min(canvas.width()),
-            ((b.bottom() + pad).ceil().max(0.0) as u32).min(canvas.height()),
-        );
-        if region.0 >= region.2 || region.1 >= region.3 {
-            // Entirely off-page. The composite ran correctly and touched
-            // nothing, which is a success, not a fallback.
-            return true;
-        }
-
+    /// The composite half of [`Self::paint_overprint`]: Table 149 applied
+    /// through an already-rasterised coverage mask.
+    ///
+    /// `coverage` is whatever shape the caller rasterised — a path through
+    /// tiny_skia, or a stencil mask's texels through the image shader — with
+    /// the clip already intersected. `region` bounds the scan. Returns `true`
+    /// if the composite ran; the caller's documented response to `false` is
+    /// to paint normally AND disclose.
+    fn overprint_composite(
+        &mut self,
+        plan: &OverprintPlan,
+        coverage: &Mask,
+        region: (u32, u32, u32, u32),
+        stroking: bool,
+        canvas: &mut Canvas<'_>,
+    ) -> bool {
+        use crate::overprint;
+        let rules = plan.rules;
+        let source_cmyk = plan.source_cmyk;
         let alpha = if stroking {
             self.gs.current.stroke_alpha
         } else {
@@ -6392,15 +6506,34 @@ impl Interpreter<'_> {
             // the one that cannot knock anything out.
             let mut spots: [Option<f32>; crate::compositor::MAX_SPOTS] =
                 [None; crate::compositor::MAX_SPOTS];
+            let mut planed = 0usize;
             for ink in &spot_inks {
                 if let Some(plane) = buf.spot_index(&ink.colorant, || (*ink.lut).clone())
                     && let Some(slot) = spots.get_mut(plane)
                 {
                     *slot = Some(ink.tint);
+                    planed += 1;
                 }
             }
+            // ★ With every named spot on a plane of its own, Table 149's
+            // process rules are applied as written rather than widened to
+            // carry the spot's flattened ink -- see
+            // `cmyk_group_rules_with_planes` (`Pass 238.0`). A spot refused a
+            // plane keeps the widened rules AND a `None` slot: its ink is
+            // then in `source_cmyk`, flattened, exactly as before.
+            let rules = if !spot_inks.is_empty() && planed == spot_inks.len() {
+                crate::overprint::cmyk_group_rules_with_planes(
+                    &plan.kind,
+                    source_cmyk,
+                    plan.op,
+                    plan.opm,
+                    true,
+                )
+            } else {
+                rules
+            };
             let changed = buf.composite_overprint(
-                &coverage,
+                coverage,
                 region,
                 rules,
                 source_cmyk,
@@ -6416,7 +6549,7 @@ impl Interpreter<'_> {
         };
         let changed = overprint::composite(
             dest,
-            &coverage,
+            coverage,
             rules,
             source_cmyk,
             alpha.clamp(0.0, 1.0),
@@ -7531,6 +7664,10 @@ impl Interpreter<'_> {
         let doc = self.doc;
         let resources = self.resources;
         let fill = self.gs.current.fill_color;
+        let is_stencil = matches!(
+            dict.get(b"ImageMask").map(|o| doc.resolve(o)),
+            Some(Object::Boolean(true))
+        );
 
         // ★ D3 -- Table 89's `/Intent` overrides the graphics state FOR THIS
         // IMAGE ONLY (`Pass 199.1`). Resolved through the shared rule rather
@@ -7689,25 +7826,78 @@ impl Interpreter<'_> {
                         self.diag.icc_unmanaged_paints += 1;
                     }
                 }
-                if self.gs.current.overprint_fill
-                    && decoded.overprint.is_none()
+                // ★★ TABLE 149's SPOT SUB-ROW FOR A PROCESS-SPACE IMAGE
+                // (`Pass 238.0`). A `DeviceGray`/`DeviceRGB`/`DeviceCMYK`
+                // image under `/OP true` takes `c_s` for every PROCESS
+                // component -- an ordinary paint already is that -- and
+                // `c_b` for every SPOT colorant. Until this Pass the second
+                // half was counted (`overprint_process_images_unsupported`)
+                // and not done: the image painted its implicit `0.0` spot
+                // tint (§11.7.3) and knocked the backdrop's spot out where a
+                // press leaves it standing. Now the composite is told to
+                // leave the planes alone. Measured on the suite's grey drop
+                // shadow over a spot green: the shadow used to sit on white
+                // paper, and now sits on the green.
+                //
+                // `Preserve` whenever overprint is on and the page composites
+                // in ink, whatever the image's space: a `Separation` image's
+                // named colorant is deposited by the route below and its
+                // UNNAMED planes are `c_b` by the same row, so the policy is
+                // right for it too. An additive destination has no planes
+                // and ignores the value.
+                let spot_source = if self.gs.current.overprint_fill
                     && self.blend_space == crate::compositor::BlendSpace::Subtractive
                 {
-                    self.diag.overprint_process_images_unsupported += 1;
-                    self.diag.note(
-                        b"process-space image painted under /OP true on a subtractive page: \
-                          Table 149 preserves the backdrop's SPOT colorants, and pdfce has no \
-                          spot plane, so any spot beneath this image was overwritten",
-                    );
+                    crate::cmyk_buffer::SpotSource::Preserve
+                } else {
+                    crate::cmyk_buffer::SpotSource::Paint
+                };
+                // ★★ A STENCIL MASK ON AN INK PAGE IS A FILL WITH AN IMAGE'S
+                // SHAPE (`Pass 238.0`). §8.9.6.2 makes it "a region of the
+                // page to be painted with the current colour", and the
+                // current colour is the graphics state's -- with its authored
+                // CMYK, its spot inks, and its overprint plan. Until this
+                // Pass the stencil's texels were pre-tinted with the fill's
+                // sRGB and bridged back, so a spot fill through a stencil
+                // flattened while the same fill through a path deposited.
+                // Measured on the suite's spot-overprint patch: the two
+                // "mask" cells showed a white X where the "vector" cells
+                // beside them, painted in the same ink, were clean.
+                if is_stencil && self.paint_stencil_as_fill(&decoded.pixmap, interpolate, canvas) {
+                    self.diag.images_rendered += 1;
+                    return;
                 }
+                // The authored colorants -- process tints plus one plane per
+                // spot -- are offered to the canvas ONLY under the
+                // separation-simulation device model. Under
+                // `AlternateSpaceSubstitution` §8.6.6.4 substitutes the
+                // alternate space at the moment the image's space is set, so
+                // the flattened `ink` IS the conforming paint and no plane
+                // may exist; `authored_spot_inks` makes the same choice for
+                // a fill, by returning nothing.
+                let simulate = matches!(
+                    self.policy.spot_colorant_device_model,
+                    pdfce_core::settings::SpotColorantDeviceModel::SimulateSeparations
+                );
+                let authored = decoded
+                    .overprint
+                    .as_ref()
+                    .filter(|o| simulate && !o.spots.is_empty());
                 if self.gs.current.overprint_fill
                     && decoded.overprint.is_some()
-                    && self.paint_image_overprint(&decoded, interpolate, canvas)
+                    && self.paint_image_overprint(&decoded, simulate, interpolate, canvas)
                 {
                     self.diag.images_rendered += 1;
                     return;
                 }
-                self.paint_image(&decoded.pixmap, decoded.ink.as_ref(), interpolate, canvas);
+                self.paint_image(
+                    &decoded.pixmap,
+                    decoded.ink.as_ref(),
+                    authored,
+                    spot_source,
+                    interpolate,
+                    canvas,
+                );
                 self.diag.images_rendered += 1;
             }
             Err(err) => {
@@ -7806,6 +7996,108 @@ impl Interpreter<'_> {
     /// here: the consequence of being slightly wrong at the boundary is
     /// one filter rather than another on an image that is very nearly
     /// 1:1, where the two agree anyway.
+    /// Paint a stencil mask as a **fill of the current colour through the
+    /// stencil's coverage**, on a canvas that composites in ink.
+    ///
+    /// Returns `false` — and paints nothing — when the canvas is not a
+    /// colorant buffer, so the caller takes the ordinary image route; every
+    /// additive destination already paints a stencil correctly, because
+    /// there sRGB is all the colour there is.
+    ///
+    /// # How the coverage is made
+    ///
+    /// The decoded stencil texels (fill-coloured where the mask marks,
+    /// transparent elsewhere) are rasterised through the SAME shader,
+    /// transform, quality and clip the image route would have used, into a
+    /// scratch pixmap whose alpha channel is then the coverage. Same
+    /// rasteriser, same edge — the stencil lands on exactly the device
+    /// pixels it always did; only where its colour comes from changes.
+    ///
+    /// # Then it is a fill
+    ///
+    /// Overprint on ⇒ [`Self::overprint_plan`] + [`Self::overprint_composite`],
+    /// the path fill's own route, so Table 149 and the spot deposit under
+    /// overprint are applied by the same code. Otherwise
+    /// [`Self::solid_authored`] builds the brush a path fill would carry and
+    /// [`crate::cmyk_paint::paint_brush_coverage_into_cmyk`] composites it,
+    /// spot planes and all.
+    fn paint_stencil_as_fill(
+        &mut self,
+        texels: &Pixmap,
+        interpolate: bool,
+        canvas: &mut Canvas<'_>,
+    ) -> bool {
+        if canvas.cmyk_mut().is_none() {
+            return false;
+        }
+        let Some(geom) = self.image_geometry(texels.width(), texels.height(), interpolate) else {
+            // A degenerate placement paints nothing on every route; report
+            // it handled so the caller does not paint it a second way.
+            return true;
+        };
+        let (w, h) = (canvas.width(), canvas.height());
+        let Some(mut scratch) = Pixmap::new(w, h) else {
+            return false;
+        };
+        let ctm = self.gs.current.ctm;
+        {
+            let paint = tiny_skia::Paint {
+                shader: tiny_skia::Pattern::new(
+                    texels.as_ref(),
+                    tiny_skia::SpreadMode::Pad,
+                    geom.quality,
+                    1.0,
+                    geom.image_to_user,
+                ),
+                blend_mode: tiny_skia::BlendMode::SourceOver,
+                anti_alias: geom.anti_alias,
+                force_hq_pipeline: false,
+            };
+            scratch.fill_path(
+                &geom.path,
+                &paint,
+                FillRule::Winding,
+                ctm,
+                self.gs.current.clip.as_deref(),
+            );
+        }
+        let Some(mut coverage) = Mask::new(w, h) else {
+            return false;
+        };
+        for (dst, px) in coverage.data_mut().iter_mut().zip(scratch.pixels()) {
+            *dst = px.alpha();
+        }
+        let Some(region) = crate::cmyk_paint::device_region(
+            crate::display_list::fill_bounds(&geom.path, ctm),
+            1.0,
+            w,
+            h,
+        ) else {
+            return true;
+        };
+
+        if self.gs.current.overprint_fill
+            && self.overprint_would_change(false, canvas.spot_plane_count())
+            && let Some(plan) = self.overprint_plan(false)
+        {
+            self.diag.overprint_effective += 1;
+            if self.overprint_composite(&plan, &coverage, region, false, canvas) {
+                return true;
+            }
+            self.diag.overprint_refused += 1;
+        }
+        let brush = self.solid_authored(
+            false,
+            self.gs.current.fill_alpha,
+            self.gs.current.blend_mode,
+        );
+        let Some(buf) = canvas.cmyk_mut() else {
+            return false;
+        };
+        crate::cmyk_paint::paint_brush_coverage_into_cmyk(buf, &coverage, region, &brush);
+        true
+    }
+
     fn paint_image(
         &self,
         texels: &Pixmap,
@@ -7814,6 +8106,11 @@ impl Interpreter<'_> {
         // through a many-to-one conversion and the ink is not recoverable
         // from it. See `crate::image::DecodedImage::ink`.
         ink: Option<&crate::image::CmykTexels>,
+        // The same colour one level LESS flattened -- authored process tints
+        // plus a plane per spot -- when the spots are to be deposited
+        // (`Pass 238.0`). See `Canvas::fill_image`.
+        authored: Option<&crate::image::OverprintSource>,
+        spot_source: crate::cmyk_buffer::SpotSource,
         interpolate: bool,
         canvas: &mut Canvas<'_>,
     ) {
@@ -7838,6 +8135,8 @@ impl Interpreter<'_> {
             &geom.path,
             texels,
             ink,
+            authored,
+            spot_source,
             geom.quality,
             geom.image_to_user,
             blend,
@@ -7961,12 +8260,38 @@ impl Interpreter<'_> {
     fn paint_image_overprint(
         &mut self,
         decoded: &crate::image::DecodedImage,
+        // Whether the separation-simulation device model is in force -- the
+        // only model under which the image's spot planes may be deposited.
+        simulate: bool,
         interpolate: bool,
         canvas: &mut Canvas<'_>,
     ) -> bool {
         let Some(op) = decoded.overprint.as_ref() else {
             return false;
         };
+        // ★★ THE SPOT HALF (`Pass 238.0`). Resolve every spot the image
+        // names to a plane, all or nothing -- the same rule the fill path
+        // and `Canvas::fill_image` apply, for the same double-ink reason.
+        // With planes, the source's spot tints land in them per sample and
+        // every unnamed plane keeps the backdrop; without them, the image
+        // is the spot-only or mixed case the refusal below has always
+        // handled by painting the flattened tint normally.
+        let mut spot_planes: Vec<(usize, &crate::image::SpotTexel)> = Vec::new();
+        if simulate
+            && !op.spots.is_empty()
+            && let Some(buf) = canvas.cmyk_mut()
+        {
+            for spot in &op.spots {
+                match buf.spot_index(&spot.colorant, || (*spot.lut).clone()) {
+                    Some(plane) => spot_planes.push((plane, spot)),
+                    None => {
+                        spot_planes.clear();
+                        break;
+                    }
+                }
+            }
+        }
+        let spots_deposited = !op.spots.is_empty() && spot_planes.len() == op.spots.len();
         // Rules ONCE for the whole image, not per texel. Table 149's
         // `Separation`/`DeviceN` row selects on the colorant NAMES alone, and
         // one image has one colour space — the same argument
@@ -7978,11 +8303,17 @@ impl Interpreter<'_> {
         // read only by the `DeviceCmykDirect` arm, which `classify` cannot
         // return for a sampled image (Table 149's row 1 excludes one by
         // name).
-        let rules = crate::overprint::cmyk_group_rules(
+        // ★ `spots_deposited` is known by now, and it is exactly what the
+        // rule table needs to be told (`Pass 238.0`): with the spot on its
+        // own plane the mixed-source widening is off, and a
+        // `[/DeviceN [/Black <spot>]]` image writes K, leaves C/M/Y to the
+        // backdrop and puts the spot where it belongs.
+        let rules = crate::overprint::cmyk_group_rules_with_planes(
             &op.kind,
             [0.0; 4],
             true,
             u8::from(self.gs.current.overprint_mode == 1),
+            spots_deposited,
         );
         if !crate::overprint::changes_anything(rules) {
             // Case 1: inert. Not a shortfall, not counted, painted normally.
@@ -7993,14 +8324,20 @@ impl Interpreter<'_> {
         // the composite then cannot run — the same ordering `paint_path`
         // uses, and for the same reason.
         self.diag.overprint_effective += 1;
-        if crate::overprint::erases_the_paint(rules) {
+        // "Erases the paint" is true of the PROCESS rules alone -- every
+        // channel `Backdrop` -- and it is the wrong question once the
+        // image's colorant has a plane of its own to land on: preserving all
+        // four process channels while writing the spot plane is exactly what
+        // a press does with a spot-only image. The refusal stays for the
+        // case it was written for, which is now only the plane-less one.
+        if crate::overprint::erases_the_paint(rules) && !spots_deposited {
             self.diag.overprint_refused += 1;
             self.diag.overprint_images_unsupported += 1;
             self.diag.note(
-                b"image painted under /OP true in a spot-only Separation/DeviceN space: \
-                  the IMAGE path does not yet deposit into a spot plane, so Table 149's \
-                  preservation cannot run here; the tint transform was painted normally. \
-                  A path FILL in the same space does keep its plane",
+                b"image painted under /OP true in a spot-only Separation/DeviceN space \
+                  whose colorant could not be given a plane (roster cap, byte ceiling, or \
+                  the composite device model): Table 149's preservation cannot run here; \
+                  the tint transform was painted normally",
             );
             return false;
         }
@@ -8012,6 +8349,7 @@ impl Interpreter<'_> {
         let Some(changed) = canvas.fill_image_overprint(
             &geom.path,
             &op.tints,
+            &spot_planes,
             rules,
             geom.quality,
             geom.image_to_user,

@@ -265,6 +265,92 @@ def main() -> int:
         objs[5] = image_object(b"6 0 R", bytes([S1]) * 64, 1)
         write(f"image-only-{label}-tint.pdf", build(objs))
 
+    # 7. `Pass 238.0` — the MIXED duotone: `/Indexed` over
+    #    `/DeviceN [/Black /SpotGreen]`, both entries stating black AND spot.
+    #    This is the shape the print-conformance suite's duotones take, and it
+    #    is the one that found TWO fill-path bugs the single-colorant duotone
+    #    above could not: the fill read the palette INDEX as the tint for
+    #    both its spot deposit and its authored process tints, so it landed
+    #    K = 0 where the image of the same entry landed K = 0.5. The
+    #    transform is Type 4 so the two operands cannot be confused by a
+    #    single-input evaluator: `(k, s) -> (0.5 s, 0, s, k)`.
+    objs = {}
+    objs[7] = b"[/DeviceN [/Black /SpotGreen] /DeviceCMYK 8 0 R]"
+    objs[8] = stream(
+        b"<< /FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1] >>",
+        b"{ dup 0.5 mul 0 2 index 5 -1 roll 5 -1 roll pop }",
+    )
+    # Two entries: index 0 = (K 0.5, spot 0.8); index 1 = (K 0, spot 1.0).
+    objs[6] = b"[/Indexed 7 0 R 1 <80CC00FF>]"
+    cs = b"6 0 R"
+    page(objs, subtractive=True, cs_ref=cs, ncomp=1)
+    objs[4] = stream(
+        b"<< >>",
+        b"q /Cs0 cs 0 scn 20 40 60 120 re f Q\n"
+        b"q 60 0 0 120 120 40 cm /Im0 Do Q",
+    )
+    objs[5] = image_object(cs, bytes([0]) * 64, 1)
+    write("duotone2-image-vs-fill-cmyk.pdf", build(objs))
+
+    # 8. `Pass 238.0` — a STENCIL MASK painted in the spot: `/ImageMask true`
+    #    all-marking, filled with the `/Separation` at the same tint as the
+    #    path fill beside it. §8.9.6.2 makes the stencil "a region of the
+    #    page to be painted with the current colour", so the two must agree
+    #    exactly as an image and a fill do. Before this Pass the stencil's
+    #    texels were pre-tinted in sRGB and bridged back, and the spot never
+    #    reached its plane.
+    objs = {}
+    cs = separation_cs(objs, 6)
+    page(objs, subtractive=True, cs_ref=cs, ncomp=1)
+    objs[4] = stream(
+        b"<< >>",
+        b"q /Cs0 cs %.10g scn 20 40 60 120 re f Q\n"
+        b"q /Cs0 cs %.10g scn 60 0 0 120 120 40 cm /Im0 Do Q" % (T1, T1),
+    )
+    # 8x8 one-bit stencil, every sample 0 = "paint" under the default Decode.
+    objs[5] = stream(
+        b"<< /Type /XObject /Subtype /Image /Width 8 /Height 8 "
+        b"/BitsPerComponent 1 /ImageMask true >>",
+        bytes([0x00]) * 8,
+    )
+    write("stencil-spot-vs-fill-cmyk.pdf", build(objs))
+
+    # 9. `Pass 238.0` — the OVERPRINT shape the suite's duotone patches test:
+    #    a `1 0 1 .5 k` process mark (a check mark's ink) painted first, then
+    #    the mixed duotone IMAGE over it under `/OP true`. Table 149 for a
+    #    `[/Black <spot>]` source: K takes the image, C and Y stay from the
+    #    mark, M stays (zero), the spot deposits. The mark therefore SURVIVES
+    #    as cyan+yellow under the image's black and green. With the pre-Pass
+    #    all-`Source` widening the image knocked C and Y out and the mark
+    #    vanished; with no spot plane the green never landed at all.
+    objs = {}
+    objs[7] = b"[/DeviceN [/Black /SpotGreen] /DeviceCMYK 8 0 R]"
+    objs[8] = stream(
+        b"<< /FunctionType 4 /Domain [0 1 0 1] /Range [0 1 0 1 0 1 0 1] >>",
+        b"{ dup 0.5 mul 0 2 index 5 -1 roll 5 -1 roll pop }",
+    )
+    objs[6] = b"[/Indexed 7 0 R 1 <80CC00FF>]"
+    cs = b"6 0 R"
+    page(objs, subtractive=True, cs_ref=cs, ncomp=1)
+    objs[3] = (
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        b"/Group << /S /Transparency /CS /DeviceCMYK >> "
+        b"/Resources << /ColorSpace << /Cs0 " + cs + b" >> "
+        b"/ExtGState << /GSop 9 0 R >> "
+        b"/XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>"
+    )
+    objs[9] = b"<< /Type /ExtGState /OP true /op true /OPM 1 >>"
+    # Left box: the mark alone (the control). Right box: the mark, then the
+    # image over it with overprint on.
+    objs[4] = stream(
+        b"<< >>",
+        b"q 1 0 1 0.5 k 20 40 60 120 re f Q\n"
+        b"q 1 0 1 0.5 k 120 40 60 120 re f Q\n"
+        b"q /GSop gs 60 0 0 120 120 40 cm /Im0 Do Q",
+    )
+    objs[5] = image_object(cs, bytes([0]) * 64, 1)
+    write("duotone2-op-image-over-cmyk-mark.pdf", build(objs))
+
     return 0
 
 

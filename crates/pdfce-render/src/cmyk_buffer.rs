@@ -378,6 +378,32 @@ pub(crate) struct SpotLut {
     samples: Box<[[f32; 3]; SPOT_LUT_SIZE]>,
 }
 
+/// What a **process-space** paint does to the spot planes it does not name
+/// (`Pass 238.0`).
+///
+/// ISO 32000-1 §11.7.3: *"every object paints every existing colour
+/// component, both process and spot. Where no value has been explicitly
+/// specified for a given component … a subtractive tint value of 0.0 shall
+/// be assumed."* So a `DeviceGray` image over a spot backdrop **paints the
+/// spot at 0.0** — knocks it out — unless overprint says otherwise, and
+/// Table 149's *"any process colour space × spot colorant"* row says
+/// exactly otherwise under `OP true`: `c_b`, in both overprint-mode columns.
+///
+/// The process channels of such a paint are `c_s` in every column, so an
+/// ordinary composite already IS the overprint result for them; the spot
+/// planes are the only thing overprint changes. This enum is that one
+/// difference, expressed where the pixel is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SpotSource {
+    /// Paint the source's spot tints — `0.0` for a process source, which
+    /// knocks the backdrop's spots out. `OP false`, and every additive
+    /// destination.
+    Paint,
+    /// Leave every spot plane exactly as the backdrop had it. Table 149's
+    /// `c_b` for a process source under `OP true`.
+    Preserve,
+}
+
 #[allow(dead_code)]
 impl SpotLut {
     /// Build from a closure that renders this colorant at a given tint.
@@ -1361,6 +1387,22 @@ impl CmykBuffer {
         alpha: Chan,
         blend: Blend,
     ) -> u32 {
+        self.composite_srgb_with(src, region, alpha, blend, SpotSource::Paint)
+    }
+
+    /// [`Self::composite_srgb`] with an explicit [`SpotSource`] — the form
+    /// a process-space image painted under `/OP true` needs, where the
+    /// process channels composite normally and the spot planes are left to
+    /// the backdrop (Table 149, *"any process colour space × spot
+    /// colorant"*, `OP true` ⇒ `c_b`).
+    pub(crate) fn composite_srgb_with(
+        &mut self,
+        src: &Pixmap,
+        region: (u32, u32, u32, u32),
+        alpha: Chan,
+        blend: Blend,
+        spot_source: SpotSource,
+    ) -> u32 {
         debug_assert_eq!(
             (src.width(), src.height()),
             (self.width, self.height),
@@ -1398,7 +1440,7 @@ impl CmykBuffer {
                 // `/AIS` says otherwise. So `f_s = a` and `q_s` is the
                 // constant alpha, which is the same split
                 // `Canvas::fill_image`'s knockout arm already makes.
-                if self.composite_at(idx, source, a, blend) {
+                if self.composite_at_with(idx, source, a, blend, spot_source) {
                     changed += 1;
                 }
                 self.bridged += 1;
@@ -1441,13 +1483,34 @@ impl CmykBuffer {
     ///
     /// Alpha is read from `cmy`; `k` carries the same alpha by construction
     /// and is used only for its colour.
+    ///
+    /// # The spot planes (`Pass 238.0`)
+    ///
+    /// `spots` pairs a **plane index** (from [`Self::spot_index`]) with a
+    /// tint pixmap packed exactly as `k` is — the tint replicated across
+    /// RGB, premultiplied by the same alpha. Each pixel's tint lands in
+    /// `PixelCmyk::s[plane]`. A caller passes these ONLY when every spot the
+    /// image names got a plane and `cmy`/`k` carry the **authored** process
+    /// tints rather than the flattened ink — the all-or-nothing rule the
+    /// fill path enforces, because the flattened ink already contains the
+    /// spots and depositing on top of it would double them.
+    ///
+    /// `spot_source` governs the planes the image does NOT name: painted at
+    /// zero (a knockout) or preserved — see [`SpotSource`].
+    ///
+    /// Eight parameters, allowed: an image's ink arrives as three kinds of
+    /// plane plus a policy, and bundling them into a struct would be a
+    /// struct built for exactly one call site.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn composite_cmyk_image(
         &mut self,
         cmy: &Pixmap,
         k: &Pixmap,
+        spots: &[(usize, &Pixmap)],
         region: (u32, u32, u32, u32),
         alpha: Chan,
         blend: Blend,
+        spot_source: SpotSource,
     ) -> u32 {
         debug_assert_eq!(
             (cmy.width(), cmy.height()),
@@ -1475,16 +1538,24 @@ impl CmykBuffer {
                 // Un-premultiply by the same alpha both planes were
                 // multiplied by, exactly as the sRGB path does.
                 let un = |v: u8| Chan::from(v) / 255.0 / a;
+                let mut s_planes = [0.0; crate::compositor::MAX_SPOTS];
+                for (plane, tint) in spots {
+                    if let (Some(slot), Some(px)) =
+                        (s_planes.get_mut(*plane), tint.pixels().get(idx))
+                    {
+                        *slot = un(px.red());
+                    }
+                }
                 let source = PixelCmyk {
                     c: [un(cm.red()), un(cm.green()), un(cm.blue()), un(kk.red())],
-                    s: [0.0; crate::compositor::MAX_SPOTS],
+                    s: s_planes,
                     a: a * alpha,
                 };
                 // An image's own alpha is SHAPE, not opacity (§11.6.4.2), so
                 // `f_s = a` and the constant alpha is `q_s` — the same split
                 // `composite_srgb` makes, kept identical on purpose so the
                 // two paths differ ONLY in where the colour came from.
-                if self.composite_at(idx, source, a, blend) {
+                if self.composite_at_with(idx, source, a, blend, spot_source) {
                     changed += 1;
                 }
                 // Deliberately NOT counted as `bridged`: nothing was
@@ -1570,6 +1641,34 @@ impl CmykBuffer {
         alpha: Chan,
         mut source_at: impl FnMut(u32, u32) -> Option<([Chan; 4], Chan)>,
     ) -> u32 {
+        self.composite_overprint_varying_spots(region, rules, alpha, |x, y| {
+            source_at(x, y).map(|(c, a)| (c, [None; crate::compositor::MAX_SPOTS], a))
+        })
+    }
+
+    /// [`Self::composite_overprint_varying`] for a source that also states
+    /// **spot** tints per pixel (`Pass 238.0`) — a `Separation`/`DeviceN`
+    /// image whose colorants got planes.
+    ///
+    /// The spot half follows [`Self::composite_overprint`] exactly: `Some`
+    /// where the source stated a tint for that plane, `None` where it did
+    /// not and the backdrop therefore stands (Table 149, *"not named in
+    /// source space"* ⇒ `c_b`). A caller with no spot planes passes all
+    /// `None`, which is what the four-channel wrapper does.
+    pub(crate) fn composite_overprint_varying_spots(
+        &mut self,
+        region: (u32, u32, u32, u32),
+        rules: [crate::overprint::ComponentRule; 4],
+        alpha: Chan,
+        mut source_at: impl FnMut(
+            u32,
+            u32,
+        ) -> Option<(
+            [Chan; 4],
+            [Option<Chan>; crate::compositor::MAX_SPOTS],
+            Chan,
+        )>,
+    ) -> u32 {
         let (x0, y0, x1, y1) = region;
         let x1 = x1.min(self.width);
         let y1 = y1.min(self.height);
@@ -1581,7 +1680,7 @@ impl CmykBuffer {
         let mut changed = 0_u32;
         for y in y0..y1 {
             for x in x0..x1 {
-                let Some((source, coverage)) = source_at(x, y) else {
+                let Some((source, spots, coverage)) = source_at(x, y) else {
                     continue;
                 };
                 let a = alpha * coverage.clamp(0.0, 1.0);
@@ -1600,6 +1699,14 @@ impl CmykBuffer {
                     // which is the opposite of preserving it.
                     let target = rules[ch].apply(before.c[ch], source[ch]);
                     out.c[ch] = target.mul_add(a, before.c[ch] * (1.0 - a));
+                }
+                // The spot planes the source named take its tint at the same
+                // weighting; the rest keep the backdrop — `out` started as
+                // `before`, so leaving a slot alone IS preserving it.
+                for (slot, stated) in out.s.iter_mut().zip(spots.iter()) {
+                    if let Some(tint) = *stated {
+                        *slot = a.mul_add(tint - *slot, *slot);
+                    }
                 }
                 out.a = a.mul_add(1.0 - before.a, before.a);
                 self.set_pixel(idx, out);
@@ -2332,6 +2439,24 @@ impl CmykBuffer {
     /// callers keep their changed-pixel tallies without each one repeating
     /// the dispatch.
     fn composite_at(&mut self, idx: usize, source: PixelCmyk, shape: Chan, blend: Blend) -> bool {
+        self.composite_at_with(idx, source, shape, blend, SpotSource::Paint)
+    }
+
+    /// [`Self::composite_at`] with an explicit [`SpotSource`].
+    ///
+    /// Under [`SpotSource::Preserve`] the spot planes are restored to the
+    /// backdrop's values AFTER the composite rather than by feeding the
+    /// backdrop's tints in as the source: a separable blend `B(c_b, c_b)` is
+    /// not `c_b` (multiply squares it), and Table 149's `c_b` means the
+    /// backdrop value itself, untouched.
+    fn composite_at_with(
+        &mut self,
+        idx: usize,
+        source: PixelCmyk,
+        shape: Chan,
+        blend: Blend,
+        spot_source: SpotSource,
+    ) -> bool {
         let before = self.pixel(idx);
         let after = if let Some(ko) = self.knockout.as_deref_mut() {
             let initial = PixelCmyk {
@@ -2361,6 +2486,13 @@ impl CmykBuffer {
             px
         } else {
             composite_element_cmyk(before, source, blend)
+        };
+        let after = match spot_source {
+            SpotSource::Paint => after,
+            SpotSource::Preserve => PixelCmyk {
+                s: before.s,
+                ..after
+            },
         };
         self.set_pixel(idx, after);
         after != before

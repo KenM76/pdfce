@@ -24,6 +24,9 @@ needed a different carrier for its colorants.
 | `separation-image-vs-fill-rgb.pdf` | the same `/Separation`, **no page group** — the additive control |
 | `image-only-good-tint.pdf` | one image and nothing else, working `/tintTransform` |
 | `image-only-broken-tint.pdf` | the same with a deliberately malformed one |
+| `duotone2-image-vs-fill-cmyk.pdf` | `/Indexed` over `/DeviceN [/Black /SpotGreen]` — the MIXED duotone (`Pass 238.0`); found two `/Indexed` operand bugs on the fill route |
+| `stencil-spot-vs-fill-cmyk.pdf` | an `/ImageMask` stencil filled in the `/Separation` beside a path fill of the same tint (`Pass 238.0`) |
+| `duotone2-op-image-over-cmyk-mark.pdf` | a `1 0 1 .5 k` mark, then the mixed duotone image over it under `/OP true` (`Pass 238.0`) — the suite's duotone-patch shape |
 
 ★ The last two carry **no fill**, and that is the measurement rather than a
 simplification. A fill's colour conversions are counted, so on any page that
