@@ -82,15 +82,30 @@
 //! visibly not redacted, where a burnt box over live pixels would be the
 //! exact false redaction §12.5.6.23 names.
 //!
+//! ## What a destroyed cell becomes: paper
+//!
+//! Overwritten cells take the colour space's **no-ink value** — all-ones
+//! for a `DeviceGray`/`DeviceRGB`/`Cal*`/`ICCBased` (1 or 3) sample
+//! (white), all-zeros for `DeviceCMYK`/`Separation`/`DeviceN`/`ICCBased`
+//! (4) (no ink), all-ones for an `/ImageMask` (unpainted), and a `/Decode`
+//! whose first pair is inverted flips the choice. (An `/Indexed` image gets
+//! entry 0, which is whatever the palette says; there is no colour-space
+//! answer for "paper" in a palette.) The point is consistency with Table
+//! 192: a mark with no `/IC` leaves its region **transparent**, so the
+//! destroyed part of an image must look like the page behind it, not like a
+//! black block the operator did not ask for. When the mark does carry an
+//! `/IC`, the burnt-in box covers the region anyway.
+//!
 //! ## Masks are destroyed with the image
 //!
 //! An `/SMask` (§11.6.5.3) is a second sample grid over the same placement,
 //! and its alpha is a *shape* — a signature on a transparent background is
 //! recognisable from its soft mask alone. So the soft mask's in-region cells
-//! are overwritten too (to opaque, so the cleared base shows as a block
-//! rather than as a hole), and a stencil `/Mask` stream (§8.9.6.4) likewise
-//! (to "paint"). A colour-key `/Mask` array is left alone: it names sample
-//! values, not positions, and carries no shape.
+//! are overwritten too — to **transparent** (zero), so the region shows the
+//! page behind, matching the paper rule above — and a stencil `/Mask`
+//! stream (§8.9.6.4) likewise, to "masked out" (one). A colour-key `/Mask`
+//! array is left alone: it names sample values, not positions, and carries
+//! no shape.
 //!
 //! ## Rotated placements over-cover
 //!
@@ -346,6 +361,9 @@ struct Decoded {
     /// JPX `/SMaskInData 2`: samples are preblended; the alpha is not
     /// recoverable, so the rewrite drops the transparency.
     preblended_alpha_dropped: bool,
+    /// The bit value a destroyed cell takes: `true` = all ones. The colour
+    /// space's no-ink ("paper") sample, `/Decode`-aware (module docs).
+    paper: bool,
 }
 
 /// Why a placement cannot be destroyed. A plain string because every
@@ -375,6 +393,7 @@ fn decode(
     } else {
         colorspace_components(view, dict, resources)
     };
+    let paper = paper_is_ones(view, dict, is_mask, resources);
     let (components, colorspace_substituted) = match (coded.components, declared) {
         (0, Some(n)) => (n, false),
         (n, Some(m)) if u32::from(n) == m => (m, false),
@@ -434,7 +453,87 @@ fn decode(
         embedded_alpha: coded.embedded_alpha,
         colorspace_substituted,
         preblended_alpha_dropped: coded.notes.jpx_smask_in_data_preblended,
+        paper,
     })
+}
+
+/// Whether "paper" for this image is the all-ones sample (module docs).
+///
+/// Subtractive spaces (CMYK, Separation, DeviceN, a 4-component ICC) have
+/// no ink at zero; additive and grey spaces are white at their maximum; an
+/// image mask is unpainted at one. A `/Decode` array whose first pair is
+/// `[1 0]` inverts the sample's meaning, so it inverts the answer.
+fn paper_is_ones(view: &DocumentView<'_>, dict: &Dict, is_mask: bool, resources: &Dict) -> bool {
+    let g = view.graph();
+    let inverted = dict
+        .get(b"Decode")
+        .map(|o| g.resolve(o))
+        .and_then(Object::as_array)
+        .and_then(|a| {
+            let d0 = g.resolve(a.first()?).as_number()?;
+            let d1 = g.resolve(a.get(1)?).as_number()?;
+            Some(d0 > d1)
+        })
+        .unwrap_or(false);
+    let ones = if is_mask {
+        true
+    } else {
+        !space_is_subtractive(
+            view,
+            dict.get(b"ColorSpace").unwrap_or(&Object::Null),
+            resources,
+            0,
+        )
+    };
+    ones != inverted
+}
+
+/// Is a colour space one whose zero sample means "no ink"? (`Indexed` is
+/// answered `true` so entry 0 is chosen — see the module docs.)
+fn space_is_subtractive(
+    view: &DocumentView<'_>,
+    cs: &Object,
+    resources: &Dict,
+    depth: usize,
+) -> bool {
+    if depth > 4 {
+        return false;
+    }
+    let g = view.graph();
+    match g.resolve(cs) {
+        Object::Name(name) => match name.as_bytes() {
+            b"DeviceCMYK" | b"CMYK" => true,
+            b"DeviceGray" | b"G" | b"CalGray" | b"DeviceRGB" | b"RGB" | b"CalRGB" | b"Pattern" => {
+                false
+            }
+            other => g
+                .resolve(resources.get(b"ColorSpace").unwrap_or(&Object::Null))
+                .as_dict()
+                .and_then(|d| d.get(other))
+                .is_some_and(|named| space_is_subtractive(view, named, resources, depth + 1)),
+        },
+        Object::Array(items) => {
+            let family = items
+                .first()
+                .map(|o| g.resolve(o))
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes().to_vec())
+                .unwrap_or_default();
+            match family.as_slice() {
+                b"DeviceCMYK" | b"CMYK" | b"Separation" | b"DeviceN" | b"Indexed" | b"I" => true,
+                b"ICCBased" => {
+                    let n = match items.get(1).map(|o| g.resolve(o)) {
+                        Some(Object::Stream(st)) => st.dict.get(b"N"),
+                        Some(Object::Dict(d)) => d.get(b"N"),
+                        _ => None,
+                    };
+                    n.map(|o| g.resolve(o)).and_then(Object::as_int) == Some(4)
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
 }
 
 /// The component count implied by an image dictionary's `/ColorSpace`,
@@ -933,7 +1032,7 @@ pub(crate) fn plan_page(
                 let Ok(mut decoded) = decode(view, params, raw, true, resources) else {
                     continue; // the blocker pass already retained this mark
                 };
-                let Some(cells) = clear_regions(&mut decoded, hit.ctm, regions, false) else {
+                let Some(cells) = clear_regions(&mut decoded, hit.ctm, regions, None) else {
                     continue; // touches the bounding box, covers no cell
                 };
                 if is_skewed(hit.ctm) {
@@ -990,15 +1089,16 @@ pub(crate) fn plan_page(
                 let Ok(mut decoded) = cache.get(doc, view, id, resources) else {
                     continue;
                 };
-                let Some(cells) = clear_regions(&mut decoded, hit.ctm, regions, false) else {
+                let Some(cells) = clear_regions(&mut decoded, hit.ctm, regions, None) else {
                     continue;
                 };
                 if is_skewed(hit.ctm) {
                     out.rotated_overcovered += 1;
                 }
                 let mut dict = rewrite_dict(&original_dict, &decoded, resources, alloc, out);
-                // Masks travel with the clone, cleared over the same placement.
-                for (key, set) in [(&b"SMask"[..], true), (&b"Mask"[..], false)] {
+                // Masks travel with the clone, cleared over the same placement:
+                // the soft mask to transparent, the stencil to masked-out.
+                for (key, set) in [(&b"SMask"[..], false), (&b"Mask"[..], true)] {
                     let Some(Object::Reference(mid)) = original_dict.get(key) else {
                         continue;
                     };
@@ -1008,7 +1108,7 @@ pub(crate) fn plan_page(
                     let Some(Object::Stream(mask_stream)) = view.graph().value(*mid) else {
                         continue;
                     };
-                    clear_regions(&mut mask, hit.ctm, regions, set);
+                    clear_regions(&mut mask, hit.ctm, regions, Some(set));
                     let mask_dict =
                         rewrite_dict(&mask_stream.dict.clone(), &mask, resources, alloc, out);
                     let mask_obj = alloc.flate_stream(mask_dict, &mask.samples);
@@ -1062,9 +1162,17 @@ pub(crate) fn plan_page(
     }
 }
 
-/// Clear every region's cells in `decoded`; returns the number of cells
-/// cleared, or `None` when no region covered a cell.
-fn clear_regions(decoded: &mut Decoded, ctm: Mat, regions: &[RegionBox], set: bool) -> Option<u64> {
+/// Clear every region's cells in `decoded` to `set` (`None` = the image's
+/// own paper value); returns the number of cells cleared, or `None` when no
+/// region covered a cell. Embedded JPX alpha over the same cells becomes
+/// transparent.
+fn clear_regions(
+    decoded: &mut Decoded,
+    ctm: Mat,
+    regions: &[RegionBox],
+    set: Option<bool>,
+) -> Option<u64> {
+    let set = set.unwrap_or(decoded.paper);
     let mut count = 0u64;
     for region in regions {
         let Some(cells) = covered_cells(ctm, *region, decoded.width, decoded.height) else {
@@ -1080,7 +1188,7 @@ fn clear_regions(decoded: &mut Decoded, ctm: Mat, regions: &[RegionBox], set: bo
             set,
         );
         if let Some(alpha) = decoded.embedded_alpha.as_mut() {
-            clear_cells(alpha, decoded.width, 1, 8, cells, true);
+            clear_cells(alpha, decoded.width, 1, 8, cells, false);
         }
     }
     (count > 0).then_some(count)
@@ -1113,7 +1221,8 @@ fn tombstone(
     dict.insert(Name::from(b"Height"), Object::Integer(1));
     dict.remove(b"SMask");
     dict.remove(b"Mask");
-    let one = vec![0u8; row_bytes(1, decoded.components, decoded.bpc)];
+    let fill = if decoded.paper { 0xFF } else { 0x00 };
+    let one = vec![fill; row_bytes(1, decoded.components, decoded.bpc)];
     out.objects.push((id, alloc.flate_stream(dict, &one)));
     for key in [&b"SMask"[..], &b"Mask"[..]] {
         let Some(Object::Reference(mid)) = original_dict.get(key) else {
@@ -1132,7 +1241,9 @@ fn tombstone(
         let mut mask_dict = rewrite_dict(&mask_stream.dict.clone(), &mask, resources, alloc, out);
         mask_dict.insert(Name::from(b"Width"), Object::Integer(1));
         mask_dict.insert(Name::from(b"Height"), Object::Integer(1));
-        let one = vec![0u8; row_bytes(1, mask.components, mask.bpc)];
+        // A soft mask tombstone is transparent; a stencil's is masked out.
+        let fill = if key == b"SMask" { 0x00 } else { 0xFF };
+        let one = vec![fill; row_bytes(1, mask.components, mask.bpc)];
         out.objects
             .push((*mid, alloc.flate_stream(mask_dict, &one)));
     }

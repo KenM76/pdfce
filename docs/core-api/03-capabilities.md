@@ -1604,7 +1604,8 @@ internally (`redact.rs:1220-1224`).
 `overlay_ro_not_drawn`, `overlay_transparent`, **`images_cleared`,
 `images_removed`, `images_cloned_shared`, `images_overcovered`,
 `vector_paths_intersecting`, `marks_retained`** (all `Pass 245.0`),
-`carriers: Vec<CarrierStatus>`, `redacted_text`, `notes`; plus
+**`vector_paths_cut`, `vector_paths_dropped`, `vector_clips_kept`**
+(`Pass 246.0`), `carriers: Vec<CarrierStatus>`, `redacted_text`, `notes`; plus
 `has_disclosed_residuals()` (`redact.rs:343`).
 `CarrierStatus { carrier, present, action }` (`redact.rs:242`) with
 `CarrierAction::{Absent, Scrubbed, DroppedByRewrite, DisclosedNotScrubbed}`
@@ -1640,11 +1641,27 @@ before presenting the output as redacted**: a non-zero value means the
 document still carries marks. Only when *no* mark at all can be applied does
 apply refuse, with `ImageUndestroyable`.
 
-**Vector paths are counted, not cut.** `vector_paths_intersecting` is the
-number of painted paths (`S`, `f`, `B`… — not `n`) whose bounding box crosses
-a region; the `vector_paths` carrier reads `DisclosedNotScrubbed` whenever it
-is non-zero. Path cutting is not implemented; on a CAD sheet this is the
-residual that trips the acknowledgement gate.
+**Vector paths are CUT (`Pass 246.0`, `redact_vector.rs`).** A painted
+path object (`S`/`s`/`f`/`F`/`f*`/`B`/`B*`/`b`/`b*`; never `n`) whose
+geometry — not merely its box — meets a region is rewritten in its own
+coordinates so nothing it paints lies inside: strokes are cut against the
+region expanded by one stroke width (lines by Liang–Barsky, cubics by
+subdivision, kept as curves where whole), fills are clipped to the region's
+complement as up to four strip objects (Sutherland–Hodgman, winding
+preserved for nonzero and even-odd alike), and a path wholly inside is
+deleted. `vector_paths_cut` / `vector_paths_dropped` count them. A
+clip-marked object (`W`/`W*` before the paint) is emitted as the cut paint
+followed by the ORIGINAL geometry as `W n` — §8.5.4 applies the clip after
+painting and shrinking it would hide later, unmarked content — counted in
+`vector_clips_kept` and noted, because the kept geometry is a shape in the
+file even though it paints nothing. `vector_paths_intersecting` is now the
+RESIDUAL: a malformed path object with a foreign operator inside it (§8.2
+forbids that) cannot be replaced as a unit and is disclosed through the
+`vector_paths` carrier as `DisclosedNotScrubbed`; on every well-formed page
+it is zero and the carrier reads `Scrubbed`. Measured on the operator's
+drawings: a whole-page mark drops 780 and 1,089 path objects respectively,
+a corner mark cuts 25, and `pdfce-render`'s
+`redaction_leaves_no_ink.rs` proves by pixels that the region renders white.
 
 `RedactError` (`redact.rs:195`): `PageTree`, `NothingToApply`,
 **`ImageUndestroyable { page, reason }`** (replaces `ImageRegion { page }`,
@@ -1770,10 +1787,17 @@ defect but a **security failure**. The cardinal rule, verbatim
   nothing at all could be applied. A shared image's original survives for
   its unmarked placements by design — the `SHARED` note is the disclosure,
   not a defect.
-- **A vector path crossing a region is NOT cut.** `vector_paths_intersecting`
-  counts them and the `vector_paths` carrier discloses them; text and images
-  under the region are removed, the lines are not. Say so in the same
-  sentence as "removed" (rule 1 of §4.4's wording contract).
+- **A cut path is several path objects.** A dashed stroke restarts its dash
+  phase at every cut, and a `B` becomes an `f` followed by an `S`. Cosmetic,
+  disclosed in the notes, never a leak. A `W`-marked object keeps its
+  original geometry as the clip (see §4.2) — say so if the clip's shape
+  could itself be sensitive.
+- **Destroyed image cells are PAPER, not black.** The colour space's no-ink
+  sample (white for grey/RGB, zero ink for CMYK, unpainted for a mask,
+  `/Decode`-aware), and a soft mask goes transparent over the same cells —
+  so a mark with no `/IC` leaves the image region looking like the page
+  behind it, consistent with Table 192. A shell that expected a black block
+  will not see one unless the mark carries an `/IC`.
 - **`RedactionMark::rect` is display information only.**
   *"This must never be used to decide what gets removed, only to describe a
   mark to a human"* (`redact.rs:1786-1790`) — apply uses `/QuadPoints`.

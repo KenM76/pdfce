@@ -48,7 +48,7 @@
 //! | Prior incremental revisions | **dropped** — apply forces a FULL REWRITE (R35), never incremental |
 //! | Images intersecting a region | **samples DESTROYED** — decoded, the covered cells overwritten, re-encoded losslessly; a wholly covered placement is removed outright; a shared image is copied-on-write; a placement pdfce cannot decode RETAINS its mark and is disclosed by name (`redact_image`) |
 //! | Form-XObject content in-region | **disclosed** — not surgically redacted this cut (verify manually) |
-//! | Vector paths in-region | **disclosed, by count** — a painted path whose bounding box crosses a region is counted and reported as an un-redacted residual; path cutting is not implemented this build |
+//! | Vector paths in-region | **CUT** — strokes are cut against the region expanded by the stroke width, fills are clipped to the region's complement, and a path wholly inside is deleted (`redact_vector`); a malformed path object pdfce cannot rewrite as a unit is counted and disclosed as a residual |
 //! | Overlay marking (Table 192 ladder) | `/OverlayText` **burnt in** (via §12.7.3.3 variable text, `/DA`-formatted, `/Q`-justified); `/IC` filled under it; **absent `/IC` ⇒ TRANSPARENT**, per Table 192; `/RO` **not drawn** — disclosed, falls back to a plain box; `/Repeat` **ignored** — disclosed |
 //! | XFA / file attachments / structure-tree ActualText / thumbnails | **detected + disclosed** (not asserted-absent) |
 //!
@@ -91,6 +91,7 @@ use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageTreeError, Rect};
 use crate::redact_image::{self, ImageHit, ImageSource};
+use crate::redact_vector::{self, Paint as PathPaint, PathRecord};
 use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
 use crate::text_extract::font::ExtractFont;
@@ -123,8 +124,14 @@ pub(crate) struct Mat {
     pub(crate) f: f64,
 }
 
+impl Default for Mat {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
 impl Mat {
-    const IDENTITY: Self = Self {
+    pub(crate) const IDENTITY: Self = Self {
         a: 1.0,
         b: 0.0,
         c: 0.0,
@@ -349,13 +356,29 @@ pub struct RedactionReport {
     /// Placements whose rotated or skewed matrix made the cleared cells a
     /// bounding-box over-cover — more destroyed than marked, never less.
     pub images_overcovered: u64,
-    /// Painted vector paths whose bounding box crossed a region and were
-    /// NOT cut — vector-path redaction is not implemented this build. Each
-    /// is an un-redacted residual: the path's bytes remain in the content
-    /// stream. Reported through the `vector_paths` carrier as
-    /// `DisclosedNotScrubbed` so no shell can present a drawing with lines
-    /// through a region as fully redacted.
+    /// Painted vector paths that crossed a region and could NOT be cut:
+    /// a malformed path object carrying an operator §8.2 forbids inside
+    /// one (a `cm`, a `q`, a colour operator between construction and
+    /// paint), which cannot be replaced as a unit. Each is an un-redacted
+    /// residual — the path's bytes remain — reported through the
+    /// `vector_paths` carrier as `DisclosedNotScrubbed`. Zero on every
+    /// well-formed page since `Pass 246.0`.
     pub vector_paths_intersecting: u64,
+    /// Path objects rewritten so no painted segment or filled area lies in
+    /// a region (`Pass 246.0`, `redact_vector`): strokes cut against the
+    /// region expanded by the stroke width, fills clipped to the region's
+    /// complement.
+    pub vector_paths_cut: u64,
+    /// Of `vector_paths_cut`, the objects that lay wholly inside a region
+    /// and were deleted outright.
+    pub vector_paths_dropped: u64,
+    /// Cut path objects that also set a clip (`W`/`W*`): the paint was cut
+    /// but the ORIGINAL geometry was kept as the clip, because §8.5.4
+    /// applies the clip after painting and rewriting it would shrink the
+    /// window every later object on the page draws through. The kept
+    /// geometry is not painted content; it is disclosed because a clip
+    /// shaped like the redacted content is still a shape in the file.
+    pub vector_clips_kept: u64,
     /// `/Redact` marks left IN the document, unapplied, because a region
     /// touched an image whose samples pdfce could not destroy. Each is
     /// named in `notes` with its reason, and the `images` carrier reads
@@ -435,15 +458,26 @@ struct Surgeon<'a> {
     /// Every image placement that intersects a region, with what is
     /// needed to destroy its samples.
     image_hits: Vec<ImageHit>,
-    /// The bounding box, in user space, of the path under construction
-    /// (`m`/`l`/`c`/`v`/`y`/`re` since the last painting operator).
-    /// Control points are included, which over-approximates a curve's
-    /// extent — the safe direction for a residual count.
-    path_bbox: Option<(f64, f64, f64, f64)>,
-    /// Painted paths (`S`, `f`, `B`, … — not `n`) whose bounding box
-    /// crossed a region. Vector cutting is not implemented this build, so
-    /// every one of these is an un-redacted residual and is disclosed.
+    /// The path object under construction (`m`/`l`/`c`/`v`/`y`/`re`/`h`
+    /// since the last painting operator), in the authored coordinates
+    /// with the CTM captured at its first operator.
+    path: PathRecord,
+    /// The current line width (`w`), user units — the stroke-expansion
+    /// input for `redact_vector`. Saved/restored with `q`/`Q`.
+    line_width: f64,
+    lw_stack: Vec<f64>,
+    /// Painted paths (`S`, `f`, `B`, … — not `n`) that crossed a region
+    /// and could NOT be cut — a malformed object with a foreign operator
+    /// inside it, which cannot be replaced as a unit. Each is an
+    /// un-redacted residual and is disclosed.
     vector_paths_intersecting: u64,
+    /// Path objects rewritten by `redact_vector`.
+    vector_paths_cut: u64,
+    /// Path objects deleted because they lay wholly inside a region.
+    vector_paths_dropped: u64,
+    /// Clip-marked path objects whose ORIGINAL geometry was kept as the
+    /// clip (`W n`) after the cut paint — see `redact_vector`'s module doc.
+    vector_clips_kept: u64,
     estimated_fonts: BTreeSet<String>,
 }
 
@@ -477,8 +511,11 @@ struct SurgeryResult {
     ops_edited: u64,
     /// A form XObject intersects a region — disclosed, not refused.
     form_intersect: bool,
-    /// Painted vector paths whose bounding box crossed a region.
+    /// Painted vector paths that crossed a region and could not be cut.
     vector_paths_intersecting: u64,
+    vector_paths_cut: u64,
+    vector_paths_dropped: u64,
+    vector_clips_kept: u64,
     estimated_fonts: BTreeSet<String>,
 }
 
@@ -506,8 +543,13 @@ impl<'a> Surgeon<'a> {
             ops_edited: 0,
             form_intersect: false,
             image_hits: Vec::new(),
-            path_bbox: None,
+            path: PathRecord::default(),
+            line_width: 1.0,
+            lw_stack: Vec::new(),
             vector_paths_intersecting: 0,
+            vector_paths_cut: 0,
+            vector_paths_dropped: 0,
+            vector_clips_kept: 0,
             estimated_fonts: BTreeSet::new(),
         }
     }
@@ -627,10 +669,40 @@ impl<'a> Surgeon<'a> {
             return;
         };
         let n = Self::nums(op.operands);
+        // §8.2: inside a path object only construction, clipping and
+        // painting operators may appear. Anything else means the bytes
+        // from the first construction operand to the paint cannot be
+        // replaced as one unit, so the object is left alone and disclosed.
+        if self.path.start.is_some()
+            && !matches!(
+                name,
+                b"m" | b"l"
+                    | b"c"
+                    | b"v"
+                    | b"y"
+                    | b"h"
+                    | b"re"
+                    | b"W"
+                    | b"W*"
+                    | b"n"
+                    | b"S"
+                    | b"s"
+                    | b"f"
+                    | b"F"
+                    | b"f*"
+                    | b"B"
+                    | b"B*"
+                    | b"b"
+                    | b"b*"
+            )
+        {
+            self.path.dirty = true;
+        }
         match name {
             b"q" => {
                 self.ctm_stack.push(self.ctm);
                 self.ts_stack.push(self.snapshot());
+                self.lw_stack.push(self.line_width);
             }
             b"Q" => {
                 if let Some(m) = self.ctm_stack.pop() {
@@ -638,6 +710,14 @@ impl<'a> Surgeon<'a> {
                 }
                 if let Some(s) = self.ts_stack.pop() {
                     self.restore(s);
+                }
+                if let Some(w) = self.lw_stack.pop() {
+                    self.line_width = w;
+                }
+            }
+            b"w" => {
+                if let Some(v) = n.first() {
+                    self.line_width = *v;
                 }
             }
             b"cm" => {
@@ -741,40 +821,64 @@ impl<'a> Surgeon<'a> {
                 self.show_simple(op, ShowKind::DoubleQuote);
             }
             b"TJ" => self.show_array(op),
-            // Path construction (§8.5.2) — tracked only for the residual
-            // count; nothing here is edited.
-            b"m" | b"l" => {
+            // Path construction (§8.5.2), recorded for the cut.
+            b"m" => {
                 if let [x, y] = n.as_slice() {
-                    self.path_point(*x, *y);
+                    self.path.begin(op_span(op).0, self.ctm);
+                    self.path.move_to(*x, *y);
+                }
+            }
+            b"l" => {
+                if let [x, y] = n.as_slice() {
+                    self.path.begin(op_span(op).0, self.ctm);
+                    self.path.line_to(*x, *y);
                 }
             }
             b"c" => {
-                for pair in n.chunks_exact(2) {
-                    if let [x, y] = pair {
-                        self.path_point(*x, *y);
-                    }
+                if let [x1, y1, x2, y2, x3, y3] = n.as_slice() {
+                    self.path.begin(op_span(op).0, self.ctm);
+                    self.path.curve_to(*x1, *y1, *x2, *y2, *x3, *y3);
                 }
             }
-            b"v" | b"y" => {
-                for pair in n.chunks_exact(2) {
-                    if let [x, y] = pair {
-                        self.path_point(*x, *y);
-                    }
+            b"v" => {
+                if let [x2, y2, x3, y3] = n.as_slice() {
+                    self.path.begin(op_span(op).0, self.ctm);
+                    self.path.curve_v(*x2, *y2, *x3, *y3);
                 }
+            }
+            b"y" => {
+                if let [x1, y1, x3, y3] = n.as_slice() {
+                    self.path.begin(op_span(op).0, self.ctm);
+                    self.path.curve_y(*x1, *y1, *x3, *y3);
+                }
+            }
+            b"h" => {
+                self.path.begin(op_span(op).0, self.ctm);
+                self.path.close();
             }
             b"re" => {
                 if let [x, y, w, h] = n.as_slice() {
-                    self.path_point(*x, *y);
-                    self.path_point(*x + *w, *y + *h);
+                    self.path.begin(op_span(op).0, self.ctm);
+                    self.path.rect(*x, *y, *w, *h);
                 }
             }
-            // Path painting (§8.5.3). `n` ends a path without painting it
-            // (a clip definition), so it is not a residual.
-            b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" => {
-                self.path_painted();
+            b"W" | b"W*" => {
+                if self.path.clip.is_none() {
+                    self.path.clip_start = Some(op_span(op).0);
+                }
+                self.path.clip = Some(if name == b"W" { b"W" } else { b"W*" });
             }
+            // Path painting (§8.5.3): the cut happens here.
+            b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" => {
+                if let Some(paint) = PathPaint::from_op(name) {
+                    self.path_painted(op, buf, paint);
+                }
+                self.path = PathRecord::default();
+            }
+            // `n` ends a path without painting it (a clip definition, or
+            // nothing): not content, never touched.
             b"n" => {
-                self.path_bbox = None;
+                self.path = PathRecord::default();
             }
             _ => {}
         }
@@ -800,28 +904,48 @@ impl<'a> Surgeon<'a> {
         self.tl = s.tl;
     }
 
-    /// Grow the path-under-construction bounding box by a user-space point
-    /// given in the current coordinate system.
-    fn path_point(&mut self, x: f64, y: f64) {
-        let (px, py) = self.ctm.apply(x, y);
-        self.path_bbox = Some(match self.path_bbox {
-            None => (px, py, px, py),
-            Some((x0, y0, x1, y1)) => (x0.min(px), y0.min(py), x1.max(px), y1.max(py)),
-        });
-    }
-
-    /// A painting operator ended the current path: count it if its box
-    /// crossed a region (with positive area — a mere touch is not a
-    /// crossing), then start a fresh path.
-    fn path_painted(&mut self) {
-        if let Some((x0, y0, x1, y1)) = self.path_bbox.take()
-            && self
-                .regions
-                .iter()
-                .any(|r| r.min_x < x1 && x0 < r.max_x && r.min_y < y1 && y0 < r.max_y)
-        {
-            self.vector_paths_intersecting += 1;
+    /// A painting operator ended the current path object: cut it against
+    /// the regions (`redact_vector`) and record the replacement edit, or —
+    /// for a malformed object that cannot be replaced as a unit — count it
+    /// as a residual.
+    fn path_painted(&mut self, op: &crate::content::Operation<'_>, buf: &[u8], paint: PathPaint) {
+        let Some(start) = self.path.start else {
+            return; // a paint with no construction: nothing to cut
+        };
+        let end = op.operator.span.end();
+        if self.path.dirty || end <= start {
+            // Count it only if it actually crosses a region.
+            if let Some((x0, y0, x1, y1)) = self.path.page_bbox()
+                && self
+                    .regions
+                    .iter()
+                    .any(|r| r.min_x < x1 && x0 < r.max_x && r.min_y < y1 && y0 < r.max_y)
+            {
+                self.vector_paths_intersecting += 1;
+            }
+            return;
         }
+        // The construction bytes end where the clip operator (if any) or
+        // the paint operator begins.
+        let construction_end = self.path.clip_start.unwrap_or(op.operator.span.start);
+        let original = buf.get(start..construction_end).unwrap_or(&[]);
+        let Some(cut) =
+            redact_vector::cut_path(&self.path, paint, self.line_width, self.regions, original)
+        else {
+            return;
+        };
+        self.vector_paths_cut += 1;
+        if cut.dropped_whole {
+            self.vector_paths_dropped += 1;
+        }
+        if cut.clip_kept {
+            self.vector_clips_kept += 1;
+        }
+        self.edits.push(Edit {
+            start,
+            end,
+            bytes: cut.bytes,
+        });
     }
 
     /// The horizontal advance `tx` for one code (text-line units, §9.4.4),
@@ -1167,6 +1291,9 @@ fn redact_page_content(
         ops_edited: surgeon.ops_edited,
         form_intersect: surgeon.form_intersect,
         vector_paths_intersecting: surgeon.vector_paths_intersecting,
+        vector_paths_cut: surgeon.vector_paths_cut,
+        vector_paths_dropped: surgeon.vector_paths_dropped,
+        vector_clips_kept: surgeon.vector_clips_kept,
         estimated_fonts: surgeon.estimated_fonts,
     }
 }
@@ -1679,6 +1806,9 @@ pub fn apply_redactions(
             form_intersect_any = true;
         }
         report.vector_paths_intersecting += result.vector_paths_intersecting;
+        report.vector_paths_cut += result.vector_paths_cut;
+        report.vector_paths_dropped += result.vector_paths_dropped;
+        report.vector_clips_kept += result.vector_clips_kept;
         estimated_fonts.extend(result.estimated_fonts);
         report.glyphs_removed += result.glyphs_removed;
         report.show_operators_edited += result.ops_edited;
@@ -2560,20 +2690,46 @@ fn carrier_detect_disclose(
         );
     }
 
-    // Vector paths (§8.5) crossing a region. Counted by the surgery
-    // interpreter; not cut. On a CAD sheet this is the residual that
-    // matters most, and it must never read as "redacted".
-    let vectors = report.vector_paths_intersecting;
-    if vectors > 0 {
+    // Vector paths (§8.5) crossing a region. Cut by the surgery
+    // interpreter (`redact_vector`); the residual is the malformed object
+    // that could not be rewritten as a unit. On a CAD sheet this is the
+    // carrier that matters most, and it must never read as "redacted"
+    // when anything was left.
+    let uncut = report.vector_paths_intersecting;
+    let cut = report.vector_paths_cut;
+    if uncut > 0 {
         report.add_carrier("vector_paths", true, CarrierAction::DisclosedNotScrubbed);
         report.note(format!(
-            "redaction: {vectors} painted vector path(s) cross a redaction region and were NOT \
-             cut — vector-path redaction is not implemented this build, so those lines, fills \
-             and curves remain in the content stream (the text and images under the region \
-             were removed); verify the region by eye or flatten the vectors first"
+            "redaction: {uncut} painted vector path(s) cross a redaction region and were NOT \
+             cut — each is a malformed path object carrying an operator ISO 32000-1 §8.2 \
+             forbids between construction and painting, so its bytes could not be replaced \
+             as a unit; those lines, fills or curves remain in the content stream; verify the \
+             region by eye"
         ));
+    } else if cut > 0 {
+        report.add_carrier("vector_paths", true, CarrierAction::Scrubbed);
     } else {
         report.add_carrier("vector_paths", false, CarrierAction::Absent);
+    }
+    if cut > 0 {
+        report.note(format!(
+            "redaction: {cut} vector path object(s) crossing a region were CUT ({} deleted \
+             outright as wholly covered) — strokes cut against the region expanded by their \
+             stroke width, fills clipped to the region's complement, every piece re-emitted in \
+             its own coordinates; the pieces are new path objects, so a dashed stroke restarts \
+             its dash phase at each cut",
+            report.vector_paths_dropped
+        ));
+    }
+    if report.vector_clips_kept > 0 {
+        report.note(format!(
+            "redaction: {} cut path object(s) also set a clipping path (W/W*); the paint was \
+             cut but the ORIGINAL geometry was kept as the clip, because the clip applies after \
+             painting and shrinking it would hide unmarked content drawn later on the page — \
+             the kept geometry is not painted, but it is a shape in the file; review it if the \
+             clip itself could be sensitive",
+            report.vector_clips_kept
+        ));
     }
 }
 
@@ -3235,12 +3391,12 @@ mod tests {
         assemble_bytes(&bodies)
     }
 
-    /// A 4×4 8-bit DeviceGray image, every sample 0xFF, no filter.
+    /// A 4×4 8-bit DeviceGray image, every sample 0x20 (dark, so a clear to paper 0xFF shows), no filter.
     fn gray_4x4() -> Vec<u8> {
         stream_body(
             "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
              /ColorSpace /DeviceGray",
-            &[0xFF; 16],
+            &[0x20; 16],
         )
     }
 
@@ -3343,17 +3499,17 @@ mod tests {
         for row in 0..4 {
             assert_eq!(
                 &samples[row * 4..row * 4 + 4],
-                &[0, 0, 0, 0xFF],
+                &[0xFF, 0xFF, 0xFF, 0x20],
                 "row {row}"
             );
         }
         // The original (its only use was this placement) is a 1×1 blank.
         let (orig, w, h, _) = decode_object(&out_doc, ObjId::new(5, 0));
         assert_eq!((w, h), (1, 1));
-        assert_eq!(orig, vec![0]);
+        assert_eq!(orig, vec![0xFF]);
         // And no byte of the original's 0xFF grid survives in the file: the
         // absence proof, over the OUTPUT bytes.
-        assert!(!contains(&out, &[0xFF; 16]));
+        assert!(!contains(&out, &[0x20; 16]));
     }
 
     #[test]
@@ -3379,8 +3535,8 @@ mod tests {
         );
         let (orig, w, h, _) = decode_object(&out_doc, ObjId::new(5, 0));
         assert_eq!((w, h), (1, 1));
-        assert_eq!(orig, vec![0]);
-        assert!(!contains(&out, &[0xFF; 16]));
+        assert_eq!(orig, vec![0xFF]);
+        assert!(!contains(&out, &[0x20; 16]));
     }
 
     #[test]
@@ -3408,7 +3564,7 @@ mod tests {
         );
         let (orig, w, _h, _) = decode_object(&out_doc, ObjId::new(5, 0));
         assert_eq!(w, 4);
-        assert_eq!(orig, vec![0xFF; 16], "the original is untouched");
+        assert_eq!(orig, vec![0x20; 16], "the original is untouched");
     }
 
     /// An image whose samples pdfce cannot decode: JBIG2 with garbage.
@@ -3485,14 +3641,14 @@ mod tests {
         let (out_doc, _x, content) = output_page(&out);
         assert!(contains(&content, b"/Im1 Do"));
         let (orig, _, _, _) = decode_object(&out_doc, ObjId::new(5, 0));
-        assert_eq!(orig, vec![0xFF; 16]);
+        assert_eq!(orig, vec![0x20; 16]);
     }
 
     #[test]
     fn an_inline_image_is_re_encoded_with_its_covered_cells_destroyed() {
         // 2×2 gray inline image, all 0xFF, placed (50,100)-(150,150).
         let mut content = b"q 100 0 0 50 50 100 cm BI /W 2 /H 2 /CS /G /BPC 8 ID ".to_vec();
-        content.extend_from_slice(&[0xFF; 4]);
+        content.extend_from_slice(&[0x20; 4]);
         content.extend_from_slice(b" EI Q");
         let pdf = image_pdf(&content, gray_4x4(), vec![]);
         // Left half of the placement → column 0 of both rows.
@@ -3521,7 +3677,7 @@ mod tests {
         );
         let coded =
             crate::image_codec::decode_image_view(&out_doc.view(), &inline.0, raw, true).unwrap();
-        assert_eq!(coded.samples, vec![0, 0xFF, 0, 0xFF]);
+        assert_eq!(coded.samples, vec![0xFF, 0x20, 0xFF, 0x20]);
     }
 
     #[test]
@@ -3574,7 +3730,7 @@ mod tests {
                 .map(|n| n.as_bytes()),
             Some(&b"FlateDecode"[..])
         );
-        assert_eq!(samples, vec![0, before[1], 0, before[3]]);
+        assert_eq!(samples, vec![0xFF, before[1], 0xFF, before[3]]);
         // The JPEG codestream itself is gone from the file.
         assert!(!contains(&out, jpeg));
     }
@@ -3585,7 +3741,7 @@ mod tests {
         let image = stream_body(
             "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
              /ColorSpace /DeviceGray /SMask 7 0 R",
-            &[0xFF; 16],
+            &[0x20; 16],
         );
         let smask = stream_body(
             "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
@@ -3610,7 +3766,7 @@ mod tests {
         for row in 0..4 {
             assert_eq!(
                 &alpha[row * 4..row * 4 + 4],
-                &[0xFF, 0xFF, 0xFF, 0x80],
+                &[0x00, 0x00, 0x00, 0x80],
                 "row {row}"
             );
         }
@@ -3621,41 +3777,110 @@ mod tests {
         assert!(!contains(&out, &[0x80; 16]));
     }
 
-    // -- vector paths: counted and disclosed, not cut ----------------------
+    // -- vector paths: cut at the region boundary (Pass 246.0) ---------------
 
     #[test]
-    fn a_vector_path_crossing_a_region_is_disclosed_as_a_residual() {
-        // One line through the region, one rectangle well outside it, and a
-        // clip-only path (`n`) inside it that must NOT count.
-        let content = b"0 0 m 300 200 l S 200 10 20 20 re f 70 120 10 10 re W n";
+    fn a_vector_path_crossing_a_region_is_cut_and_one_inside_is_deleted() {
+        // A line through the region, a filled square wholly inside it, a
+        // rectangle far away, and a clip-only path (`W n`) inside it that
+        // must be left alone.
+        let content =
+            b"0 100 m 300 150 l S 70 120 10 10 re f 200 10 20 20 re f 65 115 20 20 re W n";
+        let pdf = image_pdf(content, gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.vector_paths_cut, 2, "{report:?}");
+        assert_eq!(report.vector_paths_dropped, 1);
+        assert_eq!(report.vector_paths_intersecting, 0);
+        assert_eq!(
+            carrier_action(&report, "vector_paths"),
+            CarrierAction::Scrubbed
+        );
+        assert!(!report.has_disclosed_residuals());
+        assert!(
+            report.notes.iter().any(|n| n.contains("were CUT")),
+            "{:?}",
+            report.notes
+        );
+
+        let (_d, _x, content) = output_page(&out);
+        let text = String::from_utf8_lossy(&content);
+        assert!(
+            !text.contains("70 120 10 10 re"),
+            "the inside square is gone: {text}"
+        );
+        assert!(
+            text.contains("200 10 20 20 re"),
+            "the far rectangle is untouched: {text}"
+        );
+        assert!(
+            text.contains("65 115 20 20 re W n"),
+            "the clip is untouched: {text}"
+        );
+        assert!(
+            !text.contains("0 100 m 300 150 l S"),
+            "the line was rewritten: {text}"
+        );
+        // Two stroke pieces: the line enters the (expanded) region and leaves it.
+        assert_eq!(text.matches(" l\n").count(), 2, "{text}");
+    }
+
+    #[test]
+    fn a_vector_path_outside_every_region_is_left_byte_identical() {
+        let content = b"200 10 m 250 30 l S";
+        let pdf = image_pdf(content, gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.vector_paths_cut, 0);
+        assert_eq!(report.vector_paths_intersecting, 0);
+        assert_eq!(
+            carrier_action(&report, "vector_paths"),
+            CarrierAction::Absent
+        );
+        let (_d, _x, out_content) = output_page(&out);
+        assert!(contains(&out_content, content));
+    }
+
+    #[test]
+    fn a_malformed_path_object_is_a_disclosed_residual_not_a_cut() {
+        // A `cm` between construction and paint: §8.2 forbids it, and the
+        // bytes cannot be replaced as a unit.
+        let content = b"0 100 m 300 150 l 1 0 0 1 0 0 cm S";
         let pdf = image_pdf(content, gray_4x4(), vec![]);
         let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
         let doc = Document::from_bytes(marked).unwrap();
         let (_out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.vector_paths_cut, 0);
         assert_eq!(report.vector_paths_intersecting, 1);
         assert_eq!(
             carrier_action(&report, "vector_paths"),
             CarrierAction::DisclosedNotScrubbed
         );
         assert!(report.has_disclosed_residuals());
-        assert!(
-            report.notes.iter().any(|n| n.contains("NOT cut")),
-            "{:?}",
-            report.notes
-        );
     }
 
     #[test]
-    fn a_vector_path_outside_every_region_is_not_a_residual() {
-        let content = b"200 10 m 250 30 l S";
+    fn a_clip_marked_painted_path_keeps_its_clip_and_cuts_its_paint() {
+        // `re W f`: the fill is cut, the clip survives as the ORIGINAL rect.
+        let content = b"50 100 100 50 re W f 0 0 m 10 10 l S";
         let pdf = image_pdf(content, gray_4x4(), vec![]);
         let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
         let doc = Document::from_bytes(marked).unwrap();
-        let (_out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
-        assert_eq!(report.vector_paths_intersecting, 0);
-        assert_eq!(
-            carrier_action(&report, "vector_paths"),
-            CarrierAction::Absent
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.vector_paths_cut, 1);
+        assert_eq!(report.vector_clips_kept, 1);
+        let (_d, _x, content) = output_page(&out);
+        let text = String::from_utf8_lossy(&content);
+        assert!(text.contains("50 100 100 50 re W n"), "{text}");
+        // The paint comes first, as four strips, then the clip.
+        let paint_at = text.find(" f\n").or_else(|| text.find("\nf\n")).unwrap();
+        let clip_at = text.find("re W n").unwrap();
+        assert!(paint_at < clip_at, "{text}");
+        assert!(
+            text.contains("0 0 m 10 10 l S"),
+            "the later stroke is untouched: {text}"
         );
     }
 

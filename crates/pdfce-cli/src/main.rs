@@ -1590,7 +1590,10 @@ enum Command {
     ///
     /// The one destructive, irreversible operation in pdfce (R35). It
     /// removes the covered glyphs from the content stream (advance-
-    /// preserving, so surviving text stays put), DESTROYS the covered
+    /// preserving, so surviving text stays put), CUTS vector paths at the
+    /// region boundary (strokes against the region widened by their stroke
+    /// width, fills to the region's complement; a path wholly inside is
+    /// deleted), DESTROYS the covered
     /// samples of any image a region touches (decoded, cleared, re-encoded
     /// losslessly; an image a region contains entirely is removed outright;
     /// an image also painted elsewhere is copied so the other placements
@@ -1601,9 +1604,9 @@ enum Command {
     ///
     /// It prints a REDACTION REPORT of exactly what was removed and which
     /// carriers were scrubbed or left. If any carrier could not be scrubbed
-    /// (XFA, a tagged ActualText copy, an attachment, a vector path crossing
-    /// a region — vector cutting is not implemented yet), apply exits
-    /// non-zero UNLESS you pass `--acknowledge-residuals` — there is no path
+    /// (XFA, a tagged ActualText copy, an attachment, a malformed vector
+    /// path that could not be cut), apply exits non-zero UNLESS you pass
+    /// `--acknowledge-residuals` — there is no path
     /// where a partial redaction reads as complete. A mark over an image
     /// whose samples pdfce cannot decode is RETAINED in the output (left
     /// unapplied, named in the report with its reason) while every other
@@ -22828,12 +22831,22 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
     // and the notes below name it and say why.
     println!(
         "  images_cleared={} images_removed={} images_cloned_shared={} images_overcovered={} \
-         marks_retained={} vector_paths_intersecting={}",
+         marks_retained={}",
         report.images_cleared,
         report.images_removed,
         report.images_cloned_shared,
         report.images_overcovered,
         report.marks_retained,
+    );
+    // Vector paths (§8.5): `vector_paths_intersecting` is the residual — a
+    // path that crossed a region and could NOT be cut; it must read zero
+    // for the region to be fully redacted.
+    println!(
+        "  vector_paths_cut={} vector_paths_dropped={} vector_clips_kept={} \
+         vector_paths_intersecting={}",
+        report.vector_paths_cut,
+        report.vector_paths_dropped,
+        report.vector_clips_kept,
         report.vector_paths_intersecting,
     );
     println!("  carriers (diligence sweep, ISO 32000-1 §12.5.6.23):");

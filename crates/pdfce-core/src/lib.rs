@@ -128,6 +128,7 @@ pub mod parser;
 pub mod recover;
 pub mod redact;
 mod redact_image;
+mod redact_vector;
 pub mod richtext;
 pub mod settings;
 pub mod signature;
