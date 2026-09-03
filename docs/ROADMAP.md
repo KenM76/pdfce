@@ -96,6 +96,303 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ THREE COMMITS, 392nd filing, 2026-09-03 — `v0.27.0` (`dfce8a9`)
+RESOLVED PENDING → VERIFIED (tag on `origin`, CI green at `3331b80`,
+packaged, fresh-folder smoke-tested, deployed to `pdfce2`, `verify-release`
+clean, backup bundle refreshed); `a436432` CLOSES THE 391st FILING'S FIVE
+OWED "zero-sample" SURVIVORS (docs only); `Pass 246.1` (`ff738a6`) — A
+SHADING PAINT (`sh`) WHOSE CLIP MEETS A REDACTION REGION IS NOW DISCLOSED
+BY COUNT — THE INTERPRETER TRACKS THE CLIPPING PATH AS A PAGE-SPACE BOX
+FOR THE FIRST TIME; A SILENT GAP CLOSED TO DISCLOSURE, CUTTING FILED
+*Backlog*. NO DECISION MINTED, NO RULE MINTED. Also: three literal
+BACKSPACE BYTES (`0x08`) found in this file and `SESSION_LOG.md` where
+`\b` was meant — both planted by librarian filings — repaired.**
+
+**Sourcing (hard rule 8).** Shell available this filing, and every release
+figure was checked rather than relayed — the command beside each. `git
+log`: `ff738a6` (`Pass 246.1`, `HEAD`), `a436432` (docs), `3331b80` (the
+391st filing's commit), `dfce8a9` (`chore: v0.27.0`). `git rev-parse
+v0.27.0` = `dfce8a9`; `git ls-remote --tags origin v0.27.0` → `dfce8a9`
+(**on `origin`**); `git ls-remote origin main` = **`3331b80`** — so
+`a436432` and `ff738a6` are **NOT yet on `origin/main`** at filing time.
+`gh run list`: the push at `3331b80` is `completed success` (run
+`33750084429`, 2026-09-03 11:45Z). `du -sb
+D:\builds\pdfce-20260903-0717-dfce8a9` = **49,338,217 bytes** (the 391st
+filing's `v0.26.0` folder was 49,277,178 — +61,039 bytes, +0.12 %);
+`pdfce-cli.exe` there 19,753,472 bytes, `pdfce-gui.exe` 16,956,928.
+`OneDrive\pdfce2\pdfce-cli.exe --version` → **`0.27.0`** (`revision:
+v0.27.0`, built 11:17Z); `du -sb OneDrive\pdfce2` = **32,379,979 bytes**;
+`OneDrive\pdfce1` → **`0.26.0`** (32,354,891 bytes). `ls
+D:\Dev\pdfce-backups\` shows **`pdfce-2026-09-03-dfce8a9-full.bundle`,
+49,227,991 bytes, 07:25 local** — the newest bundle on disk, and it is at
+the release commit, not at `HEAD` (`ff738a6` and `a436432` post-date it).
+Live source cross-checked for `Pass 246.1`: `clip_bbox` /
+`clip_stack` on the `Surgeon` (`crates/pdfce-core/src/redact.rs:479-480`),
+the `sh` arm (`:914-925`, unclipped → an infinite box, so every
+unclipped `sh` counts), `RedactionReport::shadings_intersecting`
+(`:388`), the `shadings` carrier (`:2790-2801`), the test at `:3908`,
+`redact.rs:52`'s module-doc table row (*"disclosed, by count"*), the CLI
+line at `crates/pdfce-cli/src/main.rs:22846`, `docs/core-api/index.md:18`
+(*2,773 lines · 66 clauses*) and `wc -l` = **2,773** on
+`03-capabilities.md`. For `a436432`: `grep zero-sample` over
+`redact_image.rs`, `03-capabilities.md` and the engineer's memory file
+returns **nothing**; `paper-sample` at `redact_image.rs:41`, `:65`,
+`:1197` and `03-capabilities.md:1633`; the memory file's line 17 reads
+*"tombstoned to a 1×1 PAPER sample"*. **Relayed, not re-run:** the
+fresh-folder smoke test (`--version` = `0.27.0`; the corner-mark
+redaction on the operator's drawing printing
+`vector_paths_intersecting=0`, exit 0; `pdfce-gui.exe` launched);
+`verify-release.py v0.27.0` clean; `git bundle verify` okay; the test
+total `5,090 / 0` and the gate list.
+
+**Premises corrected by that check:** none of the dispatch's figures
+disagreed with the disk. Two things the dispatch did not say: **(1)**
+the backup bundle is at `dfce8a9`, two commits behind `HEAD` — correct
+for a release bundle, stated so it is not read as "at HEAD"; **(2)** the
+five `a436432` survivors are the **whole** of the 391st filing's owed
+doc-comment/memory list, but the **sixth** owed item on that list —
+`tools/verify-release.py:203`'s *"`gh` unavailable or not authenticated"*
+message for a release that simply does not exist — is **still open**
+(`git log -- tools/verify-release.py` ends at `9228cad`; the string is
+unchanged at `:203`).
+
+### `v0.27.0` release (`dfce8a9` bump, tagged at `dfce8a9`) — RESOLVED pending → VERIFIED: tagged, pushed, CI green, packaged, smoke-tested, deployed, verified, bundled
+
+Resolves the 391st filing's "IN PROGRESS" mark (its `dfce8a9` record,
+below in that block, carries a dated RESOLVED footer). **Checked from this
+filing's shell** (commands above): tag `v0.27.0` → `dfce8a9`; on `origin`;
+pushed together with the 391st filing's own commit `3331b80`, which is
+`origin/main`; **CI green at `3331b80`** (run `33750084429`); packaged to
+`D:\builds\pdfce-20260903-0717-dfce8a9` (**49,338,217 bytes**); deployed
+to OneDrive slot **`pdfce2`** (`--version` → `0.27.0`, 32,379,979 bytes;
+**`pdfce1` keeps `0.26.0`**, per the two-slot alternation); backup bundle
+`D:\Dev\pdfce-backups\pdfce-2026-09-03-dfce8a9-full.bundle` (49,227,991
+bytes) on disk. **Relayed:** fresh-folder smoke test of both binaries
+passed; `python tools/verify-release.py v0.27.0` **clean** — including
+*working tree clean*, since this time the release commit and the filing
+commit were both in before it ran; the GitHub-release check will have
+**skipped** for the standing reason (no release page exists for any
+version after `v0.17.0`; the script's `:203` message mislabels that as
+`gh` being unavailable — still owed, above).
+
+**What the release carries.** `Pass 246.0` (`194b3a1`) — vector paths
+cut, image cells become paper, the pixel proof. It does **not** carry
+`Pass 246.1` (`ff738a6`) or `a436432`; both post-date the tag and are
+unreleased at filing time. The next bump is the engineer's call.
+
+`docs/FEATURES.md`: untouched by this record — a release completion, not
+a Pass.
+
+### `a436432` (2026-09-03) — docs only: the tombstone is a "paper-sample" image, not a "zero-sample" one, in the three doc comments, the core-api sentence and the engineer's memory file that still said otherwise
+
+**No behaviour change** — `git show --stat`: 3 files, 5 insertions, 5
+deletions; no `.rs` code line, only rustdoc. Closes **all five** of the
+survivors the 391st filing's hard-rule-11 sweep reported as owed:
+`crates/pdfce-core/src/redact_image.rs:41` and `:65` (module doc) and
+`:1197` (the `tombstone` rustdoc) — the words had contradicted the
+function's own `if decoded.paper { 0xFF } else { 0x00 }` fill at `:1224`
+since `Pass 246.0`; `docs/core-api/03-capabilities.md` §4.2 (the
+*"tombstoned in place"* sentence, now `:1633`); and
+`.claude/agent-memory/pdfce-engineer/project_pass8_redaction.md:17`,
+which now reads *"tombstoned to a 1×1 PAPER sample (white for Gray/RGB,
+no ink for CMYK — Pass 246.0)"*. Filed so `check-commits-filed.py` has a
+narrative for the hash. **Nothing else on that list is closed by it** —
+see the `verify-release.py:203` item above.
+
+`docs/FEATURES.md`: no change — the row already said "PAPER, not black"
+as of the 391st filing.
+
+### Pass 246.1 (`ff738a6`, 2026-09-03) — a shading paint (`sh`) whose clip meets a redaction region is disclosed by count; the redaction interpreter tracks the clipping path as a page-space box for the first time
+
+**Trigger.** Found while ranking the next candidates after `Pass 246.0`,
+not reported by the operator and not on any list. `sh` (ISO 32000-1
+§8.7.4.5.1) paints a shading over the **whole current clipping region** —
+it has no geometry of its own. The redaction interpreter (`Surgeon`)
+tracked the path under construction, the CTM, the line width and the
+text state, but **never the clip**, so an `sh` was invisible to it: a
+shading whose clip crossed a mark was **neither cut nor counted**. That is
+the exact shape rule 4 forbids — an un-redacted residual with no
+disclosure — and it had been silent through `Pass 8.0`, `245.0` and
+`246.0`, each of which enumerated what it left behind and did not name
+this.
+
+**What ships.**
+- **Clip tracking, as a box.** `Surgeon` gains `clip_bbox:
+  Option<(f64, f64, f64, f64)>` (page space; `None` = unclipped) and a
+  `clip_stack`, saved/restored with `q`/`Q`. On every `W`/`W*` the box is
+  **intersected** with the pending path's bounding box — applied **after
+  the painting operator** that ends the path, per §8.5.4's ordering, or
+  after `n` for a pure clip. A clip whose path has **no geometry** clips
+  **everything** (an empty box). It is a bounding box, not the path: it
+  exists only to bound `sh`, and the module doc says so.
+- **The count.** On `sh`, if the current clip box meets any region — or
+  if there is **no clip at all**, in which case the shading paints the
+  whole page and the box is taken as infinite — `shadings_intersecting`
+  increments. A `sh` under a clip that lies wholly away from every
+  region is **not** counted.
+- **The disclosure.** A new `RedactionReport::shadings_intersecting`
+  counter, summed across pages; a new **thirteenth carrier `shadings`**
+  reading `DisclosedNotScrubbed` when the count is non-zero and `Absent`
+  otherwise; a note stating that the shading was **NOT cut**, that a
+  shading fills its whole clip, and that the region should be **verified
+  by eye**. Because the carrier is `DisclosedNotScrubbed`,
+  `has_disclosed_residuals()` is true and the existing acknowledgement
+  gate trips, the same route `form_intersect` already takes. **Nothing is
+  cut this Pass** — the change is from silence to disclosure.
+- **CLI.** `redact-apply`'s summary line gains `shadings_intersecting=`
+  after `vector_paths_intersecting=`.
+- **Docs.** `docs/core-api/03-capabilities.md` §4.2 names the counter and
+  the thirteenth carrier; `index.md` moved to *2,773 lines · 66 clauses*.
+
+**Test.** One new:
+`a_shading_whose_clip_meets_the_region_is_disclosed_and_one_clipped_away_is_not`
+(`redact.rs:3908`) — an axial shading resource painted twice, `q … re W n
+/Sh1 sh Q` under a clip over the region (counted, `shadings` carrier
+`DisclosedNotScrubbed`) and under a clip far from it (not counted). A
+discriminating fixture in the `R225` sense: an implementation that counts
+every `sh` fails it on the second paint; one that tracks no clip fails it
+on the first.
+
+**Gates (relayed):** `cargo test --workspace` **5,090 / 0** (5,089 at the
+391st filing + this one test); clippy all-targets all-features, fmt,
+core-api verbs, outcome-disclosed, public-fns, metrics, clap-help,
+ui-strings, string-gaps, suite-name, cited-verbs — all green. No manifest
+touched; the GUI-core invariant is unaffected by construction.
+
+**Corpus exposure: UNMEASURED, and the one available signal is zero.** No
+operator redaction file (`OneDrive\pdfTests\Redact`, eleven CAD drawings)
+carries an `sh` operator. How common a shading under a redaction mark is
+in the wild has not been counted; a census over the 2,500-file organic
+corpus would be the first step of scoping the cut.
+
+**What is deliberately NOT done, and why — the cut is *Backlog*, not
+*Next up*.** Cutting a shading out of a region is a different problem per
+shading type. Types 1–3 (function-based, axial, radial) have no geometry
+beyond their clip, so they could be **clipped out** by intersecting the
+clip with the region's **even-odd complement** — a construction, not a
+rewrite of the shading. Types 4–7 (free-form and lattice-form Gouraud
+triangle meshes, Coons and tensor patches) carry **explicit vertex data**
+in the stream and would need **real surgery** on that data — triangles
+split at the region edge, patches subdivided — a mesh-geometry Pass of
+its own. Neither half is scoped; both are one *Backlog* entry (below).
+Not *Next up*, at the engineer's own instruction: exposure unmeasured,
+no operator file affected, and the gap is now disclosed rather than
+silent, which is what rule 4 requires.
+
+**Decision record: none minted, and the decline is argued.** The choices
+here — a bounding box rather than the exact clip path, and disclosure
+rather than cutting — are implementation scoping inside one module, not
+a crate boundary, a library choice or an invariant. Decision 126's
+posture (*never claim content redacted when it is not; every bias runs
+toward removing more*) already governs: a box **over-counts** (a clip
+whose box meets a region while its true shape does not is still counted),
+which is the conservative direction. When the cut ships, the choice of
+mechanism per shading type will be a decision; the count is not.
+
+**Hard-rule-11 sweep — one claim changed meaning and was swept for the
+CLAIM, not the string:** *"what redaction leaves behind without cutting"*
+now includes shadings **by count**, where before it did not name them at
+all. Survivors and disposition:
+- **`docs/FEATURES.md:261`** (*Apply redaction* row) — listed **nine**
+  counters as not yet surfaced in `pdfceGUI`; there are now **ten** on the
+  CLI's summary line. **Fixed this filing** (`shadings_intersecting`
+  added, "nine" → "ten").
+- **`docs/FEATURES.md:262`** (*Vector-path redaction* row) — *"**Not
+  cut:** … `sh` shading fills …"* was true and stays true, but it now
+  reads as if shadings were undisclosed. **Amended this filing** to say
+  *disclosed by count (`Pass 246.1`), not cut*.
+- **Correct survivors, do not "fix":** `redact.rs:52` (the module-doc
+  table row, moved by `ff738a6`); `redact.rs:383-387` (the field
+  rustdoc); `03-capabilities.md:1608`/`:1617` (moved by `ff738a6`);
+  `.claude/agent-memory/pdfce-engineer/project_pass8_redaction.md:17`
+  names *"Form XObject intersecting → disclose. Vector paths → CUT"* and
+  does not mention shadings — **incomplete, not wrong**; the engineer may
+  wish to add *"`sh` under a clip meeting a region → disclosed by count
+  (246.1)"* to it. Engineer's file, outside this role's tiers — noted,
+  not owed.
+- **Decision 126's body-section paragraph** (*"§4's API surface:
+  `RedactionReport` gains …"*) enumerates the `Pass 246.0` fields and is
+  dated; correct on its date, left as is. The living field list is
+  `03-capabilities.md:1600-1610`, which `ff738a6` already updated.
+
+**Channel.** Not touched by this filing (the dispatch said so).
+`docs/NEXT_SESSION.md` (engineer-owned) lists this gap as §A item 2; the
+engineer is amending it himself.
+
+`docs/FEATURES.md`: *Apply redaction* row and *Vector-path redaction* row
+amended as above; **no box moves** — disclosure of a residual is a
+correctness property of the existing capability, not a new one; the cut
+itself is filed in *Planned* as a new row with all boxes unticked.
+
+#### Three literal backspace bytes repaired — `\b` had become `0x08`
+
+`grep -c $'\x08'` over `docs/` found **one** in this file and **two** in
+`SESSION_LOG.md`; **zero** in `ARCHITECTURE.md` and `FEATURES.md`:
+- **`ROADMAP.md:688`** — the 391st filing's RESOLVED footer on the
+  `7d94fe3` record wrote `D:\builds\pdfce-20260903-0553-7d94fe3` with a
+  real backspace for `\b`, so it rendered as `D:uilds\…` (`od -c` shows
+  `D : \b u i l d s`). Planted by `3331b80` (`git log -S`).
+- **`SESSION_LOG.md:77384` and `:77389`** — the 332nd filing's account of
+  `check-ledger-numbers.py`'s regex fix, *"the widened pattern initially
+  kept `\b`"* and *"never end a markdown-tolerant number pattern in
+  `\b`"* — the regex word-boundary token itself, corrupted to a backspace
+  so the sentence said *"kept ``"*. Planted by `3d71ad2`.
+- **`.claude/agent-memory/pdfce-spec-librarian/project_corpus_state.md:70`**
+  — a fourth (`\bMK\b`, a regex), in the spec-librarian's own memory
+  file, **not this role's; reported, not repaired.**
+
+All three in the two ledgers were repaired to the two characters `\b`
+with the **Edit tool** (a correction is a claim: `git diff | cat -v`
+shows `+ … \b …` with no `^H`). **Both were planted by librarian
+filings**, the same role that carried real carriage returns in an
+agent-file path from 2026-08-18 to 2026-08-22 (hard rule 11's
+parenthetical). The vector is **not traced, and is consistent with an
+existing lesson**:
+`C:\personal_rag\claude_code\lesson_20260724_bash_tool_heredoc_backslash_mangling.md`
+records the Bash tool's transport layer collapsing `\\` → `\` and a
+downstream decoder reading `\b` as backspace; this role's definition
+lists no shell, but the planting filings held one (they ran `git`, `gh`,
+`du`), so a heredoc is live. **This filing then reproduced the mechanism
+twice while repairing it** — a `sed` replacement typed with a doubled
+backslash arrived as `\b` and wrote a bare `b`; a Python heredoc's
+doubled-backslash literal arrived as a real backspace byte, so the
+replace was `0x08 → 0x08` and wrote an identical file, which was **first
+misread as a silent sandbox write refusal** and corrected once the
+lesson footer's own first draft came out mangled the same way. What is
+established is the check: **one grep, `grep -rc $'\x08' docs/`**, and it
+is mechanical — unlike a rule-11 content sweep, a control-byte scan CAN
+be a gate. Recommended to the engineer as a `tools/check-*` candidate
+(scan `docs/`, `.claude/`, `README.md` for bytes `0x00-0x08`, `0x0B-0x0C`,
+`0x0E-0x1F`); not built here — `tools/` is outside this role's remit.
+The existing lesson
+`C:\personal_rag\claude_code\lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`
+gets a dated recurrence footer (hard rule 4: amend, do not duplicate).
+
+#### Standing rules — no new mint
+
+Nothing in this filing recurs at n ≥ 2 against a rule that does not
+already exist. The `sh` gap is a rule-4 instance (disclosed now), not a
+new pattern. The backspace bytes are a second occurrence of the
+control-byte-in-a-doc shape (after the carriage returns of 2026-08-18) —
+but the remedy is a **gate**, proposed above, not a rule; a mechanical
+check beats a standing rule wherever one is possible (the inverse of the
+rule-11 argument).
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `246.0` | ceiling **`246.1`** (`246.1` *Shipped*; family 246 still the highest). Next free major: `247.0` |
+| Decisions | ceiling `126`, next free `127` | unchanged — none minted, decline argued above |
+| Standing rules | ceiling `R240`, next free `R241` | unchanged |
+| Releases | `v0.27.0` tagged locally, pending | **`v0.27.0` verified** (tag on `origin`, CI green at `3331b80`, packaged, smoke-tested, deployed `pdfce2`, `verify-release` clean, bundle at `dfce8a9`). `ff738a6` + `a436432` unreleased |
+| Backlog | — | **+1**: *shadings under a redaction region are disclosed, not cut* (types 1–3 by clip complement; 4–7 by mesh surgery) |
+| `D:\dev\rag\rust\` / `egui\` | — | no change |
+| `C:\personal_rag\` | — | one dated footer on `claude_code/lesson_20260811_b_escape_…` (recurrence); no new lesson |
+| SESSION_LOG filings | 391 | **392** |
+
+---
+
 **★★ THREE COMMITS, 391st filing, 2026-09-03 — `Pass 246.0` (`194b3a1`)
 MAKES REDACTION CUT VECTOR PATHS AT THE REGION BOUNDARY — THE `Pass 245.0`
 DISCLOSE-BY-COUNT RESIDUAL IS REMOVED: STROKES CUT AGAINST THE REGION
@@ -384,6 +681,14 @@ destruction, per-mark retention, vector paths disclosed by count. It does
 a Pass.
 
 ### `dfce8a9` — `chore: v0.27.0` — bumped and TAGGED locally; push / package / smoke / deploy / verify IN PROGRESS
+
+> ★ **RESOLVED 2026-09-03 (392nd filing) — VERIFIED.** Tag at `dfce8a9` on
+> `origin`, pushed with `3331b80`, CI green (run `33750084429`), packaged
+> (`D:\builds\pdfce-20260903-0717-dfce8a9`, 49,338,217 bytes),
+> smoke-tested, deployed to `pdfce2`, `verify-release.py` clean, bundle
+> `pdfce-2026-09-03-dfce8a9-full.bundle` on disk. Full record in the 392nd
+> filing's block above. This heading is kept as written because it was
+> true on its date.
 
 Version bump (`Cargo.toml`, both lockfiles — **3 files, 9 insertions, 9
 deletions** by `git show --stat`; **no dependency-set change**,
@@ -685,7 +990,7 @@ for `Pass 246.0`.
 
 > ★ **RESOLVED 2026-09-03 (391st filing) — VERIFIED.** Tag at `7d94fe3` on
 > `origin`, pushed with `1d91816`, CI green (run `33742631757`), packaged
-> (`D:uilds\pdfce-20260903-0553-7d94fe3`, 49,277,178 bytes), smoke-tested,
+> (`D:\builds\pdfce-20260903-0553-7d94fe3`, 49,277,178 bytes), smoke-tested,
 > deployed to `pdfce1`. Full record in the 391st filing's block above. This
 > heading is kept as written because it was true on its date.
 
@@ -114341,6 +114646,14 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+> ★★ **ONE ITEM ADDED 2026-09-03 (392nd filing), `Pass 246.1`'s NAMED
+> REMAINDER — a shading paint (`sh`) whose clip meets a redaction region
+> is DISCLOSED BY COUNT and NOT CUT.** `Pass 246.1` closed the silence
+> (the interpreter now tracks the clip as a box and counts); cutting the
+> shading out of the region is the item below. **Backlog, not *Next up*,
+> at the engineer's instruction** — exposure unmeasured, no operator file
+> carries an `sh`. `FEATURES.md`: one new *Planned* row; no box moves.
+
 > ★★ **ONE ITEM ADDED 2026-09-02 (384th filing), `Pass 240.0`'s NAMED
 > REMAINDER — shadings and meshes in an `ICCBased` RGB colour space are the
 > LAST unmanaged ICCBased route** after `Pass 240.0` made fills, strokes,
@@ -114363,6 +114676,72 @@ nothing gets forgotten, not as a commitment to build in this order.
 > knockout groups) now deposits.** `FEATURES.md`'s *Per-colorant (n-channel)
 > compositing buffer* row narrowed a fifth time to this single remaining
 > scope; no box moves.
+
+### Unscoped — ★★ A SHADING (`sh`) UNDER A REDACTION MARK IS DISCLOSED BY COUNT, NOT CUT — `Pass 246.1`'s NAMED REMAINDER — filed 2026-09-03 (392nd filing)
+
+**Status: NOT STARTED.** `Pass 246.1` (*Shipped*, above) made the
+redaction interpreter track the current clipping path as a page-space
+bounding box and count every `sh` whose clip box meets a region (or
+every `sh` with no clip at all, which paints the whole page). The count
+reaches the operator as `RedactionReport::shadings_intersecting`, the
+`shadings` carrier (`DisclosedNotScrubbed`), the CLI's
+`shadings_intersecting=` field and a note saying the shading was **NOT
+cut** and the region should be verified by eye. **The shading's paint
+inside the region is still in the output file.** This entry is the cut.
+
+**Why the cut is two different problems.** ISO 32000-1 §8.7.4.5.1: `sh`
+paints the shading over the whole current clip, so a shading's
+*geometry* is its clip for types 1–3 and its own vertex data for types
+4–7 (§8.7.4.5.5–5.8).
+- **Types 1–3 (function-based, axial, radial)** — no geometry beyond the
+  clip. The cut is a **clip construction**: rewrite the `sh` as `q <clip>
+  <region as a rectangle, reverse-wound or under W*> W n /Sh sh Q` so the
+  clip becomes the original clip intersected with the region's **even-odd
+  complement**. No shading data changes; the shading object is untouched;
+  the region simply falls outside the painted area. Needs the **exact
+  clip path**, not the bounding box `Pass 246.1` keeps — the interpreter
+  would have to retain the clip's construction operators (it has the
+  `PathRecord` at `W` time) and re-emit them.
+- **Types 4–7 (Gouraud triangle meshes, Coons and tensor patches)** —
+  explicit per-vertex data in the stream (`/BitsPerCoordinate`,
+  `/BitsPerComponent`, `/BitsPerFlag`, `/Decode`). Clipping the clip is
+  **insufficient**: the vertex data still describes colour inside the
+  region and a reader of the file can recover it, which is exactly what
+  redaction must prevent (the `Pass 8.0` posture; `redact_vector.rs`'s
+  cut-never-clip rule, decision 126). This needs **real surgery** —
+  triangles split at the region edge (three-way Sutherland–Hodgman on
+  each, colour interpolated at the new vertices), patches subdivided
+  (de Casteljau on the Coons/tensor control net) and the region's
+  pieces dropped — then the mesh stream re-encoded at the original bit
+  depths. A mesh-geometry Pass in its own right; the `Pass 246.0` strip
+  machinery does not carry over except in spirit.
+- **Shading PATTERNS** (`/Pattern` colour space with a `/PatternType 2`,
+  painted by a fill or stroke rather than by `sh`) — the **painted path**
+  is the geometry and `Pass 246.0` cuts it, so nothing is painted inside
+  the region; for a type 1–3 pattern that is the whole job. A **mesh-typed
+  pattern's** vertex data survives in the pattern object exactly as under
+  `sh`, and is this entry's subject too — same surgery, reached through
+  `/Resources /Pattern` instead of `/Shading`. (Not verified against a
+  fixture; a reading of the two code paths, stated as one.)
+
+**Corpus exposure: UNMEASURED.** None of the operator's eleven CAD
+redaction drawings carries an `sh`. Before scoping: a census over the
+2,500-file organic corpus for `sh` on pages, by `/ShadingType`, would
+size both halves — and if types 4–7 under a mark are as rare as the
+prior suggests, the type 1–3 clip construction may be the whole Pass and
+the mesh half a disclosed residual for a long time.
+
+**Acceptance shape, when scoped.** A pixel-level proof in the
+`redaction_leaves_no_ink.rs` mould: an axial shading under a full-page
+clip crossing a mark renders **zero** inked pixels inside the region and
+unchanged pixels outside it; `shadings_intersecting` reads **0** on that
+page after the cut (the counter survives as the residual — types the cut
+does not handle — the same narrowing `vector_paths_intersecting` took in
+`Pass 246.0`). And a `DisclosedNotScrubbed` → `Scrubbed` transition for
+the `shadings` carrier when every counted shading was cut.
+
+`FEATURES.md`: *Planned* row added under *Redaction & security*, all
+three boxes unticked.
 
 ### ~~Unscoped — ★★ SHADINGS AND MESHES IN A CIE OR ICCBased RGB SPACE STILL REINTERPRET RATHER THAN COLOUR-MANAGE — THE LAST UNMANAGED ROUTE~~ — **DISCHARGED 2026-09-03 (388th filing): SHIPPED AS `Pass 243.0` (`51fde3f`), THE VERY NEXT PASS** — filed 2026-09-02 (384th filing, `Pass 240.0`'s named remainder; widened 2026-09-02, 385th filing, `Pass 242.0`'s named remainder)
 

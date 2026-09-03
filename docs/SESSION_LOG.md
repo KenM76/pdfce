@@ -77381,12 +77381,12 @@ wrong."** Recorded as a bug in the gate, **not** as a weakening of `R232`.
   checker that cannot see its own subject has not found a fault in the
   repository, it has found one in itself.*
 - **★★★ THE SELF-CHECK EARNED ITS KEEP ON ITS FIRST RUN, AGAINST THIS COMMIT'S
-  OWN FIX.** The widened pattern initially kept `` and **failed the new
+  OWN FIX.** The widened pattern initially kept `\b` and **failed the new
   assertion** on `**decision _103_**` — `_` is a **word** character, so `3`
   followed by `_` is not a word boundary. **Underscore is markdown italics,
   one of the very wrapping styles the widening existed to tolerate: the fix
   and the bug were the same character.** `(?!\d)` now says what is meant. ⇒
-  **Never end a markdown-tolerant number pattern in ``.**
+  **Never end a markdown-tolerant number pattern in `\b`.**
 - **`FEATURES.md`: ZERO rows change**, checkboxes and prose —
   `git diff 645880b 4ace44f -- docs/FEATURES.md` = **0 lines**, run here, not
   relayed.
@@ -87916,3 +87916,165 @@ both `index.md` entries amended. No new file.
 no new lesson — the paper-not-black finding is a spec reading (Table 192)
 already carried by decision 126, and the cutting algorithm is pdfce's
 own, not a producer quirk.
+
+## 2026-09-03 (392nd filing) — `v0.27.0` (`dfce8a9`) RESOLVED pending → VERIFIED (tag on `origin`, CI green at `3331b80`, packaged 49,338,217 bytes, smoke-tested, deployed `pdfce2`, `verify-release` clean, bundle at `dfce8a9`); `a436432` closes the 391st filing's five owed "zero-sample" survivors (docs only); `Pass 246.1` (`ff738a6`) SHIPPED — a shading paint (`sh`) whose clip meets a redaction region is disclosed by count, the interpreter tracking the clip as a box for the first time; the cut filed *Backlog*; no decision, no rule; three literal backspace bytes in the two ledgers repaired
+
+**Sourcing (hard rule 8).** Shell available. Checked, with the command
+beside each: `git log` — `ff738a6` (`HEAD`, the Pass), `a436432`,
+`3331b80`, `dfce8a9`. `git rev-parse v0.27.0` = `dfce8a9`; `git
+ls-remote --tags origin v0.27.0` → `dfce8a9`; `git ls-remote origin
+main` = **`3331b80`** (so `a436432` and `ff738a6` are unpushed at filing
+time). `gh run list`: run `33750084429` at `3331b80`, `completed
+success`, 11:45Z. `du -sb D:\builds\pdfce-20260903-0717-dfce8a9` =
+**49,338,217** (`v0.26.0`'s folder: 49,277,178 — +61,039 bytes, +0.12 %).
+`OneDrive\pdfce2\pdfce-cli.exe --version` → `0.27.0` (built 11:17Z);
+`du -sb` = 32,379,979; `pdfce1` → `0.26.0`, 32,354,891. `ls
+D:\Dev\pdfce-backups\` → `pdfce-2026-09-03-dfce8a9-full.bundle`,
+49,227,991 bytes, 07:25 — **at the release commit, two commits behind
+`HEAD`**, which is right for a release bundle. Source: `clip_bbox`
+(`redact.rs:479`), the `sh` arm (`:914`), `shadings_intersecting`
+(`:388`), the `shadings` carrier (`:2790`), the test (`:3908`), the CLI
+field (`main.rs:22846`), `03-capabilities.md` = 2,773 lines by `wc -l`,
+`index.md:18` agrees; `grep zero-sample` over the three `a436432` files →
+nothing. **Relayed:** the fresh-folder smoke test, `verify-release.py`
+clean, `bundle verify` okay, `5,090 / 0`, the gate list.
+
+**Premises corrected:** none of the dispatch's figures disagreed with
+the disk. Two additions: the bundle is at `dfce8a9`, not `HEAD`; and the
+391st filing's owed list had **six** items — `a436432` closes the five
+doc/memory ones, and `tools/verify-release.py:203`'s mislabelled skip
+message is **still open** (`git log -- tools/verify-release.py` ends at
+`9228cad`).
+
+**Shipped:**
+- **`v0.27.0` — VERIFIED.** Carries `Pass 246.0` only. `Pass 246.1` and
+  `a436432` are unreleased at filing time.
+- **`a436432`** — docs only, 3 files / 5 lines: `redact_image.rs:41`,
+  `:65`, `:1197`; `03-capabilities.md:1633`; the engineer's
+  `project_pass8_redaction.md:17`. "1×1 zero-sample" → "1×1
+  paper-sample". Filed so `check-commits-filed.py` has a narrative.
+- **`Pass 246.1` (`ff738a6`)** — `sh` (§8.7.4.5.1) paints its whole
+  clip; the redaction `Surgeon` never tracked the clip, so a shading
+  crossing a mark was **neither cut nor counted** through `Pass 8.0`,
+  `245.0` and `246.0`. Now: `clip_bbox` (page-space box, `None` =
+  unclipped) intersected on every `W`/`W*` after the painting operator
+  per §8.5.4 or after `n`, saved/restored with `q`/`Q`, a clip with no
+  geometry clipping everything; an `sh` whose box meets a region — or
+  any `sh` with no clip — increments `RedactionReport::shadings_intersecting`;
+  a thirteenth carrier `shadings` reads `DisclosedNotScrubbed` when
+  non-zero (`Absent` otherwise), trips the existing acknowledgement gate,
+  and the note says NOT cut, verify by eye. CLI prints
+  `shadings_intersecting=`. One discriminating test (counted under a clip
+  over the region, not counted under one far away). **Nothing is cut** —
+  silence became disclosure. Found by the engineer while ranking
+  candidates, not by the operator.
+
+**Decisions made this session:**
+- **No decision record minted for `Pass 246.1`**, argued in the
+  `ROADMAP.md` block: box-not-path and disclose-not-cut are module-level
+  scoping under decision 126's existing posture, and a box **over-counts**
+  — the conservative direction. The per-type cut mechanism, when it
+  ships, will be a decision; the count is not.
+- **The cut is *Backlog*, not *Next up*** (engineer's instruction):
+  exposure unmeasured, no operator file carries an `sh`. Types 1–3 by
+  intersecting the clip with the region's even-odd complement (needs the
+  exact clip path, not the box); types 4–7 by mesh surgery (vertex data
+  is recoverable otherwise). Filed as one *Backlog* entry with an
+  acceptance shape; one *Planned* `FEATURES.md` row.
+- **No standing rule minted.** The backspace bytes (below) are the second
+  control-byte-in-a-doc occurrence after the 2026-08-18 carriage returns,
+  but the remedy is a **gate**, not a rule — a control-byte scan is
+  mechanical, the inverse of the rule-11 argument.
+
+**Findings + decisions:**
+- **Three literal `0x08` bytes where `\b` was meant, all planted by
+  librarian filings.** `grep -c $'\x08'`: `ROADMAP.md` 1 (`:688`, the
+  391st filing's RESOLVED footer, `D:\builds…` rendering as `D:uilds…`;
+  planted by `3331b80` per `git log -S`), `SESSION_LOG.md` 2 (`:77384`,
+  `:77389`, the 332nd filing's regex `\b` word-boundary token; planted
+  by `3d71ad2`), `ARCHITECTURE.md` 0, `FEATURES.md` 0. A fourth in
+  `.claude/agent-memory/pdfce-spec-librarian/project_corpus_state.md:70`
+  (`\bMK\b`) — **not this role's file; reported, not repaired.** All
+  three repaired to the two characters `\b` with the **Edit tool** —
+  verified by `git diff | cat -v`, no `^H` on any `+` line, backslash
+  present. **Vector not traced; consistent with the existing
+  `C:\personal_rag\claude_code\lesson_20260724_bash_tool_heredoc_backslash_mangling.md`**
+  (the Bash tool's transport layer collapses `\\` → `\` and a decoder
+  reads `\b` as backspace) — this role's definition lists no shell, but
+  the planting filings held one (they ran `git`/`gh`/`du`), so a heredoc
+  is live. **And this filing reproduced the mechanism twice while trying
+  to repair it, misdiagnosing the second:** a `sed` replacement typed
+  with a doubled backslash arrived as `\b` and wrote a bare `b`; a Python
+  heredoc's doubled-backslash replacement literal arrived as a real
+  backspace byte, so `replace(0x08 → 0x08)` wrote an identical file —
+  which was first read, wrongly, as *"the sandbox silently refused the
+  write"*. The correction's evidence: the lesson footer's own first
+  draft, written through the same heredoc, came out with `\b` where
+  `\\b` was typed. **A correction is a claim; this one was checked
+  against the bytes it produced.** Recorded as a dated recurrence
+  footer on
+  `C:\personal_rag\claude_code\lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`
+  (hard rule 4 — the lesson exists; amended, not duplicated), with the
+  practical rule: repair a control byte with the Edit tool, never
+  through a Bash-tool command.
+- **Recommended to the engineer, not built (`tools/` is outside this
+  role's remit):** a `tools/check-control-bytes.py` gate scanning
+  `docs/`, `.claude/`, `README.md` for bytes `0x00–0x08`, `0x0B–0x0C`,
+  `0x0E–0x1F` — one grep, mechanical, and the only defence that does not
+  depend on someone happening to `od -c` a path.
+
+**Hard-rule-11 sweep (`Pass 246.1` — claim: "what redaction leaves
+behind without cutting", now including shadings by count):**
+- `FEATURES.md:261` — "nine counters" → **ten**, `shadings_intersecting`
+  added; a shading-disclosure sentence added. **Fixed.**
+- `FEATURES.md:262` — *"Not cut: … `sh` shading fills"* — true, but
+  read as undisclosed. **Amended** to "disclosed by count since 246.1".
+- Correct survivors, not touched: `redact.rs:52` (module-doc table),
+  `:383-387` (field rustdoc), `03-capabilities.md:1608`/`:1617` — all
+  moved by `ff738a6`. `project_pass8_redaction.md:17` names forms and
+  vector paths and **omits shadings — incomplete, not wrong**; the
+  engineer's file, noted. Decision 126's "§4's API surface" paragraph
+  is dated and correct on its date.
+
+**Still in flight:**
+- `a436432` + `ff738a6` + this filing: **unpushed** at filing time
+  (`origin/main` = `3331b80`). Pushing is standing-authorised (decision
+  090); the scrub gate first, as always.
+- `tools/verify-release.py:203` message — still owed (engineer).
+- `.claude/agent-memory/pdfce-spec-librarian/project_corpus_state.md:70`
+  backspace byte — spec-librarian's file, reported.
+- `docs/NEXT_SESSION.md` §A item 2 — engineer amending it himself; **not
+  touched here.** Channel folder not touched.
+
+**For next session:**
+- Decide whether `Pass 246.1` + `a436432` ride the next bump or wait.
+- The `sh` census over the organic corpus (by `/ShadingType`) before
+  scoping the cut — it sizes both halves and may collapse the Pass to the
+  type 1–3 clip construction.
+- The control-byte gate (above).
+- Operator/engineer: the GitHub-release-page question carried from the
+  391st filing (no page since `v0.17.0`; OneDrive as the channel?).
+
+**`docs/FEATURES.md`:** *Apply redaction* row (shading sentence added,
+ten counters), *Vector-path redaction* row (the not-cut clause qualified),
+one new *Planned* row *Cut a shading out of a redaction region* under
+*Redaction & security*, all boxes unticked, Acrobat `?` (no
+`Acrobat_Features` record on the construct — checked by grep). **No box
+moves.**
+
+**`ROADMAP.md`:** new top *Shipped* block (392nd filing): sourcing,
+`v0.27.0` resolved → verified, `a436432` record, `Pass 246.1` full entry
+with the not-done argument and the rule-11 sweep, the backspace repair,
+no-mint arguments, ledger. The 391st block's `dfce8a9` record given a
+dated RESOLVED footer. *Backlog*: one new entry (`Pass 246.1`'s named
+remainder) with a head note. `:688` backspace repaired.
+
+**`ARCHITECTURE.md`:** untouched — no decision minted; the living
+`RedactionReport` field list is `03-capabilities.md`, already moved by
+`ff738a6`.
+
+**`D:\dev\rag\rust\` / `egui\`:** no change.
+
+**`C:\personal_rag\`:** one dated footer on
+`claude_code/lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`;
+no new lesson.

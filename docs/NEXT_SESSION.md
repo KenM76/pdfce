@@ -31,6 +31,7 @@ it tells me it can't"*) and then removed the residual the answer exposed:
 | vector paths | **left in place, not even disclosed** | **CUT** at the boundary: strokes vs region + stroke width, fills clipped to the complement, wholly-inside deleted (`Pass 246.0`, `redact_vector.rs`) |
 | `W`-marked path object | — | paint cut, ORIGINAL geometry kept as the clip (`vector_clips_kept`, noted) |
 | malformed path object (foreign op inside, §8.2) | — | the residual: `vector_paths_intersecting`, carrier `DisclosedNotScrubbed` |
+| `sh` shading whose clip meets the mark | — | counted + disclosed, not cut (`Pass 246.1`, carrier `shadings`) |
 
 **Proof by pixels:** `crates/pdfce-render/tests/redaction_leaves_no_ink.rs`
 rasterises an applied redaction and asserts zero inked pixels inside the
@@ -66,7 +67,7 @@ Candidates in the order I would take them:
 | # | Item | Measured exposure |
 |---|---|---|
 | 1 | **Mesh shadings deposit spot planes** — `mesh::paint_cmyk` takes `rules` and no planes. | 0.6 % of corpus; 2 visible pairs on the X-4 sheet |
-| 2 | **`sh` shading paints under a redaction mark** — `sh` fills the current clip; the redaction interpreter does not track the clip, so a shading crossing a mark is neither cut nor counted. Unmeasured; no operator file has one. Count-and-disclose is an hour; cutting needs clip tracking. | 0 files seen |
+| 2 | **`sh` shading paints under a redaction mark — CUT them.** Since `Pass 246.1` (`ff738a6`) they are COUNTED and disclosed (`shadings_intersecting`, carrier `shadings`); the interpreter now tracks the clip as a page-space box. Cutting: types 1–3 could be clipped out with an even-odd complement wrapper; types 4–7 carry vertex data and need real surgery. | 0 operator files seen |
 | 3 | **Images and paths inside a form XObject under a mark** — still `form_intersect` disclosed only. The CAD exporters seen so far draw on the page directly. | 0 of 11 operator files |
 | 4 | **`set_page_tabs(page, PageTabs)`** — pdfceGUI has not asked. | one request away |
 | 5 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. | rule 6 |
@@ -77,17 +78,18 @@ Candidates in the order I would take them:
 ## §B STATE OF THE TREE — verified 2026-09-03 ~12:00Z
 
 - **Shipped this session:** `Pass 245.0` (`98d4377`), `Pass 246.0`
-  (`194b3a1`); bumps `7d94fe3` (v0.26.0) and `dfce8a9` (v0.27.0); filings
+  (`194b3a1`), `Pass 246.1` (`ff738a6`, shading disclosure), `a436432`
+  (doc-comment survivors); bumps `7d94fe3` (v0.26.0) and `dfce8a9` (v0.27.0); filings
   390 and 391 (librarian). Decision 125 (tombstone-over-delete, per-mark
   retention). `RedactError::ImageRegion` is GONE (breaking → 0.26.0).
 - **Releases:** v0.26.0 tagged, packaged, smoke-tested, pushed, deployed to
   OneDrive `pdfce1`, verified (CI green at `1d91816`). v0.27.0 tagged at
   `dfce8a9`, packaged to `D:\builds\pdfce-20260903-0717-dfce8a9`, fresh-folder
-  smoke-tested (both binaries; the corner-mark run prints
-  `vector_paths_intersecting=0`, exit 0). Check its push/deploy/verify state
-  with `git log --oneline origin/main..HEAD`, `python tools/verify-release.py
-  v0.27.0`. OneDrive slots: pdfce1 = 0.26.0 or 0.27.0, pdfce2 = the other —
-  read `tools/deploy-onedrive.py --dry-run`.
+  smoke-tested (both binaries), pushed with `3331b80`, CI green there,
+  deployed to OneDrive `pdfce2` (pdfce1 = 0.26.0), `verify-release.py
+  v0.27.0` clean. `ff738a6` and `a436432` are AFTER the v0.27.0 tag and
+  unreleased at hand-off — a v0.28.0 is owed when the next Pass lands (or
+  now, if a session wants the shading disclosure on OneDrive).
 - **GitHub releases stop at v0.17.0.** No version since has had one;
   `verify-release.py` skips the check because its `gh` subprocess reports
   unavailable. Not a defect fixed this session; a standing state.
@@ -108,14 +110,14 @@ Candidates in the order I would take them:
   Run the ~22 script gates in a foreground loop, then
   `cargo test --workspace`, then the no-default-features / wasm / fuzz
   checks. **Run them on the FINAL tree.** Test-total convention: the sum of
-  every `test result:` line of `cargo test --workspace` — **5,089 / 0** at
+  every `test result:` line of `cargo test --workspace` — **5,090 / 0** at
   hand-off.
 - **iccce pinned rev** `a4d9003b` (v0.3.0); dependency SET unchanged since
   v0.22.0; `THIRD_PARTY_LICENSES.md` did not move.
 - **Every code commit is FILED** — `python tools/check-commits-filed.py`.
 - **Backups:** refresh with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
-  then `git bundle verify` on it. Not refreshed this session.
+  then `git bundle verify` on it. Refreshed this session at `dfce8a9`.
 
 ---
 
