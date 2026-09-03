@@ -87308,3 +87308,61 @@ deployed/verified) and `dbd6b57` (`chore: v0.24.0`, release steps in
 progress).
 
 **`ARCHITECTURE.md`:** untouched — no decision from this filing.
+
+## 2026-09-02 (387th filing) — `v0.24.0` release completed: tagged, pushed, packaged, smoke-tested, deployed and verified clean — resolves the 386th filing's "in progress" mark on `dbd6b57`
+
+**Sourcing (hard rule 8).** No shell this filing. Tag, package
+path/size, smoke-test output, deploy target, CI run outcome and
+`verify-release.py` output relayed verbatim by the engineer in the
+dispatch prompt, not independently confirmed via `git show`/`git log`.
+
+**Shipped:**
+- No new Pass. `v0.24.0` release (`dbd6b57` bump, tag at `dbd6b57`,
+  pushed) — packaged to `D:\builds\pdfce-20260902-2211-dbd6b57`
+  (**49,017,397 bytes**). Fresh-folder smoke test: both binaries
+  launched from a copy — `pdfce-cli --version` prints `pdfce-cli
+  0.24.0`; the Lab three-ways fixture probed **c=0.241 m=0.241 y=0.241
+  k=0.161** from the copied folder; `pdfce-gui.exe` launched. Deployed
+  to OneDrive slot `pdfce1` (`pdfce2` keeps `0.23.0`). Carries `Pass
+  242.0`.
+
+**Decisions made this session:**
+- None. No new `ARCHITECTURE.md` §12 entry; no new standing rule —
+  mint nothing was this filing's own instruction.
+
+**Findings + decisions:**
+- **CI.** The 386th filing's own commit `0317cb4` pushed together with
+  the `v0.24.0` tag. The run at `dc31dd1` (the 385th filing's own
+  pushed tip) had **FAILED** on `check-commits-filed` because `6876cd3`
+  was unfiled — the omission the 386th filing's entry recorded and
+  closed. The run at `0317cb4` is **GREEN**.
+- `python tools/verify-release.py v0.24.0`: **clean** — "tag, HEAD,
+  origin/main, CI and the release agree." Accepted the green run at
+  `0317cb4`, a **docs-only descendant** of the tag `dbd6b57`, per
+  `R217`'s eighth amendment note — the same walk-the-range mechanism
+  that resolved `v0.22.0` in the 382nd/383rd filings, working as
+  designed on its second release.
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather
+  than inferred.
+
+**Still in flight:**
+- The build-provenance-banner literal correction flagged by the 381st
+  filing (three sites: two in `crates/`, one in `docs/FEATURES.md`) —
+  still owed to the engineer; unrelated to this filing and not touched
+  by it.
+
+**For next session:**
+- `v0.24.0` is the current release on OneDrive slot `pdfce1`;
+  `pdfce2` still carries `0.23.0`.
+
+**`docs/FEATURES.md`:** untouched — no capability shipped by this
+filing (a release completion, not a Pass).
+
+**`ROADMAP.md`:** new top *Shipped* entry (387th filing) recording the
+completed `v0.24.0` release; inline "★ RESOLVED" amendment notes added
+to the 386th filing's own entry (both prior "in progress" mentions on
+`dbd6b57`), per the append-only discipline — nothing in that entry's
+original text removed or rewritten.
+
+**`ARCHITECTURE.md`:** untouched — no decision from this filing.

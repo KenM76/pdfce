@@ -96,6 +96,58 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 387th filing, 2026-09-02 — `v0.24.0` RELEASE COMPLETED: TAGGED,
+PUSHED, PACKAGED, SMOKE-TESTED, DEPLOYED AND VERIFIED CLEAN — RESOLVES
+THE 386th FILING'S "IN PROGRESS" MARK ON `dbd6b57`.**
+
+**Sourcing (hard rule 8).** No shell this filing. Tag, package path/size,
+smoke-test output, deploy target, CI run outcome and `verify-release.py`
+output relayed verbatim by the engineer in the dispatch prompt, not
+independently confirmed via `git show`/`git log`.
+
+### `v0.24.0` release (`dbd6b57` bump, tagged at `dbd6b57`) — packaged, smoke-tested, deployed, verified clean
+
+Tag `v0.24.0` cut at `dbd6b57`, pushed. Packaged to
+`D:\builds\pdfce-20260902-2211-dbd6b57` (**49,017,397 bytes**).
+**Fresh-folder smoke test**: both binaries launched from a copy —
+`pdfce-cli --version` banner prints `pdfce-cli 0.24.0`; the Lab
+three-ways fixture probed **c=0.241 m=0.241 y=0.241 k=0.161** from the
+copied folder; `pdfce-gui.exe` launched. Deployed to OneDrive slot
+`pdfce1` (`pdfce2` keeps `0.23.0`).
+
+**CI.** This filing's own commit (386th filing, `0317cb4`) pushed
+together with the tag. The run at `dc31dd1` (the 385th filing's own
+pushed tip) **FAILED** on `check-commits-filed` — `6876cd3` was
+unfiled, the omission the 386th filing's entry recorded and closed.
+The run at `0317cb4` is **GREEN**.
+
+`python tools/verify-release.py v0.24.0`: **clean** — "tag, HEAD,
+origin/main, CI and the release agree." Accepts the green run at
+`0317cb4`, a **docs-only descendant** of the tag `dbd6b57`, per
+`R217`'s eighth amendment note (the same walk-the-range mechanism
+that resolved `v0.22.0` in the 382nd/383rd filings).
+
+**What the release carries.** `Pass 242.0` (already filed as
+*Shipped*, below) — `dbd6b57` sits directly on top of it, per the
+386th filing's own record.
+
+`docs/FEATURES.md`: untouched — no new capability from this filing (a
+release completion, not a Pass).
+
+#### Standing rules — no new mint
+
+Per this role's own instruction for this filing: mint nothing.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | unchanged — no Pass ships from this filing |
+| Decisions | ceiling `123`, next free `124` | unchanged |
+| Standing rules | ceiling `R240`, next free `R241` | unchanged |
+
+---
+
 **★★ 386th filing, 2026-09-02 — TWO RELEASE COMMITS FILED LATE, CLOSING
 THE GAP THAT LEFT `tools/check-commits-filed.py` RED AT THE PUSHED TIP
 `dc31dd1`: `6876cd3` (`chore: v0.23.0`) WAS OMITTED FROM BOTH THE 384th
@@ -109,6 +161,11 @@ show`/`git log`. `dbd6b57`'s tag/package/smoke-test/deploy/
 `verify-release.py` steps are stated as **in progress at filing
 time** — the engineer verifies and completes them immediately after
 this filing — and are **not** claimed here as done.
+
+**★ RESOLVED 2026-09-02, 387th filing — see the new top *Shipped*
+entry.** `dbd6b57` is tagged `v0.24.0`, pushed, packaged, fresh-folder
+smoke-tested, deployed to OneDrive slot `pdfce1`, and
+`verify-release.py v0.24.0` reports clean.
 
 **The drift, named plainly, per this filing's own dispatch.** `6876cd3`
 (`chore: v0.23.0`) is a version bump touching `crates/*/Cargo.toml` and
@@ -169,6 +226,12 @@ push together). Not claimed as done here; a follow-on filing entry is
 expected once complete, mirroring this project's own `v0.22.0` pattern
 (381st → 382nd → 383rd filings, where the release cut and its
 verification landed in separate entries).
+
+**★ RESOLVED 2026-09-02, 387th filing — see the new top *Shipped*
+entry.** Tag `v0.24.0` cut at `dbd6b57`, pushed; packaged to
+`D:\builds\pdfce-20260902-2211-dbd6b57` (49,017,397 bytes); fresh-folder
+smoke test passed; deployed to OneDrive slot `pdfce1` (`pdfce2` keeps
+`0.23.0`); `verify-release.py v0.24.0` clean.
 
 `docs/FEATURES.md`: untouched — no capability shipped by this filing (a
 version bump, not a Pass).
