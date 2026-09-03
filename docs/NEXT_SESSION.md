@@ -43,6 +43,21 @@ the default). **Every patch the harness can judge passes.** The 8 unresolved
 are reference-strip / positive-criterion / no-detector patches the harness
 cannot score either way; the operator has read those by eye before.
 
+**Renders of the operator's six-page X-4 sheet from the v0.25.0 binary** are
+at `D:\Dev\temp\n3\sheet_out\x4_page1..6.png` (full size, scale 1.5) and
+`…_small.png` (two-thirds, for viewing). Re-render with
+`pdfce-cli render-page D:/Dev/temp/ghent-parity/in/<the sheet>.pdf --page N --scale 1.5`.
+Two things visible on those pages that are NOT harness failures and are
+worth knowing before someone reports them:
+
+* `4.1` cell b ("almost White"): the reference shows the same faint X — the
+  patch is designed to; pdfce additionally draws a **hairline warm outline
+  along the X's edges** where the reference has none. An antialiased
+  overprint seam (the cross's edge pixels composite at partial coverage
+  against the rect). Unmeasured; small; a candidate, not a failure.
+* `6.0` / `6.1`: the two type 7 mesh pairs on page 1 are the still-wrong
+  shading pairs — §1 item 1.
+
 ---
 
 ## §1 NEXT: there is no colour item left on the sweep — pick from §A
@@ -76,7 +91,24 @@ Candidates in the order I would take them:
 
 ---
 
-## §B STATE OF THE TREE — verified 2026-09-02
+## §B STATE OF THE TREE — verified 2026-09-03 07:30Z
+
+- **Shipped this session (2026-09-02 → 03):** Passes 240.0 (ICCBased RGB on
+  every route; the 214.0 refusal retracted), 241.0 (preset disclosures carry
+  a set claim's why), 242.0 (Lab/CalRGB/CalGray through the output intent;
+  the /Indexed-over-Lab palette fix), 243.0 (shadings and meshes through
+  `ColorBridges`), 244.0 (zero-tint default → literal). Releases v0.23.0,
+  v0.24.0, v0.25.0 — each tagged, packaged, smoke-tested, deployed, verified.
+  Filings 384–389. Decision 124, rule R240 minted by the librarian.
+- **Clean at hand-off:** `git status` empty; `origin/main` == HEAD
+  (`7db84cb`); CI green at `6067d9a`; `check-commits-filed.py` clean;
+  `verify-release.py v0.25.0` clean. OneDrive: pdfce2 = 0.25.0, pdfce1 =
+  0.24.0.
+- **pdfceGUI channel:** two files of ours await their consumption —
+  `reply_disclosures_now_carries_the_why_of_a_set_claim_delete_your_workaround.md`
+  and `note_the_overprint_zero_tint_default_moved_to_device_cmyk_only.md`.
+  The iccce reply `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`
+  is STILL unread by any pdfce session.
 
 - **`tools/run-gates.sh` cannot survive being backgrounded.** Twice this
   session the harness moved it to the background after 10 min and killed
@@ -97,7 +129,9 @@ Candidates in the order I would take them:
 - **iccce is pinned to a `rev`** (`a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3`,
   the `v0.3.0` tag's commit). The banner prints `iccce: 0.3.0 (rev a4d9003b,
   committed …)` since `Pass 240.0` (it printed the 40-char pin AND the
-  abbreviation before). Dependency SET unchanged since v0.22.0.
+  abbreviation before). Dependency SET unchanged since v0.22.0
+  (`iccce-color` became a DIRECT edge in `Pass 242.0`; it was already in
+  the tree, so `THIRD_PARTY_LICENSES.md` did not move).
 - **Every code commit is FILED** — `python tools/check-commits-filed.py`.
 - **Backups:** refresh with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
