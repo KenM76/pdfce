@@ -172,6 +172,18 @@ if [ "$LIST_ONLY" = "1" ]; then
     exit 0
 fi
 
+# R241 (394th filing): the three public-facing gates are bound to `git push`
+# by `tools/hooks/pre-push`, but only when this clone's `core.hooksPath`
+# points there -- git config is not versioned, so a fresh clone has no hook.
+# Say so on every sweep; a first bad push is the wrong place to find out.
+if [ "$(git config --get core.hooksPath 2>/dev/null)" = "tools/hooks" ]; then
+    printf 'pre-push hook: ACTIVE (core.hooksPath = tools/hooks)
+'
+else
+    printf 'pre-push hook: NOT ACTIVE -- run: git config core.hooksPath tools/hooks
+'
+fi
+
 failed=()
 run_one() {
     local cmd="$1"

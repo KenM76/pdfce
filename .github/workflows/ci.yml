@@ -380,19 +380,6 @@ jobs:
       - name: check every outcome field is surfaced by a shell
         run: python tools/check-outcome-disclosed.py
 
-      # Every CODE commit is named in the record. `check-passes-filed.py`
-      # already covers commits that CLAIM a Pass ID; most claim none, and
-      # for those it is blind — which is how eleven commits, including a
-      # dropped-transparency fix and the removal of a third party's
-      # confidential material, reached HEAD with no roadmap presence at all.
-      #
-      # Both times that backlog was discovered it was an accident. This is
-      # the exhaustive walk that replaces the accident. See the script's
-      # header for the ratchet, and why the known debt lives in a file
-      # rather than in a green gate that guards nothing.
-      - name: check that every code commit is filed
-        run: python tools/check-commits-filed.py
-
       # ------------------------------------------------------------------
       # ★★ THE EIGHT GATES THAT EXISTED AND CI DID NOT RUN
       #
@@ -597,6 +584,26 @@ jobs:
       # text, and the gate says so rather than pretending.
       - name: check a many-check job says how many
         run: python tools/check-ci-job-names.py
+
+      # Every CODE commit is named in the record. `check-passes-filed.py`
+      # already covers commits that CLAIM a Pass ID; most claim none, and
+      # for those it is blind — which is how eleven commits, including a
+      # dropped-transparency fix and the removal of a third party's
+      # confidential material, reached HEAD with no roadmap presence at all.
+      #
+      # Both times that backlog was discovered it was an accident. This is
+      # the exhaustive walk that replaces the accident. See the script's
+      # header for the ratchet, and why the known debt lives in a file
+      # rather than in a green gate that guards nothing.
+      #
+      # LAST in this job, deliberately (394th filing, 2026-09-03). By R217's
+      # design a filing gate is red on every push that carries a code
+      # commit ahead of its filing; when it sat sixth, a red here left the
+      # sixteen steps after it UNRUN, including a new gate's first CI run.
+      # A step that is expected to be red sometimes must not hide verdicts
+      # that are never expected to be.
+      - name: check that every code commit is filed
+        run: python tools/check-commits-filed.py
 
   cross-check:
     name: cross-target compile check (macOS / wasm32)

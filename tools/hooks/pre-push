@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# pre-push -- the three repo-scoped gates run BY GIT, not by a human.
+#
+# WHY THIS EXISTS (standing rule R241, 394th filing, 2026-09-03)
+# ==============================================================
+# Three times a pre-push gate ran, was correctly RED, and the push happened
+# anyway: once through `| tail` (a pipe returns the last element's status),
+# once through `cmd; echo rc=$?; other && git push` (the push depended on the
+# wrong command), once by reading "ok" from a neighbouring gate. Each time a
+# written rule said "run the gate before every push" and each time it WAS
+# run. The failure is not attention; it is that a human reads an exit code
+# and a command chain does not have to. So the binding is moved into git:
+# with `core.hooksPath` pointing here, `git push` cannot reach the remote
+# until these three exit 0, and no chain the engineer types can route around
+# that short of `--no-verify`, which is a deliberate, visible act.
+#
+# WHICH GATES, AND WHY ONLY THESE
+# ===============================
+# The three whose failure is *public* the moment a push lands -- the
+# repository is public (`LEGAL.md` section 1.1):
+#   check-suite-name-absent.py   a licensed suite's name in a public tree
+#   check-commits-filed.py       a code commit with no narrative, CI red
+#   check-control-bytes.py       a swallowed escape shipped as a control byte
+# The rest of the sweep (fmt, clippy, tests, the other twenty scripts) is
+# CI's job and takes minutes; a pre-push hook that takes minutes gets
+# `--no-verify`'d out of habit, and then guards nothing.
+#
+# INSTALL (per clone; git config is not versioned)
+# ================================================
+#   git config core.hooksPath tools/hooks
+# `tools/run-gates.sh` prints whether the hook is active so a fresh clone
+# finds out on its first sweep rather than on its first bad push.
+#
+# Never pipe these. Never `;` them. Each runs bare and the hook exits on the
+# first failure, printing which gate refused.
+
+set -u
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+for gate in \
+    "python tools/check-suite-name-absent.py" \
+    "python tools/check-commits-filed.py" \
+    "python tools/check-control-bytes.py"
+do
+    if ! $gate; then
+        echo
+        echo "pre-push: REFUSED by: $gate"
+        echo "pre-push: fix it (or file it), then push again. \`git push --no-verify\` bypasses"
+        echo "pre-push: this hook; if you type that, say so in the next filing."
+        exit 1
+    fi
+done
+exit 0
