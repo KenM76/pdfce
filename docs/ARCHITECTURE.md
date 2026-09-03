@@ -6680,9 +6680,10 @@ instances (`delete_object`, `delete_redaction_mark`, and now
   folder and the offsite copy of the build — and neither is a `git
   bundle`. Nine versions (`v0.18.0`–`v0.26.0`) reached only OneDrive
   because the recipe did not name the second channel; decision 127 exists
-  so that cannot recur by omission, and `verify-release.py`'s
-  GitHub-release check is owed a `FAIL` (not `skip`) on a missing release
-  so it cannot recur by habit either.
+  so that cannot recur by omission, and since `c0c8dee` (2026-09-03)
+  `verify-release.py`'s GitHub-release check **fails** on a missing
+  release — `skip` only when `gh` is not installed on the machine
+  (`shutil.which`) — so it cannot recur by habit either.
 
 ## 7. CLI capabilities (`pdfce-cli`)
 
@@ -30671,3 +30672,16 @@ decision 121 flagged the same sentence.
 **Decision ceiling moves `126` → `127`; next free `128`.** **Standing rules
 ceiling `R241` — unchanged**, next free `R242`; no rule minted (argued
 above).
+
+> ★ **ARMED 2026-09-03 (396th filing, `c0c8dee`).** The owed half is
+> done: `tools/verify-release.py` distinguishes *`gh` not installed*
+> (`shutil.which("gh") is None` → `skip`, a machine fact) from *`gh
+> release view <tag>` failed* (→ **`FAIL GitHub release exists`**, the
+> message naming this decision, `gh release create` and `gh auth status`).
+> Probed both ways by the engineer and again by the librarian: `v0.27.0`
+> → `ok`; `v0.26.0` → `FAIL … release not found`. The argument above for
+> not minting a rule number now holds in full — the gate fails closed, so
+> the gate is the rule. The heading's *"EXISTS AND IS DISARMED"* is kept
+> as history of the state this decision was written in. The same commit
+> resolves `R241` clause 2's variance (the sweep goes red on an inactive
+> hook), recorded under that rule.

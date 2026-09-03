@@ -317,9 +317,12 @@ does.
 | `cbc` (RustCrypto mode crate) | MIT OR Apache-2.0 (convention, not re-fetched live) | adopt, **re-verify version at Cargo.toml time** | Needed for AES-CBC (PDF AESV2/AESV3). |
 | `sha2` | MIT OR Apache-2.0 | adopt | Revision-6 security handler + PAdES hashing. |
 | `md-5` | MIT/Apache-2.0 (convention, not re-fetched live) | adopt, **re-verify version** | Legacy Standard Security Handler revisions 2-4. |
-| `rsa` (RustCrypto) | MIT OR Apache-2.0 | adopt, **watch item** | Pure Rust. **Open RustSec advisory RUSTSEC-2023-0071 ("Marvin Attack" timing side-channel)** — relevant for signature-verification paths handling attacker-controlled input; monitor for resolution before shipping. |
+| `rsa` (RustCrypto) | MIT OR Apache-2.0 | adopt **for signing only**, **watch item — still pre-1.0** | Pure Rust. **`0.10.0-rc.18` on 2026-09-03** (`cargo info`) — a release candidate, not a release. **Open RustSec advisory RUSTSEC-2023-0071 ("Marvin Attack" timing side-channel)** — ★ **narrowed 2026-09-03 (396th filing):** Marvin is a *private-key* timing channel (decryption / signing with the secret exponent). ~~relevant for signature-verification paths handling attacker-controlled input~~ — **it does not apply to verification**, which handles no secret: the public key, the signature and the digest are all in the file, and a timing leak of any of them leaks nothing. It applies to a future signing Pass, where it must be resolved before shipping. `Pass 10.1` (verification) therefore does not take this crate — see the `num-bigint` row and the 2026-09-03 decision-log entry. |
 | `ring` | non-standard mixed license (ISC-style + BoringSSL-derived C/asm) | **avoid in pdfce-core** | Ships C/asm for perf-critical primitives — needs a C/asm toolchain per target, hurts WASM. Prefer the pure-Rust RustCrypto stack; reconsider only behind a feature flag if perf genuinely forces it. |
-| `cms` (RustCrypto/formats) | Apache-2.0 OR MIT | adopt, **pre-1.0 — track stabilization** | Pure-Rust CMS (RFC 5652), parses **and** builds SignedData. Right building block for PAdES (CMS-based, PKCS#7 successor). Was `0.3.0-pre.2` at verification — recheck before any release freeze. |
+| `cms` (RustCrypto/formats) | Apache-2.0 OR MIT | adopt, **pre-1.0 — track stabilization** | Pure-Rust CMS (RFC 5652), parses **and** builds SignedData. Right building block for PAdES (CMS-based, PKCS#7 successor). Was `0.3.0-pre.2` at verification (2026-07-23) — **and still `0.3.0-pre.2` on 2026-09-03** (`cargo info`, 396th filing): six weeks with no release. For `Pass 10.1` (verification) the engineer's stated intention is an in-house minimal DER/CMS/X.509 **walker** (~500 lines, read-only, fuzzable) rather than depending on pre-1.0 churn — the *building* half (SignedData construction, for signing) is where this crate would still earn its place. Recheck before any release freeze. |
+| `num-bigint` | MIT OR Apache-2.0 | **candidate — verification only** (licence-checked 2026-09-03, `cargo info`: 0.5.1) | RSA modular exponentiation with the *public* exponent for `Pass 10.1`. No secret handled, so no constant-time requirement and no Marvin exposure. ★ **Recorded as a candidate, and the engineer's untracked tree on 2026-09-03 was already going the other way**: `crates/pdfce-core/src/crypto/bignum.rs` — *"Arbitrary-precision unsigned integers for public-key verification only … schoolbook multiplication and shift-subtract division, correct and slow, in safe Rust, with no secret to protect. It does NOT extend to signing."* The stated reason: the ecosystem stack (`num-bigint` / `crypto-bigint` / `p256` / `p384` / `ecdsa` / `elliptic-curve`) resolves to ~25 crates, several carrying `unsafe` with cfg-selected constant-time backends — the shape decision 039 accepted for `aes` only after argument, for a property (constant time) verification does not need. **Not decided**; decided when `Pass 10.1` ships, on whichever argument survived the fuzzer. Rule 13 applies if it enters `Cargo.toml`. |
+| `p256` / `p384` (RustCrypto) | Apache-2.0 OR MIT | **candidate — verification only** (licence-checked 2026-09-03, `cargo info`: 0.14.0 both) | ECDSA verify over NIST P-256 / P-384 for `Pass 10.1`, `default-features = false, features = ["ecdsa"]`. Same posture and same in-house alternative as the `num-bigint` row: prime-field arithmetic with no secret. Signing, if it ever ships, gets the constant-time dependency — the `aes` argument, not the `md5` one. |
+| `sha1` (RustCrypto) | MIT OR Apache-2.0 | **candidate — verification only** (licence-checked 2026-09-03, `cargo info`: 0.11.0) | SHA-1 digests for `adbe.pkcs7.sha1` and SHA-1-signed PKCS#7 (legal in PDF 1.7, verified because real files carry it — never *produced*). Sibling of the adopted `sha2`. pdfce already carries in-house `md5.rs` on the *frozen, small, the weakness is the standard's* argument, which reaches SHA-1 equally; either route is fine, the choice is recorded at ship. |
 | `pkcs7` (RustCrypto/formats) | — | **skip, deprecated** | Maintainers explicitly redirect to `cms`. |
 | `x509-parser` | MIT/Apache-2.0 | adopt | nom-based, zero-copy, fuzzed. Cert reading/validation during PAdES verification. |
 | `x509-cert` (RustCrypto) | Apache-2.0 OR MIT | adopt | Cert construction, shares the `der` crate ASN.1 foundation with `cms` — natural pairing. |
@@ -433,8 +436,12 @@ decision log).
 - `postscript` and `font` (pdf-rs) crates: Type1 support depth, and
   the `font` crate's crates.io-vs-GitHub date mismatch specifically.
 - `cms` crate: pre-1.0 stabilization status — recheck before any
-  release freeze.
-- `rsa` crate: RUSTSEC-2023-0071 advisory resolution status.
+  release freeze. *Re-checked 2026-09-03: still `0.3.0-pre.2`; still
+  open.*
+- `rsa` crate: RUSTSEC-2023-0071 advisory resolution status. *Re-checked
+  2026-09-03: `0.10.0-rc.18`; the advisory's scope narrowed to signing
+  in the table above — irrelevant to `Pass 10.1`, still open for any
+  signing Pass.*
 - ONLYOFFICE Desktop Editors: license terms for the desktop-editor
   component specifically — not investigated.
 
@@ -548,3 +555,27 @@ the same way, in minutes, whenever they next matter.
     cannot cross wasm32. `iccce` now gates `wasm32` in its own CI
     (2026-08-17) *and* asserts every crate in its `cargo tree` is one of
     theirs, so adopting it does not import a supply-chain surface.
+- **2026-09-03 (396th librarian filing) — Cryptography table amended for
+  `Pass 10.1` (signature verification, *Next up*) and the signing
+  *Backlog* split.** Three rows added as **candidates, verification
+  only**, each licence-checked live by `cargo info`: `num-bigint` 0.5.1
+  (MIT OR Apache-2.0), `p256` / `p384` 0.14.0 (Apache-2.0 OR MIT),
+  `sha1` 0.11.0 (MIT OR Apache-2.0). Two rows re-dated: `cms` is still
+  `0.3.0-pre.2` (unchanged since 2026-07-23) and `rsa` is `0.10.0-rc.18`
+  — both pre-1.0 on 2026-09-03. **The `rsa` row's Marvin note was wrong
+  in scope and is narrowed**: RUSTSEC-2023-0071 is a private-key timing
+  channel; verification handles no secret, so it does not apply to
+  `Pass 10.1` and does apply to any future signing Pass. **Engineer's
+  intended direction, recorded and not decided:** an in-house minimal
+  DER / CMS / X.509 walker (~500 lines, fuzzable) instead of `cms`, and
+  — one step further than the dispatch, read from the untracked tree —
+  in-house verification-side big-number arithmetic in safe Rust
+  (`crates/pdfce-core/src/crypto/bignum.rs`, 13,675 B at filing) instead
+  of the ~25-crate `num-bigint` / `p256` stack, on the argument that
+  constant-time code protects a secret and verification has none; the
+  same file states the judgement *does not extend to signing*. **Nothing
+  added to any `Cargo.toml` by this entry**; the decision is minted in
+  `ARCHITECTURE.md` §12 when the Pass ships, with rule 13's
+  `THIRD_PARTY_LICENSES.md` regeneration if any crate enters. Sourcing
+  for the Pass itself: `ROADMAP.md` *Next up*, `Pass 10.1`; the request
+  and reply in `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`.

@@ -88466,6 +88466,15 @@ against the directory.
   — by `R217`'s design; stated so the default run's `clean` is not read
   as covering the tip.
 
+**Operator, mid-filing, verbatim:** *"sorry. didn't realize the
+consequenses of my little web-edit! Can you record what I changed, roll
+it back, then add the changes and roll it forward into your release?"*
+Recorded (next paragraph). **Not rolled back** — removing `c1e4c17` from
+`origin/main` is a force-push (decision 090's standing exclusion, and it
+would kill every citation of that hash); a **merge** does what the
+sentence asks with nothing rewritten. Read as *"make it land properly"*,
+not as authority to rewrite published history.
+
 **What `c1e4c17` says.** The README's head: the GUI *"has been moved
 into it's own pdfceGUI project"*, the in-repo one is *"obselete"*, link
 **`https://github.com/KenM76/pdfceGUI`** — the first appearance of that
@@ -88519,7 +88528,8 @@ engineer's call.
 - **`R241` clause table** (in `ROADMAP.md`): 1 built; **2 built as a
   report, not a red** — variance recorded, not rounded up; 3 lapsed; 4
   in force. Owed (small): make the line fail the sweep, or amend clause 2
-  to say "reports".
+  to say "reports". *Amended 2026-09-03 (396th filing): clause 2 is RED
+  as of `c0c8dee`; four-for-four.*
 
 **Findings + decisions:**
 - **A web-editor commit is a route around the hook, by construction.**
@@ -88573,6 +88583,10 @@ engineer's call.
   not-found release, `skip` only when `gh` is genuinely unavailable
   (decision 127's mechanism); reconcile `R241` clause 2 with the
   report-only sweep line (either direction).
+  *Both RESOLVED 2026-09-03 (396th filing, `c0c8dee`): `FAIL` on a
+  missing release, `skip` only when `gh` is absent from the machine
+  (`shutil.which`); the hook line fails the sweep — clause 2 kept as
+  written.*
 - Unreleased: `ff738a6`, `a436432`, `35fbf6c`, `67ee5d6`, `4319f06`,
   `68163a2`, `f23543e`, `c1e4c17` + both filings — the next bump is the
   engineer's call, and it will be the first release under decision 127.
@@ -88604,5 +88618,239 @@ Decision ceiling `126` → `127`, next free `128`.
 `rust/a_gate_read_by_a_human_and_not_consumed_by_the_act_protects_nothing.md`
 (mechanism built, the report-only variance, the web-editor route, the
 `skip`-branch corollary). Two `index.md` bullets (one new, one amended).
+
+**`C:\personal_rag\`:** no change.
+
+---
+
+## 2026-09-03 (396th filing) — `c0c8dee`: `verify-release.py` FAILS on a missing GitHub release (`skip` only when `gh` is absent from the machine) — decision 127's mechanism ARMED; `run-gates.sh` goes RED on an inactive pre-push hook — `R241` clause 2 RESOLVED, four-for-four; local `main` MERGED with the operator's web commit (`b151a80`), `check-cited-commits-exist` clean, 4 ahead / 0 behind, unpushed. Two `pdfceGUI` requests (O108) parsed and answered: **`Pass 10.1`** (verify a signature — integrity + coverage, trust `NotChecked`) and **`Pass 5.4`** (encrypt on save, `/R` 6 only; permissions; remove encryption) filed *Next up* in that order, signing *Backlog* by name. ★★★ Premise corrected: `/R` 6 has been SOURCED since 2026-08-12 and no pdfce document, doc comment or error string knew. Operator question `(cc)` filed. No decision, no rule.
+
+**Sourcing (hard rule 8).** Shell available; every figure produced here,
+command beside it. `check-ledger-numbers.py` → clean; filings ceiling
+**395** → this is the **396th**; Pass ceiling `246.1`; rules `R241`;
+decisions `127`, next free `128`. `check-cited-commits-exist.py` →
+**clean, 79 documents** (red at the 395th; the merge fixed it). `git
+log --oneline -4` → `c0c8dee` → `b151a80` (merge of `c1e4c17`) →
+`422b405` / `c1e4c17`; `git rev-list --left-right --count
+main...origin/main` → **`4 0`** — `f23543e`, `422b405`, `b151a80`,
+`c0c8dee` unpushed; `origin/main` = `c1e4c17`. `git show c0c8dee --stat`
+→ 2 files, **+37 / −14** (`run-gates.sh` +5/−1, `verify-release.py`
++32/−13). **Probed here:** `verify-release.py v0.26.0` → `FAIL GitHub
+release exists … release not found -- decision 127 …`; `v0.27.0` →
+`ok GitHub release has at least one asset`. `git config core.hooksPath`
+→ `tools/hooks`. `check-commits-filed.py` → clean, **780** code commits
+(+1 = `c0c8dee`); `--strict-tip` → 1 unfiled, `c0c8dee` — filed here.
+`check-control-bytes.py` → **919** (395th: 916; +3 = the three
+untracked files below). `check-suite-name-absent.py` → clean. `git
+status --short` → ` M crypto/mod.rs` (+`pub mod bignum;`), ` M
+ROADMAP.md` / ` M SESSION_LOG.md` (an operator-quote paragraph in the
+395th block/entry, present and uncommitted before this filing began,
+left in place), `?? crypto/bignum.rs` (13,675 B, 08:52), `??
+tools/gen-signed-fixtures.py` (11,161 B, 08:49), `??
+fixtures/synthetic/signature-verify/` (`PROVENANCE.md` + 7 PDFs, 08:49).
+Channel `ls`: the two requests 08:27 (4,369 B) / 08:28 (3,750 B), the
+reply 08:41 (4,537 B), `done_2026-09-03-redaction-images-CONSUMED.md`
+07:20 (11,067 B). Spec corpus read directly: `security__aes256_r6.md`
+(`date: 2026-08-12`, `licensed_primary_private_rag`, §2 *COMPLETE*);
+`iso32000__ref__encryption_impl.md` A8 / W17 / W19 / W20 / A13, §H `/R
+6` row *GAP CLOSED 2026-08-12*; `iso32000__s__12.8.md` (2026-07-31)
+header *"STILL NOT ingested … §12.8.3's PKCS#1/PKCS#7"*. `grep
+aes256_r6\|2\.B` over the three ledgers → no record of the closure.
+`grep -rn unsourced crates/pdfce-core/src/crypto/` → 8 literal hits (11
+claim survivors, listed below). `cargo info`: `num-bigint` 0.5.1,
+`p256`/`p384` 0.14.0, `sha1` 0.11.0, `cms` **0.3.0-pre.2**, `rsa`
+**0.10.0-rc.18**. **Not touched:** `NEXT_SESSION.md`, the channel
+folder, memory files, `tools/`, `crates/`. Backup bundle: not asked;
+newest known here is the 392nd filing's `dfce8a9` bundle, unverified.
+**Re-measured at close:** the tree had grown — ` M lib.rs`, ` M
+signature.rs`, ` M tools/gen-signature-fixtures.py`, three re-generated
+coverage fixtures (09:06), untracked `asn1.rs`, `cms.rs`,
+`crypto/{bignum,ecdsa,rsa,sha1}.rs`, `signature_verify.rs`,
+`tests/signature_verify.rs`; `check-control-bytes.py` → **926** (919 +
+7). The in-house direction is in the tree as source, not only as a
+docstring; still uncommitted, still undecided.
+
+**Premise corrected — one, larger than the filing:**
+- **`/R` 6 is not unsourced and has not been since 2026-08-12.** The
+  operator acquired ISO 32000-2:2020 EC3 under PDF Association sponsored
+  access; `pdfce-spec-librarian` wrote `security__aes256_r6.md` the same
+  day — Algorithm 2.B complete, 2.A / 8–13 / 1.A, Tables 20/21/22/25;
+  the checklist's A8 flipped *refuse* → *IMPLEMENTABLE (behind A13)*,
+  W17 amended (*a conformant AES-256 write path NOW EXISTS*), W19/W20/A13
+  added. **The closure was written into the corpus and into nothing
+  pdfce owns** — the *Backlog* bucket, `FEATURES.md`'s Encryption row,
+  five `crypto/` doc comments, the operator-facing `#[error]` string
+  *"its key-derivation algorithm is not available in the project's spec
+  corpus"* (`standard.rs:177`), the variant name `UnsourcedRevision` and
+  a test name all still say *unsourced*, 22 days on; the 196th filing
+  even carried the sponsored PDF's licence caution for a different
+  dispatch without connecting it. The dispatch and the reply to
+  `pdfceGUI` inherited the stale state. **Consequence:** `Pass 5.4` is a
+  build gap, not a sourcing gap, and "`/R` 6 only" is the *conformant*
+  target (W17: `/R` 5 `shall not` be written). `CLAUDE.md`'s XFA shape;
+  RAG footer written (below).
+
+**Shipped:**
+- **`c0c8dee`** — `verify-release.py`: `shutil.which("gh")` decides
+  *skip* (tool absent — a machine fact) vs *run it*; a failed `gh release
+  view` is `FAIL GitHub release exists`, naming decision 127, `gh release
+  create` and `gh auth status`. `run-gates.sh`: `failed=()` moved above
+  the hook check; an inactive hook appends to it, so the sweep exits
+  non-zero. No Pass ID (tooling). Closes decision 127's owed half (the
+  gate is now the rule, as the decision argued) and `R241` clause 2's
+  variance (resolved toward the clause; second amendment on `R241`).
+
+**Filed — `pdfceGUI` inbound (O108: *"all of the encryption and
+signature features that have been implemented in the engine under one
+new tab"*), instrument `tools/security-coverage.py` keyed on our API at
+`a436432`: 61 public items, 12 reached / 31 not / 7 internal / 11
+unattributable, every one read-side:**
+- **`Pass 10.1` — verify a signature** (*Next up*, first). `signature::verify(&graph,
+  index) -> SignatureVerdict`; `integrity` / `coverage` / `trust` as
+  three enums, **`trust = NotChecked`** in the first cut, in those words;
+  SubFilters `adbe.pkcs7.detached` / `ETSI.CAdES.detached` /
+  `adbe.pkcs7.sha1`, `adbe.x509.rsa_sha1` named-unsupported; RSA v1.5 +
+  PSS, ECDSA P-256/P-384, SHA-1/256/384/512; else `Unverifiable {
+  reason }`. Gated on the spec-librarian's §12.8.3 + Table 252 ingestion
+  (in flight). Ten acceptance criteria in `ROADMAP.md`. **Started in the
+  tree at filing** (generator, 7 fixtures signed by pyHanko 0.37.0 as
+  the independent implementation, `crypto/bignum.rs`) — untracked; the
+  engineer promotes it at first commit.
+- **`Pass 5.4` — encrypt on save, `/R` 6 / AES-256 only** (*Next up*,
+  second). `EditSession::set_encryption` / `set_permissions` /
+  `remove_encryption` (owner-authenticated, refused by name otherwise);
+  no RC4 / `/R` 2–5 authoring at the requester's ask and W17's `shall
+  not`; the writer's `encoder.rs` seam + a full-rewrite mode; `/R` 6
+  decrypt ships in the same increment and `UnsourcedRevision` is
+  retired; A13 as a setting (`R169`), W19's bit rules, W20's SASLprep
+  disclosed, N13 (signature `/Contents` never encrypted). Eleven
+  criteria. ID: increments 1–3 shipped under the bare family; `5.1`–`5.3`
+  deliberately unminted.
+- **Signing — *Backlog*, stated so** (key source, cert source, PAdES
+  level, signing-time `/ByteRange` patch; *"nobody has asked us for it by
+  name"*). Digital-signatures bucket amended: verification leaves as
+  `10.1`; signing, PAdES profiles, RFC 3161 and the **trust** leg stay.
+- **Both disclosure sentences** supplied verbatim in the reply and
+  recorded in the two entries (Signatures panel: *"does not yet check the
+  signature itself … cannot tell you the signed bytes are unaltered …
+  who signed it or whether to trust them"*; permissions: *"a request, not
+  a lock … only the user password, which controls opening it"* — the
+  CLI prints the same one).
+- **Operator question `(cc)`** — the four licence readings
+  `security__aes256_r6.md` §9 escalated on 2026-08-12 (the sponsored
+  copy's *single user only* terms vs `_sources\`; the cached full-text
+  dump; paraphrase-as-reproduction; person-vs-machine; the step-(a)
+  erratum `Accepted` not ISO-`Completed`) never reached the list. Filed
+  with a conservative default; nothing blocks `Pass 5.4`.
+
+**Decisions made this session:** none minted. The dependency direction
+for `Pass 10.1` — an in-house DER/CMS/X.509 walker over pre-1.0 `cms`,
+and (further, from the tree) in-house verification-side bignum in safe
+Rust over the ~25-crate `num-bigint`/`p256` stack, *"does NOT extend to
+signing"* — is **recorded as intended in `PRIOR_ART.md`**, decided when
+the Pass ships.
+
+**Findings + decisions:**
+- **A `skip` branch may only be entered on a fact established without
+  running the thing whose failure it excuses.** An exit code alone cannot
+  tell "not installed" from "ran and said no"; `c0c8dee`'s `shutil.which`
+  before the subprocess is the general form. And: when a printed line is
+  promoted to a failure, check the failure list exists at that point
+  (`failed=()` had to move). Footer on
+  `D:/dev/rag/rust/a_gate_read_by_a_human_and_not_consumed_by_the_act_protects_nothing.md`.
+- **A blocker whose falsifier is a reference corpus decays exactly like
+  one naming another crate — n = 4, 22-day latency.** Sharper form: a
+  cross-tree blocker carries the date it was true and the artefact that
+  falsifies it; the closing side writes into the *consumer's* record.
+  Footer on
+  `D:/dev/rag/rust/a_blocker_naming_another_repository_cannot_fail_a_test_so_it_decays_silently.md`.
+- **`PRIOR_ART.md`'s `rsa` row was wrong in scope**: Marvin
+  (RUSTSEC-2023-0071) is a private-key channel; it does not touch
+  verification. Narrowed; `cms` still `0.3.0-pre.2` after six weeks.
+
+**Hard-rule-11 sweep (claims: "`/R` 6 / Algorithm 2.B is unsourced" /
+"`verify-release.py` prints `skip`" / "clause 2 reported, not enforced"):**
+- **`unsourced` survivors owed to the engineer (`crates/`, not mine):**
+  `crypto/mod.rs:21`; `crypto/standard.rs:41`, `:44`, `:166–176`,
+  **`:177–178` (the `#[error]` string — operator-facing, false since
+  2026-08-12)**, `:179` (`UnsourcedRevision`), `:1610`, `:1619`;
+  `crypto/aes.rs:124`; `crypto/r5.rs:28–29`, `:118`; plus the variant's
+  name in `tests/encryption.rs:550` and `pdfce-gui/src/main.rs:25916`.
+  Closed by `Pass 5.4` or by a docs commit before it. **Corrected here:**
+  `FEATURES.md:376`; the *Backlog* Encryption bucket (amendment). **Left
+  as dated history, correct on their dates:** the 96th–110th filings'
+  records; the *In progress* `Pass 5` entry's 2026-08-11 amendment (its
+  own tail already points at the bucket). **Unrelated uses of the word,
+  do not "fix":** `core-api/03-capabilities.md:2311`, `edit.rs:34759`,
+  `:45049`.
+- **`skip` claim:** `ROADMAP.md` 395th block (footer + owed row appended);
+  `ARCHITECTURE.md` decision 127 (dated footer; heading kept as history)
+  and §6 (rewritten — living truth); this file's 395th entry (amended);
+  391st/392nd entries dated, correct; the RAG file (footer).
+  **`NEXT_SESSION.md`** carries *"'gh unavailable' … fires when the
+  release does not exist"* — stale by one commit, the engineer's, not
+  read for this.
+- **Clause-2 claim:** `R241` (second amendment), the `f23543e` record
+  (footer), this file's 395th entry (amended), the RAG file (footer).
+- **Found while sweeping:** untracked
+  `fixtures/synthetic/signature-verify/PROVENANCE.md` names
+  `tools/gen-signature-fixtures.py` as its generator; the script is
+  `tools/gen-signed-fixtures.py` and the named one builds the *coverage*
+  fixtures — the 92nd filing's `encryption/PROVENANCE.md` shape. Owed
+  before the fixtures are committed; in the `Pass 10.1` entry.
+
+**Still in flight:**
+- **Push.** Local `main` is 4 ahead / 0 behind; the pre-push hook's first
+  real run is on that push; CI at `origin/main` stays red at `c1e4c17`
+  until then.
+- **`Pass 10.1`** — in the tree, uncommitted; the spec-librarian's
+  §12.8.3 / Table 252 ingestion in flight; the `PROVENANCE.md` path.
+- **`Pass 5.4`** — not started; question `(cc)` beside it, non-blocking.
+- **Channel:** `done_2026-09-03-redaction-images-CONSUMED.md` — the
+  redaction exchange is archivable by whoever next tends the channel.
+  The earlier unconsumed files (`NEXT_SESSION.md` §B) — no change, by
+  `ls`. `pdfceGUI` builds the security tab read-side meanwhile; each
+  verb gets its own reply with entry point, errors and `docs/core-api/`
+  section.
+- Unreleased: everything since `dfce8a9` (`ff738a6`, `a436432`, `35fbf6c`,
+  `67ee5d6`, `4319f06`, `68163a2`, `f23543e`, `c1e4c17`, `422b405`,
+  `b151a80`, `c0c8dee` + this filing) — the next bump is the engineer's
+  call, the first release with `verify-release.py` armed.
+
+**For next session:**
+- Push; watch CI go green with the filing gate last.
+- `Pass 10.1` to its first commit (fix `PROVENANCE.md` first); then the
+  `crypto/` `unsourced` survivors — the error string before anything
+  else, because it is what `pdfce-cli` prints to an operator today.
+- The `sh` census and shading-cut scoping, carried from the 392nd.
+
+**`docs/FEATURES.md`:** *Planned* +2 rows (*Verify a signature's
+integrity and coverage*; *Encrypt a document (AES-256, `/R` 6 only),
+set its eight permission bits, remove encryption*), both unticked, both
+noting the read-side `pdfceGUI` tab; the combined *signing and
+verification* row replaced by *Sign a document* (*Backlog*, unticked);
+the Encryption row's `/R` 6 clause corrected (*sourced 2026-08-12, not
+yet built*). No boxes ticked.
+
+**`ROADMAP.md`:** new top *Shipped* block (396th filing): sourcing, the
+premise correction, the `c0c8dee` record, the inbound/reply record, the
+`PRIOR_ART` summary, the sweep, the ledger. *Next up*: `Pass 10.1` and
+`Pass 5.4` entries (new, at the head). *Backlog*: Digital-signatures and
+Encryption bucket amendments. *Open operator questions*: `(cc)`.
+Footers: `R241` (second amendment), the `f23543e` variance paragraph,
+the 395th block's owed row.
+
+**`ARCHITECTURE.md`:** decision 127 gains an *ARMED* footer; §6's
+release-channels bullet rewritten. No new decision; ceiling `127`.
+
+**`docs/PRIOR_ART.md`:** Cryptography table +3 rows (`num-bigint`,
+`p256`/`p384`, `sha1` — candidates, verification only), `cms` and `rsa`
+rows re-dated and the Marvin note narrowed, two open-items lines
+re-checked, decision-log entry appended.
+
+**`D:\dev\rag\rust\` / `egui\`:** no new file; **+2** dated footers
+(`a_gate_read_by_a_human…` items 1 and 3 closed; `a_blocker_naming_
+another_repository…` n = 4, the reference-corpus variant); two `index.md`
+bullets amended; one `last_verified` bumped.
 
 **`C:\personal_rag\`:** no change.

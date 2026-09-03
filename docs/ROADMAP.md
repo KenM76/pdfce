@@ -96,6 +96,313 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 396th filing, 2026-09-03 — `c0c8dee`: `tools/verify-release.py` now
+FAILS ON A MISSING GITHUB RELEASE AND SKIPS ONLY WHEN `gh` IS ABSENT FROM
+THE MACHINE — DECISION 127's DISARMED MECHANISM IS ARMED; AND
+`tools/run-gates.sh` GOES RED WHEN THE PRE-PUSH HOOK IS NOT ACTIVE —
+`R241` CLAUSE 2's VARIANCE IS RESOLVED, THE TABLE READS FOUR-FOR-FOUR.
+LOCAL `main` IS MERGED WITH THE OPERATOR'S WEB COMMIT (`b151a80`, NO
+REBASE) AND `check-cited-commits-exist.py` IS CLEAN AGAIN. ★★ TWO
+`pdfceGUI` REQUESTS (08:27 / 08:28, THEIR OPERATOR ASK O108 — *"all of the
+encryption and signature features … under one new tab"*) ARE PARSED AND
+ANSWERED: **`Pass 10.1`** (VERIFY A SIGNATURE — INTEGRITY + COVERAGE,
+TRUST `NotChecked`) AND **`Pass 5.4`** (ENCRYPT ON SAVE, `/R` 6 ONLY;
+PERMISSIONS; REMOVE ENCRYPTION) FILED *NEXT UP* IN THAT ORDER; SIGNING
+STAYS *BACKLOG* BY NAME. ★★★ PREMISE CORRECTED, AND IT IS THE FILING'S
+MOST USEFUL FACT: `/R` 6 IS **NOT UNSOURCED** — ALGORITHM 2.B HAS BEEN
+COMPLETE IN THE SPEC CORPUS SINCE **2026-08-12**, FROM THE ISO 32000-2
+PRIMARY, AND THE CLOSURE REACHED NO pdfce DOCUMENT, NO `crypto/` DOC
+COMMENT AND NOT THE OPERATOR-FACING ERROR STRING FOR TWENTY-TWO DAYS. NO
+DECISION, NO RULE MINTED. OPERATOR QUESTION `(cc)` FILED.**
+
+**Sourcing (hard rule 8).** Shell available; every figure below produced
+here, command beside it. `python tools/check-ledger-numbers.py` → clean;
+**filings ceiling `395`, so this is the 396th**; Pass ceiling `246.1`;
+rules `R241`; decisions `127`, next free `128` — none minted here.
+`python tools/check-cited-commits-exist.py` → **clean, 79 documents,
+every cited commit an ancestor of `HEAD`** (the 395th filing left it red
+on `c1e4c17`; the merge fixed it). `git log --oneline -4` → `c0c8dee`
+(tools) on `b151a80` (*Merge branch 'main' of
+https://github.com/KenM76/pdfce*) on `422b405` (394th + 395th filings)
+and `c1e4c17` (the operator's web commit) — **a merge, not a rebase**,
+as the 395th filing prescribed; `f23543e` keeps its hash. `git rev-list
+--left-right --count main...origin/main` → **`4 0`** — local `main` is
+four commits ahead (`f23543e`, `422b405`, `b151a80`, `c0c8dee`), zero
+behind; `origin/main` is still `c1e4c17`. **Not pushed at filing** — the
+engineer's act; the pre-push hook gets its first real exercise on that
+push. `git show c0c8dee --stat` → 2 files, **+37 / −14**:
+`tools/run-gates.sh` +5 / −1, `tools/verify-release.py` +32 / −13.
+**Probed here, both ways:** `python tools/verify-release.py v0.26.0` →
+**`FAIL GitHub release exists` — *"`gh release view v0.26.0` failed:
+release not found -- decision 127: every release is published to GitHub
+with the portable zip; `gh release create` it, or fix `gh auth
+status`"*** (plus `FAIL working tree clean`, this dispatch's own tree);
+`python tools/verify-release.py v0.27.0` → **`ok GitHub release has at
+least one asset`**. `git config core.hooksPath` → `tools/hooks`.
+`check-commits-filed.py` default → clean, **780** code commits (395th:
+779; +1 = `c0c8dee`), 5 in the baseline; **`--strict-tip` → 1 unfiled:
+`c0c8dee`** — this filing files it. `check-control-bytes.py` → **919**
+text files (395th: 916; **+3 = `PROVENANCE.md` + `gen-signed-fixtures.py`
++ `bignum.rs`**, all untracked, all the engineer's in-flight `Pass 10.1`
+work — see below). `check-suite-name-absent.py` → clean. `git status
+--short` → ` M crates/pdfce-core/src/crypto/mod.rs` (+1 line, `pub mod
+bignum;`), ` M docs/ROADMAP.md` and ` M docs/SESSION_LOG.md` (an
+operator-quote paragraph inserted into the 395th block and entry —
+*"sorry. didn't realize the consequenses of my little web-edit …"* —
+present before this filing began, uncommitted, left in place), `??
+crates/pdfce-core/src/crypto/bignum.rs` (13,675 B, 08:52), `??
+tools/gen-signed-fixtures.py` (11,161 B, 08:49), `??
+fixtures/synthetic/signature-verify/` (`PROVENANCE.md` 1,650 B + 7 PDFs,
+08:49). Channel `ls` (`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\`):
+`request_a_document_cannot_be_encrypted_or_have_its_permissions_set.md`
+4,369 B **08:27**; `request_a_document_cannot_be_signed.md` 3,750 B
+**08:28**; `reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`
+4,537 B **08:41**; `done_2026-09-03-redaction-images-CONSUMED.md`
+11,067 B **07:20**. Spec corpus, read directly:
+`PDF_Spec\security\security__aes256_r6.md` (`date: 2026-08-12`,
+`license_basis: licensed_primary_private_rag`, §2 headed *"ALGORITHM 2.B
+… COMPLETE"*); `PDF_Spec\iso32000\iso32000__ref__encryption_impl.md`
+rows A8 / W17 / W19 / W20 / A13 and the §H `/R 6` row *"GAP CLOSED
+2026-08-12"*; `PDF_Spec\iso32000\iso32000__s__12.8.md` (2026-07-31)
+header: *"STILL NOT ingested: Table 252's other ~15 entries … §12.8.3's
+PKCS#1/PKCS#7"*. `grep -n "aes256_r6\|2\.B" docs/ROADMAP.md
+docs/SESSION_LOG.md docs/ARCHITECTURE.md` → **no mention of the closure**;
+every `2.B` hit after 2026-08-11 is the 200th filing's `/IRT`-walk note.
+`grep -rn unsourced crates/pdfce-core/src/crypto/` → **eight hits** (the
+sweep, below). `cargo info` (network read): `num-bigint` 0.5.1 MIT OR
+Apache-2.0; `p256` 0.14.0 and `p384` 0.14.0 Apache-2.0 OR MIT; `sha1`
+0.11.0 MIT OR Apache-2.0; `cms` **0.3.0-pre.2** Apache-2.0 OR MIT; `rsa`
+**0.10.0-rc.18** MIT OR Apache-2.0. **Not touched:** `docs/NEXT_SESSION.md`,
+the channel folder, the engineer's memory files, `tools/`, `crates/`.
+Backup bundle currency: not asked; newest known here is the 392nd
+filing's `dfce8a9` bundle, unverified against the directory.
+**Re-measured at the close of the filing, because the tree is a moving
+target:** `git status --short` had grown to ` M crypto/mod.rs`, ` M
+lib.rs`, ` M signature.rs`, ` M tools/gen-signature-fixtures.py`, three
+` M fixtures/synthetic/signature/*.pdf` (re-generated 09:06), and
+untracked `asn1.rs`, `cms.rs`, `crypto/{bignum,ecdsa,rsa,sha1}.rs`,
+`signature_verify.rs`, `tests/signature_verify.rs` —
+`check-control-bytes.py` → **926** (919 + 7 new source files). **The
+in-house direction is no longer a docstring's intention: `rsa.rs`,
+`ecdsa.rs`, `sha1.rs` and `cms.rs` exist in the tree** (uncommitted,
+uncited). `PRIOR_ART.md`'s candidate rows stand as *checked and, at
+filing, not taken*; nothing is decided until the commit.
+
+**Premise corrected — one, and it is bigger than the filing that found it:**
+
+- **`/R` 6 has been SOURCED since 2026-08-12.** The dispatch, the reply
+  to `pdfceGUI`, the *Backlog* Encryption bucket, `docs/FEATURES.md`'s
+  Encryption row (*"its Algorithm 2.B is unsourced"*) and the crate all
+  carry the 2026-08-11 state. The operator acquired ISO 32000-2:2020
+  (Errata Collection 3) on 2026-08-12 and `pdfce-spec-librarian` wrote
+  `security__aes256_r6.md` the same day — Algorithm 2.B complete,
+  Algorithms 2.A / 8–13 / 1.A, Tables 20/21/22/25; the implementation
+  checklist's A8 row flipped from *refuse* to *IMPLEMENTABLE*. **That
+  closure was written into the reference corpus and into nothing pdfce
+  owns.** The 196th filing (2026-08-19) knew the sponsored PDF existed
+  — it carried the licence caution for a *different* dispatch — and
+  still did not connect it to the `/R` 6 refusal. Twenty-two days, one
+  operator-facing error string saying *"its key-derivation algorithm is
+  not available in the project's spec corpus"* the whole time. **The
+  shape is `CLAUDE.md`'s XFA item exactly** (*the answer was already
+  sourced in one document while another still asked the question*), and
+  the generalisable half is the `a_blocker_naming_another_repository…`
+  RAG finding — a blocker whose falsifier lives in another tree cannot
+  fail a test here. Footered there this filing. **Consequence:** `Pass
+  5.4` is a build gap, not a sourcing gap; and the `pdfceGUI` reply's
+  "R6 only" is the *conformant* target, not a narrowing (W17: `/R` 5
+  `shall not` be written).
+
+### `c0c8dee` (2026-09-03) — `verify-release.py` fails closed on a missing release; `run-gates.sh` fails closed on an inactive hook
+
+**From `git show c0c8dee`.** `verify-release.py`: the branch that printed
+`skip -- gh unavailable or not authenticated` for **any** non-zero exit
+of `gh release view` — which is also what a tag with no release page
+returns, so nine releases (`v0.18.0`–`v0.26.0`) passed *clean* with the
+step undone — is split in two by `shutil.which("gh")`: **`gh` absent
+from the machine → `skip`** (a machine fact, not a release fact);
+**`gh` present and the view fails → `FAIL GitHub release exists`**, the
+message naming decision 127, the `gh release create` remedy and `gh auth
+status`. The asset-count check is unchanged behind it. `run-gates.sh`:
+the `failed=()` initialiser moves above the hook check, and an inactive
+hook appends `pre-push hook not active (git config core.hooksPath
+tools/hooks)` to it — listed with the other failures, with the command
+that fixes it, and the sweep's exit code now depends on it. **Probed
+both ways here** (sourcing above). Commit message's own account matches
+the diff.
+
+**What it closes.** Decision 127's *"owed half"* — the mechanism is armed,
+so the decision's own argument for not minting a rule number now holds
+in full (*once the check fails closed, the gate is the rule*). `R241`
+clause 2's variance (395th filing) — resolved toward the clause; the
+`f23543e` record's table reads four-for-four; second amendment on
+`R241`. The 391st filing's cosmetic-then-load-bearing message fix. **No
+Pass ID** — tooling, the `9228cad` / `b5f5554` / `f23543e` class. No
+decision, no rule. `docs/FEATURES.md` untouched by this commit.
+
+**Body-section counterpart.** `ARCHITECTURE.md` §6's release-channels
+bullet said the check *"is owed a `FAIL`"* — living truth, rewritten to
+say it fails since `c0c8dee`; decision 127 gains a dated footer.
+
+### The `pdfceGUI` inbound, 08:27–08:28, and the reply at 08:41 — `Pass 10.1` and `Pass 5.4` filed *Next up*, signing filed *Backlog*
+
+Both requests carry their operator ask verbatim — **O108**: *"can we get
+all of the encryption and signature features that have been implemented
+in the engine under one new tab in the ribbon?"* — and both rest on an
+instrument they built for it, `tools/security-coverage.py`, keyed on
+**pdfce's public API at `a436432`** (their locked revision, v0.27.0)
+rather than on any document of theirs: **61 public items in
+`signature.rs` and `crypto/{mod,standard,apply,r5}.rs` plus the
+encryption half of `document.rs` — 12 reached, 31 not, 7 engine-internal,
+11 too generic to attribute — every one read-side.** They asked rather
+than assumed because `EncryptionConfig` and `Aes256Keys` are public and
+look like a writer's inputs; the reply confirms they are, and that no
+authoring entry point exists to withdraw against.
+
+**The order, committed in the reply and adopted as the filing order:**
+
+1. **`Pass 10.1` — verify a signature.** `signature::verify(&graph,
+   index) -> SignatureVerdict`; `integrity` / `coverage` / `trust` as
+   three enums, **`trust = NotChecked` in the first cut, said in those
+   words**; SubFilters `adbe.pkcs7.detached`, `ETSI.CAdES.detached`,
+   `adbe.pkcs7.sha1`, with `adbe.x509.rsa_sha1` named-unsupported; RSA
+   PKCS#1 v1.5 + PSS, ECDSA P-256/P-384, SHA-1/256/384/512; anything else
+   `Unverifiable { reason }`, never "invalid". **Gated on the
+   spec-librarian's ingestion of §12.8.3 + Table 252**, dispatched this
+   morning and in flight at filing. ★ **Started in the working tree
+   eight minutes after the reply**: the fixture generator (pyHanko
+   0.37.0 as the independent signer, self-signed per-run certificates,
+   keys discarded), seven fixtures (valid PKCS#1 v1.5 / PSS-CAdES /
+   ECDSA-P-256-CAdES / SHA-1; tampered-in-range; tampered-`/Contents`;
+   appended-after) and `crypto/bignum.rs` — all untracked, none cited by
+   hash. Filed *Next up* as dispatched, with the tree's state recorded;
+   the engineer promotes it when the first commit lands. Full entry
+   under *Next up*, ten acceptance criteria from the requester's and the
+   reply's own words.
+2. **`Pass 5.4` — encrypt on save, `/R` 6 / AES-256 only.**
+   `EditSession::set_encryption`, `set_permissions`, `remove_encryption`
+   (owner-authenticated, refused by name otherwise — `AuthKind`
+   discriminates); no RC4 / `/R` 2–4 authoring, at the requester's
+   explicit ask; the writer's `encoder.rs` seam plus a full-rewrite mode
+   that re-serialises every string and stream. **Not spec-blocked** —
+   the premise correction above. Eleven acceptance criteria under *Next
+   up*, including A13 as a setting, W19's bit rules, W20's SASLprep
+   disclosure, and retiring `UnsourcedRevision`.
+3. **Signing — *Backlog*, stated so.** Needs a key source, a cert
+   source, a PAdES-level decision and a signing-time `/ByteRange` patch
+   in the writer; *"nobody has asked us for it by name"* on their side is
+   matched by *"not scheduled"* on ours. The Digital-signatures bucket is
+   amended: verification leaves it as `10.1`; signing, PAdES profiles,
+   RFC 3161 and the **trust** leg stay.
+
+**Both disclosure sentences went to them verbatim** (in the reply; in the
+`Pass 10.1` / `5.4` entries here). Signatures panel: *"…It does not yet
+check the signature itself — so it cannot tell you the signed bytes are
+unaltered, and it cannot tell you who signed it or whether to trust
+them."* — reworded from theirs so *unaltered* does not have to be
+unwritten when integrity ships. Permissions: *"PDF permissions are a
+request, not a lock. …Only the password protects the content — and only
+the user password, which controls opening it."* — the CLI prints the
+same sentence (rule 11), so two surfaces carry one wording.
+
+**Their own defect, theirs:** their shell never calls
+`load_with_password` / `from_bytes_with_password` — detected, tabbed,
+then no way to supply a password. They are fixing it; the reply adds
+that `AuthKind` tells them which password opened the file, which
+`remove_encryption` will need them to surface *before* the control is
+pressed.
+
+**Channel housekeeping.** `done_2026-09-03-redaction-images-CONSUMED.md`
+(07:20) — `pdfceGUI` consumed the redaction reply; the exchange can be
+archived by whoever next tends the channel. The 395th filing's
+unconsumed files (`NEXT_SESSION.md` §B) — no change, by `ls`.
+
+**`docs/PRIOR_ART.md`, amended this filing.** Cryptography table: `cms`
+row — still `0.3.0-pre.2` as of 2026-09-03; `rsa` row — `0.10.0-rc.18`,
+and the Marvin note **narrowed to signing** (RUSTSEC-2023-0071 is a
+private-key timing channel; verification handles no secret); new rows
+`num-bigint`, `p256` / `p384`, `sha1`, licence-checked by `cargo info`
+today, verdict *candidate — verification only*; and the engineer's
+intended direction recorded, not decided: **an in-house minimal DER /
+CMS / X.509 walker (~500 lines, fuzzable) over pre-1.0 churn**, with the
+tree's `bignum.rs` docstring quoted as the further step (verification-
+side arithmetic in safe Rust; *"it does NOT extend to signing"*).
+Decision when the Pass ships.
+
+#### Hard-rule-11 sweep (claims: "`/R` 6 / Algorithm 2.B is unsourced" / "`verify-release.py` prints `skip` for a missing release" / "`R241` clause 2 is reported, not enforced")
+
+- **"`/R` 6 is unsourced" — the claim, not the string.** Survivors that
+  are **wrong today and reported as owed to `Pass 5.4`** (`crates/` is
+  not this role's to edit): `crates/pdfce-core/src/crypto/mod.rs:21`
+  (module table: *"refused as unsourced — Algorithm 2.B is not in the
+  project's spec corpus"*); `crypto/standard.rs:41` (same table),
+  `:44` (*"the only non-deprecated AES-256 revision is the one that is
+  unsourced (W17)"* — W17 was itself amended 2026-08-12), `:166–176`
+  (the variant's rustdoc), **`:177–178` — the operator-facing `#[error]`
+  string *"cannot be implemented: its key-derivation algorithm is not
+  available in the project's spec corpus"*, false in shipped `pdfce-cli`
+  output since 2026-08-12**, `:179` the variant name
+  `EncryptionUnsupported::UnsourcedRevision` itself, `:1610` and
+  `:1619` (test rustdoc and test name
+  `r6_is_refused_as_unsourced_before_anything_else_is_read`);
+  `crypto/aes.rs:124` (*"2.B is unsourced past step (a)"*);
+  `crypto/r5.rs:28–29` and `:118` (*"2.B's own body stays unsourced and
+  unwritten"*); `crates/pdfce-core/tests/encryption.rs:550` and
+  `crates/pdfce-gui/src/main.rs:25916` (paused crate) name the variant.
+  `docs/FEATURES.md:376` — **corrected this filing** (mine). *Backlog*
+  Encryption bucket — **amended this filing**. *In progress* `Pass 5`
+  entry (`ROADMAP.md`, *"still open, narrowed by this commit: `/R` 6
+  alone (Algorithm 2.B's unsourced step)"*) — dated 2026-08-11, history;
+  a footer is not owed because the bucket amendment and this block are
+  the record, and the entry's own last amendment already points at the
+  bucket. **Correct survivors, do not "fix":** every dated statement in
+  the 96th–110th filings' *Shipped* records and `SESSION_LOG.md`
+  entries — true on their dates; `docs/core-api/03-capabilities.md:2311`
+  and `edit.rs:34759` / `:45049` use *unsourced* about **other** gaps
+  (sheet rotation direction; Acrobat behaviour) and are unrelated.
+- **"`verify-release.py` prints `skip`"** — `ROADMAP.md` 395th block
+  (decision 127 summary, the owed row: footered / appended);
+  `ARCHITECTURE.md` decision 127 heading and body (*"EXISTS AND IS
+  DISARMED"*, *"owed"* — dated footer added; the heading stands as
+  history) and §6 (rewritten); `SESSION_LOG.md` 391st, 392nd, 395th
+  entries (dated amendments on the 395th's owed line; the 391st/392nd
+  statements are dated history and correct on their dates);
+  `D:/dev/rag/rust/a_gate_read_by_a_human_and_not_consumed_by_the_act_protects_nothing.md`
+  items 1 and 3 — dated footer. **`docs/NEXT_SESSION.md`** carries
+  *"`verify-release.py`'s 'gh unavailable' message was misattributed — it
+  fires when the release does not exist"* — now stale by one commit;
+  not read for this, not touched, the engineer's.
+- **"clause 2 reported, not enforced"** — `R241`'s first amendment (a
+  second amendment added below it); the `f23543e` record's variance
+  paragraph (footered); the 395th `SESSION_LOG.md` entry's
+  *"reported, not enforced"* clause table line (amended); the RAG file's
+  item 1 (footer). The `tools/hooks/pre-push` header is unaffected.
+- **Found while sweeping, not part of any claim above:**
+  `fixtures/synthetic/signature-verify/PROVENANCE.md` (untracked) names
+  its generator as `tools/gen-signature-fixtures.py`; the script is
+  `tools/gen-signed-fixtures.py`, and the named one is the *coverage*
+  fixtures' generator. Reported into the `Pass 10.1` entry as owed
+  before commit — the 92nd filing's `encryption/PROVENANCE.md` shape.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `246.1`; families `5` and `10` mentioned, no sub-IDs | **`Pass 10.1`** and **`Pass 5.4`** minted (*Next up*); ceiling stays `246.1` (highest ID); `5.1`–`5.3` deliberately unminted; next free major `247.0` |
+| Decisions | ceiling `127`, next free `128` | unchanged — the dependency direction is recorded as intended, decided at ship |
+| Standing rules | ceiling `R241`, next free `R242` | unchanged — `R241` second amendment (clause 2 resolved) |
+| Operator questions | ceiling `(cb)` | **`(cc)`** — the `security__aes256_r6.md` §9 escalations, 22 days late |
+| `origin/main` | `c1e4c17`; local diverged 1/1 | **merged (`b151a80`)**; local **4 ahead / 0 behind**, unpushed; `check-cited-commits-exist` clean |
+| CI at `origin/main` | RED at `c1e4c17` (old order; 18 skipped) | unchanged until the push — four commits waiting |
+| Owed to the engineer | `verify-release.py` FAIL; `R241` clause 2 | **both CLOSED** (`c0c8dee`); **+1**: the eleven `unsourced` survivors in `crypto/` (the `#[error]` string first) — closed by `Pass 5.4` or by a docs commit before it; **+1**: `PROVENANCE.md`'s generator path before the fixtures are committed |
+| Channel | 2 requests unanswered | **answered** (08:41); 1 exchange consumed, archivable |
+| `docs/PRIOR_ART.md` | `cms` pre-1.0 (2026-07-23), `rsa` Marvin-for-verification | **amended**: +3 rows, 2 rows re-dated, Marvin narrowed to signing, decision-log entry |
+| `D:\dev\rag\rust\` / `egui\` | — | **+2** dated footers (`a_gate_read_by_a_human…`, `a_blocker_naming_another_repository…`); two index bullets amended; no new file |
+| `C:\personal_rag\` | — | no change |
+| SESSION_LOG filings | 395 | **396** |
+
+---
+
 **★★ 395th filing, 2026-09-03 — `v0.27.0` IS ON GITHUB AS A RELEASE WITH
 THE PORTABLE ZIP AS ITS ASSET, ON A MID-SESSION OPERATOR INSTRUCTION READ
 AS STANDING — DECISION **127**: EVERY RELEASE FROM NOW ON GETS A GITHUB
@@ -194,6 +501,21 @@ as unverified against the directory.
 2. **`check-commits-filed.py` is red on `f23543e` under `--strict-tip`**
    — expected by `R217` and stated so it is not read from the default
    run's `clean`. This filing is what turns it green.
+
+> ★ **Operator, mid-filing, verbatim:** *"sorry. didn't realize the
+> consequenses of my little web-edit! Can you record what I changed,
+> roll it back, then add the changes and roll it forward into your
+> release?"* **Disposition (librarian, this filing):** recorded — the
+> diff is described in the next paragraph and the commit is cited by
+> hash. **Not rolled back**: the only way to remove `c1e4c17` from
+> `origin/main` is a force-push, which is decision `090`'s standing
+> exclusion, would kill every citation of that hash (`0d9f4df` class),
+> and is unnecessary — a **merge** does exactly what the sentence asks
+> (his change joins the release line, goes out through the pre-push
+> hook, rides the next release) with no history rewritten. The
+> operator's sentence is read as *"make this land properly"*, not as
+> authority to rewrite published history; if he wants the web commit
+> itself gone, that needs his explicit, separate say-so.
 
 **What `c1e4c17` says, because it is a public-facing claim the record
 should carry.** The README's head now reads that the GUI *"has been moved
@@ -321,6 +643,11 @@ four-for-four. **Owed (small):** either make the line fail the sweep, or
 write in `R241` that clause 2 is satisfied by report — one or the other,
 so the rule and the build say the same thing.
 
+> ★ **RESOLVED 2026-09-03 (396th filing, `c0c8dee`) — the first way.**
+> The line now fails the sweep (`failed+=(…)` when `core.hooksPath` is
+> not `tools/hooks`); the table above reads four-for-four. See the 396th
+> block and `R241`'s second amendment.
+
 **What the hook cannot see, learned the same hour.** `c1e4c17` reached
 `origin/main` through GitHub's web editor, which runs no local hook. For
 that route CI is the only gate — and at `c1e4c17` CI ran the *old* step
@@ -386,7 +713,7 @@ gained the third-instance note and the structural fix. His tier.
 | Releases | `v0.27.0` verified, OneDrive only; `ff738a6`, `a436432`, `35fbf6c`, `67ee5d6`, `4319f06`, `68163a2` unreleased | **`v0.27.0` on GitHub**, `Latest`, one asset 25,281,588 B; `f23543e`, `c1e4c17` and the two filing commits also unreleased |
 | `origin/main` | `68163a2` | **`c1e4c17`** (operator, web editor); local `main` **diverged 1/1** — merge before push, never rebase or force. **`check-cited-commits-exist.py` is RED on this tree until the merge** (`STALE c1e4c17 … no commit on HEAD carries that subject`, run here after filing) — this filing cites the operator's commit by hash and it is not on local `HEAD` yet; the merge resolves it, and the push cannot happen without the merge |
 | CI at `origin/main` | RED at `68163a2` (step 6 of 22; 16 unrun) | **RED at `c1e4c17`** (old order; 18 skipped) — resolves when the 394th + this filing are merged and pushed, and the reorder lands with `f23543e` |
-| Owed to the engineer | `verify-release.py:203`; `R241` hook + `core.hooksPath` + sweep line; audits step order (optional) | hook **CLOSED**, sweep line **CLOSED (as report — variance)**, step order **CLOSED** (`f23543e`); **`verify-release.py:202–203` UPGRADED**: a not-found release must `FAIL`, not `skip` — the mechanism decision 127 leans on; **+1 small**: reconcile `R241` clause 2 with the report-only build |
+| Owed to the engineer | `verify-release.py:203`; `R241` hook + `core.hooksPath` + sweep line; audits step order (optional) | hook **CLOSED**, sweep line **CLOSED (as report — variance)**, step order **CLOSED** (`f23543e`); **`verify-release.py:202–203` UPGRADED**: a not-found release must `FAIL`, not `skip` — the mechanism decision 127 leans on; **+1 small**: reconcile `R241` clause 2 with the report-only build — *both RESOLVED 2026-09-03 (396th filing), `c0c8dee`: `FAIL` on a missing release, `skip` only when `gh` is absent from the machine; the hook line fails the sweep* |
 | `D:\dev\rag\rust\` / `egui\` | — | **+1** rust file, **+1** dated footer on the 394th's file; two index bullets |
 | `C:\personal_rag\` | — | no change |
 | SESSION_LOG filings | 394 | **395** |
@@ -103776,6 +104103,282 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
+### `Pass 10.1` — **VERIFY AN EXISTING SIGNATURE: INTEGRITY AND COVERAGE AS TWO SEPARATE FACTS, TRUST NAMED `NotChecked`** — inbound `pdfceGUI` request 2026-09-03 08:28, answered 08:41, order committed: THIS FIRST — filed 2026-09-03 (396th filing), **NOT STARTED as a commit; STARTED in the working tree at filing time (see sourcing)**
+
+**★ Sourcing (hard rule 8).** Shell available. The request:
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_a_document_cannot_be_signed.md`
+(3,750 B, 08:28). The reply:
+`reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`
+(4,537 B, 08:41). `git status --short` at filing: **`??
+tools/gen-signed-fixtures.py`** (11,161 B, 08:49), **`??
+fixtures/synthetic/signature-verify/`** (`PROVENANCE.md` + seven PDFs,
+5,291–6,906 B each, 08:49), **`?? crates/pdfce-core/src/crypto/bignum.rs`**
+(13,675 B, 08:52) and **` M crates/pdfce-core/src/crypto/mod.rs`** (+1,
+`pub mod bignum;`) — none committed, none cited by hash, all the
+engineer's in-flight work on this Pass eight minutes after the reply went
+out. Spec corpus: `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.8.md`
+(dated 2026-07-31, 689 lines) states in its own header *"STILL NOT
+ingested: Table 252's other ~15 entries (`Filter`, `SubFilter`, …),
+§12.8.3's PKCS#1/PKCS#7"* — the ingestion the reply names as this Pass's
+gate is **in flight** (dispatched by the engineer this morning, not
+landed at filing). Crate versions by `cargo info` here: `num-bigint`
+0.5.1 MIT OR Apache-2.0; `p256` / `p384` 0.14.0 Apache-2.0 OR MIT;
+`sha1` 0.11.0 MIT OR Apache-2.0; `cms` **0.3.0-pre.2**; `rsa`
+**0.10.0-rc.18**.
+
+**★ ID.** `Pass 10.0` (`2676d4d`+`2ae9991`, 2026-08-10) shipped
+`signature::byte_range_coverage` + `pdfce-cli list-signatures` — the
+non-cryptographic half. This is the cryptographic half of the same
+question, so **`10.1`**; the family ceiling was `10.0`. Signing is
+**not** this Pass — it stays in the *Backlog* Digital-signatures bucket,
+amended this filing.
+
+#### What is asked, in the requester's words
+
+*"VALIDATE an existing signature … with the three facts separated,
+because they fail independently and an operator needs to know which one
+failed: **integrity** — does the digest over the `/ByteRange` match
+`/Contents`; **coverage** — does the `/ByteRange` cover the whole file,
+or was content appended after signing (you already answer this one);
+**trust** — does the certificate chain up to something, and is it in
+date."* And: *"We would take (1) and (2) alone and be much better off
+than we are — 'the bytes under this signature have not been altered, and
+nothing was appended after it' is a real answer, and it needs no
+certificate store at all. Please do not let the trust question block the
+integrity one."* They will not build it shell-side: *"a GUI that reported
+'valid' from its own arithmetic would be making the one claim in this
+program that must never be wrong."*
+
+#### Acceptance criteria (from the request and the reply; the reply is the commitment)
+
+1. **`pdfce_core::signature::verify(&graph, index) -> SignatureVerdict`**
+   with three independent enums, none collapsed into a bool:
+   `integrity`, `coverage`, `trust`.
+2. **`integrity`** = the digest over the `/ByteRange` matches the
+   `messageDigest` the signer signed **and** the signature over the
+   signed attributes verifies against the signer's own embedded
+   certificate. A byte flipped inside the signed range and a byte
+   flipped in the CMS signature value are **different failures**
+   (digest vs signature) and are reported as such — the engineer's
+   fixture set already carries one of each (`sig-rsa-tampered.pdf`,
+   `sig-rsa-contents-tampered.pdf`).
+3. **`coverage`** moves into the verdict so one call answers both; the
+   `Pass 10.0` function is not removed. `sig-rsa-appended.pdf` (an
+   incremental `/Info` update after signing) must read integrity PASS /
+   coverage *stops before EOF*.
+4. **`trust = NotChecked` in the first cut, in those words** — no trust
+   store, no chain building, no revocation. The verdict carries the
+   signer's subject and the certificate's validity dates as **reported
+   facts, never a judgement**.
+5. **`SubFilter` coverage:** `adbe.pkcs7.detached`,
+   `ETSI.CAdES.detached` (PAdES), `adbe.pkcs7.sha1`;
+   `adbe.x509.rsa_sha1` **named-unsupported**.
+6. **Algorithms:** RSA PKCS#1 v1.5 and RSASSA-PSS; ECDSA P-256 / P-384;
+   SHA-1 / SHA-256 / SHA-384 / SHA-512. **Anything else is
+   `integrity = Unverifiable { reason }`, never "invalid"** — a
+   fail-closed verdict that names why.
+7. **Spec gate before code:** §12.8.3 (SubFilter semantics, PKCS#1 /
+   PKCS#7 / CAdES encodings) and Table 252's remaining entries ingested
+   by `pdfce-spec-librarian` — *"that is the gate on this Pass, not the
+   code."* Cite the clause in the doc comments (rule 1).
+8. **CLI:** `list-signatures` (or a sibling) prints the three facts per
+   signature, and prints `trust: not checked` rather than omitting it
+   (rule 11 — the CLI prints what it did not do).
+9. **Fixtures** (rule 7): synthetic source document; signatures produced
+   by an **independent** implementation (the tree's generator names
+   pyHanko 0.37.0, MIT, with per-run self-signed certificates and
+   discarded keys), so pdfce's verifier is written from the standard and
+   checked against CMS objects it did not produce — the
+   `gen-encryption-fixtures.py` principle. ★ **Owed before commit, found
+   by reading the untracked tree:** `fixtures/synthetic/signature-verify/PROVENANCE.md`
+   says *"Generated by `tools/gen-signature-fixtures.py`"*; the script
+   beside it is **`tools/gen-signed-fixtures.py`**, and
+   `gen-signature-fixtures.py` is the *other* generator (the `/ByteRange`
+   coverage fixtures). The same stale-path shape the 92nd filing caught
+   in `encryption/PROVENANCE.md`.
+10. **The disclosure sentence** for the Signatures panel, sent verbatim
+    in the reply and to be replaced *with the verb* when this ships:
+    *"pdfce can see that this document is signed and can tell you whether
+    anything was appended after the signature. It does not yet check the
+    signature itself — so it cannot tell you the signed bytes are
+    unaltered, and it cannot tell you who signed it or whether to trust
+    them."* On ship, the first two clauses change and the trust clause
+    stays; the replacement wording goes to `pdfceGUI` with the entry
+    point.
+
+#### Dependency posture — recorded, not decided
+
+The reply's plan and the dispatch to this role: **an in-house minimal
+DER / CMS / X.509 walker (~500 lines, fuzzable)** rather than `cms`
+(`0.3.0-pre.2`) / `rsa` (`0.10.0-rc.18`), both still pre-1.0 on
+2026-09-03 and so churn the crate would have to track. Licence-checked
+candidates for the arithmetic, in `docs/PRIOR_ART.md` as of this filing:
+`num-bigint` (RSA modexp — verification only, so RUSTSEC-2023-0071
+"Marvin", a *private-key* timing channel, does not apply), `p256` /
+`p384` with `default-features = false, features = ["ecdsa"]`, `sha1`.
+**What the working tree says at filing time, which is further than the
+dispatch:** `crates/pdfce-core/src/crypto/bignum.rs` (untracked) opens
+*"Arbitrary-precision unsigned integers for public-key verification
+only"* and argues the dependency stack away — *"twenty-five crates,
+several carrying `unsafe` with cfg-selected constant-time backends … That
+shape exists for a reason that does not apply here: constant-time code
+protects a secret, and verification handles none"* — extending the
+`md5.rs` / `rc4.rs` judgement (frozen, small, safe Rust) to
+verification-side arithmetic **and explicitly not to signing**. So the
+candidates are checked and the tree is going the other way. **No
+decision number is minted here**: the choice is the engineer's and is
+recorded when the Pass ships, with whichever argument survived contact
+with the fuzzer. Rule 13 still applies to any crate that does enter
+`Cargo.toml` (`THIRD_PARTY_LICENSES.md` regenerated).
+
+#### Not in scope, by name
+
+Signing (*Backlog*); trust evaluation beyond reporting the certificate's
+own fields; `adbe.x509.rsa_sha1`; timestamps (RFC 3161); `/DocMDP`
+re-evaluation (already `Pass 3.2`'s `SignatureImpact`); any `pdfceGUI`
+surface — they build the tab read-side now and consume the verdict when
+it exists.
+
+**`docs/FEATURES.md`:** *Planned* row **"Verify a signature's integrity
+and coverage"** added this filing, all boxes unticked; the old combined
+*"signing and verification"* row is split.
+
+### `Pass 5.4` — **ENCRYPT ON SAVE, `/R` 6 / AES-256 ONLY: `set_encryption`, `set_permissions`, `remove_encryption` (OWNER-AUTHENTICATED, REFUSED BY NAME OTHERWISE)** — inbound `pdfceGUI` request 2026-09-03 08:27, answered 08:41, order committed: SECOND, after `Pass 10.1` — filed 2026-09-03 (396th filing), **NOT STARTED**
+
+**★ Sourcing (hard rule 8).** Shell available. The request:
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_a_document_cannot_be_encrypted_or_have_its_permissions_set.md`
+(4,369 B, 08:27); the reply as for `Pass 10.1`. Spec corpus **read here,
+not relayed**: `PDF_Spec\security\security__aes256_r6.md` (`date:
+2026-08-12`, `license_basis: licensed_primary_private_rag`) — **Algorithm
+2.B is COMPLETE**; `PDF_Spec\iso32000\iso32000__ref__encryption_impl.md`
+rows **A8** (*IMPLEMENTABLE 2026-08-12 … ship it behind ambiguity A13*),
+**W17** (*never emit `/R 5` … a conformant AES-256 write path NOW
+EXISTS*), **W19**, **W20**, **A13**, and its *§H open gaps* table's
+`/R 6` row **CLOSED 2026-08-12**. Crate: `crates/pdfce-core/src/writer/encoder.rs`
+exists (the seam the reply names); `crypto/standard.rs:179`
+`EncryptionUnsupported::UnsourcedRevision` still refuses `/R` 6 with the
+operator-facing string *"its key-derivation algorithm is not available in
+the project's spec corpus"* — **false since 2026-08-12**, see the sweep in
+the 396th *Shipped* block.
+
+**★ ID.** `Pass 5` shipped decryption as three increments (`14a7400`,
+`f7aee60`, `f79f044..f79d9a2`) under the bare family name; no `5.x`
+sub-ID was ever minted. **`5.4`** is minted for the fourth increment and
+the first write-side one; **`5.1`–`5.3` are deliberately left unminted**
+(hard rule 2 is about reuse, not gaps; naming the shipped increments
+after the fact would put IDs into records that were filed without them).
+
+**★ Premise corrected at filing, and it changes the gate on this Pass.**
+The *Backlog* bucket, `docs/FEATURES.md`'s Encryption row and every
+`crypto/` doc comment said `/R` 6 is refused because Algorithm 2.B is
+**unsourced**. It has been sourced, from the ISO 32000-2:2020 primary,
+since **2026-08-12** — twenty-two days — and the closure reached none of
+pdfce's own documents (grep of both ledgers for `aes256_r6` / `2.B`:
+nothing after 2026-08-11). **This Pass is therefore not spec-blocked.**
+What it *is* gated on is the same licence discipline the corpus file
+states in its §0: `licensed_primary_private_rag` — clause numbers,
+algorithm steps, constants and short quoted fragments may be cited in
+code comments; **ISO's prose may not be transcribed into a public MIT
+repository.** The bucket amendment (this filing) carries the full
+correction.
+
+#### What is asked, in the requester's words
+
+*"1. Encrypt an existing document with a user and/or owner password …
+`session.set_encryption(EncryptionConfig { .. }, user_pw, owner_pw)?;`
+R6 (AES-256) alone would cover essentially every request an operator
+makes of us; we are not asking for RC4 or R2/R3/R4 authoring, and would
+rather you did not offer them. 2. Set the permission bits on an
+encrypted document — print, modify contents, copy, annotate, fill forms,
+accessibility extract, assemble, print high quality. 3. Remove
+encryption from a document the operator has authenticated as owner
+on."* Not asked: public-key encryption (§7.6.5), `/EFF`, strings-only or
+streams-only, any change to the reading side.
+
+#### Acceptance criteria (from the request, the reply, and the sourced checklist)
+
+1. **`EditSession::set_encryption(EncryptionConfig, user_pw, owner_pw)`**
+   writing **`/V 5` `/R 6` `/CFM /AESV3` only** — Algorithm 2.B for the
+   hash, Algorithms 8–13 for `/U` `/UE` `/O` `/OE` `/Perms`
+   (`security__aes256_r6.md` §2–§5). **No RC4, no `/R` 2–4, no `/R` 5
+   authoring, ever** — the requester's ask, W14's standing posture and
+   W17's `shall not` agree. `EncryptionConfig` and `Aes256Keys` are the
+   inputs (*"what you thought — the inputs of a writer that does not
+   exist yet"*).
+2. **The read side follows:** `/R` 6 **decrypts** in the same increment
+   (it is `/R` 5's harness with 2.B substituted at
+   `crypto::r5::hash`'s stated substitution point), and
+   `EncryptionUnsupported::UnsourcedRevision`, its message, its doc
+   comments and its test name are retired or renamed — a written `/R` 6
+   file pdfce could not reopen would fail its own round trip.
+3. **Ambiguity A13 is a SETTING, not a hard-coded choice** (`R169`,
+   memory: *make spec ambiguity a setting*): the exit-test reading —
+   step (f), minimum 65 rounds, the derived default — is switchable, and
+   an authentication failure at `/R` 6 **names A13 in the diagnostic**
+   rather than reporting "wrong password". Settled for good only by
+   measuring a real Acrobat-written `/R` 6 file ⇒ `C:\personal_rag\pdf\`.
+4. **`set_permissions(Permissions)`** — all eight Table 22 bits; the
+   write follows **W19** (bits 1–2 zero, 7–8 and 13–32 one, bit 10
+   always one) and `/Perms` is written per Algorithm 10 (decision 044's
+   read-side posture unchanged: reported, never enforced).
+5. **`remove_encryption()`** — refused **by name** unless the session
+   was opened with the **owner** password (`AuthKind::Owner`); a
+   user-authenticated session gets an error that says which password
+   would have sufficed, and the reply already told `pdfceGUI` to surface
+   `AuthKind` *before* the operator presses the control.
+6. **A full-rewrite mode that re-serialises EVERY string and stream
+   through the encrypting `ObjectEncoder`** — the verbatim path copies
+   file bytes, *"exactly right for everything except this"*. The
+   never-encrypted list (E1–E8, plus **N13**: a signature's `/Contents`
+   is never encrypted — the ISO 32000-2 exception ISO 32000-1 lacks)
+   is honoured; `/Identity` crypt filters and `/Metadata` with
+   `/EncryptMetadata false` handled per §7.6. Round trip is the proof:
+   encrypt → reopen with each password → byte-compare the decrypted
+   objects against the unencrypted source.
+7. **Incremental save on an encrypted document** — either the new
+   objects are encrypted with the document's existing key (decision
+   007's *"designed in as a first-class requirement"*) or the save is
+   refused by name; `WriteError::EncryptedSaveUnsupported` stops being
+   the answer for `/R` 6 at least. Which of the two ships is the
+   engineer's call and is recorded when it does.
+8. **W20 — SASLprep is normative at `/R` 6.** Either implement RFC
+   4013/3454 (not staged in the corpus; IETF, free) or write only after
+   UTF-8 + 127-byte truncation **and disclose the gap on the way past**
+   (rule 4 — the CLI prints it; the verdict struct carries it).
+   Decision 045's read-side posture (attempt, never refuse) is
+   unchanged.
+9. **CLI:** `encrypt` / `set-permissions` / `remove-encryption`
+   subcommands (names the engineer's), each printing **the permissions
+   sentence** — verbatim, the same one sent to `pdfceGUI`: *"PDF
+   permissions are a request, not a lock. A conforming reader honours
+   them; any program that ignores the flag can print, copy or change
+   this document freely. Only the password protects the content — and
+   only the user password, which controls opening it."* Two surfaces,
+   one wording.
+10. **Fixtures** (rule 7, LEGAL §5): pdfce-written `/R` 6 files verified
+    against an **independent** implementation (the `gen-encryption-fixtures.py`
+    principle — qpdf or pypdf, whichever the generator already uses), in
+    both directions: pdfce opens theirs, they open pdfce's.
+    `enc-aes-256-r6.pdf` stops being a refusal-only fixture.
+11. **Regression before wiring:** the 2026-08-10 pre-implementation
+    finding in the *Backlog* bucket still applies — the
+    `EditError::DocumentEncrypted` raise sites (26/27 at last count)
+    become load-bearing the day an encrypted document can carry an
+    `EditSession` with writes; re-grep and cover a representative sample
+    before the first real encrypted save.
+
+#### Not in scope, by name
+
+Public-key security handler (§7.6.5); `/EFF` / attachments-only
+encryption; `/R` ≤ 5 authoring in any form; `pdfceGUI` surfaces (they
+build the tab read-side now; the verbs get their own reply naming entry
+points, errors and the `docs/core-api/` section).
+
+**`docs/FEATURES.md`:** *Planned* row **"Encrypt a document (AES-256
+`/R` 6 only), set its permission bits, remove encryption"** added this
+filing, unticked; the Encryption row's `/R` 6 clause corrected from
+*unsourced* to *sourced 2026-08-12, not yet built*.
+
 > ★★★ **`Pass 246.0` SHIPPED and has left this section, 2026-09-03 (391st
 > filing, `194b3a1`).** Filed here by the 390th filing the same day, started
 > immediately, shipped one filing later. Its full entry — what "cut" means per
@@ -121866,6 +122469,39 @@ added. See that section below.
   sign/verify, PAdES profiles, RFC 3161) is unchanged and still entirely
   unbuilt; `Pass 10.0` answers a different, much smaller question ("what
   does this signature cover") that needs no crypto dependency at all.
+  **★★ AMENDMENT (2026-09-03, 396th filing) — THIS BUCKET IS SPLIT: the
+  VERIFICATION half leaves it as `Pass 10.1` (*Next up*); SIGNING stays
+  here, and is now a named operator-adjacent request rather than a
+  parity bullet.** Inbound `pdfceGUI` request 2026-09-03 08:28,
+  `request_a_document_cannot_be_signed.md` (their operator ask O108,
+  *"all of the encryption and signature features that have been
+  implemented in the engine under one new tab"*): their instrument
+  `tools/security-coverage.py`, keyed on our API at `a436432`, found
+  the signature surface *"entirely descriptive"* — census, coverage,
+  `signature_impact_of_save`, nothing that says whether a signature is
+  **valid**. Two asks, ranked by them: **(1) VALIDATE** an existing
+  signature with **integrity / coverage / trust as three separate
+  facts**, explicitly accepting integrity + coverage without trust
+  (*"please do not let the trust question block the integrity one"*);
+  **(2) SIGN**, *"lower priority and we say so honestly: nobody has asked
+  us for it by name"*. The reply
+  (`reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`,
+  08:41) takes (1) first as `Pass 10.1`, encryption authoring second as
+  `Pass 5.4`, and puts **(2) here, in *Backlog*, stated so**: signing
+  needs a key source, a certificate source, a PAdES-level decision and a
+  signing-time `/ByteRange` patch in the writer, and is **not
+  scheduled**. What this bullet's original scope still owns after the
+  split: PKCS#7/CMS signing, PAdES B-B/B-T/B-LT/B-LTA, RFC 3161
+  timestamps, and the **trust** leg of verification (chain building,
+  revocation, a trust store) — `Pass 10.1` ships `trust = NotChecked`
+  by name. Dependency posture at the split: `docs/PRIOR_ART.md`'s
+  Cryptography table, amended this filing (`cms` still `0.3.0-pre.2`,
+  `rsa` at `0.10.0-rc.18`, both pre-1.0 as of 2026-09-03; the
+  verification-side arithmetic direction observed in the engineer's tree
+  is in-house — see `Pass 10.1`). `docs/FEATURES.md`: the single
+  *Planned* row *"Digital signatures — PKCS#7/PAdES signing and
+  verification"* is replaced by two rows, *verify* and *sign*, both
+  unticked.
 - **Encryption** — standard security handler, RC4 (legacy read-compat
   only, never write), AES-128/256, public-key (certificate) security
   handler. **Updated 2026-07-31 by decision 007 (Pass 5 in its
@@ -122075,6 +122711,61 @@ added. See that section below.
   password," never a silently wrong document, because `/R` 5
   authentication is self-verifying). `docs/FEATURES.md`'s Encryption
   row: see the `f79f044..f79d9a2` Shipped entry for the exact row text.
+  **★★ AMENDMENT (2026-09-03, 396th filing) — TWO THINGS, AND THE FIRST
+  IS A CORRECTION THIS BUCKET HAS OWED FOR TWENTY-TWO DAYS.**
+  **(1) `/R` 6 is NO LONGER UNSOURCED, and has not been since
+  2026-08-12.** The paragraph above (*"`/R` 6 remains the ONLY unsourced
+  piece"*), the 2026-07-31 finding (*"`/R 6` cannot be implemented from
+  sourced material today"*) and its three-option sub-decision were all
+  true when written and all stale from 2026-08-12, when the operator
+  acquired ISO 32000-2:2020 (Errata Collection 3) under PDF Association
+  sponsored access and `pdfce-spec-librarian` wrote
+  `D:\Dev\Rag-Specialized\PDF_Spec\security\security__aes256_r6.md`
+  (frontmatter `date: 2026-08-12`, `license_basis:
+  licensed_primary_private_rag`) — **Algorithm 2.B complete** (SHA-256
+  seed; 64 mandatory rounds of AES-128-CBC keyed by `K[0..16]`, IV
+  `K[16..32]`, over a 64×-repeated `K0`; a modulo-3 selector over the
+  first 16 bytes of `E` choosing SHA-256/384/512; a last-byte-of-`E` ≤
+  round−32 exit), with Algorithms 2.A, 8–13 and 1.A and Tables
+  20/21/22/25. The same day `iso32000__ref__encryption_impl.md` flipped
+  its **A8** row from *"refuse `/R 6`"* to **"IMPLEMENTABLE — ship it
+  behind ambiguity A13"**, amended **W17** (*"a conformant AES-256 write
+  path NOW EXISTS, `/V 5` + `/R 6` + `AESV3`"*), and added **W19**
+  (2.0's permission-bit write rules: bits 1–2 ZERO, 7–8 and 13–32 one,
+  bit 10 always one), **W20** (SASLprep is *normative* at `/R` 6, neither
+  RFC staged) and **A13** (Algorithm 2.B's exit test is inconsistent
+  between steps (e) and (f) by exactly one round — resolution *follow
+  (f)*, derived from the standard's own NOTE 3; settleable only by
+  measuring a real `/R` 6 file). **None of that reached this bucket,
+  `docs/FEATURES.md`'s Encryption row, or the crate** — by grep of both
+  ledgers for `aes256_r6`/`2.B`, the closure appears nowhere in pdfce's
+  own record, and `crates/pdfce-core/src/crypto/` still says *unsourced*
+  in five doc comments, one operator-facing error string and one test
+  name (enumerated in the 396th *Shipped* block's sweep). The `/R` 6
+  refusal is therefore a **build gap, not a sourcing gap** — the same
+  shape as the XFA item in `CLAUDE.md` (*the answer was already sourced
+  in one document while another still asked the question*), and
+  `security__aes256_r6.md` is `licensed_primary_private_rag`: paraphrase
+  and cite in code, never transcribe.
+  **(2) `pdfceGUI` asked for the WRITE side by name, 2026-09-03 08:27
+  — `request_a_document_cannot_be_encrypted_or_have_its_permissions_set.md`
+  (their operator ask O108).** Their instrument `tools/security-coverage.py`,
+  keyed on our API at `a436432`, found **61 public crypto/signature items,
+  all read-side**. Asks, in their order: `set_encryption` — **`/R` 6 /
+  AES-256 ONLY**, and they ask us *not* to offer RC4 / `/R` 2–4 authoring
+  (*"a control that can produce a document weaker than the standard
+  allows is a control we would have to argue an operator out of using"*
+  — which is also W14/W17's `shall not`); `set_permissions` (all eight
+  Table 22 bits; `PermissionBit` already models them); `remove_encryption`
+  owner-authenticated only (`AuthKind` is the discriminator). **Not
+  asked:** public-key encryption (§7.6.5), `/EFF`, strings-only or
+  streams-only. Their own defect, theirs to fix: their shell never calls
+  `load_with_password`. **Scoped as `Pass 5.4`, filed *Next up* this
+  filing** (increments 1–3 shipped under the bare family name and are
+  cited by commit; `5.1`–`5.3` are deliberately NOT minted after the
+  fact). The reply that committed the order is
+  `reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`
+  (08:41): signature verification (`Pass 10.1`) first, this second.
 - **Adobe LiveCycle / AEM Document Security, and third-party proprietary
   DRM handlers (FileOpen, Locklizard, and similar) — recorded as
   IMPOSSIBLE, not declined.** Added 2026-08-11, operator request (*"can
@@ -123255,6 +123946,44 @@ name and say NOT BUILT YET) must be updated in the same Pass —
 shape, not the schedule.** No Pass ID assigned.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**★★ NEW 2026-09-03 (396th filing) — ONE QUESTION, TWENTY-TWO DAYS LATE:
+the spec-librarian escalated four licence readings to the operator on
+2026-08-12 inside a RAG file, and none of them reached this list. Now
+that `Pass 5.4` (*Next up*) is the first code that will be written from
+that file, they are filed here. Operator-question ceiling moves `(cb)` →
+`(cc)`, next free `(cd)`:**
+
+- **(cc) `D:\Dev\Rag-Specialized\PDF_Spec\security\security__aes256_r6.md`
+  §9 put four things to you on 2026-08-12 that only you can answer, about
+  the ISO 32000-2:2020 sponsored copy you acquired (*"Single user only,
+  copying and networking prohibited"*, watermarked to you by name): (1)
+  whether that licence permits the file living at `PDF_Spec\_sources\` on
+  one local disk — and whether to keep the second copy in your
+  `Downloads\`; (1b) whether the full-text extraction the spec-librarian
+  cached (`C:\tmp\iso32000_2_dump.txt`, a complete derivative, ~2.7 MB)
+  may stay, since it regenerates in two minutes on request; (2) whether a
+  paraphrase-plus-short-quotation RAG file is "reproduction" — the file
+  assumes not, on the notice's own *"required in the context of its
+  implementation"* carve-out, and nobody with authority has confirmed
+  that reading; (3) whether the copy travels with the machine or with
+  you — if pdfce ever gains a second contributor, that RAG cannot be
+  shared with them; and (4) that Algorithm 2.B's step-(a) erratum is
+  `Accepted` by the PDF Association TWG, not ISO-`Completed` — so
+  `Pass 5.4` would implement a correction ISO has not ratified (the
+  spec-librarian's own 2026-08-20 finding, 200th filing, is that an
+  `Accepted` read from the first `/IRT` reply is stale roughly two times
+  in three — 376 of 547; the walk for this erratum is still owed on their
+  side).** *Default if unanswered:* the
+  conservative reading on all four — the source stays in `_sources\`
+  only, nothing derived from it enters either public repository beyond
+  clause numbers, algorithm steps, constants and short cited fragments
+  (the file's own §0.1 permissions); the `Downloads\` copy and the
+  `C:\tmp` dump are your files and are left alone; `Pass 5.4` implements
+  step (a) per the erratum, **cites the erratum's review state in the doc
+  comment**, and keeps A13 switchable. Nothing here blocks `Pass 5.4`;
+  it is filed so the first line of `/R` 6 code is not written under a
+  licence reading nobody made.
 
 **★★★ NEW 2026-09-02 (372nd filing) — ONE QUESTION, AND IT NEEDS AN ACROBAT
 INSTALL THIS ROLE HAS NO ACCESS TO. Operator-question ceiling moves
@@ -142279,6 +143008,23 @@ ceiling `114` → `115`** (`iccce` enters as a git dependency pinned to tag
   > the rule.** Learned the same hour: a commit made in GitHub's web
   > editor (`c1e4c17`) runs no local hook — for that route CI is the
   > only gate; the hook binds *this clone's* pushes, nothing else.
+
+  > ★ **Amended 2026-09-03 (396th filing, `c0c8dee`) — clause 2's
+  > variance is RESOLVED, in the direction the clause was written.**
+  > `tools/run-gates.sh` now appends `pre-push hook not active (git
+  > config core.hooksPath tools/hooks)` to its `failed` array when
+  > `core.hooksPath` is not `tools/hooks`, so the sweep **exits
+  > non-zero** — red, not reported (the `failed=()` initialiser moved
+  > above the check so the push is possible; +5 / −1 in that file). Of
+  > the two closures the 395th amendment offered — make the line red,
+  > or amend this clause to say *reports* — the engineer took the first,
+  > so the clause text above stands unamended and the table in the
+  > `f23543e` *Shipped* record now reads four-for-four: 1 built, 2
+  > built, 3 lapsed, 4 in force. A fresh clone's first sweep is
+  > therefore red until `git config core.hooksPath tools/hooks` is run
+  > — the `R217`-shaped red the 395th filing weighed, accepted. The
+  > web-editor boundary is unchanged: the hook still binds this clone's
+  > pushes and nothing else.
 
   **Reading-side corollary, the cheaper half and not a substitute.** When a
   gate's text says red and a later line says ok, the text outranks the
