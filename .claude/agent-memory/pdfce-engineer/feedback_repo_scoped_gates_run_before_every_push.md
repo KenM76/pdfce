@@ -54,3 +54,10 @@ force-push to resolve one of these — report it and let him rule.
 Related: [[never-bundle-code-into-a-filing-commit]],
 [[a-gate-sweep-certifies-the-tree-it-ran-on]],
 [[run-the-projects-own-gates]].
+
+**RECURRED 2026-09-03, by a pipe.** `python tools/check-suite-name-absent.py | tail -1 && git push`
+— the `&&` saw `tail`'s exit code, not the gate's, so a docs commit carrying a
+temp-folder path with the licensed name was pushed (`c180aac`), then scrubbed
+in `bd40ffa`. The line is now in published history. Rule: the gate runs
+BARE before `&& git push` — never through a pipe — or run it, read its
+last line, and push in a SEPARATE command.
