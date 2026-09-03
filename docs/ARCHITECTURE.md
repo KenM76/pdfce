@@ -6914,6 +6914,24 @@ earlier reading; permissive, so rule 13's escalation trigger did not fire and
 no operator licence call was needed. `THIRD_PARTY_LICENSES.md` regenerated via
 `cargo-about`.
 
+★ **NOTED 2026-09-02 (`Pass 242.0`, `48f8fbb`; pdfce-librarian 385th
+filing, no new decision minted) — a THIRD crate from the same sibling
+project, `iccce-color`, is now DECLARED DIRECTLY in
+`crates/pdfce-render/Cargo.toml` too.** It carries the PCS value types
+(`Xyz`) that `iccce-cmm`'s PCS-side entry points take; it was already in
+the dependency tree transitively, as `iccce-cmm`'s own dependency, but
+`iccce-cmm` does not re-export the type, so code that needs an
+`iccce_color::Xyz` value directly needs the crate declared directly too.
+Same repository, same pinned `rev`, same MIT licence as the other two —
+dependency **set** unchanged (it was already resolved and vetted
+transitively), so this is a manifest-declaration change, not a new
+licence question; `THIRD_PARTY_LICENSES.md` unchanged, verified by
+regenerating. Not treated as decision-log-worthy on its own: nothing
+about which crate is used, what it is used for, the `pdfce-core`/
+`pdfce-render` boundary, or the pin form (decisions 064/115/123) changes
+— it is the same dependency, now named where it is used instead of only
+where it is transitively pulled in.
+
 ★★ **RE-PINNED 2026-09-02 (`Pass` untracked, `e868d36`; see §12 decision
 123, which amends decision 115's pin form without disturbing its reasoning)
 from `tag = "v0.3.0"` to `rev = "a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3"`
@@ -25531,6 +25549,17 @@ free 072.**
   bridged population is content with genuinely no ink to keep — an
   additive colour space — and the results of transparency groups.**
 
+  **★★★★ AMENDED AGAIN 2026-09-02 (`Pass 242.0`, `48f8fbb`) —
+  `Lab`/`CalRGB`/`CalGray` no longer belong in the "genuinely no ink to
+  keep" population either.** They now separate through the output
+  intent's own PCS/B2A route instead of the generic `rgb_to_cmyk`
+  reconstruction this paragraph describes. What remains bridged: a
+  plain `DeviceRGB`/`DeviceGray` paint with no CIE or ICC
+  characterisation at all, and the results of transparency groups.
+  **This is the FIFTH time this counter's population has changed**
+  (`Pass 130.1` → `137.0` → `137.1` → `140.0` → `242.0`) — the shape
+  this passage itself names, recurring.
+
   **★★ THIS IS THE FOURTH TIME THIS COUNTER'S POPULATION HAS CHANGED**
   (`Pass 130.1` → `137.0` → `137.1` → `140.0`), and on each occasion the
   description in some other document stayed still. The engineer's own
@@ -29222,6 +29251,14 @@ project — `iccce-profile` and `iccce-cmm`, both declared as
 **In `pdfce-render` only** — `pdfce-core` does not depend on `iccce`, which
 keeps the object model free of a colour engine, and which is also the reason
 the version banner did not self-update (see below).
+
+★ **AMENDED-IN-PLACE 2026-09-02 (`Pass 242.0`, `48f8fbb`) — this count is
+now stale but was correct when written.** A third crate, `iccce-color`
+(the PCS value types `iccce-cmm`'s entry points take), is now also
+declared directly, for the same reasons and the same terms as the two
+above — see §9's own dated note, added the same edit. Not a re-opening
+of this decision: the boundary (`pdfce-render` only), the pin form
+(now `rev`, per decision 123) and the licence terms are all unchanged.
 
 #### Why a git dependency, and why pinned — the engineer's reasoning, recorded in full
 

@@ -87095,3 +87095,127 @@ PDF/X), subject index updated, master index updated.
   one release cycle, worth a look next session at whether a third
   moving-target shape is still lurking in it before relying on it
   unattended for the next tag.
+
+## 2026-09-02 (385th filing) — `Pass 242.0` (`48f8fbb`) SHIPPED — a `Lab`/`CalRGB`/`CalGray` colour now separates through the output intent on every route, and an OLDER `/Indexed`-over-`Lab` palette defect (100× too dark) is found by the same fixture; `R240` MINTED
+
+**Sourcing (hard rule 8).** No shell this filing. The commit hash, the
+changes it makes, and every measurement below are relayed verbatim by
+the engineer in the dispatch prompt, not independently confirmed via
+`git show`/`git log`. Already on `main`, not yet pushed as of this
+filing — pushed together with this filing's own commit, per standing
+practice (the `R217` family).
+
+**Shipped:**
+- `Pass 242.0` (`48f8fbb`) — `Lab`/`CalRGB`/`CalGray` colours on a page
+  that composites in ink now separate through the output intent's own
+  PCS/B2A route (`ColorSpace::to_pcs_xyz` D50-adapted XYZ →
+  `IccBridgeCache::pcs_to_ink`/`PcsBridge`, a destination-only `iccce`
+  chain built once per rendering intent) instead of a generic
+  `rgb_to_cmyk` bridge that put a neutral colour into K alone.
+  Diagnosed on `PCS 22.1` (a `Lab` backdrop under `ColorBurn`); after
+  the fix, `X` and its surrounding field both probe `c=0.385 m=0.303
+  y=0.304 k=0.536` against the authored `.38 .31 .31 .525`. Conformance
+  sweep moves **2 FAIL / 41 pass / 8 unresolved of 51** (from 3/40/8).
+  Remaining FAILs: `PCS 3.0`/`PCS 4.0` (open question `(cb)`).
+- Same Pass, a SECOND and OLDER defect found by the fix's own route-twin
+  fixture: `image::palette_entry` divided every `/Indexed` palette byte
+  by a fixed 255 regardless of the base space's declared component
+  range (§8.6.6.3) — invisible against RGB/Gray/CMYK bases, ~100× too
+  dark against a `Lab` base (L\* 60 read as 0.6). Fixed via
+  `Space::component_ranges()`; the vector fill path had scaled
+  correctly all along.
+- `iccce-color` becomes a direct dependency of `pdfce-render` (already
+  transitive as `iccce-cmm`'s own dependency); same repo/rev/MIT;
+  dependency set unchanged; `THIRD_PARTY_LICENSES.md` unchanged.
+
+**Decisions made this session:**
+- No new `ARCHITECTURE.md` §12 decision. A dated note added to §9's
+  "Fifth dependency" paragraph and to decision 115's own body text (not
+  a new decision number) recording `iccce-color` as a third, now-direct
+  crate from the same sibling project, on the same terms as the other
+  two.
+- Standing rules: **`R240` minted** — "a conversion re-implemented on an
+  image/palette code path independently of the fill/vector path will
+  diverge from it; a route-twin agreement fixture (the same authored
+  value through every route, compared to each other rather than to an
+  external reference) finds it in one render." Minted at `n = 2`,
+  independently verified by this role: `Pass 240.0`'s ICC N-4 raw-ink
+  arm and this Pass's `/Indexed`-over-`Lab` palette defect. The
+  dispatch additionally characterized this as the *"third recorded
+  instance"* of the shape without naming a first; this role has no
+  shell to locate one and minted on the two verified instances alone,
+  which already clear this project's two-occurrence bar.
+
+**Findings + decisions:**
+- **The diagnosis path for `PCS 22.1`.** Three hypotheses were ruled
+  out in turn — a `Lab`→XYZ conversion error, an `/ExtGState` misread,
+  a transparency-group boundary bug — before the real cause (the
+  SEPARATION of the `Lab` backdrop into ink, upstream of the
+  `ColorBurn` blend) was found. Graduated to
+  `C:\personal_rag\pdf\lesson_20260902_pdfx_reference_render_separates_a_cie_colour_through_the_output_intent_max_gcr_reconstruction_goes_black_under_colorburn.md`.
+- **The palette defect and the route-twin technique.** A one-entry
+  `/Indexed` palette over `Lab`, a direct image texel of the same
+  colour, and a vector fill of the same colour, all on one page,
+  compared to each other rather than to an external reference — the
+  fixture built to catch a DIFFERENT defect (the separation route)
+  incidentally caught a SECOND, older one. Graduated to
+  `C:\personal_rag\pdf\lesson_20260902_indexed_palette_byte_scales_to_the_base_spaces_component_range_a_lab_base_makes_div255_100x_dark.md`,
+  and to a new cross-project finding at
+  `D:\dev\rag\rust\a_conversion_reimplemented_on_a_second_code_path_diverges_test_the_paths_against_each_other.md`
+  (written this filing, not deferred).
+- **Sabotage-harness gotcha, relayed by the engineer.** The first
+  sabotage run on `lab_ink.rs` falsely reported survivors because the
+  harness applied a test filter to both the mutant and the baseline
+  target; corrected, re-run clean at 4/4 mutations caught. Worth
+  watching for in any future sabotage run that reports an unexpected
+  survivor — check the harness's own filter arguments before trusting
+  the report.
+- **Gotcha for future sessions, relayed by the engineer:**
+  `tools/run-gates.sh`'s own backgrounded run gets killed by the
+  harness once it exceeds a 10-minute window; every gate command in
+  this filing's dispatch was run piecewise in the foreground instead.
+  Worth a `D:\dev\rag\rust\` entry if this recurs a second time —
+  declined at `n = 1` this filing.
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather
+  than inferred.
+
+**Still in flight:**
+- Shadings and meshes in `Lab`/`CalRGB`/`CalGray` AND in `ICCBased` RGB
+  remain the one unmanaged route across all four CIE/ICC spaces —
+  `ROADMAP.md` *Backlog* entry widened this filing to cover all four
+  rather than `ICCBased` RGB alone.
+- `PCS 3.0`/`PCS 4.0` (device-model adjudication, open operator
+  question `(cb)`) remain the suite's only FAILs.
+- N 1 (Gray) and N 4 (CMYK) on the DISPLAY path remain unmeasured for
+  the same defect-in-untested-path pattern, carried over from the
+  384th filing's own "still in flight" note.
+
+**For next session:**
+- This commit (`48f8fbb`) and this filing's own commit push together,
+  per standing practice.
+- Consider whether the shadings/meshes gap (now spanning four colour
+  spaces) is worth scoping into a real Pass before the corpus-exposure
+  census `ROADMAP.md`'s Backlog entry says is still needed.
+
+**`docs/FEATURES.md`:** three rows amended in place — *Colour spaces and
+PDF functions*, `/OutputIntents`-aware CMYK conversion, and
+*Subtractive (colorant) compositing buffer* (narrowed: `Lab`/`CalRGB`/
+`CalGray` no longer count as "still bridges"). No box moves.
+
+**`ROADMAP.md`:** new top *Shipped* entry (385th filing) for
+`Pass 242.0`; *Backlog* entry for shadings/meshes widened from
+`ICCBased` RGB alone to all four CIE/ICC spaces; `R240` minted in
+*Standing rules*.
+
+**`ARCHITECTURE.md`:** §9's "Fifth dependency" paragraph and decision
+115's body text both gain a dated note (not a new decision) recording
+`iccce-color` as a third, now-direct dependency crate.
+
+**`C:\personal_rag\pdf\`:** two new lessons (the `/Indexed`-over-`Lab`
+palette defect; Acrobat's output-intent routing for a CIE colour under
+`ColorBurn`), subject index updated, master index updated.
+
+**`D:\dev\rag\rust\`:** one new finding (a conversion reimplemented on a
+second code path diverges — test the paths against each other), index
+updated.

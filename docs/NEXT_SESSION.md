@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 append-only record (`ROADMAP.md`, `SESSION_LOG.md`).
 
-Written **2026-09-02**, at the end of a session that shipped **Passes 240.0
-and 241.0**. Everything below was measured with a shell in that session;
+Written **2026-09-02**, at the end of a session that shipped **Passes 240.0,
+241.0 and 242.0**. Everything below was measured with a shell in that session;
 commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
@@ -30,41 +30,37 @@ routes, and the routes agree with each other (the four-ways fixture,
 | image, `N 4` — direct | fallback | **managed (was raw samples — see §D 1)** | 240.0 |
 | image, `N 4` — `/Indexed` | fallback | managed | 214.0 |
 | `N 1`, any route | fallback | managed with an intent | — |
-| **shading, mesh, any `N`** | **fallback** | **unmanaged** | **owed** |
+| `Lab` / `CalRGB` / `CalGray` fill, text, image, `/Indexed` image | `xyz_to_srgb` (unchanged) | **managed — PCS → output intent B2A** | **242.0** |
+| **shading, mesh — ICCBased RGB OR a CIE space** | **fallback** | **unmanaged** | **owed** |
 
-**Conformance standing: 3 FAIL / 40 pass / 8 unresolved of 51** — from
+**Conformance standing: 2 FAIL / 41 pass / 8 unresolved of 51** — from
 5 / 38 / 8 at the start of the session
 (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir D:/Dev/temp/acro-refs`).
-`PCS 13.0` and `PCS 17.2` pass; every ICC patch's whole-image error fell or
-held (the table is in `f978291`'s message).
-
-### The three that remain
-
-| patch | what it is | who owns it |
-|---|---|---|
-| `3.0` cell k, `4.0` cell k | **the device-model adjudication** — decision 119, open operator question `(cb)`. Both renders conform. **Do not spend a Pass on either.** | operator |
-| `22.1` | a Lab `L*=60` swatch renders `(35,31,32)` against `(100,101,100)`; a Lab fill under a form XObject + ExtGState. **Not diagnosed.** Start by probing the pixel with and without the ExtGState, then with `--probe-ink`. | **§1 below** |
+`PCS 13.0`, `17.2` and `22.1` pass. **The two that remain are `3.0` cell k
+and `4.0` cell k — the device-model adjudication, decision 119, open operator
+question `(cb)`. Both renders conform. Do not spend a Pass on either.** There
+is nothing left on the sweep that is pdfce's to fix.
 
 ---
 
-## §1 NEXT: `PCS 22.1` — the Lab swatch
+## §1 NEXT: shadings and meshes are the last unmanaged colour route
 
-It is the last patch on the sweep that is pdfce's to fix, and nobody has
-looked at it yet. Do not assume it is a Lab conversion error: the same Lab
-values as a plain fill are within a few levels (`color.rs`'s Lab tests). The
-suspects, in order of cheapness to eliminate: the ExtGState (a soft mask or
-`/CA` that darkens), the form XObject's group (a Lab fill entering a
-subtractive buffer through `rgb_to_cmyk` — a Lab space has no ink answer, so
-it bridges), and only then the conversion itself.
+Every other object type now converts an `ICCBased` RGB colour through its
+profile and a CIE colour through the output intent. A shading or mesh in
+either space still resolves its colour inside `shading.rs:543` /
+`mesh.rs:677` through `ColorSpace::to_rgb` (Table 66 reinterpretation on
+screen) and `ColorSpace::to_cmyk` (`None`, so `rgb_to_cmyk` on an ink page).
+The predicates to reuse are `Interpreter::display_bridge` (ICC → sRGB),
+`IccBridgeCache::get` (ICC → ink) and `IccBridgeCache::pcs_bridge` (CIE →
+ink); the cache and the intent live on the interpreter, and the shading
+builder is called from it. Expect the same twin defect the last two Passes
+found: fix the ramp and the mesh vertex reader in the SAME Pass, and write the
+fixture as a fill-vs-shading agreement test (`tools/gen-shading-ink-fixtures.py`
+is the template).
 
-Second candidate, if 22.1 turns out to be `(cb)`-shaped: **shadings and
-meshes in an ICCBased RGB space** (§0's last row). Their colour is resolved
-inside `shading.rs:543` / `mesh.rs:677` through `ColorSpace::to_rgb`, which
-still reinterprets. The cache and the intent live on the interpreter;
-`Interpreter::display_bridge` is the predicate to reuse. 0 of 51 patches;
-corpus exposure unmeasured — **measure it before spending the Pass**
-(`tools/census` or a grep of the corpus for `/ShadingType` under an
-`ICCBased` `/ColorSpace`).
+0 of 51 patches exercise it; corpus exposure unmeasured — **measure before
+spending the Pass** (grep the corpus for `/ShadingType` under an `ICCBased`
+or `Lab` `/ColorSpace`). If the population is zero, take §A item 1 instead.
 
 ---
 
@@ -77,11 +73,21 @@ corpus exposure unmeasured — **measure it before spending the Pass**
 | 3 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. The gate stops it growing. | rule 6 |
 | 4 | Make `sh` shadings selectable objects; resolve `/OC` in the decomposer. | 0.6 % / 0 files |
 | 5 | **`N 1` on the display path** — one-line widening of `components == 3` in `image::resolve_space_array` and `display_bridge`; unmeasured, no patch fails on it. Measure `PCS 18.2` before and after if it is ever tried. | 0 patches |
+| 6 | **Other `/Indexed` bases with a non-unit component range** — `palette_entry` now scales into `Space::component_ranges()`, which is `0..1` for everything but a delegated CIE space. An `/Indexed` over `ICCBased` whose profile `/Range` is not `0..1` would still be wrong; pdfce does not read profile ranges anywhere (`default_decode` says so). | unmeasured |
 
 ---
 
 ## §B STATE OF THE TREE — verified 2026-09-02
 
+- **`tools/run-gates.sh` cannot survive being backgrounded.** Twice this
+  session the harness moved it to the background after 10 min and killed
+  it mid-doctest (the first run of the day survived; the next two did not).
+  Run it piecewise in the foreground instead: the ~25 fast gates in one
+  loop (`bash tools/run-gates.sh --list` prints them), then
+  `cargo test --workspace --no-run`, then `cargo test --workspace`, then
+  the no-default-features / wasm / fuzz checks. Each stays under 10 min
+  with a warm cache. A sweep certifies the tree it ran on, so run all of
+  them on the FINAL tree.
 - **Push state: run `git log --oneline origin/main..HEAD`.** Pushing `main`
   is standing-authorized; a non-zero count is something to fix.
 - **Release state: run `git tag --sort=-v:refname | head -1` and compare with
@@ -102,9 +108,9 @@ corpus exposure unmeasured — **measure it before spending the Pass**
 
 ## §C THINGS A NEW SESSION MUST KNOW BEFORE TOUCHING ANYTHING
 
-- **Run `bash tools/run-gates.sh` in the FOREGROUND**, and let the harness
-  background it (it takes ~20 min; the harness moves it after 10). **Run it
-  on the FINAL tree** — a sweep certifies the tree it ran on.
+- **Run the gates PIECEWISE in the foreground** — see §B's first bullet;
+  the whole-script run does not survive being backgrounded. **Run them on
+  the FINAL tree** — a sweep certifies the tree it ran on.
 - **★ Never type a bare `git checkout -- <file>` in a command chain.** Keep
   every multi-line edit in a script file under `D:\Dev\temp\` until it is
   committed; a heredoc edit cannot be re-run. Every sabotage must ASSERT it
@@ -193,7 +199,26 @@ corpus exposure unmeasured — **measure it before spending the Pass**
 
 ---
 
-## §F THE PATTERN THIS SESSION HIT
+## §F THE PATTERNS THIS SESSION HIT
+
+**An agreement test finds the OLD defect beside the new route.** Writing
+the three-ways `Lab` fixture for `Pass 242.0` exposed an `/Indexed`-over-
+`Lab` palette that had decoded L\* 100× too dark since `palette_entry` was
+written — on the CONTROL page, which the new route never touches. Fill vs
+image vs palette of one colour, probed with `--probe-ink`, is now three for
+three at finding a route twin on the day a route is fixed. Write it first.
+
+**A default-valued fixture cannot falsify a carry** (R225, again): the
+`Lab` fixtures declare D50, so the D50 adaptation in `to_pcs_xyz` is the
+identity there and a sabotage that deleted it survived. The unit test on a
+D65-declared space is what pins it. When a fixture's value equals what the
+code would produce with the feature removed, the fixture is not a test of
+the feature.
+
+**A sabotage harness is itself a claim.** The first sweep reported all
+four mutations surviving because `cargo test --test X --lib filter` applies
+the filter to BOTH targets. Read the harness's own output for which tests
+actually ran before believing a survivor.
 
 **A measured negative can be a measurement of the wrong thing.** `Pass
 214.0` tried the right route, measured 3×, and wrote a refusal — into its

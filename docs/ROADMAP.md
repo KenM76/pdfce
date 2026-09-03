@@ -96,6 +96,146 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★★ 385th filing, 2026-09-02 — ONE PASS SHIPPED (`Pass 242.0`,
+`48f8fbb`): A CIE COLOUR (`Lab`/`CalRGB`/`CalGray`) NOW SEPARATES THROUGH
+THE OUTPUT INTENT ON EVERY ROUTE, AND AN OLDER `/Indexed`-OVER-`Lab`
+PALETTE DEFECT (100× TOO DARK) FOUND BY THE SAME FIXTURE IS FIXED. `R240`
+MINTED.**
+
+**Sourcing (hard rule 8).** No shell this filing. The commit hash, the
+changes it makes, and every measurement below are relayed verbatim by the
+engineer in the dispatch prompt, not independently confirmed via `git
+show`/`git log`. Already on `main`, not yet pushed as of this filing —
+pushed together with this filing's own commit, per standing practice
+(the `R217` family).
+
+### Pass 242.0 (`48f8fbb`, 2026-09-02) — a Lab colour separates through the output intent on every route, and an /Indexed-over-Lab palette was decoded 100x too dark
+
+**What shipped.** `Lab`/`CalRGB`/`CalGray` colours on a page that
+composites in ink now take the PCS route instead of a generic
+`rgb_to_cmyk` bridge: `ColorSpace::to_pcs_xyz` (D50-adapted XYZ) feeds
+`IccBridgeCache::pcs_to_ink` / `PcsBridge` — a destination-only `iccce`
+chain, built once per rendering intent — which runs the output intent's
+own B2A table. Fills go through `authored_cmyk`; images go through the
+widened `image::Space::Special { cs, pcs }` (the variant became a struct
+to carry both the colour space and the PCS bridge). Previously both fills
+and images bridged through `rgb_to_cmyk`, which separates a neutral
+colour into K alone.
+
+**Diagnosis.** Print-conformance patch `PCS 22.1` (a `Lab`-authored
+backdrop composited under `ColorBurn`) was NOT a `Lab`→XYZ conversion
+error, NOT an `/ExtGState` misread, and NOT a transparency-group boundary
+bug — each ruled out in turn — but the SEPARATION of the `Lab` backdrop
+into ink, upstream of the blend arithmetic. After the fix: the patch's
+`X` marker and its surrounding field both probe `c=0.385 m=0.303
+y=0.304 k=0.536` against the file's own authored `.38 .31 .31 .525`.
+Conformance sweep moves **2 FAIL / 41 pass / 8 unresolved of 51** (from
+3/40/8 — see `Pass 240.0`, above). The two remaining FAILs are `PCS 3.0`
+and `PCS 4.0` — device-model adjudication, open operator question `(cb)`.
+No other patch changed a pixel.
+
+**★★ A SECOND, OLDER DEFECT — found by the fixture's own agreement
+test, not by the conformance sweep.** `image::palette_entry` divided
+every `/Indexed` palette byte by a fixed 255 regardless of the base
+space's declared component range (§8.6.6.3: a byte "shall be scaled to
+the range of the corresponding colour component in the base colour
+space"). For `DeviceRGB`/`Gray`/`CMYK` bases that range genuinely is
+[0, 1], so the shortcut was invisible on every earlier fixture; against a
+`Lab` base (L\* 0–100) a palette byte for L\*=60 decoded as `0.6`, not
+`60` — probed on the fixture's control page: `(0, 0.50, 0.75, 0.98)`
+beside an ordinary fill of the identical authored colour at `(0, 0, 0,
+0.43)`. The fill path (`color::indexed_to_rgb`) had scaled correctly all
+along — it was never touched by the `/255`-only shortcut; the image
+palette-decode path was the sole outlier. Fixed via a new
+`Space::component_ranges()`, feeding a widened `palette_entry(entry,
+ranges)`. **This is the third recorded instance of a "route-twin" shape
+in this project — a fill/vector path implementing a spec clause
+correctly while an image/bulk path takes a shortcut that happens to be
+invisible against every base earlier fixtures exercised** — the other
+named instance being `Pass 240.0`'s ICC N-4 image ink arm (raw decoded
+samples written straight as C,M,Y,K instead of routed through the same
+cached bridge the vector path used).
+
+**Dependency.** `iccce-color` (the PCS value types, `Xyz`, that
+`iccce-cmm`'s PCS-side entry points take) becomes a **direct** dependency
+of `pdfce-render` — it was already in the tree transitively as
+`iccce-cmm`'s own dependency, but `iccce-cmm` does not re-export it, and
+this Pass's code needs an `iccce_color::Xyz` value directly. Same
+repo/rev/licence (MIT) as the two existing `iccce` crates; dependency
+**set** unchanged; `THIRD_PARTY_LICENSES.md` unchanged, verified by
+regenerating via `cargo-about`. Both lockfiles moved.
+
+#### Tests and gates
+
+`crates/pdfce-render/tests/lab_ink.rs` (**3 tests**) over new
+`fixtures/synthetic/lab-ink/` (generator `tools/gen-lab-ink-fixtures.py`,
+`PROVENANCE.md`; reuses `icc-rgb/dest-cmyk.icc`). Unit tests:
+`palette_entry`'s range scaling and floor padding; `to_pcs_xyz` adapting
+a D65-DECLARED `Lab` fixture to D50 — added after a sabotage run showed
+the fixture's own D50-declared construction could not see a missing
+adaptation step (the `R225` shape: before trusting a green sabotage run,
+ask what the fixture would have shown on a broken implementation — the
+D50-declared fixture cannot discriminate a missing D50 adaptation because
+its own numbers already assume one, so a second, D65-declared fixture was
+added specifically to make the adaptation step observable). Sabotage: 4
+mutations, none survive (the first run's harness applied a test filter
+to both the mutant and the baseline target and falsely reported
+survivors — the harness itself was wrong, corrected, re-run clean).
+
+**Counter semantics.** `icc_managed_paints` now also counts a CIE paint
+separated through the output intent; it counts unmanaged only when a
+destination exists and the paint still could not separate.
+
+**Gates.** `fmt`/`clippy -D warnings` clean; every `tools/run-gates.sh`
+command run piecewise in the foreground (the script's own backgrounded
+run gets killed by the harness past its 10-minute window — worth a
+`SESSION_LOG.md` gotcha for a future filing, not fixed here); workspace
+**5054 passed / 0 failed**; `wasm32-unknown-unknown` clean; fuzz targets
+build; `--no-default-features` clean; `cargo tree -p pdfce-render`/
+`-p pdfce-core` re-verified GUI-free.
+
+#### Deliberately NOT done
+
+Shadings and meshes in `Lab`/`CalRGB`/`CalGray` AND in `ICCBased` RGB —
+widening the existing Backlog item (below) to cover both; the `N 1`/`N 4`
+display-path route is unchanged from `Pass 240.0`.
+
+#### `docs/FEATURES.md`
+
+*Colour spaces and PDF functions* (row amended: `Lab`/`CalRGB`/`CalGray`
+now separate through the output intent; `/Indexed`-over-`Lab` palette fix
+noted), the `/OutputIntents`-aware CMYK conversion row (now applies to
+CIE sources too, not just `ICCBased`), and the `Subtractive (colorant)
+compositing buffer` row (narrowed: `Lab`/`CalRGB`/`CalGray` no longer
+fall under "genuinely no ink to keep — still bridges") all amended in
+place. No box moves on any of the three.
+
+#### Standing rules — `R240` MINTED (full text below, in *Standing rules*)
+
+*A conversion re-implemented on an image/palette code path independently
+of the fill/vector path will diverge from it; a route-twin agreement
+fixture — the same authored value through every route, compared to each
+other rather than to an external reference — finds it in one render.*
+Minted at `n = 2`: `Pass 240.0`'s ICC N-4 raw-ink arm and this Pass's
+`/Indexed`-over-`Lab` palette defect. **Note on the count stated in the
+dispatch:** this filing independently verifies exactly those two named
+instances; the dispatch additionally characterized this as the *"third
+recorded instance"* of the shape, but does not name the first, and this
+role has no shell to locate it. The rule is minted on the two verified
+instances alone, which already meet this project's two-occurrence bar;
+if the dispatch's third instance is later identified, it strengthens the
+rule's evidentiary base but is not needed to justify minting it.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | `Pass 242.0` ships |
+| Decisions | ceiling `123`, next free `124` | unchanged — no decision minted (packaging/dependency fact, not a boundary or invariant change; body-section note added to decision 115 instead) |
+| Standing rules | ceiling `R239`, next free `R240` | `R240` minted; ceiling `R240`, next free `R241` |
+
+---
+
 **★★ 384th filing, 2026-09-02 — TWO PASSES SHIPPED: `Pass 240.0`
 (`f978291`) MAKES ICCBASED RGB COLOUR-MANAGED ON EVERY ROUTE AND
 RETRACTS A `Pass 214.0` "MEASURED AND EXPLICITLY REFUSED" CONCLUSION
@@ -113197,7 +113337,16 @@ nothing gets forgotten, not as a commitment to build in this order.
 > REMAINDER — shadings and meshes in an `ICCBased` RGB colour space are the
 > LAST unmanaged ICCBased route** after `Pass 240.0` made fills, strokes,
 > text and images colour-managed on every page kind. `FEATURES.md`'s
-> `/ICCBased` row stays `◐` core; no box moves.
+> `/ICCBased` row stays `◐` core; no box moves. **★ WIDENED 2026-09-02
+> (385th filing, `Pass 242.0`'s named remainder) — the same gap now also
+> covers `Lab`/`CalRGB`/`CalGray` shadings and meshes, not `ICCBased` RGB
+> alone.** `Pass 242.0` made `Lab`/`CalRGB`/`CalGray` fills, strokes, text
+> and images separate through the output intent's PCS route on every
+> other page kind; a shading or mesh in any of those three spaces is
+> still an un-widened reinterpretation, the identical shape of gap
+> `Pass 240.0` left for `ICCBased` RGB. The item below is retitled and its
+> scope widened accordingly rather than filed as a second, near-duplicate
+> entry.
 
 > ★★ **ONE ITEM ADDED 2026-09-02 (380th filing), `Pass 239.0`'s NAMED
 > REMAINDER — mesh shadings (types 4–7) are now the ONLY route still
@@ -113207,30 +113356,39 @@ nothing gets forgotten, not as a commitment to build in this order.
 > compositing buffer* row narrowed a fifth time to this single remaining
 > scope; no box moves.
 
-### Unscoped — ★★ SHADINGS AND MESHES IN AN ICCBased RGB SPACE STILL REINTERPRET RATHER THAN COLOUR-MANAGE — THE LAST UNMANAGED ICCBased ROUTE — filed 2026-09-02 (384th filing, `Pass 240.0`'s named remainder)
+### Unscoped — ★★ SHADINGS AND MESHES IN A CIE OR ICCBased RGB SPACE STILL REINTERPRET RATHER THAN COLOUR-MANAGE — THE LAST UNMANAGED ROUTE — filed 2026-09-02 (384th filing, `Pass 240.0`'s named remainder; widened 2026-09-02, 385th filing, `Pass 242.0`'s named remainder)
 
 **Status: NOT STARTED.** `Pass 240.0` (*Shipped*, above) made an
 `ICCBased` RGB (N 3) paint colour-managed on every OTHER route — fills,
 strokes, text, direct images, `/Indexed`-over-`ICCBased` images, and JPX
 images with an embedded profile and no `/ColorSpace` — on both additive
-and subtractive (with an output intent) pages. A shading (`sh`, a shading
-pattern, or a mesh, types 4–7) drawn in an `ICCBased` RGB space is still
-a Table 66 §8.6.5.5 reinterpretation through `/Alternate`, on both the
-display path and the ink path — unmanaged.
+and subtractive (with an output intent) pages. `Pass 242.0` (*Shipped*,
+above) did the same for `Lab`/`CalRGB`/`CalGray` paints, routing them
+through the output intent's own PCS/B2A table instead of a generic
+`rgb_to_cmyk` bridge. **In both cases, a shading (`sh`, a shading
+pattern, or a mesh, types 4–7) drawn in the affected colour space is
+still a Table 66 §8.6.5.5 reinterpretation through `/Alternate`, on both
+the display path and the ink path — unmanaged.** The gap is now stated
+once, for all four spaces (`ICCBased` RGB, `Lab`, `CalRGB`, `CalGray`),
+rather than as two near-duplicate entries, because the shape of the
+remaining work is identical across all four.
 
 **Corpus exposure unmeasured.** 0 of 51 print-conformance patches
-exercise this construct; no measurement has been taken of how common an
-`ICCBased`-RGB-space shading or mesh is in the wild. Scoping this Pass
-needs that census before an acceptance criterion can be written the way
-`Pass 240.0`'s own fixtures were (a discriminating construction, not a
-suite patch that happens to pass).
+exercise this construct in ANY of the four affected spaces; no
+measurement has been taken of how common a shading or mesh in an
+`ICCBased`-RGB, `Lab`, `CalRGB` or `CalGray` space is in the wild.
+Scoping this Pass needs that census before an acceptance criterion can be
+written the way `Pass 240.0`/`Pass 242.0`'s own fixtures were (a
+discriminating construction, not a suite patch that happens to pass).
 
 **The shape of the remaining work.** `ColorRamp`'s per-sample colour
 resolution and the mesh per-vertex colour resolution both currently ask
 `ColorSpace::to_cmyk`/the RGB conversion path directly rather than
-through `iccce`'s bridge; both would need the same `IccBridge`/cache
-plumbing `Pass 240.0` built for the paint and image routes, keyed the
-same way (profile bytes, not `Arc::ptr_eq`).
+through `iccce`'s bridge (for `ICCBased`) or the new PCS route (for
+`Lab`/`CalRGB`/`CalGray`, `Pass 242.0`); both would need the same
+`IccBridge`/`PcsBridge`/cache plumbing `Pass 240.0` and `Pass 242.0`
+built for their respective paint and image routes, keyed the same way
+(profile bytes, not `Arc::ptr_eq`).
 
 ### Unscoped — ★★ MESH SHADINGS (TYPES 4–7) STILL FLATTEN SPOT COLORANTS — THE ONE ROUTE `Pass 239.0` LEFT OPEN — filed 2026-09-02 (380th filing, `Pass 239.0`'s named remainder)
 
@@ -139884,6 +140042,65 @@ filing's report, not edited here (hard rule 11's `crates/` boundary).
 **Standing rules ceiling `R239` — UNCHANGED**, next free `R240`. **Decision
 ceiling `114` → `115`** (`iccce` enters as a git dependency pinned to tag
 `v0.3.0`; `ARCHITECTURE.md` §12), **next free `116`.**
+
+- **R240 — A CONVERSION IMPLEMENTED SEPARATELY ON THE FILL/VECTOR PATH AND
+  ON THE IMAGE/PALETTE PATH WILL DIVERGE, AND A "ROUTE-TWIN" AGREEMENT
+  FIXTURE — THE SAME AUTHORED VALUE THROUGH BOTH ROUTES ON ONE PAGE,
+  COMPARED TO EACH OTHER — FINDS THE DIVERGENCE FASTER THAN A
+  REFERENCE-RENDER DIFF CAN.** Minted 2026-09-02 (385th filing),
+  librarian-minted, at **n = 2**:
+
+  | | **instance 1 — `Pass 240.0` (`f978291`)** | **instance 2 — `Pass 242.0` (`48f8fbb`)** |
+  |---|---|---|
+  | conversion | `ICCBased /N 3` (RGB) → ink | `/Indexed` palette byte → base-space component |
+  | fill/vector side | correct — routed through the cached `tinting` bridge | correct — `color::indexed_to_rgb` already scaled to the base's declared range |
+  | image/palette side | wrong — outside the cached route, wrote raw decoded samples straight as C,M,Y,K | wrong — `image::palette_entry` divided by a fixed 255 regardless of the base's declared range |
+  | how found | an ink probe on a matched vector/image pair of the same authored colour | a route-twin fixture: fill, image texel and a one-entry `/Indexed` palette of the same authored `Lab` triple, on one page |
+  | magnitude | 3×/1.8× on two conformance patches | ~100× (L\* 60 read as 0.6) |
+
+  **Sourcing (hard rule 8).** No shell this filing; both instances relayed
+  verbatim by the engineer across the 384th and 385th filings' dispatch
+  prompts, not independently confirmed via `git show`. **Note on the
+  count:** the 385th filing's dispatch characterized this as the *"third
+  recorded instance"* of the shape but named only these two; this role has
+  no shell to locate a third and mints on the two independently-verifiable
+  instances alone, which already meet the project's two-occurrence bar.
+
+  **Why this clears the bar and is not merely `R225`/`R93` again.** `R225`
+  ("before trusting a green sabotage run, ask what the fixture would have
+  shown on a broken implementation") is about a fixture's power to
+  DISCRIMINATE; this rule is about WHICH TWO ROUTES to compare and why
+  they diverge in the first place — the fill/vector path is the one this
+  project's own test suite exercises most, so it accumulates correctness
+  the image/bulk path does not inherit for free. `R93` ("a doc comment
+  claiming equivalence is a claim, not a guarantee") is about a STATED
+  claim of equivalence between two things; here nothing claimed
+  equivalence — the two routes were simply never tested against each
+  other. And an external reference-render diff cannot see this class at
+  all: it only measures divergence from the reference, never divergence
+  between a project's own two routes — the mirror case of
+  `lesson_20260827_two_routes_wrong_in_the_same_direction_look_correct_to_a_reference_diff.md`
+  (`C:\personal_rag\pdf\`), where BOTH routes are wrong in the same
+  direction and a reference diff also sees nothing; here one route is
+  right and one is wrong, and the reference still does not have to be
+  involved to catch it.
+
+  **Standing practice.** Any colour or component conversion with both a
+  per-operand (fill/vector) implementation and a per-texel/
+  per-palette-entry (image) implementation gets a route-twin agreement
+  fixture — the same authored value drawn through both routes on one
+  page, asserted equal to each other — as part of ITS OWN test, not left
+  for a suite patch or an operator's eyeball to find by accident.
+
+  **Cross-project derivation, written this filing (not deferred):**
+  `D:/dev/rag/rust/a_conversion_reimplemented_on_a_second_code_path_diverges_test_the_paths_against_each_other.md`.
+  PDF-domain instance:
+  `C:\personal_rag\pdf\lesson_20260902_indexed_palette_byte_scales_to_the_base_spaces_component_range_a_lab_base_makes_div255_100x_dark.md`.
+
+  **Standing rules ceiling `R239` → `R240`; next free `R241`.** **Decision
+  ceiling `123` — UNCHANGED, next free `124`** — no decision minted with
+  this rule; it is a testing-discipline convention, not an architectural
+  ruling.
 
 ## Update protocol
 
