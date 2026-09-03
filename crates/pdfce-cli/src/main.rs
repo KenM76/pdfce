@@ -22843,11 +22843,12 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
     // for the region to be fully redacted.
     println!(
         "  vector_paths_cut={} vector_paths_dropped={} vector_clips_kept={} \
-         vector_paths_intersecting={}",
+         vector_paths_intersecting={} shadings_intersecting={}",
         report.vector_paths_cut,
         report.vector_paths_dropped,
         report.vector_clips_kept,
         report.vector_paths_intersecting,
+        report.shadings_intersecting,
     );
     println!("  carriers (diligence sweep, ISO 32000-1 §12.5.6.23):");
     for c in &report.carriers {

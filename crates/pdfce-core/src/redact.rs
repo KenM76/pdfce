@@ -49,6 +49,7 @@
 //! | Images intersecting a region | **samples DESTROYED** — decoded, the covered cells overwritten, re-encoded losslessly; a wholly covered placement is removed outright; a shared image is copied-on-write; a placement pdfce cannot decode RETAINS its mark and is disclosed by name (`redact_image`) |
 //! | Form-XObject content in-region | **disclosed** — not surgically redacted this cut (verify manually) |
 //! | Vector paths in-region | **CUT** — strokes are cut against the region expanded by the stroke width, fills are clipped to the region's complement, and a path wholly inside is deleted (`redact_vector`); a malformed path object pdfce cannot rewrite as a unit is counted and disclosed as a residual |
+//! | `sh` shading paints whose clip meets a region | **disclosed, by count** — a shading fills its clip (§8.7.4.5.1), tracked here as a bounding box; not cut this build |
 //! | Overlay marking (Table 192 ladder) | `/OverlayText` **burnt in** (via §12.7.3.3 variable text, `/DA`-formatted, `/Q`-justified); `/IC` filled under it; **absent `/IC` ⇒ TRANSPARENT**, per Table 192; `/RO` **not drawn** — disclosed, falls back to a plain box; `/Repeat` **ignored** — disclosed |
 //! | XFA / file attachments / structure-tree ActualText / thumbnails | **detected + disclosed** (not asserted-absent) |
 //!
@@ -379,6 +380,12 @@ pub struct RedactionReport {
     /// geometry is not painted content; it is disclosed because a clip
     /// shaped like the redacted content is still a shape in the file.
     pub vector_clips_kept: u64,
+    /// `sh` shading paints (§8.7.4.5.1) whose current clip's bounding box
+    /// met a region. A shading fills its clip, so each one may have painted
+    /// the region; pdfce does not cut shadings this build, and the exact
+    /// clip shape is not tracked — so every one is an un-redacted residual,
+    /// reported through the `shadings` carrier as `DisclosedNotScrubbed`.
+    pub shadings_intersecting: u64,
     /// `/Redact` marks left IN the document, unapplied, because a region
     /// touched an image whose samples pdfce could not destroy. Each is
     /// named in `notes` with its reason, and the `images` carrier reads
@@ -466,6 +473,15 @@ struct Surgeon<'a> {
     /// input for `redact_vector`. Saved/restored with `q`/`Q`.
     line_width: f64,
     lw_stack: Vec<f64>,
+    /// The current clipping path's bounding box in page space (`None` =
+    /// unclipped), intersected on every `W`/`W*` and saved/restored with
+    /// `q`/`Q`. A box, not the path: it exists only to bound `sh`.
+    clip_bbox: Option<(f64, f64, f64, f64)>,
+    clip_stack: Vec<Option<(f64, f64, f64, f64)>>,
+    /// `sh` operators (§8.7.4.5.1: paint the shading over the whole
+    /// current clip) whose clip box meets a region. Not cut this build —
+    /// a residual, disclosed.
+    shadings_intersecting: u64,
     /// Painted paths (`S`, `f`, `B`, … — not `n`) that crossed a region
     /// and could NOT be cut — a malformed object with a foreign operator
     /// inside it, which cannot be replaced as a unit. Each is an
@@ -516,6 +532,8 @@ struct SurgeryResult {
     vector_paths_cut: u64,
     vector_paths_dropped: u64,
     vector_clips_kept: u64,
+    /// `sh` paints whose clip box met a region.
+    shadings_intersecting: u64,
     estimated_fonts: BTreeSet<String>,
 }
 
@@ -546,6 +564,9 @@ impl<'a> Surgeon<'a> {
             path: PathRecord::default(),
             line_width: 1.0,
             lw_stack: Vec::new(),
+            clip_bbox: None,
+            clip_stack: Vec::new(),
+            shadings_intersecting: 0,
             vector_paths_intersecting: 0,
             vector_paths_cut: 0,
             vector_paths_dropped: 0,
@@ -703,6 +724,7 @@ impl<'a> Surgeon<'a> {
                 self.ctm_stack.push(self.ctm);
                 self.ts_stack.push(self.snapshot());
                 self.lw_stack.push(self.line_width);
+                self.clip_stack.push(self.clip_bbox);
             }
             b"Q" => {
                 if let Some(m) = self.ctm_stack.pop() {
@@ -713,6 +735,9 @@ impl<'a> Surgeon<'a> {
                 }
                 if let Some(w) = self.lw_stack.pop() {
                     self.line_width = w;
+                }
+                if let Some(c) = self.clip_stack.pop() {
+                    self.clip_bbox = c;
                 }
             }
             b"w" => {
@@ -873,12 +898,31 @@ impl<'a> Surgeon<'a> {
                 if let Some(paint) = PathPaint::from_op(name) {
                     self.path_painted(op, buf, paint);
                 }
+                self.apply_clip();
                 self.path = PathRecord::default();
             }
             // `n` ends a path without painting it (a clip definition, or
-            // nothing): not content, never touched.
+            // nothing): not content, never touched — but the clip it sets
+            // bounds every later `sh`.
             b"n" => {
+                self.apply_clip();
                 self.path = PathRecord::default();
+            }
+            // A shading paints the whole current clip. Without the clip's
+            // exact shape the interpreter can only say whether its box meets
+            // a region; when it does, that is an un-redacted residual.
+            b"sh" => {
+                let clip = self.clip_bbox.unwrap_or((
+                    f64::NEG_INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::INFINITY,
+                    f64::INFINITY,
+                ));
+                if self.regions.iter().any(|r| {
+                    r.min_x < clip.2 && clip.0 < r.max_x && r.min_y < clip.3 && clip.1 < r.max_y
+                }) {
+                    self.shadings_intersecting += 1;
+                }
             }
             _ => {}
         }
@@ -902,6 +946,24 @@ impl<'a> Surgeon<'a> {
         self.th = s.th;
         self.trise = s.trise;
         self.tl = s.tl;
+    }
+
+    /// If the path object under construction carries `W`/`W*`, intersect
+    /// the tracked clip box with its page-space box (§8.5.4: the clip takes
+    /// effect after the painting operator).
+    fn apply_clip(&mut self) {
+        if self.path.clip.is_none() {
+            return;
+        }
+        let Some((x0, y0, x1, y1)) = self.path.page_bbox() else {
+            // A clip with no geometry clips everything.
+            self.clip_bbox = Some((0.0, 0.0, 0.0, 0.0));
+            return;
+        };
+        self.clip_bbox = Some(match self.clip_bbox {
+            None => (x0, y0, x1, y1),
+            Some((a0, b0, a1, b1)) => (a0.max(x0), b0.max(y0), a1.min(x1), b1.min(y1)),
+        });
     }
 
     /// A painting operator ended the current path object: cut it against
@@ -1294,6 +1356,7 @@ fn redact_page_content(
         vector_paths_cut: surgeon.vector_paths_cut,
         vector_paths_dropped: surgeon.vector_paths_dropped,
         vector_clips_kept: surgeon.vector_clips_kept,
+        shadings_intersecting: surgeon.shadings_intersecting,
         estimated_fonts: surgeon.estimated_fonts,
     }
 }
@@ -1809,6 +1872,7 @@ pub fn apply_redactions(
         report.vector_paths_cut += result.vector_paths_cut;
         report.vector_paths_dropped += result.vector_paths_dropped;
         report.vector_clips_kept += result.vector_clips_kept;
+        report.shadings_intersecting += result.shadings_intersecting;
         estimated_fonts.extend(result.estimated_fonts);
         report.glyphs_removed += result.glyphs_removed;
         report.show_operators_edited += result.ops_edited;
@@ -2720,6 +2784,20 @@ fn carrier_detect_disclose(
              its dash phase at each cut",
             report.vector_paths_dropped
         ));
+    }
+    // Shadings (§8.7.4.5.1): `sh` paints the whole current clip, and the
+    // interpreter tracks that clip only as a box. Not cut; disclosed.
+    let shadings = report.shadings_intersecting;
+    if shadings > 0 {
+        report.add_carrier("shadings", true, CarrierAction::DisclosedNotScrubbed);
+        report.note(format!(
+            "redaction: {shadings} shading paint(s) (`sh`) have a clipping region that meets a \
+             redaction region and were NOT cut — a shading fills its whole clip, and pdfce does \
+             not cut shadings this build; whatever the shading painted inside the region is \
+             still painted; verify the region by eye"
+        ));
+    } else {
+        report.add_carrier("shadings", false, CarrierAction::Absent);
     }
     if report.vector_clips_kept > 0 {
         report.note(format!(
@@ -3824,6 +3902,36 @@ mod tests {
         );
         // Two stroke pieces: the line enters the (expanded) region and leaves it.
         assert_eq!(text.matches(" l\n").count(), 2, "{text}");
+    }
+
+    #[test]
+    fn a_shading_whose_clip_meets_the_region_is_disclosed_and_one_clipped_away_is_not() {
+        // An axial shading resource; `sh` under a clip over the region, and
+        // `sh` under a clip far from it.
+        let content = b"q 50 100 100 50 re W n /Sh1 sh Q q 200 10 20 20 re W n /Sh1 sh Q";
+        let shading = b"<< /ShadingType 2 /ColorSpace /DeviceGray /Coords [0 0 300 0] \
+                        /Function << /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >> >>"
+            .to_vec();
+        let mut bodies = vec![
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] \
+               /Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>"
+                .to_vec(),
+            stream_body("", content),
+            shading,
+        ];
+        bodies.push(b"<< >>".to_vec());
+        let pdf = assemble_bytes(&bodies);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (_out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.shadings_intersecting, 1, "{report:?}");
+        assert_eq!(
+            carrier_action(&report, "shadings"),
+            CarrierAction::DisclosedNotScrubbed
+        );
+        assert!(report.has_disclosed_residuals());
     }
 
     #[test]

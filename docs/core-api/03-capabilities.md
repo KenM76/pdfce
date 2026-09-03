@@ -1605,14 +1605,18 @@ internally (`redact.rs:1220-1224`).
 `images_removed`, `images_cloned_shared`, `images_overcovered`,
 `vector_paths_intersecting`, `marks_retained`** (all `Pass 245.0`),
 **`vector_paths_cut`, `vector_paths_dropped`, `vector_clips_kept`**
-(`Pass 246.0`), `carriers: Vec<CarrierStatus>`, `redacted_text`, `notes`; plus
+(`Pass 246.0`), **`shadings_intersecting`** (`Pass 246.1`),
+`carriers: Vec<CarrierStatus>`, `redacted_text`, `notes`; plus
 `has_disclosed_residuals()` (`redact.rs:343`).
 `CarrierStatus { carrier, present, action }` (`redact.rs:242`) with
 `CarrierAction::{Absent, Scrubbed, DroppedByRewrite, DisclosedNotScrubbed}`
 (`redact.rs:256`) and `as_str()` (`:274`) yielding
-`"DISCLOSED_NOT_SCRUBBED"`. The twelve carriers: `info`, `xmp`, **`images`**,
+`"DISCLOSED_NOT_SCRUBBED"`. The thirteen carriers: `info`, `xmp`, **`images`**,
 `xfa`, `struct_tree`, `attachments`, `ocg`, `thumbnails`, `object_streams`,
-`prior_revisions`, `overlapping_annotations`, **`vector_paths`**.
+`prior_revisions`, `overlapping_annotations`, **`vector_paths`**,
+**`shadings`** (`sh` paints whose clip box meets a region — a shading fills
+its whole clip (§8.7.4.5.1) and is not cut this build, so each is a
+`DisclosedNotScrubbed` residual; `Pass 246.1`).
 
 **Images (`Pass 245.0`, `redact_image.rs`).** A raster image a region
 touches — image XObject or inline, any codec pdfce decodes (raw, DCT, CCITT,
