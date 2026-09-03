@@ -96,6 +96,58 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 389th filing, 2026-09-03 — `v0.25.0` RELEASE COMPLETED: TAGGED,
+PUSHED, PACKAGED, SMOKE-TESTED, DEPLOYED AND VERIFIED CLEAN — RESOLVES
+THE 388th FILING'S "IN PROGRESS" MARK ON `6a54894`.**
+
+**Sourcing (hard rule 8).** No shell this filing. Tag, push pairing,
+package path/size, smoke-test output, deploy target, CI result and
+`verify-release.py` output relayed verbatim by the engineer in the
+dispatch prompt, not independently confirmed via `git show`/`git log`.
+
+### `v0.25.0` release (`6a54894` bump, tagged at `6a54894`) — packaged, smoke-tested, deployed, verified clean
+
+Tag `v0.25.0` cut at `6a54894`, pushed together with the 388th filing's
+own commit `6067d9a`. Packaged to
+`D:\builds\pdfce-20260903-0253-6a54894` (**49,022,765 bytes** — same
+figure the 388th filing's own packaging step reported; not repackaged).
+**Fresh-folder smoke test**: both binaries launched from a copy —
+`pdfce-cli --version` banner prints `0.25.0`; `PCS 3.0` cell `k` renders
+flat grey from the copied folder (the `Pass 244.0` default in effect);
+the managed-shading disclosure note prints; `pdfce-gui.exe` launched.
+Deployed to OneDrive slot `pdfce2` (`pdfce1` keeps `0.24.0`).
+
+**CI.** Green at the pushed tip `6067d9a` (the 388th filing's own filing
+commit, pushed together with the tag).
+
+`python tools/verify-release.py v0.25.0`: **clean** — "tag, HEAD,
+origin/main, CI and the release agree."
+
+**`tools/check-commits-filed.py`**: clean at push time — **770 code
+commits checked** — the bump was filed in the same dispatch as the
+Passes it carries this time, unlike the `v0.23.0`/`v0.24.0` gap the
+386th/387th filings closed.
+
+**What the release carries.** `Pass 243.0`, `Pass 244.0` (both already
+filed as *Shipped*, below).
+
+`docs/FEATURES.md`: untouched — no new capability from this filing (a
+release completion, not a Pass).
+
+#### Standing rules — no new mint
+
+Per this role's own instruction for this filing: mint nothing.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | unchanged — no Pass ships from this filing |
+| Decisions | ceiling `124`, next free `125` | unchanged |
+| Standing rules | ceiling `R240`, next free `R241` | unchanged |
+
+---
+
 **★★ THREE COMMITS, 388th filing, 2026-09-03 — `Pass 243.0` (`51fde3f`)
 MAKES SHADINGS AND MESHES COLOUR-MANAGED THROUGH THE PAGE'S OWN ICC/CIE
 BRIDGES, CLOSING THE LAST UNMANAGED ROUTE `Pass 240.0`/`242.0` LEFT OPEN;
@@ -218,6 +270,12 @@ default in effect); the managed-shading disclosure note prints;
 filing time — not claimed here as done.** A follow-on filing resolves
 them, per this session's own release-authorization gates (decision 121,
 `CLAUDE.md` rule 8).
+
+**★ RESOLVED 2026-09-03, 389th filing — see the new top *Shipped*
+entry.** `6a54894` is tagged `v0.25.0`, pushed together with the 388th
+filing's own commit `6067d9a`, packaged, fresh-folder smoke-tested,
+deployed to OneDrive slot `pdfce2`, and `verify-release.py v0.25.0`
+reports clean.
 
 `docs/FEATURES.md`: no additional row change beyond the two Passes above
 — a version bump carries no new capability of its own.

@@ -87473,6 +87473,61 @@ made this session*, above). No body-section counterpart required — same
 shape as decision 104's own note; the living account is the type's own
 doc comment, already rewritten in `e7db280`.
 
+## 2026-09-03 (389th filing) — `v0.25.0` release completed: tagged, pushed, packaged, smoke-tested, deployed and verified clean — resolves the 388th filing's "in progress" mark on `6a54894`
+
+**Sourcing (hard rule 8).** No shell this filing. Tag, push pairing,
+package path/size, smoke-test output, deploy target, CI result,
+`verify-release.py` output and `check-commits-filed.py` count relayed
+verbatim by the engineer in the dispatch prompt, not independently
+confirmed via `git show`/`git log`.
+
+**Shipped:**
+- `v0.25.0` release — tag `v0.25.0` cut at `6a54894`, pushed together
+  with the 388th filing's own commit `6067d9a`. Packaged to
+  `D:\builds\pdfce-20260903-0253-6a54894` (**49,022,765 bytes** — same
+  figure the 388th filing's packaging step reported; not repackaged).
+  Fresh-folder smoke test passed: `pdfce-cli --version` prints `0.25.0`;
+  `PCS 3.0` cell `k` renders flat grey from the copied folder; the
+  managed-shading disclosure note prints; `pdfce-gui.exe` launched.
+  Deployed to OneDrive slot `pdfce2` (`pdfce1` keeps `0.24.0`).
+
+**Decisions made this session:** none — mint nothing, per this
+dispatch's own instruction.
+
+**Findings + decisions:**
+- CI is **green** at the pushed tip `6067d9a`. `python
+  tools/verify-release.py v0.25.0` reports **clean** — "tag, HEAD,
+  origin/main, CI and the release agree."
+- `tools/check-commits-filed.py` clean at push time — **770 code
+  commits checked**. The version bump was filed in the same dispatch as
+  the Passes it carries this time, which is the shape the 386th/387th
+  filings' late-filing gap was missing — worth naming as the contrast,
+  not just a clean result: filing the bump alongside its Passes is what
+  keeps the gate from going red on the next push, rather than catching
+  a gap after the fact.
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather than
+  inferred.
+
+**Still in flight:**
+- None from this filing — `v0.25.0`'s release steps are now fully
+  resolved. `docs/NEXT_SESSION.md` §D item 4's retraction (388th
+  filing) remains the engineer's to rewrite; not this role's file.
+
+**For next session:**
+- None specific to this filing. Re-read `docs/ROADMAP.md`'s *Next up*/
+  *Backlog* sections for what follows `Pass 244.0`.
+
+**`docs/FEATURES.md`:** untouched — no new capability from this filing
+(a release completion, not a Pass).
+
+**`ROADMAP.md`:** new top *Shipped* entry (389th filing) resolving
+`v0.25.0`'s release record from pending to done; the 388th filing's own
+entry amended in place with a dated `★ RESOLVED` pointer, per the same
+pattern the 386th→387th filing pair used for `v0.24.0`.
+
+**`ARCHITECTURE.md`:** no change this filing — no new decision.
+
 **`C:\personal_rag\pdf\`:** one new lesson —
 `a_divergence_kept_to_compensate_for_a_different_error_must_be_remeasured_when_that_error_closes.md`
 — filed and indexed this session; see the file for the full record.
