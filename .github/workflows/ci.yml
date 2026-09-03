@@ -309,7 +309,7 @@ jobs:
   # and the COUNT is the part that decays, so the count is the part a gate
   # can falsify.
   audits:
-    name: repository audits (21 checks)
+    name: repository audits (22 checks)
     runs-on: ubuntu-latest
     steps:
       # ★ FULL HISTORY REQUIRED, and its absence was SILENT.
@@ -471,6 +471,15 @@ jobs:
       # line, because CI logs on a public repository are public too.
       - name: check the licensed suite is not named anywhere
         run: python tools/check-suite-name-absent.py
+
+      # A backslash escape routed through a Bash-tool heredoc loses one level
+      # and lands in the file as the CONTROL BYTE it named: `\b` becomes a
+      # backspace, `\n` a bare newline inside a literal. The 392nd filing
+      # found three backspaces in ROADMAP/SESSION_LOG that had rendered
+      # `D:\builds` as `D:uilds` for days; nothing else fails on them. This is
+      # the mechanical inverse of the written rule: it makes the mistake fail.
+      - name: check no prose or source file carries a stray control byte
+        run: python tools/check-control-bytes.py
 
       # In clap-derive a `///` doc comment IS the shipped `--help` text, and
       # only its FIRST line becomes the short summary. A doc block whose real
