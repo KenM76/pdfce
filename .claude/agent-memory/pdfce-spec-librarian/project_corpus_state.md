@@ -5982,3 +5982,236 @@ open "the spec does not say" issue against it is *definitively* not in the spec.
 - **A "verifications that PASSED" entry retires a suspicion.** I suspected the
   *"shall not be inherited"* preamble was 2.0-only (it is prominent there). **It is
   in both.** Recording the pass stops the next session re-opening `a19e54d`.
+
+---
+
+## 70. ★★ THE **CLOSE-A-NAMED-EXCLUSION-THAT-IS-ALSO-A-CAPABILITY-BUILD** dispatch — *"file X's own header says clause C and standard S are NOT ingested; ingest them, and give me the implementation's step list"* (2026-09-03, §12.8.3 + Table 252 + ETSI EN 319 142-1 → `iso32000__s__12.8.3.md`, `pades__profile__baseline.md`, `iso32000__ref__signature_verification.md`)
+
+**Shape.** Same opening as item 58 (a banner names its own gap) but with a
+**second deliverable bolted on**: a DERIVED consolidator in the style of an
+existing file (`iso32000__ref__redaction_removal.md`). The dispatch enumerated
+four numbered asks and **named the traps it expected**. Three files written, four
+edited, ~40 tool calls.
+
+### 70a. ★★★ WHEN THE DISPATCH NAMES THE TRAPS, **VERIFY EACH ONE AND SAY WHICH DID NOT SURVIVE**
+
+The dispatch's item 4 listed five traps by name. Four verified. **One was
+wrong-shaped and one was mis-attributed, and reporting that is part of the job:**
+
+- *"PAdES baseline constraints on the CMS: **`SignedData` version**"* — **EN 319
+  142-1 states NO version constraint.** `grep -i version` over all 24 pages
+  returns ETSI boilerplate, one `V`-key row and `/BaseVersion` examples. **The
+  rule lives in RFC 5652 §5.1 and nowhere else** (an assignment algorithm:
+  5/4/3/else 1). Recorded as `PB-N4`, a measured negative, with the real source.
+- *"no `signing-time` **at B-B level**"* — true but **understated**: ETSI Table 1
+  sets `signing-time` `shall not be present`, cardinality **0**, at **all four**
+  levels, and `/M` `shall be present`, cardinality **1**, at all four.
+  **A level-scoped reading of a rule that is total is the same class of error as
+  a scope smell (61e/64e), just inverted.**
+
+**Generalises:** a dispatch's trap list is a hypothesis set. Grade it. The two
+corrections were more valuable than the three confirmations, and neither would
+have surfaced from ingesting the clause without checking the premise.
+
+### 70b. ★★★ A **SUBJECT-LESS BULLET** IN THE PUBLISHED STANDARD — AND THE `pdfminer` X-POSITION PASS IS WHAT DISTINGUISHES IT FROM AN EXTRACTION ARTIFACT
+
+ISO 32000-1 §12.8.3.3.1's third *"should contain"* bullet reads, as printed,
+**"• (PDF 1.6). This differs from the treatment when using
+`adbe.x509.rsa_sha1`…"** — no subject, no verb phrase for what should be
+contained. `pypdf` showed it; **the question is always "is this the document or
+is this my extractor?"** and extraction item 4a answers it in one command: the
+bullet's glyph run starts at `y=345, x0=70.8`, the **same x as its neighbouring
+bullets**, which extract complete. No gap, no dropout ⇒ **the text is genuinely
+absent from the page.**
+
+★★ **THE HALF THAT MATTERS MORE: THE RULE SURVIVED ANYWAY.** ISO 32000-2's
+corresponding bullet supplies the missing sentence (capture + validate the
+certificate chain before signing) — **and ISO 32000-1 §12.8.1 already states the
+same requirement in its own prose** (*"The signing software must capture and
+validate the certificate's chain before signing."*). So the defective bullet was
+a **RESTATEMENT**, not the sole carrier. **Say which of the two you measured**
+(the standing caution from 66f, now with a second instance: a lost sentence is
+not a lost rule until you grep the concept).
+
+**Second defect, same clause, same session:** ISO 32000-1 **Table 257's column
+header is spelt `adbe.x509.rsa.sha1`, with a DOT**, where Table 252 and §12.8.3.2
+use the underscore. An implementer taking the name from the table emits a
+`SubFilter` nobody recognises. 2.0 Table 260 fixes it; **1.7 has no errata channel
+at all**, so both stand forever.
+
+### 70c. ★★★ THE DELIVERABLE OF A "HOW DO I VERIFY?" DISPATCH IS AN **OUTCOME MODEL**, NOT A PIPELINE
+
+The dispatch asked for a step list and a *"three-way outcome model (integrity /
+coverage / trust)"*. The step list was the easy half. **The load-bearing finding
+is that the three axes are INDEPENDENT and the second one is invisible:**
+
+- **`integrity=verified` + `coverage=revision_only` is the CORRECT and COMMON
+  answer for any countersigned document** — §12.8.1 NOTE 1 says an incremental
+  update *preserves* the earlier signature's bytes, so an earlier signature stays
+  intact while later revisions sit outside its digest. Reporting that as plain
+  *"valid"* hides the entire question of what changed afterwards.
+- **`trust` must be EMITTED as `not_evaluated`, not omitted.** ISO 32000-1
+  §12.8.3.3.1 hands trust to *"the validation signature handler"*; 2.0
+  §12.8.3.4.5 b)–d) then specifies four steps pdfce does not perform. **Silence
+  on an axis you did not check is the rule-4 failure in its highest-consequence
+  form.**
+- A fourth vocabulary item nobody asks for: **`malformed` and `unsupported` are
+  not `failed`.** `unsupported` is *guaranteed* to occur because Annex E makes the
+  `SubFilter` namespace **open** — a conforming file can carry a signature no
+  conforming reader can check.
+
+**Generalises to any verify/validate capability:** enumerate the axes first, then
+the steps. A boolean API is the bug.
+
+### 70d. ★★ THE STANDARD DELEGATES ITS WHOLE OBJECT MODEL, AND THE **DELEGATED** DOCUMENT CARRIES THE THING THAT BREAKS IMPLEMENTATIONS
+
+ISO 32000 says *"shall conform to RFC 5652"* and stops. **Every genuinely
+dangerous rule is in the RFC:**
+
+- **RFC 5652 §5.4** — *"The IMPLICIT [0] tag in the `signedAttrs` is **not** used
+  for the DER encoding, rather an EXPLICIT SET OF tag is used."* ⇒ hash/verify
+  over tag **`0x31`**, not the `0xA0` in the file. **ISO 32000 never mentions
+  it.**
+- **RFC 3370 §3.2** — `rsaEncryption` identifies a PKCS#1-v1.5 signature
+  *"regardless of the message digest algorithm employed"* ⇒ the digest algorithm
+  is authoritative in `SignerInfo.digestAlgorithm`, **never** derivable from
+  `signatureAlgorithm`.
+- **RFC 5754 / 4055 / 5480** — the parameter rules are three different answers:
+  RSA-PKCS1 **NULL**, ECDSA **ABSENT**, RSASSA-PSS **PRESENT** (with DEFAULTs DER
+  omits: SHA-1 / MGF1-SHA-1 / 20 / 1).
+
+★ **All of them are `free_primary` from `rfc-editor.org` with a plain `curl`**
+(`https://www.rfc-editor.org/rfc/rfc<N>.txt`, 6 fetched in one loop, ~2 s each).
+**When an ISO clause says "shall conform to RFC N", fetching RFC N is the cheapest
+high-value move available** — and unlike the ISO text it may be quoted anywhere.
+
+### 70e. ★★★ A **SUBSET/PROFILE** STANDARD CAN SUPPLY A SENTENCE THE **BASE** STANDARD OMITS — AND IT MAY BE THE FREE ONE
+
+Measured: `contentskeyinasignaturedictionary` = **0** hits in ISO 32000-1, **1**
+in ISO 32000-2. **ISO 32000-1 §7.6.1's encryption-exception list has THREE
+bullets and does not exempt the signature `Contents` string** — read literally, an
+encrypted 1.7 file encrypts its own unverifiable signature value. I first graded
+the 1.7 half *"derived, unsourced"*.
+
+**That was wrong. ETSI EN 319 142-1 §5.5 — a document that profiles ISO
+32000-1 — reprints the exception list WITH the fourth bullet.** So the rule is
+sourced for the 1.7 baseline after all, **and by a `free_primary` that may be
+quoted in a public pdfce artifact where ISO 32000-2 may not.** The same clause
+also states a rule *neither* ISO edition does: *"encryption **shall** be applied
+to its content **before** any signature is incorporated"* ⇒ **the digest is over
+CIPHERTEXT; a verifier does not decrypt before hashing.**
+
+**The move to remember: when the base standard is silent and the later edition
+fixes it, CHECK WHETHER A PROFILE OF THE BASE EDITION ALSO FIXES IT.** A profile
+is written against a *specific* base edition, so its statement is evidence about
+*that* edition — which a later-edition citation is not. This inverts the usual
+direction (we normally read subset standards as *narrowing* the base).
+
+### 70f. ★★ THE LICENCE TIER DECIDES WHICH FILE A FACT LIVES IN — SPLIT THE FILE ALONG THE TIER, NOT ALONG THE TOPIC
+
+ISO 32000-2 §12.8.3.4 and ETSI EN 319 142-1 say substantially the same things
+about PAdES. **The ISO one is `licensed_primary_private_rag` (single-user
+licence, never reproducible in `D:\Dev\pdfce`); the ETSI one is `free_primary`.**
+⇒ **a separate `pades__profile__baseline.md`, justified in its own §0.1 by
+LICENSING, NOT BY TOPIC**, with an explicit instruction: *when a pdfce doc
+comment / README / CLI string needs to state a PAdES rule, cite THIS file.*
+
+Corollary for the mixed file: **§7 of `iso32000__s__12.8.3.md` (the 2.0 CAdES
+clause) ends up with ZERO blockquote lines** — all paraphrase plus inline
+sentence fragments — while the 1.7 and RFC sections carry full block quotations.
+**Audit it mechanically before filing:**
+```bash
+awk '/^> /{if(!n)st=NR; n++; next} {if(n>=6) print st"-"NR-1" len="n; n=0}' file.md
+```
+then attribute every block ≥6 lines to its source. One long block turned out to
+be a 2.0 bullet; it was rewritten as paraphrase + one short quotation.
+
+### 70g. ★★ AN **OPEN** STANDARDS-BODY ISSUE IS THE STRONGEST AMBIGUITY EVIDENCE THERE IS — AND THE API SEARCH FOUND FOUR
+
+`api.github.com/search/issues?q=repo:pdf-association/pdf-issues+<term>` on four
+key names (`adbe.pkcs7`, `ByteRange`, `SubFilter`, `signature Contents padding`)
+returned 9/11/15/2 hits and surfaced, among them:
+
+- **#777 OPEN `bug`** — 2.0 Table 255's *"the `ByteRange` **shall** cover the
+  entire PDF file"* for the ETSI subfilters *"prohibits any incremental updates
+  even without `P=1`, yet 12.8.5.3 allows incremental updates (for updating the
+  DSS) even with `P=1`."* **The standard contradicts itself, in the submitter's
+  own free-quotable words.** Became register row `SV-A4`.
+- **#505 CLOSED `wontfix`** — the `/M`-vs-`signing-time` ISO/PAdES conflict, put
+  to ISO and declined. ⇒ **PERMANENT and acknowledged**, which is a much stronger
+  statement than "the standard is silent".
+- **#88 CLOSED `wontfix`, `Parked`** — ISO declines to acknowledge CMS
+  `subjectKeyIdentifier`. A *parked* refusal is a third state worth naming.
+- **#211 CLOSED `ISO approved`** — closed **on the premise** that `Contents` is
+  already never encrypted, which is corroboration for 70e.
+
+**A `wontfix` on a real conflict is a finding.** It converts *"the two documents
+disagree"* into *"the two documents disagree and the owner has ruled it will
+stay that way"*, which is exactly what a settings decision needs.
+
+### 70h. ★ ERRATA: THE `/IRT` CHAIN CAUGHT A THIRD-REPLY `Completed` AGAIN
+
+Nine ISO-approved edits to §12.8 in the staged 2.0. **Issue #403's chain is
+obj 5938 → 5940 `Accepted` (2024-06-17) → 5955 `Completed` (2026-05-22)** — the
+first reply says TWG-only and the truth is ISO-ratified. **Extraction item
+3-ISO2-ter's rule earned its keep for the second recorded time.** Content:
+*a signature dictionary cannot carry `/Metadata` or `/AF`*, because all its values
+must be direct objects and those keys reference streams — a rule nothing in
+clause 12.8 hints at.
+
+Also: **#219 corrects the `SubFilter` version gates** that BOTH editions print
+wrong (`(PDF 1.6)` for all three; the truth is **1.3 / 1.3 / 1.4**), and **#121
+strikes `Filter`'s "; inheritable"** — a qualifier that was never meaningful
+because a signature dictionary has no inheritance chain.
+
+**Negative, three channels + positive control:** §12.8.3.3 itself has **no**
+erratum. (1) `/Annots` sweep over staged pp. 580–600 — zero on pp. 594/595/597–599
+**while the same run returned 11 annotation groups on pp. 582–593 and 596/600**;
+(2) the rendered `clause12.html` TOC lists only sub-clauses with errata and
+**omits 12.8.3.3** while listing 12.8.1, 12.8.3.1, 12.8.3.4.4, 12.8.4.*; (3) the
+API searches. **The positive control is what makes the zero credible.**
+
+### 70i. ★ THE CROSS-EDITION COLLISION HIT **BOTH** AXES AT ONCE, ON THE SAME CLAUSE FAMILY
+
+Not just tables (52/62h) and not just clauses (63c) — **both, in clause 12.8:**
+
+| | 1.7 | 2.0 |
+|---|---|---|
+| signature dictionary | Table **252** | Table **255** |
+| SubFilter algorithms | Table **257** | Table **260** |
+| **Table 252 in the OTHER edition** | — | **FDF template dictionary** |
+| Permissions | §**12.8.4** | §**12.8.6** |
+| §12.8.4 in the OTHER edition | — | **Long-term validation (DSS/VRI)** |
+
+★ **A bare "Table 252" or "§12.8.4" resolves to a plausible-looking WRONG object
+in the other edition.** Put the map in the file's own §0 — the next reader will
+make the same mistake otherwise. And **2.0 introduced its own new defect** in the
+same neighbourhood: it cites *"the `Cert` key … as defined in **Table 260 —
+SubFilter value algorithm support**"* where 1.7 correctly cited Table 252. **A
+regression, with no erratum as of 2026-09-03.**
+
+### 70j. Filing shape
+
+- **3 new files, 4 edited.** `iso32000__s__` **103 → 104**, `iso32000__ref__`
+  **25 → 26**, **`pades__` 0 → 1 (PREFIX OPENED)**, total **173 → 176** content /
+  **176 → 179**. **Recounted from disk with `ls <subdir>/<prefix>*.md | wc -l`
+  BEFORE writing — the cells were correct beforehand, second session running.**
+- Edited: `iso32000__s__12.8.md` (the **exclusion banner spliced at the TOP** as a
+  was/now table with the old text struck-through and kept legible, per 66g/67g;
+  plus the two cross-reference GAP bullets and the frontmatter `related_files` /
+  `future_files`), `iso32000__ref__ambiguity_settings_register.md` (§11a intake +
+  frontmatter ×4), `index.md` (**Status entry + prefix table ×2 + total + 3
+  manifest rows + 14 trigger rows + a 10-recipe block + 9 rows in the flat
+  spec-ambiguity table + the Pass-3.x gap row + the `_sources` ETSI inventory
+  note**).
+- **All 10 search recipes RUN against the files just written; all returned
+  non-empty.**
+- **`Write` for every corpus file and every multi-line patch script, then run the
+  script.** Bash heredocs are still the wrong tool at this size — but note a NEW
+  failure inside the *script*: a `u"""…"""` block containing a literal `"` inside
+  the markdown broke Python's parse. **Prefer typographic quotes in generated
+  markdown, or single-quote the Python string.**
+- **`s.count(old) == 1` assertions before every `str.replace`** caught two stale
+  anchors (a keyword line indented 11 spaces, not 18) before they silently
+  no-op'd. Keep doing this; a silent `.replace` that matches nothing is the
+  index-drift mechanism.

@@ -483,3 +483,16 @@ path = "fuzz_targets/annot_delete_sequence.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 10.1: signature VERIFICATION over untrusted bytes. The /Contents of a
+# signature is whatever the file says it is, and pdfce parses it with an
+# in-crate DER reader, CMS/X.509 walker, RSA/ECDSA verifier and big-integer
+# arithmetic -- every one of them new and on the hostile path. The seeds are
+# the seven pyHanko-signed fixtures, so libFuzzer's mutations start from
+# real CMS objects and real certificates rather than from noise.
+[[bin]]
+name = "signature_verify"
+path = "fuzz_targets/signature_verify.rs"
+test = false
+doc = false
+bench = false

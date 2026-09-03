@@ -132,13 +132,17 @@ def build(name, coverage):
     )
 
     # Now the file is laid out, so the hole's real position is known.
-    # `+1` and `-1` step over the `<` and `>` delimiters: the digest
-    # excludes the signature VALUE, not the string syntax around it.
+    # The hole is the WHOLE /Contents token INCLUDING its `<` and `>`
+    # delimiters (ISO 32000-1 §12.8.3.3.2, spec RAG `SI-W3`: "a = offset
+    # of <, b = offset just past >"). An earlier version of this script
+    # excluded only the hex digits, which `signature::verify` (Pass 10.2)
+    # correctly refuses as "not the /Contents hex string" — the coverage
+    # arithmetic never noticed, because it counts bytes, not delimiters.
     lt = buf.index(b"<" + contents)
-    gt = lt + 1 + len(contents)
+    gt = lt + 1 + len(contents) + 1  # just past `>`
     total = len(buf)
 
-    first = (0, lt + 1)
+    first = (0, lt)
     if coverage == "full":
         second = (gt, total - gt)
     elif coverage == "short":

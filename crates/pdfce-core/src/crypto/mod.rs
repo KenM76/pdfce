@@ -81,9 +81,13 @@
 
 pub mod aes;
 pub mod apply;
+pub mod bignum;
+pub mod ecdsa;
 pub mod md5;
 pub mod r5;
 pub mod rc4;
+pub mod rsa;
+pub mod sha1;
 pub mod standard;
 
 pub use r5::{PermsCheck, PreparedPassword};

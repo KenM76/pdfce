@@ -73,6 +73,7 @@
 
 pub mod annot;
 pub mod annot_author;
+mod asn1;
 pub mod attachments;
 /// Build provenance — what this binary is and when it was made
 /// (`Pass 101.0`; see the module's own docs for the `iccce` question).
@@ -86,6 +87,7 @@ pub mod build;
 /// is not something `pdfce-core` should be offering. The file's own header
 /// comments carry the reasoning and the leap-year cases.
 mod civil_time;
+mod cms;
 pub mod color;
 pub mod content;
 pub mod crypto;
@@ -132,6 +134,7 @@ mod redact_vector;
 pub mod richtext;
 pub mod settings;
 pub mod signature;
+pub mod signature_verify;
 pub mod span;
 pub mod structure;
 pub mod text_edit;

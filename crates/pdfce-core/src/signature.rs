@@ -142,6 +142,11 @@
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object};
 
+// The verification stage (`Pass 10.2`) lives in its own module; it is
+// re-exported here so `signature::verify` is the path a consumer reaches
+// for, beside the census and coverage this file already answers.
+pub use crate::signature_verify::{Integrity, SignatureVerdict, Trust, verify, verify_all};
+
 /// How many objects a census will look at before giving up.
 ///
 /// pdfce policy (`ARCHITECTURE.md` §10), not spec. The census walks the

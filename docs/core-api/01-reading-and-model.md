@@ -140,7 +140,7 @@ builds `--no-default-features`, so both configurations compile.
 | Make hyperlinks clickable | `annot::page_link_destinations(&graph, page.id, &reader)` — `annot.rs:852`, with `outline::DestinationReader::new(&graph)` — `outline.rs:1649` built ONCE per document. Returns rect + fully resolved `Destination` per `/Link`. **`Pass 222.0` — this row previously said "no direct API"; that is obsolete.** | §12.4, §12.6.4 |
 | Resolve where ONE annotation goes (incl. a `/Widget` pushbutton) | `Annotation::destination(&graph, &reader)` — `annot.rs:622`. Needs `Annotation::id`; use `page_link_destinations` when completeness matters. | §12.5.6.5 |
 | Report dangling cross-references (document health) | `pageops::references::census_dangling` — `pageops/references.rs:336` ⚠️ **Counts REFERENCES only.** `/ResetForm`, `/SubmitForm` and `/Hide` name their targets by fully-qualified **name string**, and a name is not a reference — so deleting such a field leaves this report at zero while the buttons stop working. `is_empty() == true` is therefore **not** a clean bill of health on its own; pair it with `delete_field`'s `action_targets_orphaned` and `rename_field`'s `action_targets_retargeted` (`Pass 184.0`). | §12.4 |
-| Census digital signatures and their byte coverage | `signature::census(&graph)` — `signature.rs:370`; `signature::byte_range_coverage` — `signature.rs:900` | §12.5 |
+| Census digital signatures, their byte coverage, and (`Pass 10.1`) their integrity | `signature::census(&graph)` — `signature.rs:370`; `signature::byte_range_coverage` — `signature.rs:900`; `signature::verify_all(&graph, bytes)` / `verify(&graph, bytes, index)` — `signature_verify.rs` | §12.5 |
 | Read `/Info` title / author / subject / keywords | `EditSession::info_text(InfoField)` — `edit.rs:3807` **(needs a session; only those 4 fields)** | §12.6 |
 | Read `/Producer`, `/CreationDate`, XMP, or page labels | **No public reader** — read the raw `/Info` dict via `ObjectGraph` | §12.6 |
 | Load / persist user settings | `settings::resolve_store()` — `settings/mod.rs:1677`; `Settings` — `settings/mod.rs:840` | §13 |
@@ -2425,17 +2425,53 @@ the way. Use `DestinationReader` for anything that navigates.
 `resolve_target` `:187`. Also `census_dangling` `:336` → `DanglingReport`
 `:287`, useful for a document-health panel.
 
-### 12.5 Signatures (census only)
+### 12.5 Signatures — census, coverage, and (`Pass 10.1`) integrity verification
 
 ```rust
 let census = pdfce_core::signature::census(&doc);              // signature.rs:370
 let cov = pdfce_core::signature::byte_range_coverage(&doc, /* … */);  // signature.rs:900
+// Pass 10.1 — verification. `bytes` is the FILE the graph was loaded from
+// (`Document::bytes()`); the digest is over those bytes, not over objects.
+let verdicts = pdfce_core::signature::verify_all(&doc.view(), doc.bytes());
+let one = pdfce_core::signature::verify(&doc.view(), doc.bytes(), 0);   // Option<SignatureVerdict>
 ```
 
 `SignatureCensus` `:265`, `SignatureImpact` `:174`, `ImpactBasis` `:228`,
 `SaveMode` `:249`, `ByteRangeCoverage` `:843`. This tells you what signing
 state a document is in and what a save would do to it — enough for a
-warning banner. **Cryptographic verification is part 3.**
+warning banner.
+
+**`verify_all` / `verify` (`signature_verify.rs`, re-exported from
+`signature`).** One `SignatureVerdict` per `/FT /Sig` field with a `/V`, in
+`byte_range_coverage`'s order, carrying **three independent facts** that a
+shell must keep apart:
+
+| field | type | what it answers |
+|---|---|---|
+| `integrity` | `Integrity` — `Verified { digest_algorithm, signature_algorithm }` / `DigestMismatch` / `SignatureInvalid` / `Unverifiable { reason }` | are the signed bytes unaltered (digest over `/ByteRange` vs the signed `messageDigest`), and is the signature over the signed attributes genuine against the signer's OWN embedded certificate? `DigestMismatch` = the document was altered; `SignatureInvalid` = the digest matches but the signature/certificate does not; `Unverifiable` names why pdfce cannot say (a subfilter, algorithm or curve it lacks, a malformed CMS, a missing certificate) and is never either of the others |
+| `coverage` | `ByteRangeCoverage` | was anything appended after signing (`covers_to_eof()`) |
+| `trust` | `Trust` — **only `NotChecked`** this build | nobody: no trust store, chain, revocation or clock |
+
+Plus claims — `signer_subject`, `signer_issuer`, `cert_not_before`,
+`cert_not_after`, `signing_time`, and the dictionary's `name`/`date`/
+`reason`/`location` — and `notes` (a SHA-1 digest, non-zero padding, extra
+`/ByteRange` gaps, an ETSI signature that does not reach EOF, extra signers).
+
+Implemented: `adbe.pkcs7.detached`, `ETSI.CAdES.detached`, `adbe.pkcs7.sha1`
+(the double hash — the inner SHA-1 is pinned by the subfilter); RSA PKCS#1
+v1.5 and RSASSA-PSS, ECDSA P-256/P-384; SHA-1/256/384/512.
+`adbe.x509.rsa_sha1`, `ETSI.RFC3161`, P-521, Brainpool → `Unverifiable` by
+name. All in-crate (`asn1.rs`, `cms.rs`, `crypto::{bignum,rsa,ecdsa,sha1}`),
+no new dependency; verified against pyHanko-signed fixtures whose expected
+verdicts were recorded from pyHanko's own validator first
+(`fixtures/synthetic/signature-verify/PROVENANCE.md`).
+
+★ **Disclosure contract.** `Integrity::Verified` must never be rendered as
+"valid" or "signed by X". The sentence pdfceGUI and the CLI share: *"the
+bytes under this signature have not been altered and nothing was appended
+after it; pdfce does not check who signed it or whether to trust them."*
+The CLI is `verify-signatures`: exit 0 all verified, **12** any failed,
+**13** none failed but some unverifiable.
 
 ### 12.6 ★ Document metadata — the honest gap
 

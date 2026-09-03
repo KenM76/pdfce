@@ -585,6 +585,18 @@ mod exit {
     /// A distinct, documented status per the R20 counted-diagnostics
     /// tradition (fuzzy-never-sneaky).
     pub const OPENED_VIA_RECOVERY: u8 = 11;
+    /// `verify-signatures`: at least one signature FAILED integrity — the
+    /// bytes under it were altered after signing, or its signature value
+    /// does not verify with its own certificate. The output was printed;
+    /// this is the one exit code a script must treat as "do not trust
+    /// this document".
+    pub const SIGNATURE_FAILED: u8 = 12;
+    /// `verify-signatures`: no signature failed, but at least one could
+    /// not be verified — a subfilter, algorithm or curve pdfce does not
+    /// implement, a malformed CMS, a missing certificate. Named in the
+    /// output. Distinct from [`SIGNATURE_FAILED`](Self::SIGNATURE_FAILED)
+    /// because "pdfce cannot say" is not "the document was tampered with".
+    pub const SIGNATURE_UNVERIFIABLE: u8 = 13;
     /// The subcommand exists in the surface but is not implemented yet
     /// (Pass 0 stub). Distinct code so a script can tell "you asked for a
     /// feature pdfce doesn't have yet" apart from a real failure.
@@ -2027,14 +2039,36 @@ enum Command {
 
     /// **Report what each signature COVERS** — not whether it is valid.
     ///
-    /// pdfce performs no cryptographic verification. This measures each
-    /// signature's `/ByteRange` (§12.8.1) against the file's real length
-    /// and reports what it protects, which answers a question a validity
-    /// badge does not: was anything added beyond the signed range?
+    /// This measures each signature's `/ByteRange` (§12.8.1) against the
+    /// file's real length and reports what it protects, which answers a
+    /// question a validity badge does not: was anything added beyond the
+    /// signed range? It computes no digest; `verify-signatures` does.
     ///
     /// A signature can be cryptographically perfect over the first 40 KB
     /// of a 900 KB file.
     ListSignatures {
+        /// Input PDF.
+        input: PathBuf,
+    },
+
+    /// **Verify each signature's INTEGRITY and COVERAGE** — and say, in so
+    /// many words, that trust is not checked (ISO 32000-1 §12.8, RFC 5652).
+    ///
+    /// For every signature field: the digest over the `/ByteRange` is
+    /// recomputed and compared with what the signer signed, and the
+    /// signature value is checked against the signer's own embedded
+    /// certificate (RSA PKCS#1 v1.5 / RSASSA-PSS, ECDSA P-256 / P-384;
+    /// SHA-1 / 256 / 384 / 512; `adbe.pkcs7.detached`,
+    /// `ETSI.CAdES.detached`, `adbe.pkcs7.sha1`). Coverage says whether
+    /// anything was appended after signing. Anything pdfce cannot verify is
+    /// reported BY NAME as unverifiable, never as valid or invalid.
+    ///
+    /// **`verified` is not `valid`.** No trust store, no chain, no
+    /// revocation, no clock: the signer's name and dates are printed as the
+    /// CLAIMS the certificate makes. Exit 0 only when every signature
+    /// verified; 12 when any failed integrity; 13 when none failed but one
+    /// or more could not be verified.
+    VerifySignatures {
         /// Input PDF.
         input: PathBuf,
     },
@@ -8623,6 +8657,7 @@ fn run() -> ExitCode {
             json,
         } => cmd_font_preflight(&input, page, &find, pin_span.as_deref(), json),
         Command::ListSignatures { input } => cmd_list_signatures(&input),
+        Command::VerifySignatures { input } => cmd_verify_signatures(&input),
         Command::ListPrinters => cmd_list_printers(),
         Command::Print {
             input,
@@ -14567,6 +14602,137 @@ fn cmd_list_outline(input: &Path, flat: bool) -> u8 {
 /// short range is reported and never called malformed. Overlapping
 /// ranges violate Table 252's "exact byte range" and ARE reported as
 /// malformed. The two are deliberately distinguishable in the output.
+/// `verify-signatures`: the integrity + coverage verdicts, one block per
+/// signature field, with trust named as not checked on every one.
+fn cmd_verify_signatures(input: &Path) -> u8 {
+    use pdfce_core::signature::{self, Integrity, Trust};
+    let bytes = match std::fs::read(input) {
+        Ok(b) => b,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::IO_ERROR;
+        }
+    };
+    let doc = match open_document_bytes(bytes.clone()) {
+        Ok(d) => d,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let verdicts = signature::verify_all(&doc.view(), &bytes);
+    if verdicts.is_empty() {
+        println!(
+            "verify-signatures {}: 0 signature field(s)",
+            input.display()
+        );
+        return exit::SUCCESS;
+    }
+    let mut failed = 0usize;
+    let mut unverifiable = 0usize;
+    for (i, v) in verdicts.iter().enumerate() {
+        let (integrity, detail) = match &v.integrity {
+            Integrity::Verified {
+                digest_algorithm,
+                signature_algorithm,
+            } => (
+                "verified",
+                format!("{signature_algorithm} with {digest_algorithm}"),
+            ),
+            Integrity::DigestMismatch => {
+                failed += 1;
+                (
+                    "FAILED",
+                    "the bytes under the signature were ALTERED after signing".to_string(),
+                )
+            }
+            Integrity::SignatureInvalid => {
+                failed += 1;
+                (
+                    "FAILED",
+                    "the signature value does not verify with the signer's certificate".to_string(),
+                )
+            }
+            Integrity::Unverifiable { reason } => {
+                unverifiable += 1;
+                ("unverifiable", reason.clone())
+            }
+            // `#[non_exhaustive]`: a variant this shell does not know is
+            // reported as unverifiable, never as verified.
+            other => {
+                unverifiable += 1;
+                (
+                    "unverifiable",
+                    format!("a verdict this build of the CLI does not know: {other:?}"),
+                )
+            }
+        };
+        let coverage = if !v.coverage.ranges_well_formed {
+            "MALFORMED_RANGE".to_string()
+        } else if v.coverage.covers_to_eof() {
+            "whole file".to_string()
+        } else {
+            format!(
+                "{} byte(s) after the signed range were appended after signing",
+                v.coverage.uncovered_tail
+            )
+        };
+        let trust = match v.trust {
+            Trust::NotChecked => "NOT CHECKED (no trust store, no chain, no revocation, no clock)",
+            other => {
+                // A trust verdict this shell does not know is not one it
+                // can vouch for.
+                eprintln!("pdfce-cli: unknown trust verdict {other:?}; reported as not checked");
+                "NOT CHECKED (unknown verdict)"
+            }
+        };
+        println!(
+            "signature {} field={:?} subfilter={}",
+            i + 1,
+            v.field_name.as_deref().unwrap_or("-"),
+            v.sub_filter.as_deref().unwrap_or("-"),
+        );
+        println!("  integrity: {integrity} -- {detail}");
+        println!("  coverage: {coverage}");
+        println!("  trust: {trust}");
+        println!(
+            "  claims: signer={:?} issuer={:?} valid={}..{} signing_time={} name={:?} date={:?} reason={:?}",
+            v.signer_subject.as_deref().unwrap_or("-"),
+            v.signer_issuer.as_deref().unwrap_or("-"),
+            v.cert_not_before.as_deref().unwrap_or("-"),
+            v.cert_not_after.as_deref().unwrap_or("-"),
+            v.signing_time.as_deref().unwrap_or("-"),
+            v.name.as_deref().unwrap_or("-"),
+            v.date.as_deref().unwrap_or("-"),
+            v.reason.as_deref().unwrap_or("-"),
+        );
+        for n in &v.notes {
+            println!("  note: {n}");
+        }
+    }
+    println!(
+        "verify-signatures {}: {} signature(s), {} verified, {} failed, {} unverifiable -- trust NOT checked on any",
+        input.display(),
+        verdicts.len(),
+        verdicts.len() - failed - unverifiable,
+        failed,
+        unverifiable,
+    );
+    if failed > 0 {
+        eprintln!(
+            "pdfce-cli: {failed} signature(s) FAILED integrity -- the signed bytes were altered or the signature is not genuine; do not treat this document as signed"
+        );
+        return exit::SIGNATURE_FAILED;
+    }
+    if unverifiable > 0 {
+        eprintln!(
+            "pdfce-cli: {unverifiable} signature(s) could not be verified (reasons above) -- that is 'pdfce cannot say', not 'tampered'"
+        );
+        return exit::SIGNATURE_UNVERIFIABLE;
+    }
+    exit::SUCCESS
+}
+
 fn cmd_list_signatures(input: &Path) -> u8 {
     // The file's real length on disk. `/ByteRange` is a claim about
     // BYTES, and only the bytes can check it — the object model cannot
