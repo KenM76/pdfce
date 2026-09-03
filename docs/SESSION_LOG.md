@@ -87366,3 +87366,113 @@ to the 386th filing's own entry (both prior "in progress" mentions on
 original text removed or rewritten.
 
 **`ARCHITECTURE.md`:** untouched — no decision from this filing.
+
+## 2026-09-03 (388th filing) — `Pass 243.0` (`51fde3f`) + `Pass 244.0` (`e7db280`) SHIPPED — shadings/meshes become colour-managed, closing the last unmanaged ICC/CIE route; the overprint zero-tint default flips to the literal ISO 32000-1 reading, taking the print-conformance sweep to 0 FAIL; decision 124 minted; `v0.25.0` tagged and packaged, push/deploy/verify IN PROGRESS
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, dates,
+measured figures and packaging/smoke-test output relayed by the engineer
+in the dispatch prompt. Cross-checked against live source rather than
+taken on the dispatch text alone: `icc::ColorBridges`,
+`IccBridgeCache::bridges_for`, `Shading::load`'s new `IccContext`/
+`RenderPolicy` params and the `managed-shading` fixture set confirmed
+present by `Grep`/`Glob`; `OverprintZeroTintScope`'s `#[default]`
+confirmed on `DeviceCmykOnly` at
+`crates/pdfce-core/src/settings/mod.rs:790`; `Cargo.toml`/`Cargo.lock`
+confirmed at `version = "0.25.0"`.
+
+**Shipped:**
+- `Pass 243.0` (`51fde3f`) — shadings (`ColorRamp::build`) and meshes
+  (`mesh::read_shade`) now convert their colour through the page's own
+  ICC/CIE bridges (`icc::ColorBridges`, `IccBridgeCache::bridges_for`),
+  the same ladder the fill path already used — closing the last
+  unmanaged `ICCBased`-RGB/`Lab`/`CalRGB`/`CalGray` route `Pass 240.0`/
+  `242.0` left open. 4 new tests over 6 new synthetic fixtures (two
+  colour-space families × three page kinds), 7 sabotages all caught.
+  Sweep unchanged at 2 FAIL / 41 pass / 8 unresolved of 51 — 0 of 51
+  patches exercise the construct; shipped on principle, per the
+  operator's own instruction, not against measured corpus exposure.
+- `Pass 244.0` (`e7db280`) — `OverprintZeroTintScope`'s `#[default]`
+  moves `GreyAsKOnly` → `DeviceCmykOnly`, now that decision 104's own
+  named condition for the flip (the per-spot-colorant plane, `Pass
+  238.0`/`239.0`) is met. Sweep **0 FAIL / 43 pass / 8 unresolved of
+  51**, from 2 FAIL / 41 pass / 8 unresolved under the old default;
+  three patches change a pixel (`PCS 3.0` 107.7→40.6, `PCS 4.0.1`
+  287.3→34.2, `PCS 9.0` moves toward reference). The
+  reference-engine-presumed combination
+  (`alternate_space_substitution` + literal) was tried and is worse (3
+  traps reappear on `PCS 3.0`) — the spot device model itself is
+  unchanged. Grey over a spot backdrop still preserves it (`OP-N3`,
+  unweakened). `pdfceGUI` disclosure note filed.
+- `v0.25.0` — version bump (`6a54894`), tagged at `6a54894`, packaged to
+  `D:\builds\pdfce-20260903-0253-6a54894` (**49,022,765 bytes**).
+  Fresh-folder smoke test passed: `pdfce-cli --version` prints `0.25.0`;
+  `PCS 3.0` cell `k` renders flat grey from the copied folder; the
+  managed-shading disclosure note prints; `pdfce-gui.exe` launched.
+  **Push, OneDrive deploy and `verify-release.py` are IN PROGRESS at
+  filing time — not claimed done.**
+
+**Decisions made this session:**
+- **Decision 124** (`ARCHITECTURE.md` §12): the `OverprintZeroTintScope`
+  default flip is recorded as a decision, not a bare settings change,
+  because it reverses decision 104's own explicit refusal to flip —
+  acting on the exact condition 104 pre-announced, now that it is met.
+  Ceiling moves 123 → 124.
+
+**Findings + decisions:**
+- **The gap between the plane landing and the re-measurement is the
+  reusable finding, not just the flip itself.** `Pass 238.0`/`239.0`
+  closed the compensating error decision 104's refusal depended on;
+  nobody re-measured `overprint_zero_tint_scope` against it until the
+  operator pointed at two still-failing cells. A divergence kept
+  *because* it compensated for a different, now-fixed error needs
+  re-measuring the moment that error closes — filed as a
+  `personal_rag/pdf` lesson this filing.
+- `(cb)`'s two cells (`PCS 3.0`/`4.0.1`) had been mis-labelled
+  "device-model adjudication" in two prior `Shipped` entries (384th,
+  385th filings) — they were the zero-tint-scope question, decision
+  104's axis, not the device-colorant-set-model question decision 120
+  answered. `(cb)`'s own record amended in place (append-only); `(cb)`
+  stays CLOSED, narrows to the device model in the abstract with no
+  patch depending on it.
+- The print-conformance sweep now has **nothing left standing that
+  pdfce can fix** — every patch the harness can judge (43 of 51) now
+  passes; the remaining 8 are `unresolved` (a harness limitation), not
+  `FAIL`.
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather
+  than inferred.
+
+**Still in flight:**
+- `v0.25.0` push, OneDrive deploy and `verify-release.py` — in progress
+  at filing time; a follow-on filing resolves them.
+- `docs/NEXT_SESSION.md` §D item 4 ("LEAVE THE DEFAULT ALONE") is
+  **retracted** by `Pass 244.0` — the engineer will rewrite
+  `NEXT_SESSION.md`; not edited by this role (outside its five storage
+  tiers).
+
+**For next session:**
+- Confirm `v0.25.0`'s push/deploy/verify resolved; `pdfce1`/`pdfce2`
+  OneDrive slot state should be re-read from disk, not assumed.
+
+**`docs/FEATURES.md`:** two rows edited in this filing. `/ICCBased` row
+(*Implemented*) — the "shadings and meshes… one remaining unmanaged
+route" clause struck and closed, cited to `Pass 243.0`. The
+`overprint_zero_tint_scope` row (*Implemented*) — `DEFAULT` label moved
+from `grey_as_k_only` to `device_cmyk_only`, the "deliberately NOT
+flipped" claim struck and replaced with the `Pass 244.0`/decision 124
+measurement. No `gui` box touched on either row.
+
+**`ROADMAP.md`:** new top *Shipped* entry (388th filing) for `Pass
+243.0`, `Pass 244.0` and the `v0.25.0` release record. The *Backlog*
+entry for shadings/meshes in a CIE-or-`ICCBased` RGB space (384th/385th
+filings) discharged in place, citing `51fde3f`. `(cb)`'s record amended
+in place per the finding above.
+
+**`ARCHITECTURE.md`:** decision **124** appended to §12 (see *Decisions
+made this session*, above). No body-section counterpart required — same
+shape as decision 104's own note; the living account is the type's own
+doc comment, already rewritten in `e7db280`.
+
+**`C:\personal_rag\pdf\`:** one new lesson —
+`a_divergence_kept_to_compensate_for_a_different_error_must_be_remeasured_when_that_error_closes.md`
+— filed and indexed this session; see the file for the full record.

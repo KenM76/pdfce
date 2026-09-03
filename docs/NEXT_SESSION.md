@@ -7,8 +7,8 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 append-only record (`ROADMAP.md`, `SESSION_LOG.md`).
 
-Written **2026-09-02**, at the end of a session that shipped **Passes 240.0,
-241.0 and 242.0**. Everything below was measured with a shell in that session;
+Written **2026-09-03**, at the end of a session that shipped **Passes 240.0
+through 244.0** and released v0.23.0, v0.24.0 and v0.25.0. Everything below was measured with a shell in that session;
 commands are given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
@@ -16,11 +16,11 @@ run `python tools/check-ledger-numbers.py`.** Do not mint from memory.
 
 ---
 
-## §0 THE ICC ARC IS DONE FOR FILLS, TEXT AND IMAGES — shadings and meshes are the corner left
+## §0 THE COLOUR ARC IS DONE, AND THE SWEEP IS AT 0 FAIL
 
-`ICCBased` colour is now converted through its own embedded profile on these
-routes, and the routes agree with each other (the four-ways fixture,
-`crates/pdfce-render/tests/icc_rgb.rs`):
+Every object type now converts an `ICCBased` colour through its embedded
+profile and a CIE colour through the output intent, and the routes agree with
+each other (`tests/icc_rgb.rs`, `tests/lab_ink.rs`, `tests/managed_shading.rs`):
 
 | route | display (→ sRGB) | ink (→ `/OutputIntent`) | Pass |
 |---|---|---|---|
@@ -31,36 +31,35 @@ routes, and the routes agree with each other (the four-ways fixture,
 | image, `N 4` — `/Indexed` | fallback | managed | 214.0 |
 | `N 1`, any route | fallback | managed with an intent | — |
 | `Lab` / `CalRGB` / `CalGray` fill, text, image, `/Indexed` image | `xyz_to_srgb` (unchanged) | **managed — PCS → output intent B2A** | **242.0** |
-| **shading, mesh — ICCBased RGB OR a CIE space** | **fallback** | **unmanaged** | **owed** |
+| shading, mesh — any of the above | as the fill in that space | as the fill in that space | **243.0** — `icc::ColorBridges` is the ONE copy of the ladder |
 
-**Conformance standing: 2 FAIL / 41 pass / 8 unresolved of 51** — from
-5 / 38 / 8 at the start of the session
+**Conformance standing: 0 FAIL / 43 pass / 8 unresolved of 51** — from
+5 / 38 / 8 at the start of 2026-09-02
 (`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir D:/Dev/temp/acro-refs`).
-`PCS 13.0`, `17.2` and `22.1` pass. **The two that remain are `3.0` cell k
-and `4.0` cell k — the device-model adjudication, decision 119, open operator
-question `(cb)`. Both renders conform. Do not spend a Pass on either.** There
-is nothing left on the sweep that is pdfce's to fix.
+The last two (`3.0` k, `4.0.1` k) were NOT the device-model question they
+had been filed under — they were `OverprintZeroTintScope`, and the literal
+ISO reading clears them now that spot inks have a plane (`Pass 244.0` flipped
+the default). **Every patch the harness can judge passes.** The 8 unresolved
+are reference-strip / positive-criterion / no-detector patches the harness
+cannot score either way; the operator has read those by eye before.
 
 ---
 
-## §1 NEXT: shadings and meshes are the last unmanaged colour route
+## §1 NEXT: there is no colour item left on the sweep — pick from §A
 
-Every other object type now converts an `ICCBased` RGB colour through its
-profile and a CIE colour through the output intent. A shading or mesh in
-either space still resolves its colour inside `shading.rs:543` /
-`mesh.rs:677` through `ColorSpace::to_rgb` (Table 66 reinterpretation on
-screen) and `ColorSpace::to_cmyk` (`None`, so `rgb_to_cmyk` on an ink page).
-The predicates to reuse are `Interpreter::display_bridge` (ICC → sRGB),
-`IccBridgeCache::get` (ICC → ink) and `IccBridgeCache::pcs_bridge` (CIE →
-ink); the cache and the intent live on the interpreter, and the shading
-builder is called from it. Expect the same twin defect the last two Passes
-found: fix the ramp and the mesh vertex reader in the SAME Pass, and write the
-fixture as a fill-vs-shading agreement test (`tools/gen-shading-ink-fixtures.py`
-is the template).
+Candidates in the order I would take them:
 
-0 of 51 patches exercise it; corpus exposure unmeasured — **measure before
-spending the Pass** (grep the corpus for `/ShadingType` under an `ICCBased`
-or `Lab` `/ColorSpace`). If the population is zero, take §A item 1 instead.
+1. **Mesh shadings deposit spot planes** (§A 1) — the last flattening
+   route of the spot arc, and the two type 7 meshes on the operator's
+   X-4 sheet are the two still-visibly-wrong shading pairs. `mesh::paint_cmyk`
+   takes `rules` and no planes. The `ColorBridges` refactor put the mesh's
+   colour resolution beside the ramp's; the plane deposit is the next
+   asymmetry between them.
+2. **The 8 unresolved patches** — read them by eye against
+   `D:/Dev/temp/acro-refs` (the harness cannot score a reference-strip or a
+   positive-criterion patch). Three of the `MARK?` ones are known failures
+   per `tools/suite-check.py`'s docstring.
+3. **`set_page_tabs`** when pdfceGUI asks.
 
 ---
 
@@ -178,9 +177,16 @@ or `Lab` `/ColorSpace`). If the population is zero, take §A item 1 instead.
    `(77,175,48)`.
 3. **Do NOT extend `Pass 201.0`'s shading `ink_reach` narrowing to images.**
    Measured `23.90 → 28.68`. Stays for the plane-less fallback.
-4. **`OverprintZeroTintScope`: LEAVE THE DEFAULT ALONE.** Per-patch trap
-   counts with the spot plane in place: `grey_as_k_only` (default) 2,
-   `all_process_spaces` 2, `device_cmyk_only` 4.
+4. **★★ RETRACTED 2026-09-03 (`Pass 244.0`): "`OverprintZeroTintScope`:
+   LEAVE THE DEFAULT ALONE", counts `grey_as_k_only` 2 / `all_process_spaces`
+   2 / `device_cmyk_only` 4.** Those counts predate `Pass 239.0`'s
+   group-merge-by-name fix. Re-measured on the 2026-09-03 tree:
+   `device_cmyk_only` **0 FAIL / 43 pass**, `grey_as_k_only` 2 FAIL. The
+   default is now `DeviceCmykOnly` (ISO 32000-1 to the letter). What survives
+   of the old item: the scope no longer reaches a SPOT (`Pass 238.0`) — under
+   every scope a spot plane is Table 149's `c_b` — and the combination
+   `alternate_space_substitution` + literal scope is WORSE (3 traps on 3.0
+   alone), so the spot device model stays `simulate_separations`.
 5. **The `cmyk_group_rules` mixed-source widening to `[Source; 4]` is
    correct WITHOUT planes and wrong WITH them.** `cmyk_group_rules_with_planes`
    carries the switch. Do not delete the widening.
@@ -219,6 +225,13 @@ the feature.
 four mutations surviving because `cargo test --test X --lib filter` applies
 the filter to BOTH targets. Read the harness's own output for which tests
 actually ran before believing a survivor.
+
+**A divergence kept for a compensating error must be re-measured the moment
+the error is fixed.** `GreyAsKOnly` stayed the default for one stated reason
+(no spot plane); the plane landed in `238.0`/`239.0`, and the default sat for
+five more Passes and a stale §D bullet until the operator pointed at two cells.
+When you fix the thing a divergence was compensating for, re-run the
+divergence's own measurement in the SAME session.
 
 **A measured negative can be a measurement of the wrong thing.** `Pass
 214.0` tried the right route, measured 3×, and wrote a refusal — into its

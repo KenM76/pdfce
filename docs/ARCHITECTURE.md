@@ -30171,3 +30171,113 @@ false text had already been committed twice.
 ruling's enforcement surface, the same disposition the 368th and 369th
 filings gave the "sweep-spelling" and CI-mechanism families before either
 crossed this project's two-occurrence bar for a new number.
+
+### 2026-09-03 (388th filing, `e7db280`) — decision 124: `OverprintZeroTintScope`'S DEFAULT FLIPS `GreyAsKOnly` → `DeviceCmykOnly` — DECISION 104'S OWN NAMED CONDITION FOR THE FLIP (THE PER-SPOT-COLORANT PLANE) WAS MET BY `Pass 238.0`/`239.0`, AND RE-MEASURING WITH IT PRESENT SHOWS THE LITERAL ISO 32000-1 READING NOW AGREES WITH THE REFERENCE ON EVERY PRINT-CONFORMANCE PATCH THE HARNESS CAN JUDGE
+
+**(librarian filing, 388th. Commit `e7db280` and its measured figures relayed
+by the engineer in the dispatch prompt; independently cross-checked against
+live source rather than taken on the dispatch text alone (hard rule 8) —
+`crates/pdfce-core/src/settings/mod.rs:765-791` confirmed `#[default]` now
+sits on `DeviceCmykOnly`, not `GreyAsKOnly`, and the type's own doc comment
+(lines 690-869) already carries the identical reasoning and figures this
+entry records, independently authored by the engineer in the same commit.)**
+
+**Why this is a decision and not just a settings-default bookkeeping change.**
+`overprint_zero_tint_scope` governs what *every* render of a `DeviceGray`
+(and, under `AllProcessSpaces`, `DeviceRGB`/`CalRGB`) fill under `/OP true
+/OPM 1` produces by default, on every shell. Decision **104** (2026-08-29,
+above) considered flipping this exact default and **declined**, naming a
+specific, checkable condition for revisiting that refusal: *"The honest fix
+is the literal row assignment **together with** the per-spot-colorant
+plane… it will change when the n-colorant buffer lands."* That is a
+pre-announced trigger, not a closed question — this decision is the record
+that the trigger fired and was acted on, not a fresh argument from
+first principles.
+
+**The condition, and when it was met.** Decision 104's own diagnosis: at the
+time, flipping the default alone was **trap-neutral** on the conformance
+corpus (17 traps before and after) because it corrected one cell and broke
+another that only passed through a **compensating error** — pdfce flattened
+a spot colorant into C/M/Y for want of a spot plane, and the wrong (`c_b`
+under `OP true`) row assignment happened to preserve exactly those
+flattened channels. The per-spot-colorant plane `Pass 238.0` (images) and
+`Pass 239.0` (shadings, shading patterns, transparency/knockout groups)
+shipped closed that compensating error for every route the sweep exercises.
+**Nobody re-measured the zero-tint-scope default against the now-present
+plane until the operator pointed at `PCS 3.0` and `PCS 4.0.1` still
+carrying a trap** — the gap between the plane landing and the re-measurement
+is itself worth naming: a divergence kept *because* it compensated for a
+different, now-fixed error needs re-measuring the moment that error closes,
+not left standing on the reasoning that justified it originally.
+
+**Measured (`tools/suite-check.py`, 51 patches; totals beside their
+per-item form, hard rule 10).** Sweep **0 FAIL / 43 pass / 8 unresolved of
+51** under the new default (`DeviceCmykOnly`), against **2 FAIL / 41 pass /
+8 unresolved of 51** under the old (`GreyAsKOnly`) — same 51-patch
+denominator both times. Three patches change a pixel on the flip: `PCS 3.0`
+(changed-pixel error 107.7 → 40.6), `PCS 4.0.1` (287.3 → 34.2), and `PCS
+9.0` (font-support page grey text rows move toward the reference, not a
+pass/fail change). **Nothing else moves.**
+
+**The reference-engine-presumed combination was tried and is WORSE.**
+Pairing the literal zero-tint reading with `alternate_space_substitution`
+(`OP-A7`/`SpotColorantDeviceModel`, decision 120's other axis) — the
+combination that would be presumed correct if Acrobat's reference render
+were assumed to use the mandatory §8.6.6.4 substitution branch throughout —
+regresses `PCS 3.0` back to **3 traps**. `spot_colorant_device_model`'s own
+default (`simulate_separations`) is **unchanged by this decision**; the two
+axes are independent and this decision touches only
+`overprint_zero_tint_scope`.
+
+**`OP-N3` still holds, unweakened.** Tables 148/149 place *"any process
+colour space" × spot colorant × `OP true`* at `c_b` — *do not paint* — in
+**both** overprint-mode columns, so a grey fill over a **spot** backdrop
+still preserves it under `DeviceCmykOnly` exactly as it did under
+`GreyAsKOnly` (`OP-N3`, decision 104). **Only the grey-over-PROCESS-
+component case moved** — the discriminating geometry `OP-N3` itself
+identified as the one a spot-backdrop fixture cannot exercise.
+
+**Consequence for `(cb)`.** `PCS 3.0`/`PCS 4.0.1`'s remaining traps had been
+filed under open operator question `(cb)` (372nd/374th filings) as
+*"device-model adjudication"* — that label was imprecise: the two cells were
+the **zero-tint-scope** question this decision resolves, not the **device-
+colorant-set-model** question decision 120 answered. `(cb)`'s own record
+(*Open operator questions*, below) carries a dated amendment saying so;
+`(cb)` itself stays CLOSED (374th filing) and now concerns only the device
+model in the abstract, with **no patch in the corpus depending on it**.
+
+**What this closes.** The print-conformance sweep now has **nothing left
+that pdfce can fix** — every patch the harness can judge (43 of 51; the
+remaining 8 are `unresolved`, not `FAIL`) passes. This is a stopping point
+for this axis of work, not a claim that the corpus is exhausted — an
+`unresolved` patch is a harness limitation, not a graded pass.
+
+**Disclosure.** `pdfceGUI` note filed:
+`open/note_the_overprint_zero_tint_default_moved_to_device_cmyk_only.md`
+— rule 4 applies to a default flip the same way it applies to any other
+inference pdfce makes on the operator's behalf without being asked per
+render.
+
+**★ Retracts `docs/NEXT_SESSION.md` §D item 4** ("LEAVE THE DEFAULT ALONE"),
+which carried counts 2/2/4 — measured before `Pass 239.0`'s group-merge fix
+closed the compensating error this decision's condition depended on. The
+engineer will rewrite `NEXT_SESSION.md`; not edited here (outside this
+role's five storage tiers).
+
+**Body-section counterpart: none required**, the same shape as decision
+104's own note. No crate boundary is redrawn, no invariant defined, no
+public API changed — `OverprintZeroTintScope`'s three variants are
+byte-for-byte what `Pass 143.0` shipped; only the `#[default]` attribute's
+target variant moved. The living account is the type's own doc comment
+(`crates/pdfce-core/src/settings/mod.rs:690-869`, already rewritten in the
+same commit), `docs/FEATURES.md`'s `overprint_zero_tint_scope` row
+(corrected in this same filing), and the spec register's `OP-A5`/`OP-N3`
+entries (unchanged — this decision does not revise their reasoning, only
+acts on the trigger decision 104 attached to them).
+
+**GUI-core separation:** unaffected and **not re-verified** — no crate
+manifest was touched and no dependency added, so `cargo tree` was neither
+run nor claimed.
+
+**Decision ceiling moves `123` → `124`; next free `125`.** **Standing rules
+ceiling `R240` — unchanged**, next free `R241`; no rule minted this filing.

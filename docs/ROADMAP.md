@@ -96,6 +96,144 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ THREE COMMITS, 388th filing, 2026-09-03 — `Pass 243.0` (`51fde3f`)
+MAKES SHADINGS AND MESHES COLOUR-MANAGED THROUGH THE PAGE'S OWN ICC/CIE
+BRIDGES, CLOSING THE LAST UNMANAGED ROUTE `Pass 240.0`/`242.0` LEFT OPEN;
+`Pass 244.0` (`e7db280`) FLIPS `OverprintZeroTintScope`'S SHIPPED DEFAULT
+NOW THAT DECISION 104'S OWN NAMED CONDITION FOR DOING SO IS MET, TAKING
+THE PRINT-CONFORMANCE SWEEP TO 0 FAIL — DECISION **124**; `v0.25.0` IS
+TAGGED AND PACKAGED, WITH PUSH/DEPLOY/VERIFY STILL IN PROGRESS AT FILING
+TIME.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, dates,
+measured figures and packaging/smoke-test output relayed verbatim by the
+engineer in the dispatch prompt. Independently cross-checked, not taken
+on the dispatch text alone: `icc::ColorBridges`/`IccBridgeCache::bridges_for`,
+`Shading::load`'s new `IccContext`/`RenderPolicy` parameters and
+`fixtures/synthetic/managed-shading/` confirmed present by `Grep`/`Glob`
+against live source; `OverprintZeroTintScope`'s `#[default]` confirmed
+sitting on `DeviceCmykOnly` (`crates/pdfce-core/src/settings/mod.rs:790`),
+not `GreyAsKOnly`, and the renamed test
+`grey_overprint.rs::the_shipped_default_is_device_cmyk_only` confirmed
+present; `Cargo.toml`/`Cargo.lock` confirmed at `version = "0.25.0"`. Push,
+OneDrive deploy and `verify-release.py` are stated as **in progress at
+filing time** and are **not** claimed here as done.
+
+### Pass 243.0 (`51fde3f`, 2026-09-03) — shadings and meshes convert their colour through the page's bridges, closing the last unmanaged ICC/CIE route
+
+**What shipped.** `icc::ColorBridges { display, ink, pcs }` +
+`IccBridgeCache::bridges_for` collect the fill path's own colour-conversion
+ladder into one place; `ColorRamp::build` (axial/radial/function shadings)
+and `mesh::read_shade` (types 4–7) now convert through it instead of a
+direct `ColorSpace::to_cmyk`/RGB call. `Shading::load` takes `IccContext`
+and `RenderPolicy` so a shading built from a page's content stream sees the
+same output-intent/rendering-intent context a fill or image already does.
+`ShadingDiagnostics::ramps_managed` discloses the count, off-canvas, per
+rule 4; a CLI note prints alongside it.
+
+**Fixtures and tests.** `crates/pdfce-render/tests/managed_shading.rs`
+(**4 tests**) over new `fixtures/synthetic/managed-shading/`
+(`tools/gen-managed-shading-fixtures.py`, `PROVENANCE.md`): a solid fill,
+a constant axial shading and a type-4 mesh, all authored to the identical
+colour, must agree — over two colour-space families (`ICCBased` with
+red/green swapped; `Lab` at D50) × three page kinds. Profiles are READ
+from `icc-rgb/`, not re-synthesised. **Seven sabotages, all fail their
+disagreement check** (i.e. the test correctly catches every one). No
+suite patch changed pixels — **the conformance sweep is unchanged at 2
+FAIL / 41 pass / 8 unresolved of 51** (measured before `Pass 244.0`, below,
+which is a separate commit) — 0 of 51 patches carry an ICC- or CIE-managed
+shading, the operator asked for the closure on principle rather than
+against measured corpus exposure.
+
+**Gates.** All clean, run piecewise per this session's own convention
+(hard rule 8 — no shell, relayed). Workspace test count **5058 / 0**
+failing.
+
+`docs/FEATURES.md`: `/ICCBased` row (*Implemented*) — the "shadings and
+meshes… the one remaining unmanaged route" clause struck and closed, dated
+and cited to this Pass.
+
+### Pass 244.0 (`e7db280`, 2026-09-03) — `OverprintZeroTintScope` defaults to the literal ISO 32000-1 reading now that the spot plane exists — the sweep goes to 0 FAIL
+
+**See `ARCHITECTURE.md` §12 decision 124 for the full reasoning, the
+condition decision 104 pre-announced, and the measured figures — not
+reproduced twice.** Summary: `#[default]` moves `GreyAsKOnly` →
+`DeviceCmykOnly`. Measured: sweep **0 FAIL / 43 pass / 8 unresolved of
+51** under the new default vs **2 FAIL / 41 pass / 8 unresolved of 51**
+under the old; three patches change a pixel (`PCS 3.0`: changed-pixel
+error 107.7 → 40.6; `PCS 4.0.1`: 287.3 → 34.2; `PCS 9.0`: font-page rows
+move toward the reference, not a verdict change). Grey over a **spot**
+backdrop still preserves it under the new default (Table 149 `c_b`,
+`OP-N3`) — unweakened by this flip. The reference-engine-presumed
+combination (`alternate_space_substitution` + literal) was tried and is
+**worse** — 3 traps reappear on `PCS 3.0`; `spot_colorant_device_model`'s
+own default is unchanged.
+
+**★ RETRACTS `docs/NEXT_SESSION.md` §D item 4** ("LEAVE THE DEFAULT
+ALONE"), which carried counts 2/2/4 — measured before `Pass 239.0`'s
+group-merge fix closed the compensating error decision 104's refusal
+depended on. The engineer will rewrite `NEXT_SESSION.md`; not edited by
+this role.
+
+**Settles the two cells `(cb)` had filed as "device-model adjudication".**
+They were the zero-tint-scope question, not the device-model question.
+`(cb)`'s own record (*Open operator questions*, below) carries a dated
+amendment; `(cb)` stays CLOSED (374th filing), now scoped to the device
+model in the abstract, with **no patch depending on it**.
+
+**Net result: the print-conformance sweep has nothing left standing that
+pdfce can fix.** Every patch the harness can judge (43 of 51) now passes;
+the remaining 8 are `unresolved` (harness limitation), not `FAIL`.
+
+**Disclosure.** `pdfceGUI` note filed:
+`open/note_the_overprint_zero_tint_default_moved_to_device_cmyk_only.md`.
+
+**Tests.** `grey_overprint.rs::the_shipped_default_is_device_cmyk_only`
+(renamed from its prior form) pins `OverprintZeroTintScope::default()` and
+the process-backdrop geometry that discriminates it; the settings
+round-trip test's non-default probe value flipped to `GreyAsKOnly` so it
+still exercises the non-default branch.
+
+**Gates.** All clean. Workspace test count **5058 / 0** failing (same
+total as `Pass 243.0` — a rename, not a net add/remove, per this session's
+own two test-file edits).
+
+`docs/FEATURES.md`: `overprint_zero_tint_scope` row (*Implemented*) —
+DEFAULT label moved from `grey_as_k_only` to `device_cmyk_only`, dated and
+cited to this Pass and decision 124; the "deliberately NOT flipped" claim
+struck and replaced.
+
+### `6a54894` — `chore: v0.25.0` — tagged and packaged; push/deploy/verify IN PROGRESS
+
+Version bump (`Cargo.toml`, both lockfiles; `THIRD_PARTY_LICENSES.md`
+unchanged — no dependency set change). Tag `v0.25.0` cut at `6a54894`.
+Packaged to `D:\builds\pdfce-20260903-0253-6a54894` (**49,022,765
+bytes**). **Fresh-folder smoke test**: both binaries launched from a
+copy — `pdfce-cli --version` banner prints `pdfce-cli 0.25.0`; `PCS 3.0`'s
+cell `k` renders flat grey from the copied folder (the `Pass 244.0`
+default in effect); the managed-shading disclosure note prints;
+`pdfce-gui.exe` launched.
+
+**★ Push, OneDrive deploy and `verify-release.py` are IN PROGRESS at
+filing time — not claimed here as done.** A follow-on filing resolves
+them, per this session's own release-authorization gates (decision 121,
+`CLAUDE.md` rule 8).
+
+`docs/FEATURES.md`: no additional row change beyond the two Passes above
+— a version bump carries no new capability of its own.
+
+#### Standing rules — no new mint
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `242.0` | ceiling `244.0` — `243.0`, `244.0` both *Shipped* |
+| Decisions | ceiling `123`, next free `124` | ceiling `124`, next free `125` — decision 124 minted |
+| Standing rules | ceiling `R240`, next free `R241` | unchanged |
+
+---
+
 **★★ 387th filing, 2026-09-02 — `v0.24.0` RELEASE COMPLETED: TAGGED,
 PUSHED, PACKAGED, SMOKE-TESTED, DEPLOYED AND VERIFIED CLEAN — RESOLVES
 THE 386th FILING'S "IN PROGRESS" MARK ON `dbd6b57`.**
@@ -113512,7 +113650,7 @@ nothing gets forgotten, not as a commitment to build in this order.
 > compositing buffer* row narrowed a fifth time to this single remaining
 > scope; no box moves.
 
-### Unscoped — ★★ SHADINGS AND MESHES IN A CIE OR ICCBased RGB SPACE STILL REINTERPRET RATHER THAN COLOUR-MANAGE — THE LAST UNMANAGED ROUTE — filed 2026-09-02 (384th filing, `Pass 240.0`'s named remainder; widened 2026-09-02, 385th filing, `Pass 242.0`'s named remainder)
+### ~~Unscoped — ★★ SHADINGS AND MESHES IN A CIE OR ICCBased RGB SPACE STILL REINTERPRET RATHER THAN COLOUR-MANAGE — THE LAST UNMANAGED ROUTE~~ — **DISCHARGED 2026-09-03 (388th filing): SHIPPED AS `Pass 243.0` (`51fde3f`), THE VERY NEXT PASS** — filed 2026-09-02 (384th filing, `Pass 240.0`'s named remainder; widened 2026-09-02, 385th filing, `Pass 242.0`'s named remainder)
 
 **Status: NOT STARTED.** `Pass 240.0` (*Shipped*, above) made an
 `ICCBased` RGB (N 3) paint colour-managed on every OTHER route — fills,
@@ -113545,6 +113683,18 @@ through `iccce`'s bridge (for `ICCBased`) or the new PCS route (for
 `IccBridge`/`PcsBridge`/cache plumbing `Pass 240.0` and `Pass 242.0`
 built for their respective paint and image routes, keyed the same way
 (profile bytes, not `Arc::ptr_eq`).
+
+**★ RESOLVED 2026-09-03 (388th filing) — `Pass 243.0` (`51fde3f`) built
+exactly this plumbing: `icc::ColorBridges`/`IccBridgeCache::bridges_for`,
+consumed by `ColorRamp::build` and `mesh::read_shade` alike, for all four
+named spaces (`ICCBased` RGB and `Lab`/`CalRGB`/`CalGray` share one route
+via `Shading::load`'s new `IccContext`/`RenderPolicy` parameters, rather
+than the `IccBridge`/`PcsBridge` split this entry anticipated).** The
+corpus-exposure gap named above stayed unmeasured and unmet — 0 of 51
+patches exercise the construct — and the Pass shipped anyway, on the
+operator's own instruction that the closure was wanted on principle. See
+the `Pass 243.0` *Shipped* entry, top of this file, for fixtures and gate
+results.
 
 ### Unscoped — ★★ MESH SHADINGS (TYPES 4–7) STILL FLATTEN SPOT COLORANTS — THE ONE ROUTE `Pass 239.0` LEFT OPEN — filed 2026-09-02 (380th filing, `Pass 239.0`'s named remainder)
 
@@ -121413,6 +121563,27 @@ INSTALL THIS ROLE HAS NO ACCESS TO. Operator-question ceiling moves
   > refuting** — see `C:\personal_rag\pdf\`'s dated amendment to the
   > `acrobats_overprint_preview_defaults_to_pdfx_only` lesson and the new
   > `a_region_count_metric_is_topologically_blind_to_hole_filling` lesson.
+
+  > **★★ AMENDED 2026-09-03 (388th filing) — THE "device-model
+  > adjudication" LABEL ON `PCS 3.0`/`PCS 4.0.1` WAS IMPRECISE, AND THE
+  > TWO CELLS ARE NOW RESOLVED, BY A DIFFERENT SETTING THAN THIS QUESTION
+  > NAMES.** Several `Shipped`-entry mentions of `PCS 3.0`/`4.0`/`4.0.1`
+  > (384th, 385th filings) filed their remaining traps under this question,
+  > `(cb)`, as awaiting "device-model adjudication" — i.e. decision 120's
+  > `spot_colorant_device_model` axis. **That attribution was wrong.**
+  > `Pass 244.0` (`e7db280`, `ARCHITECTURE.md` §12 decision **124**) closed
+  > both cells by flipping `overprint_zero_tint_scope`'s default instead —
+  > a **different setting**, decision **104**'s axis, not decision 120's.
+  > `spot_colorant_device_model` itself is untouched by that fix and stays
+  > at its own default (`simulate_separations`). **`(cb)` itself is
+  > unaffected — it was CLOSED (dissolved, not answered) in the 374th
+  > filing and stays closed** — but its subject narrows: with the
+  > zero-tint-scope cells resolved, `(cb)`'s remaining content is the
+  > device-colorant-set-model question **in the abstract**, with **no
+  > patch in the print-conformance corpus currently depending on it** —
+  > every patch the harness can judge now passes (`Pass 244.0`'s own
+  > entry, *Shipped*, top of this file). A future session should not read
+  > `(cb)`'s history as still gating any measured cell.
 
 ---
 
