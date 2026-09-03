@@ -9609,7 +9609,18 @@ with a forward pointer.
   - **(e) Refuse-not-false-redact posture.** Images in a redaction region are
     REFUSED by name (`RedactError::ImageRegion`, NO output written) rather
     than overlay-and-leave-pixels — never falsely claim a raster region
-    redacted when only a masking box covers intact pixels. Form-XObject
+    redacted when only a masking box covers intact pixels.
+    **★ AMENDED 2026-09-03 (390th filing) — the MECHANISM in this clause is
+    SUPERSEDED by decision 125 (`Pass 245.0`, `98d4377`); the POSTURE is
+    kept.** `RedactError::ImageRegion` no longer exists. Covered image
+    cells are DESTROYED in the decoded samples and re-encoded losslessly;
+    a wholly covered placement is removed and its object tombstoned; a
+    mark over a placement pdfce cannot decode is RETAINED (per mark, not
+    per document) and disclosed; apply refuses (`ImageUndestroyable`) only
+    when no mark at all can be applied. "Never falsely claim a raster
+    region redacted" still holds — it is now satisfied by destruction
+    plus per-mark retention rather than by whole-document refusal. Left in
+    place because this entry is append-only. Form-XObject
     content in-region is NOT surgically redacted and is disclosed loudly
     (`form_intersect`), never claimed removed. XFA / structure-tree
     `/ActualText` / attachments are detect + disclose (`DISCLOSED_NOT_SCRUBBED`)
@@ -30281,3 +30292,111 @@ run nor claimed.
 
 **Decision ceiling moves `123` → `124`; next free `125`.** **Standing rules
 ceiling `R240` — unchanged**, next free `R241`; no rule minted this filing.
+
+### 2026-09-03 (390th filing, `98d4377`) — decision 125: REDACTION DESTROYS IMAGE SAMPLES INSTEAD OF REFUSING THE APPLY — CELL-EXACT CLEARING IN THE DECODED SAMPLES WITH LOSSLESS RE-ENCODE, WHOLE-PLACEMENT REMOVAL WITH IN-PLACE TOMBSTONING, COPY-ON-WRITE FOR SHARED IMAGES, AND PER-MARK (NOT PER-DOCUMENT) RETENTION WHEN A PLACEMENT CANNOT BE DECODED; SUPERSEDES THE MECHANISM OF `Pass 8.0` CLAUSE (e), KEEPS ITS POSTURE
+
+**(librarian filing, 390th. Shell available; commit `98d4377` confirmed by
+`git log`; `RedactError::ImageUndestroyable` confirmed present and
+`ImageRegion` confirmed absent from every `.rs` under `crates/` by `grep`;
+`crates/pdfce-core/src/redact_image.rs` confirmed at 1,484 lines by
+`wc -l`. Measured figures relayed by the engineer, not re-run.)**
+
+**What was decided, and why each part is a decision rather than
+bookkeeping.**
+
+1. **Destroy, don't refuse — and the gate is the SAMPLES, not the
+   rectangle.** `Pass 8.0` (2026-08-06, clause (e) above) refused any
+   region whose rectangle touched an image's rectangle, by name, with the
+   written rationale that a partial raster clear was "more error-prone
+   than an honest refusal." Twenty-eight days later the operator's own
+   drawings (`OneDrive\pdfTests\Redact`, 11 files, 2 with images) showed
+   the refusal is unusable on the document class this project exists for:
+   a CAD title block sits inches from a logo, so *touching a rectangle*
+   is the common case, not the edge case, and the refusal presented as
+   *"the feature does not work"* (operator, verbatim, in pdfceGUI's
+   request). The replacement: map each region through the inverse
+   placement matrix into image space, snap OUTWARD (floor near, ceil far
+   — the glyph surgery's own over-cover bias), overwrite exactly those
+   cells in the decoded samples at every bit depth, re-encode as
+   `FlateDecode`. A region that touches the rectangle but covers no cell
+   destroys nothing and is not an image redaction.
+2. **Lossless re-encode; never re-run a lossy codec.** The requirement is
+   that the in-region samples are gone, not that the survivors match the
+   producer's compression. Re-running DCT or JPX would change every
+   surviving sample as a side effect of removing some, which is a
+   minimal-diff violation on content the operator did not mark (§5) —
+   Flate changes bytes, not samples.
+3. **A soft mask's alpha is a SHAPE, so it is cleared over the same
+   cells.** A signature on a transparent background is recognisable from
+   its `/SMask` alone; a stencil `/Mask` stream likewise. A colour-key
+   `/Mask` *array* names values, not positions, and carries no shape —
+   left as is.
+4. **A wholly covered placement is REMOVED, and its object is TOMBSTONED
+   in place (a 1×1 zero-sample image under the same object number) rather
+   than deleted.** Chosen over deletion because a `/Resources` dictionary
+   shared by other pages or forms would otherwise carry a dangling
+   reference — and a dangling `/XObject` entry is the kind of thing a
+   different viewer reports as a broken file. The `Do` (or the whole
+   inline `BI…EI`) is deleted from the content; the report names the
+   removal with page, position, size and resource name.
+5. **Copy-on-write for shared images, with every census miss biased
+   toward "shared".** A document-wide use census (page content, forms
+   recursively to depth 32, annotation appearance streams, tiling
+   patterns walked as if painted) decides whether an image is still
+   painted somewhere unmarked. A partially covered placement ALWAYS gets
+   its own clone under a fresh page-local name (`/pdfceRd<obj>_<n>`); the
+   original is tombstoned only when every use was marked. The bias is
+   the safe direction: a false "shared" costs one redundant clone; a
+   false "unique" would destroy samples under an unmarked placement.
+6. **Refusal is per MARK, not per document.** A placement pdfce cannot
+   decode (a codec feature it lacks, a corrupt codestream, a bit depth
+   Flate cannot carry) RETAINS the marks touching it — left as unapplied
+   `/Redact` annotations, nothing removed under them, no overlay drawn —
+   while every other mark applies. `RedactionReport::marks_retained`
+   counts them, a note names each with its reason, and a new `images`
+   carrier reads `DisclosedNotScrubbed` so the acknowledgement gate
+   trips. Only when NO mark can be applied does apply refuse:
+   `RedactError::ImageUndestroyable { page, reason }`. This is rule 4's
+   shape exactly: render the retained mark as it is, disclose off-canvas
+   what was not done and why, no gate in front of the marks that CAN be
+   applied.
+7. **`RedactError::ImageRegion` is REMOVED, not deprecated** — a breaking
+   change carried by `v0.26.0` (MINOR, `7d94fe3`). A variant that can no
+   longer be produced is a lie in the type; pdfceGUI matches `other =>`
+   and is unaffected.
+
+**Also decided, as a side effect of verifying on the operator's file:**
+a painted vector path crossing a region — never removed AND never
+disclosed since `Pass 8.0`, a rule-4 silence — is now counted
+(`vector_paths_intersecting`; the nine painting operators count, `n`
+clip-only does not) and disclosed through a `vector_paths` carrier reading
+`DisclosedNotScrubbed`. Cutting is `Pass 246.0` (*Next up*). The decision
+here is only that the silence closes before the cutting ships, not after.
+
+**What this supersedes.** `Pass 8.0` clause **(e)**'s mechanism (whole-
+document refusal by rectangle) — amended in place above with a dated
+footer. Its POSTURE — never falsely claim a raster region redacted —
+survives unchanged and is now satisfied by destruction plus per-mark
+retention. `Pass 8.0`'s deviation 1 (*"partial raster clear was rejected
+as more error-prone than an honest refusal"*) was a reasonable call at
+n = 0 files; the operator's files are the measurement it lacked.
+
+**Body-section counterpart.** §5's redaction corollary (*"redaction is the
+one deliberate exception"*) is unchanged in wording and now more true —
+image samples join glyphs as content the exception actually removes. §4's
+API surface: `RedactionReport` gains `images_cleared`, `images_removed`,
+`images_cloned_shared`, `images_overcovered`, `marks_retained`,
+`vector_paths_intersecting`; `RedactError` gains `ImageUndestroyable` and
+loses `ImageRegion`. The living account is `docs/core-api/03-capabilities.md`
+§4.2/§4.5 (moved in the same commit; `check-core-api-verbs` green) and
+`crates/pdfce-core/src/redact_image.rs`'s module doc, which cites
+§12.5.6.23, §8.9.3/§8.9.4, Table 93 and the spec RAG's
+`iso32000__ref__redaction_removal.md` §4.
+
+**GUI-core separation:** `cargo tree` core/render **re-run by the engineer
+and reported clean** (no GUI deps) — relayed, not re-run here; no manifest
+was touched (the Pass's `--stat` shows no `Cargo.toml`).
+
+**Decision ceiling moves `124` → `125`; next free `126`.** **Standing rules
+ceiling `R240` — unchanged**, next free `R241`; no rule minted this filing
+(the decline is argued in `ROADMAP.md`'s 390th-filing *Shipped* block).

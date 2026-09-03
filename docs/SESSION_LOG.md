@@ -87531,3 +87531,150 @@ pattern the 386th→387th filing pair used for `v0.24.0`.
 **`C:\personal_rag\pdf\`:** one new lesson —
 `a_divergence_kept_to_compensate_for_a_different_error_must_be_remeasured_when_that_error_closes.md`
 — filed and indexed this session; see the file for the full record.
+
+## 2026-09-03 (390th filing) — `Pass 245.0` (`98d4377`) SHIPPED — redaction DESTROYS image samples instead of refusing the apply (cell-exact clearing, whole-placement removal with tombstoning, copy-on-write for shared images, per-mark retention on undecodable images); vector paths crossing a region are DISCLOSED by count, not yet cut; decision 125 minted; `Pass 246.0` (vector-path cutting) filed *Next up*; `v0.26.0` (`7d94fe3`) bumped, tag/package/smoke/deploy/verify IN PROGRESS
+
+**Second session of the day** — the first ended 07:30Z with the
+`NEXT_SESSION.md` hand-off at `c180aac`/`a64ee2c` (0 FAIL on the
+print-conformance sweep; `v0.25.0` deployed).
+
+**Sourcing (hard rule 8).** Shell available. `git log` confirms
+`98d4377` (the Pass) and `7d94fe3` (`chore: v0.26.0`, `HEAD`). `git tag
+--list 'v0.2*'` ends at **`v0.25.0`** — the `v0.26.0` tag does NOT exist
+at filing time; the release is filed as pending. Symbols cross-checked
+against live source (`ImageUndestroyable` at `redact.rs:222`; `ImageRegion`
+absent from `crates/`; the six new `RedactionReport` fields at
+`redact.rs:339-365`; the CLI counter line at `main.rs:22830`; the renamed
+GUI test at `redact_apply.rs:648`; `image_use_census` and `pdfceRd` at
+`redact_image.rs:585`/`:1023`). Measured figures (cells, seconds, fuzz
+runs, test totals) relayed by the engineer, not re-run. **Backup bundle
+currency: not checked this filing** — the dispatch did not ask and the
+figure was not needed; stated as unverified rather than inferred.
+
+**Premises corrected (the dispatch asked):**
+- `redact_image.rs` is **1,484 lines** by `wc -l`, not "~900"; the
+  commit's own `--stat` (1,484 insertions) agrees.
+- Everything else held: version `0.26.0` after `7d94fe3`; previous
+  release `v0.25.0`; rule ceiling `R240`; decision ceiling `124` (now
+  `125`); 389 prior filings; Pass ceiling `244.0` (now `246.0`).
+
+**Shipped:**
+- `Pass 245.0` (`98d4377`) — all three asks of pdfceGUI's
+  `request_redaction_refuses_any_region_that_touches_an_image.md`
+  (blocking their O103), in the request's preference order: (1) the gate
+  is the SAMPLES, not the bounding boxes — covered cells are overwritten
+  in the decoded image (raw/DCT/CCITT/JBIG2/JPX; bit depths 1/2/4/8/16),
+  snapped outward, re-encoded losslessly as Flate, `/SMask` and stencil
+  `/Mask` cleared over the same cells; (2) a wholly covered placement is
+  REMOVED (`Do` or `BI…EI` deleted) and its object TOMBSTONED in place
+  (1×1 zero-sample, same object number — shared `/Resources` would
+  otherwise dangle); (3) refusal is per MARK — an undecodable placement
+  RETAINS its marks (`marks_retained`, named with reason, `images`
+  carrier `DisclosedNotScrubbed`) while every other mark applies; apply
+  refuses (`ImageUndestroyable`) only when no mark can be applied.
+  `RedactError::ImageRegion` REMOVED (breaking → `v0.26.0`). Copy-on-write
+  for shared images via a document-wide use census biased toward
+  "shared"; partial placements always cloned as `/pdfceRd<obj>_<n>`.
+  `apply_redactions` is now two passes (census + decode-once, then
+  surgery). New module `crates/pdfce-core/src/redact_image.rs`.
+- Vector paths: a painted path crossing a region was never removed AND
+  never disclosed since `Pass 8.0` — now counted
+  (`vector_paths_intersecting`) and disclosed (`vector_paths` carrier).
+  Cutting is `Pass 246.0`.
+- Measured on the operator's files (relayed): `DW 17036-15.pdf`
+  whole-page mark exit 9 → **exit 0**, `images_removed=1` (3350×2025 RGB +
+  `/SMask` tombstoned), `glyphs_removed=194`; `DW 17036-Plates.pdf`
+  `images_removed=2` (page-1 placements; four on pages 2–3 untouched);
+  corner-clipping rect on `17036-15`: `images_cleared=1`, **195,960 cells
+  in 0.32 s ≈ 1.6 µs/cell**.
+- Tests: 12 new in `redact.rs`, 6 in `redact_image.rs` (live `grep -c
+  '#[test]'` agrees at 6); sabotage — no-op `clear_cells` fails 5, no-op
+  tombstone fails 4. Fuzz target 15 extended (three image XObjects, 7
+  committed seeds): **15,728 runs / 181 s / 0 crashes ≈ 87 runs/s**;
+  coverage **3,432 → 5,554 edges**.
+- Gates (relayed): workspace **4,127 / 0**; no-default-features **3,465 /
+  0**; clippy/fmt/wasm32/fuzz-check/`cargo tree`/22 script gates clean.
+- `7d94fe3` `chore: v0.26.0` — MINOR (`ImageRegion` removed; six report
+  fields + two carriers added); no dependency change.
+
+**Decisions made this session:**
+- **Decision 125** (`ARCHITECTURE.md` §12): destroy-not-refuse; samples
+  not rectangles; lossless re-encode, never re-run a lossy codec; a soft
+  mask's alpha is a shape and is cleared; tombstone over delete (shared
+  `/Resources`); copy-on-write with the census biased toward "shared";
+  per-mark retention; `ImageRegion` removed not deprecated. Supersedes
+  the MECHANISM of `Pass 8.0` clause (e) — amended in place with a dated
+  footer — and keeps its POSTURE.
+- **No standing rule minted.** The candidate shape — *a scoped, disclosed
+  refusal coarser than the thing it protects presents as a broken feature
+  on any document class where the refused thing is ubiquitous* — is
+  **n = 1**. Filed as a `C:\personal_rag\pdf\` methodology lesson so a
+  second instance has something to be the second instance of. Explicitly
+  NOT `R225` (no measured negative, no untested intermediate — a design
+  choice with a written rationale) and NOT `R195` (the refusal WAS on the
+  runtime surface, by name, with a page number).
+
+**Findings + decisions:**
+- **A figure that disagrees with the 388th filing, filed rather than
+  smoothed (hard rule 10):** that filing recorded the workspace test
+  total as **5,058 / 0**; this dispatch reports **4,127 / 0** one Pass
+  (+18 tests) later. The two cannot count the same set. Both were
+  relayed; neither verified here. **Owed to the engineer:** say which
+  counting convention each used (doctests / all-targets vs
+  `--lib --tests`) before the next filing carries a total.
+- **Hard-rule-11 sweep for the CLAIM "images are refused under
+  redaction"** — survivors: `ARCHITECTURE.md` `Pass 8.0` (e) (amended
+  this filing); three `C:\personal_rag\pdf\` lessons of 2026-08-01
+  (amended this filing, dated footers);
+  **`.claude/agent-memory/pdfce-engineer/project_pass8_redaction.md:17`
+  — the engineer's file, OWED.** Correct survivors that must not be
+  "fixed": `redact_apply.rs:165` (`CoreRefused` now describes the
+  `ImageUndestroyable` case), `docs/ui_specs/pass-8-redaction.md:662`
+  (the retained-mark case), `redact.rs:81`, and
+  `03-capabilities.md:1650`/`:1766` (name `ImageRegion` only as the thing
+  replaced).
+- The Acrobat RAG's `redaction__content_removal_scope.md` DOES cover
+  vector cutting — *clip when possible, rasterise when not* — and its own
+  pdfce-parity note says prefer decomposition over rasterising. `Pass
+  246.0`'s acceptance is written against it: cut, else retain-and-
+  disclose, never rasterise.
+
+**Still in flight:**
+- `v0.26.0` tag, `package-portable.py`, fresh-folder smoke test, OneDrive
+  deploy, `verify-release.py` — the engineer's, in progress. A follow-on
+  filing resolves the pending mark on `7d94fe3`.
+- `Pass 246.0` — vector-path cutting — the engineer is starting it
+  immediately (*Next up*, full scope and acceptance there).
+- pdfceGUI channel: `open/reply_images_are_destroyed_now_and_all_three_asks_ship.md`
+  awaiting their consumption — **do not archive**.
+
+**For next session:**
+- Resolve the `v0.26.0` release record (tag/package/smoke/deploy/verify).
+- Reconcile the workspace test-total convention (5,058 vs 4,127).
+- Engineer: update `project_pass8_redaction.md:17` in the engineer
+  memory (images are destroyed, not refused).
+- After `Pass 246.0` ships, re-run the corner-clipping marks on both
+  `DW 17036` drawings and confirm `vector_paths_intersecting == 0` AND
+  rendered absence — both halves.
+
+**`docs/FEATURES.md`:** *Redaction & security* "Apply redaction — true
+removal" row's sentence REPLACED (images destroyed / removed /
+copy-on-write; undecodable → retained and counted; vector paths disclosed
+not cut; pdfceGUI prints notes verbatim, six counters not yet surfaced;
+`core`/`cli`/`gui` unchanged at `[x] [x] [x]`, Acrobat `◐`). *Planned*
+gains **"Vector-path redaction — cut painted paths at the region
+boundary"** `[ ] [ ] [ ]`, Acrobat `◐`, for `Pass 246.0`.
+
+**`ROADMAP.md`:** new top *Shipped* block (390th filing) — `Pass 245.0`
+full entry, `7d94fe3` bump record (pending), rule-mint decline argued,
+hard-rule-11 sweep, ledger; `Pass 246.0` at the head of *Next up*.
+
+**`ARCHITECTURE.md`:** decision 125 appended to §12; `Pass 8.0` clause (e)
+amended with a dated footer.
+
+**`C:\personal_rag\pdf\`:** two new lessons, subject index and master
+index updated; three 2026-08-01 redaction lessons amended with dated
+footers —
+`lesson_20260903_cad_shaded_view_as_one_dct_image_with_a_separate_smask_and_filter_chains.md`
+and
+`lesson_20260903_a_scoped_refusal_coarser_than_what_it_protects_reads_as_a_broken_feature.md`.
