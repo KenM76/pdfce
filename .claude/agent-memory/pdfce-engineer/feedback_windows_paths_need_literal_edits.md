@@ -510,3 +510,13 @@ Bash tool is never literal — and the fix is the same: any patch script with
 a backslash in it goes through the `Write` tool to a file, then
 `python <file>`. Note the shape of the misdiagnosis: the wrong cause was the
 most VISIBLE character on the failing line, not the one the class predicts.
+
+**Recurred 2026-09-03 (fourth time), with a Rust byte-escape rather than a
+path:** a Python heredoc patch containing `b'\n' | b'\r'` arrived in the
+Rust source as literal LF/CR bytes; `grep` answered "Binary file matches"
+and the file compiled only by accident. The tell is `cat -A` showing `^M`
+or a bare `$` inside a quoted literal. **The rule is not "paths" — it is
+ANY backslash, and Rust escapes (`\n`, `\r`, `\x0C`, `\0`, `\`) are the
+ones a Rust project types most.** Write the patch with the Write tool to
+`D:\Dev\temp\*.py` and run `python <file>`; the fix that day was exactly
+that (`fix_trim_ws.py`).

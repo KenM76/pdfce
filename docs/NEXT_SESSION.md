@@ -7,74 +7,57 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 append-only record (`ROADMAP.md`, `SESSION_LOG.md`).
 
-Written **2026-09-03**, at the end of a session that shipped **Passes 240.0
-through 244.0** and released v0.23.0, v0.24.0 and v0.25.0. Everything below was measured with a shell in that session;
-commands are given so nothing here has to be trusted.
+Written **2026-09-03** (second session of the day), at the end of a session
+that shipped **Passes 245.0 and 246.0** and released **v0.26.0 and v0.27.0**.
+Everything below was measured with a shell in that session; commands are
+given so nothing here has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
 run `python tools/check-ledger-numbers.py`.** Do not mint from memory.
 
 ---
 
-## §0 THE COLOUR ARC IS DONE, AND THE SWEEP IS AT 0 FAIL
+## §0 REDACTION NOW REMOVES EVERYTHING UNDER A MARK — text, images, vectors
 
-Every object type now converts an `ICCBased` colour through its embedded
-profile and a CIE colour through the output intent, and the routes agree with
-each other (`tests/icc_rgb.rs`, `tests/lab_ink.rs`, `tests/managed_shading.rs`):
+The session answered pdfceGUI's request *"redaction refuses any region that
+touches an image"* (the operator: *"every time I've tried the redact feature
+it tells me it can't"*) and then removed the residual the answer exposed:
 
-| route | display (→ sRGB) | ink (→ `/OutputIntent`) | Pass |
-|---|---|---|---|
-| fill / stroke / text, `N 3` | managed | managed | 240.0 / 199.2 |
-| fill / stroke / text, `N 4` | Table 66 fallback (`from_cmyk`) | managed | 199.2 |
-| image, `N 3` — direct, `/Indexed`, JPX `colr` | managed | managed | 240.0 |
-| image, `N 4` — direct | fallback | **managed (was raw samples — see §D 1)** | 240.0 |
-| image, `N 4` — `/Indexed` | fallback | managed | 214.0 |
-| `N 1`, any route | fallback | managed with an intent | — |
-| `Lab` / `CalRGB` / `CalGray` fill, text, image, `/Indexed` image | `xyz_to_srgb` (unchanged) | **managed — PCS → output intent B2A** | **242.0** |
-| shading, mesh — any of the above | as the fill in that space | as the fill in that space | **243.0** — `icc::ColorBridges` is the ONE copy of the ladder |
+| content under a mark | before this session | now |
+|---|---|---|
+| text glyphs | removed (Pass 8) | unchanged |
+| raster image, any codec | **whole apply REFUSED** | covered cells destroyed → **paper**, re-encoded Flate; wholly covered → `Do` removed + object tombstoned; shared → copy-on-write clone; undecodable → **mark RETAINED**, disclosed (`Pass 245.0`, `redact_image.rs`) |
+| soft mask / stencil mask | — | cleared with the image (transparent / masked-out) |
+| vector paths | **left in place, not even disclosed** | **CUT** at the boundary: strokes vs region + stroke width, fills clipped to the complement, wholly-inside deleted (`Pass 246.0`, `redact_vector.rs`) |
+| `W`-marked path object | — | paint cut, ORIGINAL geometry kept as the clip (`vector_clips_kept`, noted) |
+| malformed path object (foreign op inside, §8.2) | — | the residual: `vector_paths_intersecting`, carrier `DisclosedNotScrubbed` |
 
-**Conformance standing: 0 FAIL / 43 pass / 8 unresolved of 51** — from
-5 / 38 / 8 at the start of 2026-09-02
-(`python tools/suite-check.py D:/Dev/temp/suite-patches --reference-dir D:/Dev/temp/acro-refs`).
-The last two (`3.0` k, `4.0.1` k) were NOT the device-model question they
-had been filed under — they were `OverprintZeroTintScope`, and the literal
-ISO reading clears them now that spot inks have a plane (`Pass 244.0` flipped
-the default). **Every patch the harness can judge passes.** The 8 unresolved
-are reference-strip / positive-criterion / no-detector patches the harness
-cannot score either way; the operator has read those by eye before.
+**Proof by pixels:** `crates/pdfce-render/tests/redaction_leaves_no_ink.rs`
+rasterises an applied redaction and asserts zero inked pixels inside the
+region. It found the black-block defect nothing else did.
 
-**Renders of the operator's six-page X-4 sheet from the v0.25.0 binary** are
-at `D:\Dev\temp\n3\sheet_out\x4_page1..6.png` (full size, scale 1.5) and
-`…_small.png` (two-thirds, for viewing). Re-render with
-`pdfce-cli render-page <the sheet, in the parity input folder under D:/Dev/temp> --page N --scale 1.5`.
-Two things visible on those pages that are NOT harness failures and are
-worth knowing before someone reports them:
-
-* `4.1` cell b ("almost White"): the reference shows the same faint X — the
-  patch is designed to; pdfce additionally draws a **hairline warm outline
-  along the X's edges** where the reference has none. An antialiased
-  overprint seam (the cross's edge pixels composite at partial coverage
-  against the rect). Unmeasured; small; a candidate, not a failure.
-* `6.0` / `6.1`: the two type 7 mesh pairs on page 1 are the still-wrong
-  shading pairs — §1 item 1.
+**On the operator's files** (`C:\Users\Ken\OneDrive\pdfTests\Redact\`, the
+two image-bearing drawings): whole-page marks exit 0 with the page blank
+(780 / 1,089 path objects dropped, images removed); a corner mark cuts 25
+objects and clears 195,960 image cells in 0.30 s.
+Re-run: `pdfce-cli redact-mark --page 1 --rect 500,300,700,400 <in> -o m.pdf`
+then `pdfce-cli redact-apply m.pdf -o out.pdf`.
 
 ---
 
-## §1 NEXT: there is no colour item left on the sweep — pick from §A
+## §1 NEXT: nothing is owed on redaction — pick from §A
 
 Candidates in the order I would take them:
 
-1. **Mesh shadings deposit spot planes** (§A 1) — the last flattening
-   route of the spot arc, and the two type 7 meshes on the operator's
-   X-4 sheet are the two still-visibly-wrong shading pairs. `mesh::paint_cmyk`
-   takes `rules` and no planes. The `ColorBridges` refactor put the mesh's
-   colour resolution beside the ramp's; the plane deposit is the next
-   asymmetry between them.
-2. **The 8 unresolved patches** — read them by eye against
-   `D:/Dev/temp/acro-refs` (the harness cannot score a reference-strip or a
-   positive-criterion patch). Three of the `MARK?` ones are known failures
-   per `tools/suite-check.py`'s docstring.
-3. **`set_page_tabs`** when pdfceGUI asks.
+1. **pdfceGUI's consumption of the reply** — two new report fields groups
+   (`images_*`, `vector_*`, `marks_retained`) are not surfaced by their
+   panel yet; their mark-time image warning wording should change (the
+   reply says how). Wait for their file in `open/`; nothing to build until
+   they ask.
+2. **Mesh shadings deposit spot planes** (§A 1) — the last flattening route
+   of the spot arc; the two type 7 meshes on the operator's X-4 sheet.
+3. **The 8 unresolved conformance patches** — read by eye against
+   `D:/Dev/temp/acro-refs`.
 
 ---
 
@@ -82,196 +65,134 @@ Candidates in the order I would take them:
 
 | # | Item | Measured exposure |
 |---|---|---|
-| 1 | **Mesh shadings deposit spot planes** — the last flattening route of the spot arc. `mesh::paint_cmyk` takes `rules` and no planes. Two type 7 meshes on the operator's sheet are the two still-wrong shading pairs. | 0.6 % of corpus |
-| 2 | **`set_page_tabs(page, PageTabs)`** — deliberately not built in `Pass 237.0`; filed in Backlog with its sourcing. pdfceGUI has not asked. | one shell request away |
-| 3 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. The gate stops it growing. | rule 6 |
-| 4 | Make `sh` shadings selectable objects; resolve `/OC` in the decomposer. | 0.6 % / 0 files |
-| 5 | **`N 1` on the display path** — one-line widening of `components == 3` in `image::resolve_space_array` and `display_bridge`; unmeasured, no patch fails on it. Measure `PCS 18.2` before and after if it is ever tried. | 0 patches |
-| 6 | **Other `/Indexed` bases with a non-unit component range** — `palette_entry` now scales into `Space::component_ranges()`, which is `0..1` for everything but a delegated CIE space. An `/Indexed` over `ICCBased` whose profile `/Range` is not `0..1` would still be wrong; pdfce does not read profile ranges anywhere (`default_decode` says so). | unmeasured |
+| 1 | **Mesh shadings deposit spot planes** — `mesh::paint_cmyk` takes `rules` and no planes. | 0.6 % of corpus; 2 visible pairs on the X-4 sheet |
+| 2 | **`sh` shading paints under a redaction mark** — `sh` fills the current clip; the redaction interpreter does not track the clip, so a shading crossing a mark is neither cut nor counted. Unmeasured; no operator file has one. Count-and-disclose is an hour; cutting needs clip tracking. | 0 files seen |
+| 3 | **Images and paths inside a form XObject under a mark** — still `form_intersect` disclosed only. The CAD exporters seen so far draw on the page directly. | 0 of 11 operator files |
+| 4 | **`set_page_tabs(page, PageTabs)`** — pdfceGUI has not asked. | one request away |
+| 5 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. | rule 6 |
+| 6 | **`N 1` on the display path**; **other `/Indexed` bases with a non-unit range** — carried from the prior hand-off, unmeasured. | 0 patches |
 
 ---
 
-## §B STATE OF THE TREE — verified 2026-09-03 07:30Z
+## §B STATE OF THE TREE — verified 2026-09-03 ~12:00Z
 
-- **Shipped this session (2026-09-02 → 03):** Passes 240.0 (ICCBased RGB on
-  every route; the 214.0 refusal retracted), 241.0 (preset disclosures carry
-  a set claim's why), 242.0 (Lab/CalRGB/CalGray through the output intent;
-  the /Indexed-over-Lab palette fix), 243.0 (shadings and meshes through
-  `ColorBridges`), 244.0 (zero-tint default → literal). Releases v0.23.0,
-  v0.24.0, v0.25.0 — each tagged, packaged, smoke-tested, deployed, verified.
-  Filings 384–389. Decision 124, rule R240 minted by the librarian.
-- **Clean at hand-off:** `git status` empty; `origin/main` == HEAD
-  (`7db84cb`); CI green at `6067d9a`; `check-commits-filed.py` clean;
-  `verify-release.py v0.25.0` clean. OneDrive: pdfce2 = 0.25.0, pdfce1 =
-  0.24.0.
-- **pdfceGUI channel:** two files of ours await their consumption —
-  `reply_disclosures_now_carries_the_why_of_a_set_claim_delete_your_workaround.md`
-  and `note_the_overprint_zero_tint_default_moved_to_device_cmyk_only.md`.
-  The iccce reply `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`
+- **Shipped this session:** `Pass 245.0` (`98d4377`), `Pass 246.0`
+  (`194b3a1`); bumps `7d94fe3` (v0.26.0) and `dfce8a9` (v0.27.0); filings
+  390 and 391 (librarian). Decision 125 (tombstone-over-delete, per-mark
+  retention). `RedactError::ImageRegion` is GONE (breaking → 0.26.0).
+- **Releases:** v0.26.0 tagged, packaged, smoke-tested, pushed, deployed to
+  OneDrive `pdfce1`, verified (CI green at `1d91816`). v0.27.0 tagged at
+  `dfce8a9`, packaged to `D:\builds\pdfce-20260903-0717-dfce8a9`, fresh-folder
+  smoke-tested (both binaries; the corner-mark run prints
+  `vector_paths_intersecting=0`, exit 0). Check its push/deploy/verify state
+  with `git log --oneline origin/main..HEAD`, `python tools/verify-release.py
+  v0.27.0`. OneDrive slots: pdfce1 = 0.26.0 or 0.27.0, pdfce2 = the other —
+  read `tools/deploy-onedrive.py --dry-run`.
+- **GitHub releases stop at v0.17.0.** No version since has had one;
+  `verify-release.py` skips the check because its `gh` subprocess reports
+  unavailable. Not a defect fixed this session; a standing state.
+  `gh release create` works from the interactive shell if the operator
+  wants them resumed.
+- **pdfceGUI channel:** `reply_images_are_destroyed_now_and_all_three_asks_ship.md`
+  (with a same-day v0.27.0 update appended) awaits their consumption;
+  their request file stays in `open/` until then. The two earlier files
+  (`reply_disclosures_now_carries_the_why…`, `note_the_overprint_zero_tint…`)
+  are also still unconsumed. The iccce reply
+  `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`
   is STILL unread by any pdfce session.
-
-- **`tools/run-gates.sh` cannot survive being backgrounded.** Twice this
-  session the harness moved it to the background after 10 min and killed
-  it mid-doctest (the first run of the day survived; the next two did not).
-  Run it piecewise in the foreground instead: the ~25 fast gates in one
-  loop (`bash tools/run-gates.sh --list` prints them), then
-  `cargo test --workspace --no-run`, then `cargo test --workspace`, then
-  the no-default-features / wasm / fuzz checks. Each stays under 10 min
-  with a warm cache. A sweep certifies the tree it ran on, so run all of
-  them on the FINAL tree.
-- **Push state: run `git log --oneline origin/main..HEAD`.** Pushing `main`
-  is standing-authorized; a non-zero count is something to fix.
-- **Release state: run `git tag --sort=-v:refname | head -1` and compare with
-  `Cargo.toml`'s `version`.** Releasing is standing-authorized (decision 121)
-  — tag, `python tools/package-portable.py`, fresh-folder smoke test of both
-  binaries, `python tools/deploy-onedrive.py`, `python tools/verify-release.py
-  vX.Y.Z` — and it does not skip the gates.
-- **iccce is pinned to a `rev`** (`a4d9003bf87c61299fa1c6f9c2e2ffffa30de0c3`,
-  the `v0.3.0` tag's commit). The banner prints `iccce: 0.3.0 (rev a4d9003b,
-  committed …)` since `Pass 240.0` (it printed the 40-char pin AND the
-  abbreviation before). Dependency SET unchanged since v0.22.0
-  (`iccce-color` became a DIRECT edge in `Pass 242.0`; it was already in
-  the tree, so `THIRD_PARTY_LICENSES.md` did not move).
+- **Disk:** `target/debug` reached **243.8 GiB** and D: hit 0 bytes free
+  mid-sweep (`LNK1318`, "no space on device"). `cargo clean --profile dev`
+  fixed it. Check `df -h /d` at session start; if `target/debug` is over
+  ~50 GB, clean it BEFORE the gate sweep, not during.
+- **`tools/run-gates.sh` cannot survive being backgrounded** (unchanged).
+  Run the ~22 script gates in a foreground loop, then
+  `cargo test --workspace`, then the no-default-features / wasm / fuzz
+  checks. **Run them on the FINAL tree.** Test-total convention: the sum of
+  every `test result:` line of `cargo test --workspace` — **5,089 / 0** at
+  hand-off.
+- **iccce pinned rev** `a4d9003b` (v0.3.0); dependency SET unchanged since
+  v0.22.0; `THIRD_PARTY_LICENSES.md` did not move.
 - **Every code commit is FILED** — `python tools/check-commits-filed.py`.
 - **Backups:** refresh with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
-  then `git bundle verify` on it.
+  then `git bundle verify` on it. Not refreshed this session.
 
 ---
 
 ## §C THINGS A NEW SESSION MUST KNOW BEFORE TOUCHING ANYTHING
 
-- **Run the gates PIECEWISE in the foreground** — see §B's first bullet;
-  the whole-script run does not survive being backgrounded. **Run them on
-  the FINAL tree** — a sweep certifies the tree it ran on.
-- **★ Never type a bare `git checkout -- <file>` in a command chain.** Keep
-  every multi-line edit in a script file under `D:\Dev\temp\` until it is
-  committed; a heredoc edit cannot be re-run. Every sabotage must ASSERT it
-  applied (`assert s.count(old) == 1`) and restore from a backup copy, not
-  from git.
 - **★ A Python heredoc through the Bash tool eats one level of
-  backslashes in the script's own source** — an `old` anchor written as
-  `\\` (to match a Rust string's line-continuation `\`) arrives as `\`, and
-  `s.count(old)` returns 0 against a file that visibly contains the text.
-  Non-ASCII is NOT the problem (tested: `len("a — b") == 5`), and the first
-  diagnosis this session blamed it anyway. Any patch script containing a
-  backslash goes through the `Write` tool to a file, then `python <file>`.
-  Cost: one failed patch, caught by its own `assert s.count(old) == 1`.
-- **Pillow cannot write or read an ICC profile in a JP2** (`icc_profile` is
-  ignored on JPEG2000 save; `.info` never carries a `colr` profile back).
-  `tools/gen-icc-rgb-fixtures.py` rewrites the `colr` box itself and
-  re-walks the boxes to verify.
-- **READ CI'S COLOUR FROM GITHUB, EVERY SESSION, EARLY.**
-  `gh run list --limit 10 --json status,conclusion,headSha,createdAt`.
-- **Push a code commit and its filing commit together.** CI runs one job per
-  push, on the tip.
-- **Stage by path. Never `git add -A`.**
+  backslashes** — and this session it did it to a **Rust byte escape**
+  (`b'\n'` arrived as a literal LF; `grep` said "Binary file matches").
+  Any patch containing ANY backslash goes through the `Write` tool to
+  `D:\Dev\temp\<name>.py`, then `python <file>`. Every patch asserts its
+  anchor count. Fourth recurrence; the memory file is updated.
+- **A test suite is not a pixel.** Twenty-two green redaction tests said
+  destroyed image cells were "cleared"; the render-level proof said they
+  were BLACK inside a transparent mark. When the property is visual, assert
+  it on a raster (`pdfce-render/tests`), not on the content stream.
+- **Stage by path. Never `git add -A`.** Push a code commit and its filing
+  commit together.
 - **A licensed conformance suite's NAME must never appear in any repo file.**
-  `python tools/check-suite-name-absent.py && git push`. The temp folders
-  under `D:\Dev\temp\suite-patches` carry it in their FILE NAMES — never
-  paste a listing of that folder into a commit message or a dispatch.
+  `python tools/check-suite-name-absent.py && git push`.
 - **Check BOTH feature-request channels every session.**
   `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` and
-  `…\iccce_FeatureRequests\open\`. This session answered pdfceGUI's
-  `disclosures()` note (`reply_disclosures_now_carries_the_why_of_a_set_claim_delete_your_workaround.md`,
-  awaiting their consumption). The iccce reply
-  `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`
-  (409 lines) has **still not been read** by any pdfce session.
-- **`docs/core-api/` is engineer-owned and must move in the SAME Pass** as
-  any `pub` change to `EditSession`. Neither Pass this session touched it.
+  `…\iccce_FeatureRequests\open\`.
+- **`docs/core-api/` is engineer-owned and must move in the SAME commit** as
+  any `pub` change to the redaction/`EditSession` surface. Both Passes did.
+- **READ CI'S COLOUR FROM GITHUB, EARLY.**
+  `gh run list --limit 5 --json status,conclusion,headSha`.
 
 ---
 
 ## §D ★★ MEASURED NEGATIVES — DO NOT RE-DERIVE THESE
 
-1. **★★ RETRACTED 2026-09-02 (`Pass 240.0`): "Do NOT colour-manage
-   ICCBased images with `/N != 4` onto the ink path — measured 3× worse".**
-   The numbers (`20.59 → 62.51`, `17.87 → 31.50`) were real and measured a
-   DEFECT: a direct `Space::Icc` image was outside the texel loop's
-   `tinting` route, so its ink arm wrote the RAW samples as C, M, Y, K. For
-   `N 3` that was RGB written as ink. With `Icc` and `IccRgb` on the cached
-   route the same two patches read `19.98 → 19.51` and `17.39 → 15.95`, and
-   on `PCS 13.0` the image cell's ink equals the vector cell's at the probe
-   (`c=0.850 m=0.030 y=1.000 k=0.150`). **The lesson replaces the rule:** a
-   negative measured through an untested intermediate measures the
-   intermediate; probe it (`render-page --probe-ink X,Y` on a vector/image
-   pair of one authored colour) before recording a route as refused.
-   **Also measured this session:** for a PDF/X page the ink route IS the
-   reference's behaviour — Acrobat converts an ICC RGB image through the
-   output intent (`(10,141,49)`), not profile→sRGB directly (`(0,154,0)`,
-   which is what lcms2 and iccce both give). Direct-to-sRGB is right only on
-   a page without an output intent.
-2. **Do NOT rewire the terminal CMYK→sRGB display conversion to iccce.**
-   Best intent through the document's `/OutputIntent`: mean error 8.0 vs
-   today's 10.3, and every intent clips red to 0 where both pdfce and the
-   reference are non-zero. (This is why `N 4` stays on `from_cmyk` for
-   display; an embedded CMYK profile → sRGB is the same class of transform.)
-   The residual on the two ICC patches that pass is this conversion: on
-   `17.2` the `DeviceCMYK` surround is `(13,169,76)` against the reference's
-   `(77,175,48)`.
-3. **Do NOT extend `Pass 201.0`'s shading `ink_reach` narrowing to images.**
-   Measured `23.90 → 28.68`. Stays for the plane-less fallback.
-4. **★★ RETRACTED 2026-09-03 (`Pass 244.0`): "`OverprintZeroTintScope`:
-   LEAVE THE DEFAULT ALONE", counts `grey_as_k_only` 2 / `all_process_spaces`
-   2 / `device_cmyk_only` 4.** Those counts predate `Pass 239.0`'s
-   group-merge-by-name fix. Re-measured on the 2026-09-03 tree:
-   `device_cmyk_only` **0 FAIL / 43 pass**, `grey_as_k_only` 2 FAIL. The
-   default is now `DeviceCmykOnly` (ISO 32000-1 to the letter). What survives
-   of the old item: the scope no longer reaches a SPOT (`Pass 238.0`) — under
-   every scope a spot plane is Table 149's `c_b` — and the combination
-   `alternate_space_substitution` + literal scope is WORSE (3 traps on 3.0
-   alone), so the spot device model stays `simulate_separations`.
-5. **The `cmyk_group_rules` mixed-source widening to `[Source; 4]` is
-   correct WITHOUT planes and wrong WITH them.** `cmyk_group_rules_with_planes`
-   carries the switch. Do not delete the widening.
-6. **The §11.7.4.2 non-separable guard in `blend_spots` is REDUNDANT** —
-   sabotage-verified; kept for legibility.
+1. **Do NOT clear destroyed image cells to zero.** Zero is black for
+   Gray/RGB and the mark's default is transparent (Table 192); the pixel
+   proof measured 6,241 black pixels inside a "transparent" region. Paper =
+   the colour space's no-ink sample, `/Decode`-aware (`paper_is_ones`).
+2. **Do NOT rewrite a `W`-marked path's geometry.** §8.5.4 applies the clip
+   AFTER painting; the cut paint goes first and the ORIGINAL construction
+   stays as `W n`, else later unmarked content vanishes.
+3. **Do NOT reach for a polygon-boolean crate for fills.** `polygon ∩
+   convex rect` via Sutherland–Hodgman preserves winding for any subject;
+   four complement strips give the difference exactly. A wrong boolean is a
+   silent wrong picture.
+4. **Do NOT delete a redacted image object; tombstone it** (1×1 paper under
+   the same number). `save_full` re-emits every object the dirty set does
+   not name, and shared `/Resources` dicts would dangle (decision 125).
+5. The prior hand-off's colour negatives (rewiring CMYK→sRGB display to
+   iccce; extending `ink_reach` to images; the `cmyk_group_rules` widening;
+   the redundant §11.7.4.2 guard) still stand — see `ROADMAP.md` Passes
+   240.0–244.0.
 
 ---
 
 ## §E ITEMS OWED BY THE OPERATOR
 
-- **Open question `(cb)`** — the device-model adjudication behind `3.0 k`
-  and `4.0 k`. Both renders conform; the choice is his.
+- **Open question `(cb)`** — the device-model adjudication; both renders
+  conform.
 - **Open question `(ca)`** — 82 published commit messages carry the licensed
   suite's name; the gate stops the count growing.
-- **The `set_page_tabs` verb** needs no ruling until pdfceGUI asks.
+- **GitHub releases** — resume them or not (§B). No one has asked.
 
 ---
 
 ## §F THE PATTERNS THIS SESSION HIT
 
-**An agreement test finds the OLD defect beside the new route.** Writing
-the three-ways `Lab` fixture for `Pass 242.0` exposed an `/Indexed`-over-
-`Lab` palette that had decoded L\* 100× too dark since `palette_entry` was
-written — on the CONTROL page, which the new route never touches. Fill vs
-image vs palette of one colour, probed with `--probe-ink`, is now three for
-three at finding a route twin on the day a route is fixed. Write it first.
+**A scoped refusal coarser than what it protects reads as a broken
+feature.** Pass 8's image refusal was correct and keyed on the bounding
+box; on a CAD title block every rectangle grazes a logo, so the operator's
+report was *"it never works"*. The fix was not to relax the rule but to make
+the gate measure what the rule protects (the samples), and to refuse per
+mark rather than per document.
 
-**A default-valued fixture cannot falsify a carry** (R225, again): the
-`Lab` fixtures declare D50, so the D50 adaptation in `to_pcs_xyz` is the
-identity there and a sabotage that deleted it survived. The unit test on a
-D65-declared space is what pins it. When a fixture's value equals what the
-code would produce with the feature removed, the fixture is not a test of
-the feature.
+**Fixing one residual exposed the next, and the next was worse.** The
+request was about images; verifying the image fix on the operator's drawing
+showed vector lines through the region — never removed, never disclosed.
+Disclose first (same Pass), cut second (next Pass, same day). Never leave
+the discovered gap silent while the reported one ships.
 
-**A sabotage harness is itself a claim.** The first sweep reported all
-four mutations surviving because `cargo test --test X --lib filter` applies
-the filter to BOTH targets. Read the harness's own output for which tests
-actually ran before believing a survivor.
-
-**A divergence kept for a compensating error must be re-measured the moment
-the error is fixed.** `GreyAsKOnly` stayed the default for one stated reason
-(no spot plane); the plane landed in `238.0`/`239.0`, and the default sat for
-five more Passes and a stale §D bullet until the operator pointed at two cells.
-When you fix the thing a divergence was compensating for, re-run the
-divergence's own measurement in the SAME session.
-
-**A measured negative can be a measurement of the wrong thing.** `Pass
-214.0` tried the right route, measured 3×, and wrote a refusal — into its
-commit, into `FEATURES.md`, and into this file's §D — that stood for a day.
-The route had never been probed one level down; the agreement test between
-the vector and image cells of one patch, plus one `--probe-ink` on each,
-found the defect in under an hour. **An agreement test's failing half is not
-always the new code, and a measured negative's cause is not always the thing
-that was changed.** Probe the intermediate before recording a refusal.
+**The proof that matters is the one an auditor would run.** The unit tests
+checked bytes; the auditor checks pixels. One render-level test found a
+design choice (black clear value) that every byte-level test agreed with.

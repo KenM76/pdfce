@@ -91,3 +91,4 @@
 - [Never type a reverting git verb in a chain](feedback_never_type_a_reverting_git_verb_in_a_chain.md) — a `git checkout -- file` typed "as a no-op" reverted an hour of uncommitted work; keep edits in re-runnable scripts until committed
 - [A measured negative can measure a defect](feedback_a_measured_negative_can_measure_a_defect.md) — a prior session's "3x worse, refused" measured raw samples written as ink; probe the intermediate before believing a refusal
 - [A chore commit between two filings is unfiled](feedback_a_chore_commit_between_two_filings_is_unfiled.md) — run check-commits-filed.py before EVERY push; the version bump slipped past two dispatches and CI went red
+- [A byte-level test cannot see a black block](feedback_a_byte_level_test_cannot_see_a_black_block.md) — 22 green redaction tests agreed with a black block inside a transparent mark; assert visual properties on a raster in pdfce-render/tests

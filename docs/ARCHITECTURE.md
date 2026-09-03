@@ -30333,7 +30333,16 @@ bookkeeping.**
    left as is.
 4. **A wholly covered placement is REMOVED, and its object is TOMBSTONED
    in place (a 1×1 zero-sample image under the same object number) rather
-   than deleted.** Chosen over deletion because a `/Resources` dictionary
+   than deleted.
+   > ★ **Amended 2026-09-03 (391st filing, `194b3a1`, decision 126):
+   > "zero-sample" is no longer literally true. The tombstone's single
+   > sample, like every destroyed cell, now takes the colour space's
+   > **no-ink ("paper") value** — `0xFF` for Gray/RGB, `0x00` for CMYK —
+   > per `redact_image.rs:1224`. The property this clause argued for
+   > (resolves everywhere, carries none of the original samples, costs a
+   > few dozen bytes) is unchanged; only the value changed, and why is in
+   > decision 126 §5. Kept as written above because it was true on its
+   > date.** Chosen over deletion because a `/Resources` dictionary
    shared by other pages or forms would otherwise carry a dangling
    reference — and a dangling `/XObject` entry is the kind of thing a
    different viewer reports as a broken file. The `Do` (or the whole
@@ -30400,3 +30409,130 @@ was touched (the Pass's `--stat` shows no `Cargo.toml`).
 **Decision ceiling moves `124` → `125`; next free `126`.** **Standing rules
 ceiling `R240` — unchanged**, next free `R241`; no rule minted this filing
 (the decline is argued in `ROADMAP.md`'s 390th-filing *Shipped* block).
+
+### 2026-09-03 (391st filing, `194b3a1`) — decision 126: REDACTION CUTS VECTOR GEOMETRY OUT AND NEVER CLIPS IT; THE REGION IS SUBTRACTED FROM A FILL AS CONVEX STRIPS (SUTHERLAND–HODGMAN), NOT BY A POLYGON BOOLEAN, SO NO BOOLEAN-OPERATIONS DEPENDENCY ENTERS THE CRATE; A CLIP-MARKED PATH OBJECT KEEPS ITS ORIGINAL CONSTRUCTION AS A CLIP AND IS DISCLOSED; ONLY GEOMETRY THAT MEETS THE REGION IS REWRITTEN; DESTROYED IMAGE CELLS ARE PAPER, NOT BLACK; `vector_paths_intersecting` BECOMES THE RESIDUAL
+
+**(librarian filing, 391st. Shell available; commit `194b3a1` confirmed by
+`git log`; `crates/pdfce-core/src/redact_vector.rs` confirmed at 1,420
+lines by the commit's `--stat`; the rationale below is lifted from that
+module's own doc, sections "Why strips rather than a polygon boolean",
+"Over-cover, stated" and "The clip-marked path object", and from
+`redact_image.rs:85–97` "What a destroyed cell becomes: paper". Measured
+figures relayed by the engineer, not re-run.)**
+
+**What was decided, and why each part is a decision rather than
+bookkeeping.**
+
+1. **Cut, never clip — §12.5.6.23's clipping ban is read as binding on
+   vector content.** The clause forbids hiding *image* data behind a
+   clip; the module reads the same prohibition onto paths, because a path
+   under a clip is a path whose bytes survive in the file. This is the
+   same posture as `Pass 8.0`'s glyph surgery and decision 125's sample
+   destruction: the content is gone from the stream, not masked. It is
+   also what makes pdfce **exceed** the Acrobat reference, which
+   rasterises when it cannot clip (`Acrobat_Features/redaction__content_removal_scope.md`).
+2. **The region is subtracted from a fill as up to four convex STRIPS
+   (left / right / below / above, bounded by the path's own box), each
+   clipped with Sutherland–Hodgman, rather than by a polygon boolean.**
+   This is a *library-choice* decision as much as an algorithm: a general
+   `polygon − rect` needs a robust boolean-operations library
+   (self-intersections, winding rules, coincident edges), and **a wrong
+   boolean is a silent wrong picture** — the failure class redaction can
+   least afford. `polygon ∩ convex-rect` needs only Sutherland–Hodgman,
+   which preserves the winding number of every point inside the clip for
+   *any* subject polygon (concave, self-intersecting, multi-subpath), so
+   nonzero and even-odd fills both stay **exact**. The cost is a few extra
+   path objects for the paths that cross a region; nothing crosses on
+   most pages, and a wholly-inside path is simply deleted. **No new
+   dependency** — the Pass's `--stat` touches no `Cargo.toml`, and
+   `cargo tree` core/render stays GUI-free (§3).
+3. **A `W`/`W*`-marked path object keeps its ORIGINAL construction as a
+   clip, after the cut paint.** §8.5.4: the clip takes effect after
+   painting, from the path as constructed. Rewriting the construction
+   would rewrite the clip and shrink the window every later, *unmarked*
+   object draws through — content nobody marked would vanish, which is
+   the mirror of the failure rule 4 guards against. So the object is
+   emitted as the cut paint followed by the original construction with
+   `W n`. The original geometry therefore **survives in the stream as a
+   clip**; it paints nothing, but a clip shaped like the secret is a
+   residual the operator should hear about — counted in
+   `vector_clips_kept` and named in the notes. Disclosed, not silent
+   (rule 4); not counted as *uncut*, because it is not painted content.
+4. **Only geometry that actually MEETS the region is rewritten.** The
+   trigger is the path's edges intersecting the region, or a winding test
+   at the region's corners and centre landing inside a fill — never the
+   bounding box. A stroke passing beside the mark, or an even-odd ring
+   whose hole holds it, is left **byte-identical**. This is §5's
+   minimal-diff invariant applied inside the one operation that is
+   allowed to destroy content: destroy what the mark covers, touch nothing
+   else. (The bounding-box test was exactly the coarseness decision 125
+   §1 removed from the image half; the vector half was built without it.)
+5. **Destroyed image cells are PAPER, not black — and the tombstones
+   follow.** Decision 125's cleared cells were zero samples (black in
+   Gray/RGB). Table 192 leaves a mark with no `/IC` *transparent*, so the
+   destroyed part of an image must look like the page behind it, not like
+   a black block the operator did not ask for; with an `/IC` the burnt box
+   covers it anyway. The no-ink sample is colour-space-dependent
+   (all-ones for Gray/RGB/Cal*/ICC 1,3; all-zeros for
+   CMYK/Separation/DeviceN/ICC 4; all-ones for an `/ImageMask`; flipped by
+   an inverted `/Decode`; `/Indexed` → entry 0, there being no palette
+   answer for "paper"); a soft mask goes transparent over the same cells,
+   a stencil `/Mask` masked-out, JPX alpha transparent. **How this was
+   found is the part worth keeping:** the pixel proof
+   (`crates/pdfce-render/tests/redaction_leaves_no_ink.rs`) asserted zero
+   inked pixels inside a region marked with no `/IC`, and its first run
+   found **6,241 black pixels — all of them the cleared image.** No unit
+   test of decision 125 could have asked that question; they asserted the
+   samples were *gone*, not what they had *become*. A design choice with
+   a written rationale was wrong at the level the operator sees, and only
+   an oracle at that level could say so.
+6. **`vector_paths_intersecting` changes meaning: it is now the
+   RESIDUAL.** Decision 125's side-effect paragraph made it *every painted
+   path crossing a region*; it now counts only the path objects that
+   **cannot be replaced as a unit** — a foreign operator between
+   construction and paint, which §8.2 forbids — and reads zero on every
+   well-formed page. Three counters are added beside it
+   (`vector_paths_cut`, `vector_paths_dropped`, `vector_clips_kept`), and
+   the `vector_paths` carrier reads `Scrubbed` when something was cut and
+   nothing left, `DisclosedNotScrubbed` only for the residual. Rule 4's
+   discipline is preserved by construction: the count reaches zero by
+   cutting, and a counter with a narrower meaning got a new name for each
+   thing it stopped counting. A singular CTM (zero-area placement)
+   touching a region drops the object whole — it cannot be inverted back
+   into its own coordinates, and a zero-area path is at most a hairline.
+
+**Over-cover, stated as policy rather than left in the numerics:** the
+stroke cutting region is the mark expanded by **one full stroke width**
+(not inset by half, as the *Next up* entry had sketched — the more
+conservative direction), under the CTM's larger scale factor, with zero
+width counting as one unit; a cubic piece smaller than the 0.05 pt
+flattening tolerance that still straddles the boundary is **dropped**; a
+coordinate within `1e-6` of a region edge counts as on the redacted side.
+Every bias runs toward removing more, never less — the glyph surgery's
+and the image surgery's own bias, now stated for the third kind.
+
+**What this supersedes.** Nothing struck. Decision 125's side-effect
+paragraph (*"cutting is `Pass 246.0`"*) is fulfilled, and its clause 4's
+"zero-sample" tombstone is amended above with a dated footer. `Pass 8.0`'s
+posture — never claim content redacted when it is not — is untouched and
+now satisfied for glyphs, image samples and vector geometry alike.
+
+**Body-section counterpart.** §5's redaction corollary is unchanged in
+wording and covers a third content kind. §4's API surface:
+`RedactionReport` gains `vector_paths_cut`, `vector_paths_dropped`,
+`vector_clips_kept`; `vector_paths_intersecting` is re-documented as the
+residual; no error variant added or removed (`v0.27.0` is MINOR for the
+additions). The living account is `docs/core-api/03-capabilities.md`
+§4.2/§4.5 (moved in the same commit; 2,769 lines · 65 clauses) and
+`crates/pdfce-core/src/redact_vector.rs`'s module doc, which cites
+§12.5.6.23, §8.5, §8.5.4 and the spec RAG's
+`iso32000__ref__redaction_removal.md` §3.
+
+**GUI-core separation:** `cargo tree` core/render **re-run by the engineer
+and reported clean** (no GUI deps) — relayed, not re-run here; no
+manifest was touched. The pixel proof lives in `pdfce-render`'s tests
+because core cannot rasterise — the boundary held rather than bent.
+
+**Decision ceiling moves `125` → `126`; next free `127`.** **Standing rules
+ceiling `R240` — unchanged**, next free `R241`; no rule minted this filing
+(the decline is argued in `ROADMAP.md`'s 391st-filing *Shipped* block).

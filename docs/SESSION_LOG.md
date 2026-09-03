@@ -87592,7 +87592,12 @@ figure was not needed; stated as unverified rather than inferred.
   tombstone fails 4. Fuzz target 15 extended (three image XObjects, 7
   committed seeds): **15,728 runs / 181 s / 0 crashes ≈ 87 runs/s**;
   coverage **3,432 → 5,554 edges**.
-- Gates (relayed): workspace **4,127 / 0**; no-default-features **3,465 /
+- Gates (relayed): workspace ~~**4,127 / 0**~~ — **★ corrected 2026-09-03
+  (391st filing): 4,127 was an UNDER-COUNT from a truncated pipe, not a
+  different convention (engineer's statement in `194b3a1`'s message); the
+  convention is the sum of every `test result:` line of `cargo test
+  --workspace`, the 388th filing's 5,058 stood, and the derived `Pass
+  245.0` figure is 5,058 + 18 = 5,076 / 0**; no-default-features **3,465 /
   0**; clippy/fmt/wasm32/fuzz-check/`cargo tree`/22 script gates clean.
 - `7d94fe3` `chore: v0.26.0` — MINOR (`ImageRegion` removed; six report
   fields + two carriers added); no dependency change.
@@ -87622,6 +87627,9 @@ figure was not needed; stated as unverified rather than inferred.
   relayed; neither verified here. **Owed to the engineer:** say which
   counting convention each used (doctests / all-targets vs
   `--lib --tests`) before the next filing carries a total.
+  > ★ **Answered 2026-09-03 (391st filing):** one convention, the sum of
+  > every `test result:` line; 4,127 was a truncated-pipe under-count. See
+  > the 391st entry below.
 - **Hard-rule-11 sweep for the CLAIM "images are refused under
   redaction"** — survivors: `ARCHITECTURE.md` `Pass 8.0` (e) (amended
   this filing); three `C:\personal_rag\pdf\` lessons of 2026-08-01
@@ -87678,3 +87686,233 @@ footers —
 `lesson_20260903_cad_shaded_view_as_one_dct_image_with_a_separate_smask_and_filter_chains.md`
 and
 `lesson_20260903_a_scoped_refusal_coarser_than_what_it_protects_reads_as_a_broken_feature.md`.
+
+## 2026-09-03 (391st filing) — `Pass 246.0` (`194b3a1`) SHIPPED — redaction CUTS vector paths at the region boundary (strokes cut against the region expanded by a stroke width, fills clipped to the complement as strips with the winding rule preserved, wholly-inside objects deleted, clip-marked objects keep their clip and are disclosed, the residual counter reads zero on every well-formed page); destroyed image cells become PAPER, not black; a pixel-level proof; decision 126 minted; `v0.26.0` resolved pending → VERIFIED; `v0.27.0` (`dfce8a9`) bumped and tagged locally, push/package/smoke/deploy/verify IN PROGRESS; the 390th filing's `4,127` corrected
+
+**Sourcing (hard rule 8).** Shell available, and every release figure
+below was checked rather than relayed — the command beside each. `git
+log`: `194b3a1` (the Pass), `dfce8a9` (`chore: v0.27.0`, `HEAD`),
+`1d91816` (the 390th filing's commit). `git rev-parse v0.26.0` =
+`7d94fe3`; `git ls-remote --tags origin` has `v0.26.0`, **not**
+`v0.27.0`; `git ls-remote origin main` = `1d91816`; local `git tag --list`
+has `v0.27.0` at `dfce8a9`. `gh run list`: the push at `1d91816` is
+`completed success` (run `33742631757`, 10:07Z, 14 m 42 s). `gh release
+list`: `v0.17.0` (2026-08-30) is `Latest`. `pdfce-cli --version` from
+`OneDrive\pdfce1` → `0.26.0`, from `pdfce2` → `0.25.0`.
+`D:\builds\pdfce-20260903-0553-7d94fe3` is 49,277,178 bytes by `du -sb`;
+no `D:\builds` folder for `dfce8a9`. Source cross-checks: the module is
+**1,420 lines** by `--stat`; `redact.rs:51` says CUT; the tombstone fill
+at `redact_image.rs:1224` follows the paper flag. Measured Pass figures
+(objects cut, fuzz, seconds, test totals) relayed by the engineer.
+**Backup bundle currency: not checked** — not asked, not needed, stated
+as unverified rather than inferred.
+
+**Premises corrected (the dispatch asked):**
+- `redact_vector.rs` is **1,420 lines**, not "~1,300" (commit `--stat`).
+- `v0.27.0`'s release is further along than "in progress" suggested: the
+  **tag is already cut locally** at `dfce8a9`; unpushed, unpackaged,
+  undeployed, unverified — those are the open steps.
+- The "`gh` subprocess reports unavailable" premise is the script's own
+  message quoted back, and the message is wrong about the cause:
+  `verify-release.py:202–203` prints *"`gh` unavailable or not
+  authenticated"* whenever `gh release view <tag>` exits non-zero, while
+  the same script's CI check (`:256`) reached GitHub through `gh` in the
+  same run. **The skip is the release not existing.** Standing state,
+  recorded plainly as asked: **no GitHub release exists for any version
+  after `v0.17.0`** — `v0.18.0` through `v0.26.0`, nine versions, tagged
+  and deployed but with no release page. The mislabelled message is
+  reported below as owed; whether the missing releases are a defect is
+  the operator's/engineer's call, not this filing's.
+- Everything else held: Pass ceiling `246.0` (now *Shipped*), `R240`,
+  decision ceiling `125` (now `126`), 390 prior filings, `v0.26.0`'s
+  tag/push/CI/deploy facts all confirmed.
+
+**Shipped:**
+- `Pass 246.0` (`194b3a1`) — new `crates/pdfce-core/src/redact_vector.rs`
+  wired into the surgery interpreter. Strokes: every segment cut against
+  the region expanded by one full stroke width (Liang–Barsky for lines;
+  recursive de Casteljau for cubics, outside pieces kept AS CURVES,
+  straddling pieces split to depth 12 / 0.05 pt then dropped); closed
+  subpaths opened at the cuts. Fills: region subtracted as up to four
+  complement strips via Sutherland–Hodgman (winding preserved, nonzero
+  and even-odd exact), each strip its own path object under the same
+  operator. `B`/`b` family: strips then cut stroke. Wholly inside →
+  deleted. Rewritten only when the GEOMETRY meets the region (a stroke
+  beside, or an even-odd ring around, the mark stays byte-identical).
+  `W`/`W*`-marked objects: cut paint, then the ORIGINAL construction as
+  `W n` (§8.5.4) — counted `vector_clips_kept`, noted. Malformed objects
+  (foreign operator between construction and paint, §8.2) are the
+  RESIDUAL: `vector_paths_intersecting` now means only that, zero on every
+  well-formed page; the `vector_paths` carrier reads `Scrubbed` when cut
+  and nothing left. Singular CTM → object dropped whole.
+- Destroyed image cells (`Pass 245.0`) now PAPER: the colour space's
+  no-ink sample (ones for Gray/RGB/Cal*/ICC 1,3; zeros for
+  CMYK/Separation/DeviceN/ICC 4; ones for `/ImageMask`; flipped by an
+  inverted `/Decode`; `/Indexed` → entry 0); soft mask transparent (was
+  opaque), stencil `/Mask` masked-out, JPX alpha transparent; tombstones
+  follow. Table 192: a no-`/IC` mark is transparent, so the destroyed
+  part must look like the page behind it. **Found by the pixel proof's
+  first run — 6,241 black pixels inside a "transparent" region, all the
+  cleared image.**
+- Pixel proof `crates/pdfce-render/tests/redaction_leaves_no_ink.rs`: a
+  page whose every object crosses one region (8 pt diagonal, 6 pt Bézier,
+  filled rect, fill+stroke, wholly-inside square, even-odd ring, image,
+  text), no `/IC`, applied, rasterised at 2× — ZERO inked pixels strictly
+  inside, > 500 outside.
+- Measured on the operator's drawings (relayed): corner mark on
+  `DW 17036-15` → **25 objects cut (21 deleted)**, residual 0, exit 0,
+  0.30 s (≈ 12 ms per cut object, whole apply); band render at 3× shows
+  ink at x 480–492.3 and from 700.7, nothing between (thick line ends at
+  499.0 = 500 − 1.44 pt width). Whole-page marks: **780** and **1,089**
+  objects dropped, page renders blank, exit 0 (was exit 10 one Pass ago).
+- Report fields `vector_paths_cut`, `vector_paths_dropped`,
+  `vector_clips_kept` added; CLI prints a vector line; `--help` says cut.
+  `docs/core-api/03-capabilities.md` §4.2/§4.5 + index (2,769 lines · 65
+  clauses).
+- Tests: 11 `redact_vector` units, 4 rewritten `redact.rs` tests, 1
+  render integration test. Sabotage: never-cut `cut_stroke` fails 7 units
+  + the pixel proof (3,071 leaked); never-clip `fill_in_strip` fails the
+  pixel proof (9,623 leaked). Fuzz target 15: **14,796 runs / 181 s / 0
+  crashes ≈ 82 runs/s**; coverage **5,554 → 6,149 edges (+595)**.
+- Gates (relayed): workspace **5,089 / 0**; no-default-features **3,478 /
+  0**; clippy/fmt/wasm32/fuzz-check/`cargo tree`/22 script gates clean.
+- `dfce8a9` `chore: v0.27.0` — MINOR (three report fields added, a
+  counter's meaning narrowed, a carrier can now read `Scrubbed`; nothing
+  removed); 3 files, 9/9 lines, no dependency change.
+
+**Release records:**
+- **`v0.26.0` — RESOLVED, VERIFIED.** Tag at `7d94fe3` on `origin`,
+  pushed with `1d91816`, CI green at `1d91816`, packaged
+  (`D:\builds\pdfce-20260903-0553-7d94fe3`, 49,277,178 bytes — +254,413
+  on `v0.25.0`'s 49,022,765, +0.5 %), fresh-folder smoke passed
+  (relayed), deployed to `pdfce1` (checked; `pdfce2` keeps `0.25.0`).
+  `verify-release.py v0.26.0` clean except *working tree clean* (in-flight
+  `Pass 246.0` files, expected) and *GitHub release* (skipped — no release
+  page exists; see the premise correction above). Carries `Pass 245.0`
+  only.
+- **`v0.27.0` — PENDING.** Tagged locally at `dfce8a9`; push, package,
+  smoke, deploy, verify open. Carries `Pass 246.0`.
+
+**Decisions made this session:**
+- **Decision 126** (`ARCHITECTURE.md` §12): cut-never-clip (§12.5.6.23's
+  clipping ban read onto vector content); strips via Sutherland–Hodgman
+  over a polygon boolean — a library-choice decision, *a wrong boolean is
+  a silent wrong picture*, no boolean-ops dependency; clip-marked objects
+  keep their construction as `W n` and are disclosed; geometry-touch not
+  bbox-touch decides rewrite (§5 minimal-diff inside the destructive
+  operation); destroyed cells are paper (Table 192), tombstones follow;
+  `vector_paths_intersecting` is the residual, with a new name for each
+  thing it stopped counting. Decision 125 clause 4 ("1×1 zero-sample")
+  amended with a dated footer.
+- **No standing rule minted.** The candidate — *a pixel-level oracle
+  found a DESIGN CHOICE the mechanism-level unit tests could not, because
+  they asserted the mechanism did what it was told and never asked what
+  the result looked like* — is **n = 1**. Adjacent to `R225` but not an
+  instance (the unit fixtures discriminated for the question they asked;
+  the defect was in the question). Nearest prior shape, `PCS 16.1` (358th
+  filing), was a wrong conversion found by an established oracle, not a
+  design choice found by an ad hoc proof. Recorded so a second instance
+  has something to be the second of.
+
+**Findings + decisions:**
+- **Test-total convention SETTLED:** the sum of every `test result:` line
+  of `cargo test --workspace` (default features). 5,089 = 5,058 (388th)
+  + 31. **`Pass 245.0`'s 4,127 was an under-count from a truncated
+  pipe** — the 390th filing's ROADMAP *Gates* paragraph and this log's
+  390th entry are amended in place (struck, corrected, dated). The
+  derived `Pass 245.0` figure is 5,058 + 18 = 5,076, stated as arithmetic
+  not a re-run.
+- **The *Next up* entry's item 4 premise was unfounded:** it feared a cut
+  segment re-emitted outside an enclosing clip; every surviving piece is
+  a subset of the original geometry (a Liang–Barsky/de Casteljau piece
+  lies on the original segment, a strip clip lies within the original
+  fill), so an enclosing clip that hid it before hides it after. The
+  shipped handling of the clip-*defining* object (§8.5.4) is the real
+  clip concern, and it is decision 126 §3. Item 3 shipped more
+  conservative than written (expand by one full width, not inset by
+  half).
+- **Hard-rule-11 sweep, two meaning changes** (*"vector paths are
+  counted, not cut"*; *"a destroyed cell / tombstone is black /
+  zero-sample"*): `FEATURES.md:261` fixed; `ARCHITECTURE.md` decision 125
+  §4 footered; `C:\personal_rag\pdf\lesson_20260903_cad_shaded_view…md`
+  lines 58/63 footered. **OWED to the engineer:**
+  `.claude/agent-memory/pdfce-engineer/project_pass8_redaction.md:17`
+  (still *"counted … until Pass 246.0 cuts them"* and *"tombstoned to
+  1×1"*); `crates/pdfce-core/src/redact_image.rs:41`, `:65`, `:1197`
+  (*"1×1 zero-sample image"* ×3, contradicting `:1224`'s `0xFF` paper
+  fill); `docs/core-api/03-capabilities.md:1629` (same phrase). Correct
+  survivors, do not "fix": `redact.rs:51`, `redact_image.rs:85–97`,
+  `03-capabilities.md:1657`/`:1799`, `redact_apply.rs:165`,
+  `pass-8-redaction.md:662`; and every dated "cutting is `Pass 246.0`" in
+  the 390th filing's records.
+- **`tools/verify-release.py:203` misattributes its skip** — *"`gh`
+  unavailable or not authenticated"* for a non-zero `gh release view`,
+  which also fires when the release simply does not exist (as it has for
+  nine versions). A diagnostic naming the wrong cause is the family of
+  `a_claim_in_a_comment_is_not_a_check`. **OWED to the engineer** (tools/
+  is outside this role's remit): distinguish "gh missing/unauthenticated"
+  from "no release for this tag", or print the subprocess's stderr.
+- **`target/debug` full-disk — THIRD occurrence** (08-23 pdfce 103 GB;
+  09-02 pdfceGUI; today pdfce **243.8 GiB / 363,515 files**, D: at 0
+  bytes mid-gate-sweep). New this time: it fired on `cargo test
+  --no-default-features` (a feature-permutation rebuild of every test
+  binary — the largest single allocation in the sweep), presenting as
+  `LNK1318 Unexpected PDB error; LIMIT (12)` AND `rustc-LLVM ERROR: IO
+  failure on output stream: no space on device`; `cargo clean --profile
+  dev` reclaimed it (profile-scoped, cargo-native, leaves `target/release`
+  as the existing finding advises). Growth since the 08-23 clean: ~140 GB
+  in 11 days ≈ 13 GB/day. Filed as dated footers on the two existing
+  `D:\dev\rag\rust\` files (hard rule 4), index entries amended; at n = 3
+  the recommendation firms from "pre-flight before a release" to
+  "periodic session hygiene".
+
+**Still in flight:**
+- `v0.27.0` push (`194b3a1`, `dfce8a9`, this filing's commit), package,
+  fresh-folder smoke, OneDrive deploy, `verify-release.py` — the
+  engineer's, in progress. A follow-on filing resolves the pending mark.
+- pdfceGUI channel: the engineer is appending to
+  `open/reply_images_are_destroyed_now_and_all_three_asks_ship.md`
+  (engineer-owned; untouched here). **Do not archive.**
+
+**For next session:**
+- Resolve the `v0.27.0` release record.
+- Engineer: the six owed doc-comment/memory survivors listed above
+  (`project_pass8_redaction.md:17`; `redact_image.rs:41/:65/:1197`;
+  `03-capabilities.md:1629`), and the `verify-release.py:203` message.
+- Operator/engineer: decide whether `v0.18.0`–`v0.26.0` should get GitHub
+  release pages (nine versions, none since `v0.17.0` on 2026-08-30) or
+  whether OneDrive deploy is the release channel now — and record
+  whichever it is, so `verify-release.py`'s skip stops reading as a
+  transient.
+- Run `cargo clean --profile dev` before the next long gate sweep if
+  `du -sh target/debug` is past ~100 GB.
+
+**`docs/FEATURES.md`:** *Redaction & security* "Apply redaction — true
+removal" row: vector sentence replaced (paths CUT; cells become paper;
+nine counters named as not yet surfaced in `pdfceGUI`). *Planned* row
+"Vector-path redaction" **moved to *Implemented*** directly under the
+apply row as `[x] [x] [x]`, Acrobat `◐` with **pdfce EXCEEDS** stated
+(Acrobat clips-or-rasterises; pdfce excises and never rasterises).
+
+**`ROADMAP.md`:** new top *Shipped* block (391st filing) — `Pass 246.0`
+full entry, `v0.26.0` resolved → verified, `dfce8a9` bump record
+(pending), test-total convention settled, rule-mint decline argued,
+hard-rule-11 sweep, the `verify-release.py:203` finding, ledger. The 390th
+block's *Gates* paragraph struck-and-corrected in place; its `7d94fe3`
+record given a RESOLVED footer. `Pass 246.0` replaced in *Next up* by a
+left-the-section note.
+
+**`ARCHITECTURE.md`:** decision 126 appended to §12; decision 125 clause 4
+amended with a dated footer.
+
+**`D:\dev\rag\rust\`:** dated third-occurrence footers on
+`a_full_disk_fails_the_release_build_and_cargos_debug_tree_is_usually_the_reason.md`
+and
+`a_full_disk_on_windows_presents_as_LNK1318_unexpected_PDB_error_not_as_out_of_space.md`;
+both `index.md` entries amended. No new file.
+
+**`C:\personal_rag\pdf\`:** one dated footer
+(`lesson_20260903_cad_shaded_view_as_one_dct_image_with_a_separate_smask_and_filter_chains.md`);
+no new lesson — the paper-not-black finding is a spec reading (Table 192)
+already carried by decision 126, and the cutting algorithm is pdfce's
+own, not a producer quirk.
