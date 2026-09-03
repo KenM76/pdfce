@@ -46,7 +46,7 @@ cannot score either way; the operator has read those by eye before.
 **Renders of the operator's six-page X-4 sheet from the v0.25.0 binary** are
 at `D:\Dev\temp\n3\sheet_out\x4_page1..6.png` (full size, scale 1.5) and
 `…_small.png` (two-thirds, for viewing). Re-render with
-`pdfce-cli render-page D:/Dev/temp/ghent-parity/in/<the sheet>.pdf --page N --scale 1.5`.
+`pdfce-cli render-page <the sheet, in the parity input folder under D:/Dev/temp> --page N --scale 1.5`.
 Two things visible on those pages that are NOT harness failures and are
 worth knowing before someone reports them:
 
