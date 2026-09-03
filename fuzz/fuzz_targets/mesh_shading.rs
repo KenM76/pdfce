@@ -116,6 +116,9 @@ fuzz_target!(|data: &[u8]| {
         bits_per_flag: Some(bpf),
         vertices_per_row: Some(u32::from(head[5] >> 1).max(1)),
         space: &space,
+        // No page, no bridges: the fuzzer exercises the stream decoder, and
+        // the colour route is the fixture tests' business.
+        bridges: &pdfce_render::icc::ColorBridges::none(),
         parametric,
         patch_padding,
         intent: pdfce_core::settings::CmykIntent::default(),

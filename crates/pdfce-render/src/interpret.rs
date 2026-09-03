@@ -4949,13 +4949,12 @@ impl Interpreter<'_> {
             return;
         };
 
-        let intent = self.policy.cmyk_intent;
         let shading = crate::shading::Shading::load(
             doc,
             entry,
             resources,
-            intent,
-            self.policy.mesh_patch_padding,
+            self.policy,
+            crate::image::IccContext::managed(&self.icc, self.gs.current.rendering_intent),
             &mut self.diag.color,
             &mut self.diag.shading,
         );
@@ -6946,13 +6945,12 @@ impl Interpreter<'_> {
         self.diag
             .shading
             .reached(crate::shading::PaintRoute::ShadingPattern);
-        let intent = self.policy.cmyk_intent;
         let Some(shading) = crate::shading::Shading::load(
             doc,
             shading_entry,
             resources,
-            intent,
-            self.policy.mesh_patch_padding,
+            self.policy,
+            crate::image::IccContext::managed(&self.icc, self.gs.current.rendering_intent),
             &mut self.diag.color,
             &mut self.diag.shading,
         ) else {

@@ -638,6 +638,21 @@ struct Params {
     patch_padding: MeshPatchPadding,
 }
 
+/// Everything a vertex colour converts THROUGH: the shading's space, the
+/// page's bridges for it, and the fixed CMYK→sRGB table (`Pass 243.0`).
+///
+/// One struct rather than three parameters because the three are one
+/// dependency — a bridge built for a different space or intent is a valid
+/// object that answers the wrong question (R237's shape) — and because
+/// threading them separately pushed the per-type parsers past clippy's
+/// argument ceiling, which is the lint doing its job.
+#[derive(Clone, Copy)]
+struct ShadeContext<'a> {
+    space: &'a ColorSpace,
+    bridges: &'a crate::icc::ColorBridges,
+    intent: pdfce_core::settings::CmykIntent,
+}
+
 impl Params {
     /// Read a coordinate pair and decode it.
     fn read_point(&self, r: &mut BitReader<'_>) -> Option<[f32; 2]> {
@@ -661,11 +676,15 @@ impl Params {
     fn read_shade(
         &self,
         r: &mut BitReader<'_>,
-        space: &ColorSpace,
-        intent: pdfce_core::settings::CmykIntent,
+        cx: ShadeContext<'_>,
         diag: &mut ColorDiagnostics,
         comps: &mut Vec<f32>,
     ) -> Option<Shade> {
+        let ShadeContext {
+            space,
+            bridges,
+            intent,
+        } = cx;
         comps.clear();
         for i in 0..self.ncomp {
             let raw = r.read(self.bpcp)?;
@@ -674,13 +693,17 @@ impl Params {
         if self.parametric {
             return Some(Shade::Parametric(comps[0]));
         }
-        let rgb = space.to_rgb(comps, intent, diag).unwrap_or(Rgb::BLACK);
+        // Through the page's bridges (`Pass 243.0`), so an `ICCBased` or
+        // `Lab` corner converts as a fill in the same space does.
+        let rgb = bridges
+            .to_rgb(space, comps, intent, diag)
+            .unwrap_or(Rgb::BLACK);
         // ★ Both answers come out of the SAME `comps`, in the same call, for
         // the same reason `ColorRamp::new` builds its two vectors in one
         // loop: a `/Separation` or `/DeviceN` space converts through a
         // `/tintTransform` that is allowed to be arbitrary PostScript, and
         // nothing would force two separate evaluations of it to agree.
-        match space.to_cmyk(comps, diag) {
+        match bridges.to_cmyk(space, comps, diag) {
             Some(cmyk) => Some(Shade::Ink { rgb, cmyk }),
             None => Some(Shade::Rgb(rgb)),
         }
@@ -776,6 +799,11 @@ pub struct ParseInput<'a> {
     pub vertices_per_row: Option<u32>,
     /// The shading's colour space.
     pub space: &'a ColorSpace,
+    /// The page's colour bridges for that space (`Pass 243.0`) — what a
+    /// per-vertex colour converts through, so a mesh corner and a fill of
+    /// one colour take one route. [`crate::icc::ColorBridges::none`] when
+    /// the caller has none.
+    pub bridges: &'a crate::icc::ColorBridges,
     /// Whether `/Function` is present — the switch `MSH14` turns.
     pub parametric: bool,
     /// Which `MSH-A1` reading is in force.
@@ -849,29 +877,19 @@ pub fn parse(input: &ParseInput<'_>, diag: &mut ColorDiagnostics) -> Result<Mesh
     let mut truncated = false;
     let mut rows_inferred = None;
 
+    let cx = ShadeContext {
+        space: input.space,
+        bridges: input.bridges,
+        intent: input.intent,
+    };
     let data = match input.shading_type {
-        4 => MeshData::Triangles(parse_type4(
-            &mut reader,
-            &params,
-            input.space,
-            input.intent,
-            diag,
-            &mut truncated,
-        )?),
+        4 => MeshData::Triangles(parse_type4(&mut reader, &params, cx, diag, &mut truncated)?),
         5 => {
             let k = input
                 .vertices_per_row
                 .filter(|v| *v >= 2)
                 .ok_or(MeshRefusal::BadVerticesPerRow)? as usize;
-            let (tris, rows) = parse_type5(
-                &mut reader,
-                &params,
-                k,
-                input.space,
-                input.intent,
-                diag,
-                &mut truncated,
-            )?;
+            let (tris, rows) = parse_type5(&mut reader, &params, k, cx, diag, &mut truncated)?;
             rows_inferred = Some(rows);
             MeshData::Triangles(tris)
         }
@@ -879,8 +897,7 @@ pub fn parse(input: &ParseInput<'_>, diag: &mut ColorDiagnostics) -> Result<Mesh
             &mut reader,
             &params,
             input.shading_type == 7,
-            input.space,
-            input.intent,
+            cx,
             diag,
             &mut truncated,
         )?),
@@ -976,8 +993,7 @@ const fn classify_colorants((ink, rgb, parametric): &(usize, usize, usize)) -> M
 fn parse_type4(
     r: &mut BitReader<'_>,
     p: &Params,
-    space: &ColorSpace,
-    intent: pdfce_core::settings::CmykIntent,
+    cx: ShadeContext<'_>,
     diag: &mut ColorDiagnostics,
     truncated: &mut bool,
 ) -> Result<Vec<Triangle>, MeshRefusal> {
@@ -991,7 +1007,7 @@ fn parse_type4(
         |r: &mut BitReader<'_>, diag: &mut ColorDiagnostics| -> Option<(u8, [f32; 2], Shade)> {
             let flag = r.read(p.bpf)? as u8 & 3;
             let xy = p.read_point(r)?;
-            let shade = p.read_shade(r, space, intent, diag, &mut comps)?;
+            let shade = p.read_shade(r, cx, diag, &mut comps)?;
             // MSH12: the padded unit for types 4 and 5 is exactly one vertex,
             // and this is normative rather than inferred.
             r.align();
@@ -1080,8 +1096,7 @@ fn parse_type5(
     r: &mut BitReader<'_>,
     p: &Params,
     k: usize,
-    space: &ColorSpace,
-    intent: pdfce_core::settings::CmykIntent,
+    cx: ShadeContext<'_>,
     diag: &mut ColorDiagnostics,
     truncated: &mut bool,
 ) -> Result<(Vec<Triangle>, usize), MeshRefusal> {
@@ -1094,7 +1109,7 @@ fn parse_type5(
             *truncated = true;
             break;
         };
-        let Some(shade) = p.read_shade(r, space, intent, diag, &mut comps) else {
+        let Some(shade) = p.read_shade(r, cx, diag, &mut comps) else {
             *truncated = true;
             break;
         };
@@ -1191,8 +1206,7 @@ fn parse_patches(
     r: &mut BitReader<'_>,
     p: &Params,
     tensor: bool,
-    space: &ColorSpace,
-    intent: pdfce_core::settings::CmykIntent,
+    cx: ShadeContext<'_>,
     diag: &mut ColorDiagnostics,
     truncated: &mut bool,
 ) -> Result<Vec<Patch>, MeshRefusal> {
@@ -1244,7 +1258,7 @@ fn parse_patches(
         let mut corner = [Shade::Rgb(Rgb::BLACK); 4];
         let first_colour = if flag == 0 { 0 } else { 2 };
         for slot in corner.iter_mut().skip(first_colour) {
-            let Some(s) = p.read_shade(r, space, intent, diag, &mut comps) else {
+            let Some(s) = p.read_shade(r, cx, diag, &mut comps) else {
                 ok = false;
                 break;
             };

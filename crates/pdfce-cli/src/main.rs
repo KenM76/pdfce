@@ -12911,6 +12911,16 @@ sample points, and those bands of the gradient have no colour rather than an inv
             s.ramps_incomplete
         );
     }
+    if s.ramps_managed > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} shading(s) were colour-managed — their colour space carried an \
+embedded ICC profile, or was a Lab/CalRGB/CalGray space on a document with an output intent, and \
+every ramp sample or mesh corner went through it rather than through the device-space fallback. \
+This is the same route a fill in that space takes, so a gradient and a flat fill of one colour \
+land on one value; it is disclosed because the conversion leaves nothing on the page to point at",
+            s.ramps_managed
+        );
+    }
     if !s.notes.is_empty() {
         eprintln!(
             "pdfce-cli: note: shading divergences: {}",

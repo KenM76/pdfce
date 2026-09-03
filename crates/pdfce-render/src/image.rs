@@ -2844,6 +2844,18 @@ impl<'a> IccContext<'a> {
         }
     }
 
+    /// Every bridge `space` can have under this context — empty when the
+    /// context declines management (`Pass 243.0`, for the shading and mesh
+    /// readers, which convert through the bundle rather than the bare
+    /// space).
+    #[must_use]
+    pub fn bridges_for(&self, space: &crate::color::ColorSpace) -> crate::icc::ColorBridges {
+        match self.cache {
+            Some(cache) => cache.bridges_for(space, self.intent),
+            None => crate::icc::ColorBridges::none(),
+        }
+    }
+
     /// The context that declines colour management, for callers that have no
     /// document-level destination — tests, and the geometry-only paths.
     pub fn unmanaged() -> Self {

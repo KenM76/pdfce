@@ -472,6 +472,7 @@ impl ColorRamp {
         function: &ShadingFunction,
         domain: [f32; 2],
         space: &ColorSpace,
+        bridges: &crate::icc::ColorBridges,
         intent: CmykIntent,
         diag: &mut ColorDiagnostics,
     ) -> Self {
@@ -540,8 +541,12 @@ impl ColorRamp {
             comps.clear();
             #[allow(clippy::cast_possible_truncation)]
             comps.extend(raw.iter().map(|v| *v as f32));
-            samples.push(space.to_rgb(&comps, intent, diag));
-            cmyk.push(space.to_cmyk(&comps, diag));
+            // Through the page's bridges, not the bare space (`Pass 243.0`):
+            // an `ICCBased` ramp goes through its profile and a `Lab` ramp
+            // through the output intent, exactly as a fill in the same space
+            // does. `ColorBridges::none()` is the identity.
+            samples.push(bridges.to_rgb(space, &comps, intent, diag));
+            cmyk.push(bridges.to_cmyk(space, &comps, diag));
             // Authored tints from the SAME `comps`, in the SAME loop, for the
             // reason the two lines above share it.
             if !spot_slots.is_empty()
@@ -778,11 +783,18 @@ impl Shading {
         doc: &DocumentView<'_>,
         obj: &Object,
         resources: &Dict,
-        intent: CmykIntent,
-        patch_padding: pdfce_core::settings::MeshPatchPadding,
+        policy: crate::font::RenderPolicy<'_>,
+        icc: crate::image::IccContext<'_>,
         color_diag: &mut ColorDiagnostics,
         diag: &mut ShadingDiagnostics,
     ) -> Option<Self> {
+        // The two policy axes a shading reads, taken from the one struct the
+        // interpreter already carries rather than as two parameters -- the
+        // parameter list crossed clippy's ceiling when the bridge context
+        // joined it (`Pass 243.0`), and the lint was right: `cmyk_intent`
+        // and `mesh_patch_padding` are two fields of one operator setting.
+        let intent = policy.cmyk_intent;
+        let patch_padding = policy.mesh_patch_padding;
         let resolved = doc.resolve(obj);
         // Table 78's entries live in the dictionary either way; a mesh
         // shading is a stream whose *dictionary* carries them.
@@ -882,6 +894,18 @@ impl Shading {
             return None;
         }
 
+        // ★ The page's colour bridges for this space, resolved ONCE per
+        // shading (`Pass 243.0`). Until this Pass a shading's colour was the
+        // one route left that never saw the bridge cache: an `ICCBased` RGB
+        // gradient was Table 66's reinterpretation beside a fill that went
+        // through its profile, and a `Lab` gradient bridged through
+        // `rgb_to_cmyk` beside a fill that separated through the output
+        // intent. Same page, same profile, two colours.
+        let bridges = icc.bridges_for(&color_space);
+        if bridges.is_managed() {
+            diag.ramps_managed += 1;
+        }
+
         let function = load_function(doc, dict, diag);
         if let Some(f) = &function {
             let want = color_space.components();
@@ -915,7 +939,7 @@ impl Shading {
                     .filter(|d| d.len() >= 6)
                     .map_or([0.0, 1.0], |d| [d[4], d[5]]);
                 diag.ramps_sampled += 1;
-                let r = ColorRamp::build(f, domain, &color_space, intent, color_diag);
+                let r = ColorRamp::build(f, domain, &color_space, &bridges, intent, color_diag);
                 if !r.is_complete() {
                     diag.ramps_incomplete += 1;
                     diag.note(
@@ -926,7 +950,7 @@ impl Shading {
             }
             (Geometry::Axial { domain, .. } | Geometry::Radial { domain, .. }, Some(f)) => {
                 diag.ramps_sampled += 1;
-                let r = ColorRamp::build(f, *domain, &color_space, intent, color_diag);
+                let r = ColorRamp::build(f, *domain, &color_space, &bridges, intent, color_diag);
                 if !r.is_complete() {
                     diag.ramps_incomplete += 1;
                     diag.note(
@@ -968,6 +992,7 @@ impl Shading {
                         bits_per_flag: uint(doc, dict, b"BitsPerFlag"),
                         vertices_per_row: uint(doc, dict, b"VerticesPerRow"),
                         space: &color_space,
+                        bridges: &bridges,
                         parametric: function.is_some(),
                         patch_padding,
                         intent,
@@ -1239,6 +1264,13 @@ pub struct ShadingDiagnostics {
     pub ramps_sampled: usize,
     /// Ramps with at least one sample the function failed to produce.
     pub ramps_incomplete: usize,
+    /// Shadings whose colour space had a bridge on this page — an
+    /// `ICCBased` space with a usable profile, or a CIE space on a document
+    /// with an output intent — so their colour went through it rather than
+    /// through Table 66's reinterpretation or `rgb_to_cmyk` (`Pass 243.0`).
+    /// Counted per shading loaded, meshes included. The disclosure half of
+    /// rule 4 for a conversion that leaves nothing on screen to point at.
+    pub ramps_managed: usize,
     /// Geometry decoded from mesh streams - triangles for types 4/5,
     /// patches for types 6/7.
     ///
@@ -1319,6 +1351,7 @@ impl ShadingDiagnostics {
         self.function_arity_mismatch += other.function_arity_mismatch;
         self.ramps_sampled += other.ramps_sampled;
         self.ramps_incomplete += other.ramps_incomplete;
+        self.ramps_managed += other.ramps_managed;
         self.mesh_records += other.mesh_records;
         self.mesh_truncated += other.mesh_truncated;
         self.mesh_unusable += other.mesh_unusable;
