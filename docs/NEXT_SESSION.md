@@ -7,215 +7,202 @@ Per standing rule `R216` this file carries **no edit-history layer**. What is
 true now, plus a pointer. Corrections and their prior wording live in the
 append-only record (`ROADMAP.md`, `SESSION_LOG.md`).
 
-Written **2026-09-03** (second session of the day), at the end of a session
-that shipped **Passes 245.0 and 246.0** and released **v0.26.0 and v0.27.0**.
-Everything below was measured with a shell in that session; commands are
-given so nothing here has to be trusted.
+Written **2026-09-03**, at the end of a session that shipped **Passes 245.0,
+246.0, 246.1 and 10.1**, released **v0.26.0 and v0.27.0** (v0.27.0 also on
+GitHub — the first GitHub release since v0.17.0, on the operator's
+instruction), and filed the operator's decision to **fork the project as
+`pdfcer`**. Everything below was measured with a shell; commands are given so
+nothing has to be trusted.
 
 **For the ledger — Pass ceiling, rule ceiling, decision ceiling, filing count —
 run `python tools/check-ledger-numbers.py`.** Do not mint from memory.
 
 ---
 
-## §0 REDACTION NOW REMOVES EVERYTHING UNDER A MARK — text, images, vectors
+## §0 ★★ NEXT: THE FORK. `Pass 247.0` — clone to `D:\Dev\pdfcer`, strip the GUI
 
-The session answered pdfceGUI's request *"redaction refuses any region that
-touches an image"* (the operator: *"every time I've tried the redact feature
-it tells me it can't"*) and then removed the residual the answer exposed:
+**The operator's rulings, verbatim, all on the record (397th filing, decision
+128, question (cd)):** the product is **`pdfcer`** ("pdf-see-er": create,
+edit, read); `pdfce` becomes its pre-release code name; *"Let's do it."*;
+the GUI project renames to **`pdfcer-gui` at `D:\dev\pdfcer-gui`** in its
+own session, by its own engineer. The full plan with acceptance criteria is
+`ROADMAP.md`'s *Next up* head (`Pass 247.0` / `247.1` / `247.2`). In one
+paragraph each:
 
-| content under a mark | before this session | now |
+1. **`247.0` — fork by clone, strip the in-repo GUI, green.**
+   `git clone D:\Dev\pdfce D:\Dev\pdfcer` (a CLONE, never a fresh repo:
+   2,040 cited commit hashes must survive, and the old folder becomes the
+   untouched backup). In the clone: `git config core.hooksPath tools/hooks`
+   (the sweep is red without it). Delete `crates/pdfce-gui`, drop it from
+   `[workspace] members`, drop every dependency only it pulled (verify by
+   `cargo tree` before/after), regenerate `THIRD_PARTY_LICENSES.md`
+   (`cargo-about`). Delete the four gates that only read the GUI crate
+   (`check-ui-strings.sh`, `check-theme-colors.sh`, `check-string-gaps.sh`,
+   `check-disclosure-channel.sh`) with their CI steps and their
+   `check-ci-parity.py` rows; strip the GUI branch from the five that also
+   read other crates (`check-outcome-disclosed.py`,
+   `check-settings-consumed.py`, `check-ci-job-names.py`,
+   `package-portable.py`, `deploy-onedrive.py`). The *zero GUI deps* CI job
+   STAYS — it is the invariant. `FEATURES.md`'s header and `ARCHITECTURE.md`
+   §3/§6 lose the crate (librarian). Green = build, test, fmt, clippy,
+   `run-gates.sh`, `cargo tree` GUI-free, and the test total recorded
+   beside the pre-strip total (**5,114 / 0** at hand-off) so the difference
+   is the GUI's own tests and nothing else. `ui_specs/` stays (history).
+2. **`247.1` — the rename.** Mechanical, case-preserving: `pdfce-` →
+   `pdfcer-`, `pdfce_` → `pdfcer_`, bare `pdfce` → `pdfcer`, over
+   present-tense files only — **`ROADMAP.md`, `SESSION_LOG.md`,
+   `ARCHITECTURE.md` §12 and `docs/decisions/` are history and are
+   excluded.** CLI binary `[[bin]] name = "pdfcer"`. Crate directories
+   renamed. `deploy-onedrive.py` → `pdfcer1`/`pdfcer2`;
+   `verify-release.py` follows. Hard-rule-11 sweep for the claim "this
+   product is called pdfce" in present-tense prose. **Coordination point
+   with `pdfcer-gui`: agree the crate names (`pdfcer-core`,
+   `pdfcer-render`) and both folders BEFORE either side switches its path
+   dependency** — the channel note
+   `note_the_engine_is_becoming_pdfcer_and_here_are_the_names_before_either_side_moves.md`
+   already gives them the table; post the exact commit and the two
+   `Cargo.toml` lines when `247.1` lands.
+3. **`247.2` — publish, archive, release.** `gh repo create KenM76/pdfcer
+   --public`; `git remote set-url origin`; push `main` **with `--tags`**.
+   Archive `KenM76/pdfce` with a README pointer (one commit in the old
+   folder — the only write it ever receives after the clone). First
+   release under the new name **`v0.28.0`** (continuing the line, not a
+   reset): tag → package → smoke → OneDrive `pdfcer1`/`pdfcer2` (old
+   slots untouched) → GitHub release with the zip (decision 127) →
+   `verify-release.py`. **Creating and archiving repositories are
+   authorised for this Pass only** on the plan the operator approved —
+   not standing.
+4. The global `C:\Users\Ken\.claude\CLAUDE.md` references `D:\Dev\pdfce\`
+   — flagged for the operator, not edited by an agent. A new folder gets a
+   fresh auto-memory directory; the in-repo agent memory travels with the
+   clone.
+
+**Four hard-rule-11 survivors of `Pass 10.1`, owed in `247.0`'s first commit
+(comments and one CLI string; the 398th filing found them):**
+`crates/pdfce-cli/src/main.rs` — the `list-signatures` summary line still
+says "no cryptographic verification" and its doc comment (search
+`cryptographic verification`); `crates/pdfce-core/src/signature.rs:3`
+("This module verifies nothing" — the sibling module now does) and `:145`
+(names the stage `Pass 10.2`; it is `10.1`); `docs/DEPENDENCIES.md`'s
+"implements itself" list lacks the six in-crate modules.
+
+**Before the clone, confirm the tree is clean and pushed:** `git status
+--short` empty, `git log --oneline origin/main..HEAD` empty. If not, commit
+and push first — a clone carries only committed state.
+
+---
+
+## §1 SHIPPED THIS SESSION, in one table
+
+| Pass | what an operator gets | commit |
 |---|---|---|
-| text glyphs | removed (Pass 8) | unchanged |
-| raster image, any codec | **whole apply REFUSED** | covered cells destroyed → **paper**, re-encoded Flate; wholly covered → `Do` removed + object tombstoned; shared → copy-on-write clone; undecodable → **mark RETAINED**, disclosed (`Pass 245.0`, `redact_image.rs`) |
-| soft mask / stencil mask | — | cleared with the image (transparent / masked-out) |
-| vector paths | **left in place, not even disclosed** | **CUT** at the boundary: strokes vs region + stroke width, fills clipped to the complement, wholly-inside deleted (`Pass 246.0`, `redact_vector.rs`) |
-| `W`-marked path object | — | paint cut, ORIGINAL geometry kept as the clip (`vector_clips_kept`, noted) |
-| malformed path object (foreign op inside, §8.2) | — | the residual: `vector_paths_intersecting`, carrier `DisclosedNotScrubbed` |
-| `sh` shading whose clip meets the mark | — | counted + disclosed, not cut (`Pass 246.1`, carrier `shadings`) |
+| 245.0 | redaction destroys image samples (any codec), removes wholly-covered images, copies shared ones, RETAINS a mark over an undecodable image instead of refusing the document | `98d4377` (v0.26.0) |
+| 246.0 | redaction CUTS vector paths at the region boundary; destroyed image cells are paper, not black; a pixel-level proof (`pdfce-render/tests/redaction_leaves_no_ink.rs`) | `194b3a1` (v0.27.0) |
+| 246.1 | a shading under a mark is counted and disclosed (not cut yet) | `ff738a6` |
+| 10.1 | **signature verification**: integrity (digest + CMS signature vs the signer's own cert) and coverage, trust NAMED as unchecked; RSA v1.5/PSS, ECDSA P-256/384, SHA-1/256/384/512; all in-crate, no new dependency; `pdfce-cli verify-signatures` | `22421b6` (unreleased — v0.28.0 is the first `pdfcer` release) |
 
-**Proof by pixels:** `crates/pdfce-render/tests/redaction_leaves_no_ink.rs`
-rasterises an applied redaction and asserts zero inked pixels inside the
-region. It found the black-block defect nothing else did.
-
-**On the operator's files** (`C:\Users\Ken\OneDrive\pdfTests\Redact\`, the
-two image-bearing drawings): whole-page marks exit 0 with the page blank
-(780 / 1,089 path objects dropped, images removed); a corner mark cuts 25
-objects and clears 195,960 image cells in 0.30 s.
-Re-run: `pdfce-cli redact-mark --page 1 --rect 500,300,700,400 <in> -o m.pdf`
-then `pdfce-cli redact-apply m.pdf -o out.pdf`.
+Also: `tools/check-control-bytes.py` (a swallowed backslash fails the sweep),
+`tools/hooks/pre-push` (R241: the three public-facing gates bound to `git
+push`; `run-gates.sh` red when inactive), `verify-release.py` fails on a
+missing GitHub release (decision 127).
 
 ---
 
-## §1 NEXT: nothing is owed on redaction — pick from §A
+## §2 QUEUED AFTER THE FORK
 
-Candidates in the order I would take them:
-
-1. **pdfceGUI's consumption of the reply** — two new report fields groups
-   (`images_*`, `vector_*`, `marks_retained`) are not surfaced by their
-   panel yet; their mark-time image warning wording should change (the
-   reply says how). Wait for their file in `open/`; nothing to build until
-   they ask.
-2. **Mesh shadings deposit spot planes** (§A 1) — the last flattening route
-   of the spot arc; the two type 7 meshes on the operator's X-4 sheet.
-3. **The 8 unresolved conformance patches** — read by eye against
-   `D:/Dev/temp/acro-refs`.
-
----
-
-## §A OTHER CANDIDATES, ranked by measured exposure
-
-| # | Item | Measured exposure |
-|---|---|---|
-| 1 | **Mesh shadings deposit spot planes** — `mesh::paint_cmyk` takes `rules` and no planes. | 0.6 % of corpus; 2 visible pairs on the X-4 sheet |
-| 2 | **`sh` shading paints under a redaction mark — CUT them.** Since `Pass 246.1` (`ff738a6`) they are COUNTED and disclosed (`shadings_intersecting`, carrier `shadings`); the interpreter now tracks the clip as a page-space box. Cutting: types 1–3 could be clipped out with an even-odd complement wrapper; types 4–7 carry vertex data and need real surgery. | 0 operator files seen |
-| 3 | **Images and paths inside a form XObject under a mark** — still `form_intersect` disclosed only. The CAD exporters seen so far draw on the page directly. | 0 of 11 operator files |
-| 4 | **`set_page_tabs(page, PageTabs)`** — pdfceGUI has not asked. | one request away |
-| 5 | **73 undocumented public functions** in `tools/public-fns-undocumented-baseline.txt`. | rule 6 |
-| 6 | **`N 1` on the display path**; **other `/Indexed` bases with a non-unit range** — carried from the prior hand-off, unmeasured. | 0 patches |
+1. **`Pass 5.4` — encryption authoring, `/R` 6 only**: `EditSession::set_encryption`,
+   `set_permissions`, `remove_encryption` (owner-auth refusal by name).
+   `/R` 6 IS sourced (`PDF_Spec\security\security__aes256_r6.md`, since
+   2026-08-12) — the crate's "not available in the spec corpus" strings
+   (`crypto/standard.rs:177`, `UnsourcedRevision`, doc comments in
+   `crypto/mod.rs`, `standard.rs`, `aes.rs`, `r5.rs`) are STALE and owed
+   with it. Spec-side: `Contents` is never encrypted and the signature
+   digest is over CIPHERTEXT (ETSI EN 319 142-1 §5.5) — the writer's
+   exemption list must carry it. pdfceGUI's disclosure sentence for
+   permissions is in the reply file, verbatim.
+2. **pdfceGUI's consumption** of `reply_signature_integrity_first…` (the
+   verify verb + panel wording) and `reply_images_are_destroyed…` (consumed
+   2026-09-03 07:20 — archivable).
+3. Mesh shadings deposit spot planes; the 8 unresolved conformance patches;
+   `sh` cutting under a redaction mark; `set_page_tabs` when asked.
 
 ---
 
-## §B STATE OF THE TREE — verified 2026-09-03 ~12:00Z
+## §3 STATE OF THE TREE — verified 2026-09-03 at hand-off
 
-- **Shipped this session:** `Pass 245.0` (`98d4377`), `Pass 246.0`
-  (`194b3a1`), `Pass 246.1` (`ff738a6`, shading disclosure), `a436432`
-  (doc-comment survivors); bumps `7d94fe3` (v0.26.0) and `dfce8a9` (v0.27.0); filings
-  390 and 391 (librarian). Decision 125 (tombstone-over-delete, per-mark
-  retention). `RedactError::ImageRegion` is GONE (breaking → 0.26.0).
-- **Releases:** v0.26.0 tagged, packaged, smoke-tested, pushed, deployed to
-  OneDrive `pdfce1`, verified (CI green at `1d91816`). v0.27.0 tagged at
-  `dfce8a9`, packaged to `D:\builds\pdfce-20260903-0717-dfce8a9`, fresh-folder
-  smoke-tested (both binaries), pushed with `3331b80`, CI green there,
-  deployed to OneDrive `pdfce2` (pdfce1 = 0.26.0), `verify-release.py
-  v0.27.0` clean. `ff738a6` and `a436432` are AFTER the v0.27.0 tag and
-  unreleased at hand-off, as are `67ee5d6` (the control-bytes gate) and the
-  392nd/393rd filings — a v0.28.0 is owed when the next Pass lands (or now,
-  if a session wants the shading disclosure on OneDrive).
-- **GitHub releases RESUMED at v0.27.0** — the operator asked, mid-session:
-  *"while you are working on the new release please push the current
-  release's source and release to github!"* `v0.27.0` is now the `Latest`
-  GitHub release with `pdfce-v0.27.0-windows-x64.zip` (25,281,588 bytes,
-  zipped from the packaged folder), notes covering v0.18.0–v0.27.0.
-  v0.18.0–v0.26.0 remain OneDrive-only. **Read that instruction as
-  standing: every release from now on gets a GitHub release with the
-  portable zip as its asset** — `powershell Compress-Archive` of the
-  `D:\builds\pdfce-<date>-<sha>` folder to
-  `D:\builds\pdfce-vX.Y.Z-windows-x64.zip`, then `gh release create vX.Y.Z
-  <zip> --title … --notes-file … --latest`. `verify-release.py`'s "gh
-  unavailable" message was misattributed — it fires when the release does
-  not exist; with one present it reports `ok`.
-- **pdfceGUI channel:** `reply_images_are_destroyed_now_and_all_three_asks_ship.md`
-  (with a same-day v0.27.0 update appended) awaits their consumption;
-  their request file stays in `open/` until then. The two earlier files
-  (`reply_disclosures_now_carries_the_why…`, `note_the_overprint_zero_tint…`)
-  are also still unconsumed. The iccce reply
+- **Push state:** run `git log --oneline origin/main..HEAD`. Releases:
+  v0.27.0 is tagged, on OneDrive `pdfce2`, and on GitHub as `Latest`
+  (`pdfce-v0.27.0-windows-x64.zip`); `verify-release.py v0.27.0` clean.
+  Commits after the tag (`Pass 246.1`, `10.1`, the gates, the filings) are
+  unreleased by design — see §0.3.
+- **Channels:** pdfce channel `open/` holds our unconsumed
+  `reply_signature_integrity_first…` (with the SHIPPED section) and
+  `note_the_engine_is_becoming_pdfcer…`; their two security requests stay
+  open until they consume. iccce's
   `reply_all_four_asks_measured_and_your_bpc_would_have_done_nothing.md`
   is STILL unread by any pdfce session.
-- **Disk:** `target/debug` reached **243.8 GiB** and D: hit 0 bytes free
-  mid-sweep (`LNK1318`, "no space on device"). `cargo clean --profile dev`
-  fixed it. Check `df -h /d` at session start; if `target/debug` is over
-  ~50 GB, clean it BEFORE the gate sweep, not during.
-- **`tools/run-gates.sh` cannot survive being backgrounded** (unchanged).
-  Run the ~22 script gates in a foreground loop, then
-  `cargo test --workspace`, then the no-default-features / wasm / fuzz
-  checks. **Run them on the FINAL tree.** Test-total convention: the sum of
-  every `test result:` line of `cargo test --workspace` — **5,090 / 0** at
-  hand-off.
-- **iccce pinned rev** `a4d9003b` (v0.3.0); dependency SET unchanged since
-  v0.22.0; `THIRD_PARTY_LICENSES.md` did not move.
-- **Every code commit is FILED** — `python tools/check-commits-filed.py`.
-- **`tools/hooks/pre-push` (`f23543e`, R241)** runs suite-name / commits-filed /
-  control-bytes BEFORE every push, bound by git, not by a chain you type.
-  Per clone: `git config core.hooksPath tools/hooks`; `run-gates.sh` says
-  ACTIVE / NOT ACTIVE on every sweep. The commits-filed CI step is now LAST
-  in the audits job so its expected reds stop hiding the other verdicts.
-- **New gate `tools/check-control-bytes.py`** (`67ee5d6`): a stray C0 byte
-  (a swallowed `\b`, a bare LF inside a literal) in docs/, .claude/, tools/,
-  crates/ or the root Markdown fails the sweep. In CI (`repository audits`,
-  22 checks) and in `run-gates.sh --list`. It is what the heredoc rule in §C
-  could not do: make the mistake FAIL. (It caught the sentence you are reading: the
-  first draft of this bullet went through a heredoc and lost its own
-  backslash. Fifth recurrence, first one caught by a machine.)
-- **Backups:** refresh with
-  `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
-  then `git bundle verify` on it. Refreshed this session at `dfce8a9`.
+- **Disk:** `target/debug` reached 243.8 GiB and D: hit 0 bytes free
+  mid-sweep this session; `cargo clean --profile dev` fixed it. A fresh
+  clone starts empty — the first build is ~6 minutes per profile.
+- **Test-total convention:** the sum of every `test result:` line of
+  `cargo test --workspace` — **5,114 / 0**; no-default-features 3,503 / 0.
+- **Backups:** `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
+  then `git bundle verify`. Last refreshed at `dfce8a9` this session; the
+  clone itself is the fork's backup from here.
 
 ---
 
-## §C THINGS A NEW SESSION MUST KNOW BEFORE TOUCHING ANYTHING
+## §4 THINGS A NEW SESSION MUST KNOW BEFORE TOUCHING ANYTHING
 
 - **★ A Python heredoc through the Bash tool eats one level of
-  backslashes** — and this session it did it to a **Rust byte escape**
-  (`b'\n'` arrived as a literal LF; `grep` said "Binary file matches").
-  Any patch containing ANY backslash goes through the `Write` tool to
-  `D:\Dev\temp\<name>.py`, then `python <file>`. Every patch asserts its
-  anchor count. Fourth recurrence; the memory file is updated.
-- **A test suite is not a pixel.** Twenty-two green redaction tests said
-  destroyed image cells were "cleared"; the render-level proof said they
-  were BLACK inside a transparent mark. When the property is visual, assert
-  it on a raster (`pdfce-render/tests`), not on the content stream.
+  backslashes** — three recurrences this session, two caught by the new
+  gate within minutes of writing it. Any patch containing ANY backslash
+  goes through the `Write` tool to `D:\Dev\temp\<name>.py`, then
+  `python <file>`; every patch asserts its anchor count.
+- **A gate a human reads is not a gate** (R241): the pre-push hook runs the
+  three public-facing gates; never chain `gate; other && git push`.
+- **A test suite is not a pixel.** When the property is visual, assert on a
+  raster in `pdfce-render/tests`; 22 byte-level tests agreed with a black
+  block inside a transparent mark.
+- **Verification's dependency posture** (decision 129): in-crate
+  arithmetic and parsing are acceptable for VERIFICATION (no secret); a
+  SIGNING implementation holds a private key, must be constant-time, and
+  takes the audited dependency — the `aes` argument, not the `md5` one.
 - **Stage by path. Never `git add -A`.** Push a code commit and its filing
-  commit together.
-- **A licensed conformance suite's NAME must never appear in any repo file.**
-  `python tools/check-suite-name-absent.py && git push`.
-- **Check BOTH feature-request channels every session.**
-  `D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\` and
-  `…\iccce_FeatureRequests\open\`.
-- **`docs/core-api/` is engineer-owned and must move in the SAME commit** as
-  any `pub` change to the redaction/`EditSession` surface. Both Passes did.
-- **READ CI'S COLOUR FROM GITHUB, EARLY.**
+  commit together. Read CI's colour from GitHub early:
   `gh run list --limit 5 --json status,conclusion,headSha`.
+- **`docs/core-api/` is engineer-owned and moves in the SAME commit** as
+  any `pub` change to the surface. `Pass 10.1` did (§12.5 of
+  `01-reading-and-model.md`).
 
 ---
 
-## §D ★★ MEASURED NEGATIVES — DO NOT RE-DERIVE THESE
+## §5 ★★ MEASURED NEGATIVES — DO NOT RE-DERIVE THESE
 
-1. **Do NOT clear destroyed image cells to zero.** Zero is black for
-   Gray/RGB and the mark's default is transparent (Table 192); the pixel
-   proof measured 6,241 black pixels inside a "transparent" region. Paper =
-   the colour space's no-ink sample, `/Decode`-aware (`paper_is_ones`).
-2. **Do NOT rewrite a `W`-marked path's geometry.** §8.5.4 applies the clip
-   AFTER painting; the cut paint goes first and the ORIGINAL construction
-   stays as `W n`, else later unmarked content vanishes.
-3. **Do NOT reach for a polygon-boolean crate for fills.** `polygon ∩
-   convex rect` via Sutherland–Hodgman preserves winding for any subject;
-   four complement strips give the difference exactly. A wrong boolean is a
-   silent wrong picture.
-4. **Do NOT delete a redacted image object; tombstone it** (1×1 paper under
-   the same number). `save_full` re-emits every object the dirty set does
-   not name, and shared `/Resources` dicts would dangle (decision 125).
-5. The prior hand-off's colour negatives (rewiring CMYK→sRGB display to
-   iccce; extending `ink_reach` to images; the `cmyk_group_rules` widening;
-   the redundant §11.7.4.2 guard) still stand — see `ROADMAP.md` Passes
-   240.0–244.0.
+1. **Do NOT clear destroyed image cells to zero** — zero is black for
+   Gray/RGB and a no-`/IC` mark is transparent; paper is the colour space's
+   no-ink sample, `/Decode`-aware.
+2. **Do NOT rewrite a `W`-marked path's geometry** — §8.5.4 applies the
+   clip after painting; the cut paint goes first, the ORIGINAL construction
+   stays as `W n`.
+3. **Do NOT sign or verify over the `[0] IMPLICIT` tag** — the signed
+   attributes are hashed as `SET OF` (`0x31`), RFC 5652 §5.4; sabotaging
+   this fails every valid fixture.
+4. **Do NOT treat `adbe.pkcs7.sha1` like `.detached`** — its content is the
+   SHA-1 of the byte range, so `messageDigest = H(SHA1(D))`.
+5. **Do NOT take the RustCrypto EC/RSA stack for verification** without a
+   new decision: 25 crates, two pre-release, cfg-selected unsafe backends
+   protecting a secret that verification does not have.
+6. The prior hand-off's colour negatives (`ROADMAP.md` Passes 240.0–244.0)
+   still stand.
 
 ---
 
-## §E ITEMS OWED BY THE OPERATOR
+## §6 ITEMS OWED BY THE OPERATOR
 
-- **Open question `(cb)`** — the device-model adjudication; both renders
-  conform.
-- **Open question `(ca)`** — 82 published commit messages carry the licensed
-  suite's name; the gate stops the count growing.
-- **GitHub releases** — resume them or not (§B). No one has asked.
-
----
-
-## §F THE PATTERNS THIS SESSION HIT
-
-**A scoped refusal coarser than what it protects reads as a broken
-feature.** Pass 8's image refusal was correct and keyed on the bounding
-box; on a CAD title block every rectangle grazes a logo, so the operator's
-report was *"it never works"*. The fix was not to relax the rule but to make
-the gate measure what the rule protects (the samples), and to refuse per
-mark rather than per document.
-
-**Fixing one residual exposed the next, and the next was worse.** The
-request was about images; verifying the image fix on the operator's drawing
-showed vector lines through the region — never removed, never disclosed.
-Disclose first (same Pass), cut second (next Pass, same day). Never leave
-the discovered gap silent while the reported one ships.
-
-**The proof that matters is the one an auditor would run.** The unit tests
-checked bytes; the auditor checks pixels. One render-level test found a
-design choice (black clear value) that every byte-level test agreed with.
+- **Open question `(cc)`** — four licence escalations from the `/R` 6
+  sourcing (2026-08-12) that never reached the question list; conservative
+  default filed; non-blocking for `Pass 5.4`.
+- **Open questions `(ca)`, `(cb)`** — unchanged.
+- **Global `CLAUDE.md`'s `D:\Dev\pdfce\` references** — his to edit after
+  the fork.

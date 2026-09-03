@@ -96,6 +96,495 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 398th filing, 2026-09-03 — `22421b6`: `Pass 10.1` SHIPS. A SIGNATURE
+CAN NOW BE VERIFIED — INTEGRITY (THE DIGEST OVER `/ByteRange` AND THE CMS
+SIGNATURE OVER THE SIGNED ATTRIBUTES, AGAINST THE SIGNER'S OWN EMBEDDED
+CERTIFICATE), COVERAGE (THE `Pass 10.0` ANSWER, FOLDED IN) AND TRUST (ONLY
+`NotChecked` EXISTS) AS THREE FACTS THAT NEVER COLLAPSE INTO ONE BOOL.
+`adbe.pkcs7.detached` / `ETSI.CAdES.detached` / `adbe.pkcs7.sha1`; RSA
+PKCS#1 v1.5 (STRICT WHOLE-EM COMPARE) AND RSASSA-PSS; ECDSA P-256/P-384;
+SHA-1/256/384/512. ★ ALL IN-CRATE, NO NEW DEPENDENCY — `asn1.rs`,
+`cms.rs`, `signature_verify.rs`, `crypto/{bignum,sha1,rsa,ecdsa}.rs` —
+AND THAT IS **DECISION 129**: THE MD5/RC4 IN-CRATE JUDGEMENT IS EXTENDED,
+NARROWLY, TO VERIFICATION-SIDE ARITHMETIC, BECAUSE CONSTANT-TIME CODE
+PROTECTS A SECRET AND VERIFICATION HOLDS NONE; IT DOES NOT EXTEND TO
+SIGNING. `pdfce-cli verify-signatures`, EXIT 12 / 13. A PRE-EXISTING
+FIXTURE-GENERATOR DEFECT (THE `/ByteRange` GAP EXCLUDED THE HEX DIGITS
+BUT NOT THE `<` `>` DELIMITERS, AGAINST §12.8.3.3 AND ITS OWN COMMENT) WAS
+FOUND BY THE NEW VERIFIER AND FIXED. NO RELEASE CUT — `v0.28.0` IS
+ASSIGNED TO THE FIRST `pdfcer` RELEASE (`Pass 247.2`). NO RULE MINTED.**
+
+**Sourcing (hard rule 8).** Shell available; every figure below produced
+here unless marked *relayed*. `python tools/check-ledger-numbers.py` →
+clean; **filings ceiling `397`, so this is the 398th**; Pass ceiling
+`247.2` (headed `247.0`); rules `R241`; decisions `128`, **next free
+`129` — minted here**. `git log --oneline -4` → `22421b6` (this Pass) on
+`d9af88d` (396th filing) on `c0c8dee` on `b151a80`. `git rev-list
+--left-right --count main...origin/main` → **`1 0`** — `22421b6` is
+the one unpushed commit; `d9af88d` and everything below it is on
+`origin`. `git tag` newest → `v0.27.0`; **no `v0.28.0` tag** — not cut,
+by the 397th filing's assignment. `python tools/check-commits-filed.py
+--strict-tip` → **1 unfiled: `22421b6`** — this filing files it.
+`python tools/check-cited-commits-exist.py` → clean, 79 documents. `git
+status --short` at start → ` M docs/ARCHITECTURE.md`, ` M
+docs/ROADMAP.md`, ` M docs/SESSION_LOG.md` — **the 397th filing,
+uncommitted, left in place** at the engineer's instruction; nothing
+else modified, nothing untracked. `git show 22421b6 --stat` → **38
+files, +3,822 / −13**; **`Cargo.lock` is not in the stat** — no
+dependency change, confirming the commit's own claim. `wc -l` on the new
+modules: `asn1.rs` 292, `cms.rs` 418, `signature_verify.rs` 739,
+`crypto/bignum.rs` 548, `crypto/sha1.rs` 141, `crypto/rsa.rs` 285,
+`crypto/ecdsa.rs` 435, `tests/signature_verify.rs` 181 — **3,039 lines
+across eight files**, against the 396th filing's *"~500 lines"* estimate
+for the walker alone (the walker — `asn1` + `cms` — is 710; the
+arithmetic is the rest). `ls fixtures/synthetic/signature-verify/` →
+`PROVENANCE.md` (1,647 B) + 7 PDFs, 5,293–6,906 B, all 09:46;
+`PROVENANCE.md` now names **`tools/gen-signed-fixtures.py`** — the 396th
+filing's criterion-9 stale-path debt is **discharged**. `ls
+fuzz/fuzz_targets/` → **30** targets, `fuzz/Cargo.toml` → 30 `[[bin]]`
+stanzas (the 29 before + `signature_verify`). `grep -c "^| "
+docs/core-api/index.md` → the `01-reading-and-model.md` row reads **2,791
+lines · 148 clauses cited**, matching the commit. Spec corpus, `wc -l`:
+`PDF_Spec\iso32000\iso32000__s__12.8.3.md` **1,199** lines (new this
+session, `pdfce-spec-librarian`), `iso32000__ref__signature_verification.md`
+**516** lines (new), `PDF_Spec\pades\pades__profile__baseline.md` exists
+(new prefix `pades/`). Channel `ls` (`…\pdfce_FeatureRequests\open\`,
+Sep 3): `reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`
+**7,208 B, 09:59** (was 4,537 B at the 396th — it gained a same-day
+*SHIPPED* section, read here, not edited);
+`note_the_engine_is_becoming_pdfcer_and_here_are_the_names_before_either_side_moves.md`
+**1,950 B, 09:59** (new — the rename table and sequence, the
+coordination point the 397th filing's `(cd)` answer asked for; read,
+not edited); the two requests 08:27/08:28 unchanged. Backup bundles,
+`ls -t D:\Dev\pdfce-backups\` → newest `pdfce-2026-09-03-dfce8a9-full.bundle`
+— **`git rev-list --count dfce8a9..22421b6` → 14**, so the newest bundle
+is fourteen commits behind `HEAD` and does not hold this Pass (a first
+draft of this sentence said *five*, from memory of the log rather than
+from the count — the count is the source); engineer's call whether to
+take one. **Relayed from
+the commit message, not re-run here** (a full `cargo test --workspace`
+is the engineer's gate, not this filing's): `cargo test --workspace`
+**5,114 / 0**; `--no-default-features` **3,503 / 0**; clippy
+all-targets all-features, fmt, wasm32 check, fuzz check, `cargo tree`
+core/render GUI-free — all clean; the twelve string/asset gates green;
+fuzz `signature_verify` **67,204 runs / 241 s = 279 runs/s, 0 crashes,
+cov 3,767**, seven seeds; sabotage — *skip the SET-OF retag → all five
+`Verified` cases fail; a digest compare that never mismatches → the
+tamper case fails*. **Not touched:** `docs/NEXT_SESSION.md`, the channel
+folder, `tools/`, `crates/`, memory files.
+
+**Premises corrected: none.** Every claim in the dispatch checked out
+against the tree; two things the dispatch did not say are recorded below
+under *Found by reading the tree*, both as owed work rather than
+corrections.
+
+### `Pass 10.1` (`22421b6`, 2026-09-03) — verify an existing signature: integrity and coverage as two separate facts, trust named `NotChecked`
+
+**Filed *Next up* at the 396th filing (2026-09-03, `d9af88d`), from
+`pdfceGUI`'s 08:28 request; shipped the same day at 09:58.** The
+*Next-up* entry is moved here whole (below, under *The entry as filed*),
+its ten acceptance criteria annotated with what shipped against each.
+
+#### What shipped, from `git show 22421b6`
+
+**Entry point.** `pdfce_core::signature::verify_all(&graph, bytes) ->
+Vec<SignatureVerdict>` and `verify(&graph, bytes, index) ->
+Option<SignatureVerdict>` — `bytes` is the file the graph was loaded
+from, because the digest is over BYTES, not objects. One verdict per
+`/FT /Sig` field with a `/V`, in `byte_range_coverage`'s order. The
+verifier lives in a new module `signature_verify.rs` and is re-exported
+from `signature.rs` so a consumer reaching for `signature::verify` finds
+it beside the census and coverage that file already answers.
+
+**`SignatureVerdict`** carries three independent facts and never a bool:
+
+- `integrity: Integrity` — `Verified { digest_algorithm,
+  signature_algorithm }` · `DigestMismatch` (the bytes under the
+  signature were altered) · `SignatureInvalid` (the digest matches; the
+  signature or certificate does not) · `Unverifiable { reason }` (a
+  subfilter, algorithm or curve pdfce lacks; malformed CMS; a missing
+  certificate — **never reported as either of the other two**).
+  `#[non_exhaustive]`.
+- `coverage: ByteRangeCoverage` — `Pass 10.0`'s answer, now beside the
+  verdict; `covers_to_eof()`.
+- `trust: Trust` — **only `NotChecked` exists**; no trust store, no
+  chain, no revocation, no clock. It stays the only variant until a
+  trust stage does.
+- Claims, carried as claims: `signer_subject`, `signer_issuer`,
+  `cert_not_before`, `cert_not_after`, the `signingTime` attribute, and
+  the dictionary's `/Name` `/M` `/Reason` `/Location`.
+- `notes: Vec<String>` — the rule-4 disclosures: a SHA-1 digest;
+  non-zero `/Contents` padding; extra `/ByteRange` gaps with their
+  extents (`G7`); a first pair not at offset 0 (`G8`); an ETSI signature
+  that does not reach EOF (`G10`); extra signers; odd CMS versions.
+
+**What integrity checks** (spec RAG `iso32000__s__12.8.3.md`, ingested
+this session by `pdfce-spec-librarian`, and its consolidator
+`iso32000__ref__signature_verification.md`; identifiers cited in the
+code and in the commit): `/ByteRange` geometry `G1`–`G6` (pairs,
+non-negative, ascending, inside the file; **the gap is EXACTLY the
+`/Contents` token INCLUDING its `<` `>` delimiters, checked against the
+FILE bytes, hex-only inside — `SI-W3`**); the DER parsed by its own
+length, trailing padding ignored and non-zero padding disclosed
+(`SI-W4`, `SI-A3`); `adbe.pkcs7.detached` and `ETSI.CAdES.detached`:
+`H(D) == messageDigest`; `adbe.pkcs7.sha1`: `eContent == SHA1(D)` and
+`H(eContent) == messageDigest` — the double hash, the inner SHA-1 pinned
+by the subfilter name (`SI-W1`); content-type `== id-data` (RFC 5652
+§5.6); the signature verifies over `DER(SET OF signedAttrs)` — the
+`[0]` tag in the file rewritten to `0x31` (`SI-C2`, RFC 5652 §5.4) —
+with the signer's own embedded certificate located by
+`issuerAndSerialNumber` or `subjectKeyIdentifier`; `digestAlgorithm` is
+authoritative over a `shaNWithRSA` `signatureAlgorithm` (`SI-W13`); RSA
+PKCS#1 v1.5 by **strict whole-EM comparison, never a lenient
+`DigestInfo` parse** (Bleichenbacher 2006); RSASSA-PSS with params from
+the `AlgorithmIdentifier` (RFC 4055; MGF1; trailer `0xBC`); ECDSA
+P-256/P-384 (Jacobian coordinates, on-curve check, SEC 1 §4.1.4).
+**`adbe.x509.rsa_sha1`, `ETSI.RFC3161`, P-521, Brainpool and any other
+algorithm → `Unverifiable`, by name, never valid and never invalid.**
+
+**No new dependency — decision 129** (`ARCHITECTURE.md` §12, this
+filing). The RustCrypto route (`num-bigint`, `p256`/`p384`/`ecdsa`/
+`elliptic-curve`, `cms`, `x509-cert`) was resolved in a scratch crate:
+**25 crates**, `cms 0.3.0-pre.2` and `rsa 0.10.0-rc.18` still
+pre-release, `cmov` and `hybrid-array` carrying cfg-selected `unsafe` in
+decision 039's shape. That shape protects a SECRET; verification has
+none — the public key, the signature and the digest are all in the
+file. So the MD5/RC4 in-crate judgement (96th filing, decision 039's
+sibling) is extended, **narrowly**, to verification-side arithmetic and
+parsing, and every module header says it does **not** extend to
+signing. The modules: `crypto/bignum.rs` (u32 limbs, schoolbook
+multiply, Knuth Algorithm D division, square-and-multiply modpow,
+Fermat inversion; **400 random cases** agree with a bit-serial
+reference, modpow and inversion agree with Python's `pow`);
+`crypto/sha1.rs` (FIPS 180-4 vectors); `crypto/rsa.rs`;
+`crypto/ecdsa.rs` (RFC 6979 A.2.5 / A.2.6 published vectors for both
+curves; `n·G` is the identity; an off-curve point is refused);
+`asn1.rs` (a bounds-checked DER reader: definite lengths only, no BER,
+single-byte tags); `cms.rs` (SignedData, SignerInfo, X.509 v3 with
+SubjectKeyIdentifier). `docs/PRIOR_ART.md`'s three candidate rows are
+closed *checked, NOT taken* this filing.
+
+**Fixtures** (rule 7): `fixtures/synthetic/signature-verify/` — seven,
+signed by **pyHanko 0.37.0 (MIT), an independent implementation**, with
+self-signed keys generated per run and discarded
+(`tools/gen-signed-fixtures.py`, `PROVENANCE.md` with sha256 per file).
+**Their expected verdicts were recorded from pyHanko's own validator
+BEFORE pdfce's verifier existed:** valid RSA PKCS#1 v1.5 SHA-256;
+RSA-PSS CAdES; ECDSA P-256 CAdES; RSA SHA-1 (`adbe.pkcs7.detached`, a
+SHA-1 digest); one byte flipped INSIDE the signed range (pyHanko
+`intact=False valid=True` → pdfce `DigestMismatch`); one hex digit
+flipped in the signature VALUE (`intact=True valid=False` →
+`SignatureInvalid`); an incremental `/Info` update appended after
+signing (`Verified` + `uncovered_tail 390`). **Nine integration tests**
+(`tests/signature_verify.rs`), all passing; the two sabotages above.
+
+**A pre-existing defect, found by the new verifier.**
+`tools/gen-signature-fixtures.py` — the no-cryptography COVERAGE
+fixtures from `Pass 10.0` — excluded only the hex digits from
+`/ByteRange`, not the `<` `>` delimiters. **Its own comment asserted the
+opposite of §12.8.3.3 (`SI-W3`).** The coverage arithmetic never noticed
+because it counts bytes, not delimiters — every one of the four coverage
+tests passed over a geometry that was two bytes wrong. Fixed; the three
+coverage fixtures regenerated (`signed-full-coverage.pdf`,
+`signed-malformed-range.pdf`, `signed-short-coverage.pdf`, same 1,469 B
+each); the four coverage tests pass unchanged; the new test
+`the_coverage_fixtures_with_filler_contents_are_unverifiable_by_name`
+now asserts what those fixtures ARE (a placeholder `/Contents`, so
+`Unverifiable`, never `Verified`). Twenty-four days between the
+generator's comment and its refutation, closed by the first consumer
+that read the delimiters. Footered to
+`D:\dev\rag\rust\a_claim_in_a_comment_is_not_a_check.md` this filing as
+a further instance (a first draft said *"fourth"*; the file's own text
+records one worked instance and *"third occurrence in that one tool"* of
+the gate bug — the count was not the file's, so it is not asserted).
+
+**CLI.** `pdfce-cli verify-signatures <input>` — one block per signature
+(integrity / coverage / trust / claims / notes) and a summary line; exit
+**0** all verified, **12 `SIGNATURE_FAILED`** any failed, **13
+`SIGNATURE_UNVERIFIABLE`** none failed but some unverifiable — *"pdfce
+cannot say"* is not *"tampered"*. `list-signatures`'s help no longer
+says pdfce performs no verification (its summary LINE still does — see
+*Found by reading the tree*).
+
+**Fuzz.** Target `signature_verify` (`Document::from_bytes` +
+`verify_all` over the input; asserts a malformed `/ByteRange` never
+reaches `Verified`), seeded with the seven signed fixtures: **67,204
+runs / 241 s / 0 crashes**, cov 3,767.
+
+**Docs.** `docs/core-api/01-reading-and-model.md` §12.5 rewritten; the
+disclosure contract for shells is stated there: **`Verified` is never
+"valid" and never "signed by X".**
+
+#### Acceptance criteria, annotated (the ten from the 396th filing)
+
+1. `verify(&graph, index) -> SignatureVerdict` with three enums — **met**,
+   with `bytes` added to the signature (the digest is over the file) and
+   `verify_all` beside it.
+2. Digest failure and signature failure are different verdicts — **met**:
+   `DigestMismatch` vs `SignatureInvalid`, one fixture each, pyHanko's
+   `intact`/`valid` split as the oracle.
+3. Coverage in the verdict, `byte_range_coverage` kept, appended fixture
+   reads integrity PASS / coverage short — **met** (`uncovered_tail 390`).
+4. `trust = NotChecked` in those words; subject and dates as facts —
+   **met**; `Trust` has one variant.
+5. Subfilters — **met**, and `adbe.x509.rsa_sha1` is `Unverifiable` by
+   name. ★ See *Found by reading the tree* (1) on `adbe.pkcs7.sha1`.
+6. Algorithms; anything else `Unverifiable`, never invalid — **met**;
+   P-521 and Brainpool named as refused.
+7. Spec gate before code — **met**: `iso32000__s__12.8.3.md` (1,199
+   lines) and the consolidator landed this session; the code cites
+   `SI-W1/W3/W4/W13/C2`, `G1`–`G10`, `SI-A3`.
+8. CLI prints the three facts and `trust: not checked` — **met**, as a
+   new subcommand rather than a `list-signatures` flag, with two new exit
+   codes.
+9. Independent-implementation fixtures; the PROVENANCE stale path —
+   **met and discharged** (`PROVENANCE.md` names `gen-signed-fixtures.py`).
+10. The disclosure sentence replaced with the verb — **met**: the reply
+    gained a same-day *SHIPPED* section (09:59) carrying the entry point,
+    the three facts and the replacement Signatures-panel wording — *"pdfce
+    checked this signature: the bytes it covers have not been altered
+    since signing[, and nothing was added … | , but N bytes were added …].
+    pdfce does not check who signed it or whether to trust them — the name
+    shown is what the certificate claims."* — with *never the word
+    "valid"*.
+
+#### Found by reading the tree — two owed items, neither a correction
+
+1. **`adbe.pkcs7.sha1` — the double-hash path — has no fixture and no
+   integration test.** `sig-rsa-sha1-pkcs7.pdf` is `adbe.pkcs7.detached`
+   with a SHA-1 *digest* (its `PROVENANCE.md` row says so); the
+   `adbe.pkcs7.sha1` branch (`signature_verify.rs:484`, `eContent ==
+   SHA1(D)`) is exercised by construction and by the fuzzer's reachability
+   only. Likewise **P-384 has RFC 6979 unit vectors but no end-to-end
+   fixture** (the one ECDSA fixture is P-256). Neither is a defect; both
+   are paths whose *independent-oracle* proof is thinner than the
+   others', and a future pyHanko run could add both (pyHanko may not emit
+   the deprecated `adbe.pkcs7.sha1` at all — if so, say so in
+   `PROVENANCE.md` and the path stays construction-verified by name).
+2. **Hard-rule-11 sweep for the CLAIM *"pdfce performs no cryptographic
+   signature verification"*** — bare keyword `verif`/`cryptograph`/`digest`
+   over the files that name signatures, every hit read. **Three survivors
+   in `crates/` (engineer's, reported not edited):**
+   `crates/pdfce-cli/src/main.rs:14821` — the `list-signatures` SUMMARY
+   LINE, printed on every invocation: *"(COVERAGE ONLY — pdfce performs
+   no cryptographic verification, so this says what each signature would
+   protect, never whether it is valid)"* — the help was fixed, the line
+   the operator actually reads was not; **`main.rs:14587`** — the
+   subcommand's doc comment, *"pdfce performs no cryptography at all"*;
+   **`crates/pdfce-core/src/signature.rs:3`** — the module header *"This
+   module verifies nothing … all of that is the Digital-signatures
+   Pass"*, on a file that now re-exports the verifier; and **`signature.rs:145`
+   names the verification stage `Pass 10.2`** — it is `10.1`. Docs this
+   role owns, fixed this filing: `docs/FEATURES.md` row *"Report a
+   signature's `/ByteRange` coverage … no digest is computed"*;
+   `ARCHITECTURE.md` §3's `signature.rs` cell and §7's `list-signatures`
+   bullet (*"explicitly NOT cryptographic verification"* — true of that
+   subcommand, now qualified by its sibling). **Correct survivors, do not
+   "fix":** the *Backlog* Digital-signatures bullet's dated `Pass 10.0`
+   sentence (2026-08-10 history, and its 396th amendment already names
+   `10.1`); the foreign-oracles table row quoting *"This module verifies
+   nothing"* and the PAdES conformance bullet (both dated 2026-08-07
+   records of the then-state); `01-reading-and-model.md:302` (*"pdfce
+   cannot verify this one"* is about a PASSWORD, not a signature).
+
+#### Spec side, from `pdfce-spec-librarian`'s same-session ingestion (cited, not written, by this role)
+
+`iso32000__s__12.8.3.md` (1,199 lines), `pades/pades__profile__baseline.md`
+(new `pades/` prefix), `iso32000__ref__signature_verification.md` (516
+lines, the derived consolidator — the citation to use in any pdfce
+artifact). **Its gap list, carried here so it is not re-discovered:**
+**ETSI EN 319 122-1 is not staged** (`SI-G2`) — needed for SIGNING, not
+for this Pass; **ETSI EN 319 102-1 is staged and NOT ingested**
+(`PB-G1`) — it owns `TOTAL-PASSED` / `TOTAL-FAILED` / `INDETERMINATE`,
+so **pdfce's verdict names are its own until a trust stage exists
+(`SV-A5`, deferred by name)**; and **two corrections owed on the spec
+side** to `iso32000__s__7.6.1.md` / `iso32000__ref__encryption_impl.md`
+(trap 7 / `SI-G4`): a signature's `/Contents` is **never encrypted**
+(ISO 32000-1 §7.6.1's exception list omits it; ETSI EN 319 142-1 §5.5
+supplies the bullet for 1.7, ISO 32000-2 §7.6.2 for 2.0), and
+**encryption is applied BEFORE any signature is incorporated** — so the
+digest is over ciphertext and a verifier must never decrypt on the
+verification path. **Relevant to `Pass 5.4`** (encrypt on save): noted in
+that entry this filing.
+
+#### Release, and why not
+
+**No release cut for `10.1`.** The 397th filing assigns **`v0.28.0` to
+the first `pdfcer` release (`Pass 247.2`)**; cutting a `pdfce` `v0.28.0`
+now would take that number from the rename. Nothing is withheld from
+`pdfceGUI` by this: they build against `main` by path and rev, and
+`22421b6` is on `main` (unpushed at filing — `1 0`; the push is
+standing-authorised, decision 090). Decision 121's per-release
+authority is untouched; this is a sequencing choice, not a gate.
+
+#### Ledger
+
+- **Pass `10.1` → *Shipped*** (`22421b6`). Family ceiling `10.1`.
+- **Decision 129 minted** (`ARCHITECTURE.md` §12): verification-side
+  cryptographic arithmetic and parsing in-crate, under a condition
+  distinct from the MD5/RC4 one — *no secret is handled* — and explicitly
+  not extending to signing. Decision ceiling `128` → `129`; next free
+  `130`.
+- **No standing rule minted.** Rules ceiling `R241`, next free `R242`.
+- **Open operator questions:** none minted; `(cd)` answered (397th);
+  next free `(ce)`.
+- `docs/FEATURES.md`: *"Verify a signature's integrity and coverage"* moves
+  *Planned* → *Implemented* (Redaction & security), `[x] core [x] cli [ ]
+  gui`, Acrobat `◐`; the coverage row's sentence replaced; the Encryption
+  row and the Sign row re-worded for the new state.
+- `docs/PRIOR_ART.md`: `num-bigint`, `p256`/`p384`, `sha1` → *checked, NOT
+  taken*; `cms`, `x509-parser`, `x509-cert` rows footered (verification
+  half in-crate; the signing half still theirs to earn).
+- `D:\dev\rag\rust\`: two dated footers
+  (`hand_rolled_frozen_legacy_crypto_primitives_defer_not_answer_the_vetted_crate_question.md`
+  — the extension and its new discriminant;
+  `a_claim_in_a_comment_is_not_a_check.md` — the generator instance).
+  `C:\personal_rag\pdf\`: one new lesson (pyHanko as the independent
+  oracle; the `intact`/`valid` split; the `< >` delimiters a byte-count
+  cannot see).
+
+#### The entry as filed at the 396th filing (moved from *Next up*; heading levels demoted one step so it nests here, text otherwise unedited below this line)
+
+#### `Pass 10.1` — **VERIFY AN EXISTING SIGNATURE: INTEGRITY AND COVERAGE AS TWO SEPARATE FACTS, TRUST NAMED `NotChecked`** — inbound `pdfceGUI` request 2026-09-03 08:28, answered 08:41, order committed: THIS FIRST — filed 2026-09-03 (396th filing), **NOT STARTED as a commit; STARTED in the working tree at filing time (see sourcing)**
+
+**★ Sourcing (hard rule 8).** Shell available. The request:
+`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_a_document_cannot_be_signed.md`
+(3,750 B, 08:28). The reply:
+`reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`
+(4,537 B, 08:41). `git status --short` at filing: **`??
+tools/gen-signed-fixtures.py`** (11,161 B, 08:49), **`??
+fixtures/synthetic/signature-verify/`** (`PROVENANCE.md` + seven PDFs,
+5,291–6,906 B each, 08:49), **`?? crates/pdfce-core/src/crypto/bignum.rs`**
+(13,675 B, 08:52) and **` M crates/pdfce-core/src/crypto/mod.rs`** (+1,
+`pub mod bignum;`) — none committed, none cited by hash, all the
+engineer's in-flight work on this Pass eight minutes after the reply went
+out. Spec corpus: `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.8.md`
+(dated 2026-07-31, 689 lines) states in its own header *"STILL NOT
+ingested: Table 252's other ~15 entries (`Filter`, `SubFilter`, …),
+§12.8.3's PKCS#1/PKCS#7"* — the ingestion the reply names as this Pass's
+gate is **in flight** (dispatched by the engineer this morning, not
+landed at filing). Crate versions by `cargo info` here: `num-bigint`
+0.5.1 MIT OR Apache-2.0; `p256` / `p384` 0.14.0 Apache-2.0 OR MIT;
+`sha1` 0.11.0 MIT OR Apache-2.0; `cms` **0.3.0-pre.2**; `rsa`
+**0.10.0-rc.18**.
+
+**★ ID.** `Pass 10.0` (`2676d4d`+`2ae9991`, 2026-08-10) shipped
+`signature::byte_range_coverage` + `pdfce-cli list-signatures` — the
+non-cryptographic half. This is the cryptographic half of the same
+question, so **`10.1`**; the family ceiling was `10.0`. Signing is
+**not** this Pass — it stays in the *Backlog* Digital-signatures bucket,
+amended this filing.
+
+##### What is asked, in the requester's words
+
+*"VALIDATE an existing signature … with the three facts separated,
+because they fail independently and an operator needs to know which one
+failed: **integrity** — does the digest over the `/ByteRange` match
+`/Contents`; **coverage** — does the `/ByteRange` cover the whole file,
+or was content appended after signing (you already answer this one);
+**trust** — does the certificate chain up to something, and is it in
+date."* And: *"We would take (1) and (2) alone and be much better off
+than we are — 'the bytes under this signature have not been altered, and
+nothing was appended after it' is a real answer, and it needs no
+certificate store at all. Please do not let the trust question block the
+integrity one."* They will not build it shell-side: *"a GUI that reported
+'valid' from its own arithmetic would be making the one claim in this
+program that must never be wrong."*
+
+##### Acceptance criteria (from the request and the reply; the reply is the commitment)
+
+1. **`pdfce_core::signature::verify(&graph, index) -> SignatureVerdict`**
+   with three independent enums, none collapsed into a bool:
+   `integrity`, `coverage`, `trust`.
+2. **`integrity`** = the digest over the `/ByteRange` matches the
+   `messageDigest` the signer signed **and** the signature over the
+   signed attributes verifies against the signer's own embedded
+   certificate. A byte flipped inside the signed range and a byte
+   flipped in the CMS signature value are **different failures**
+   (digest vs signature) and are reported as such — the engineer's
+   fixture set already carries one of each (`sig-rsa-tampered.pdf`,
+   `sig-rsa-contents-tampered.pdf`).
+3. **`coverage`** moves into the verdict so one call answers both; the
+   `Pass 10.0` function is not removed. `sig-rsa-appended.pdf` (an
+   incremental `/Info` update after signing) must read integrity PASS /
+   coverage *stops before EOF*.
+4. **`trust = NotChecked` in the first cut, in those words** — no trust
+   store, no chain building, no revocation. The verdict carries the
+   signer's subject and the certificate's validity dates as **reported
+   facts, never a judgement**.
+5. **`SubFilter` coverage:** `adbe.pkcs7.detached`,
+   `ETSI.CAdES.detached` (PAdES), `adbe.pkcs7.sha1`;
+   `adbe.x509.rsa_sha1` **named-unsupported**.
+6. **Algorithms:** RSA PKCS#1 v1.5 and RSASSA-PSS; ECDSA P-256 / P-384;
+   SHA-1 / SHA-256 / SHA-384 / SHA-512. **Anything else is
+   `integrity = Unverifiable { reason }`, never "invalid"** — a
+   fail-closed verdict that names why.
+7. **Spec gate before code:** §12.8.3 (SubFilter semantics, PKCS#1 /
+   PKCS#7 / CAdES encodings) and Table 252's remaining entries ingested
+   by `pdfce-spec-librarian` — *"that is the gate on this Pass, not the
+   code."* Cite the clause in the doc comments (rule 1).
+8. **CLI:** `list-signatures` (or a sibling) prints the three facts per
+   signature, and prints `trust: not checked` rather than omitting it
+   (rule 11 — the CLI prints what it did not do).
+9. **Fixtures** (rule 7): synthetic source document; signatures produced
+   by an **independent** implementation (the tree's generator names
+   pyHanko 0.37.0, MIT, with per-run self-signed certificates and
+   discarded keys), so pdfce's verifier is written from the standard and
+   checked against CMS objects it did not produce — the
+   `gen-encryption-fixtures.py` principle. ★ **Owed before commit, found
+   by reading the untracked tree:** `fixtures/synthetic/signature-verify/PROVENANCE.md`
+   says *"Generated by `tools/gen-signature-fixtures.py`"*; the script
+   beside it is **`tools/gen-signed-fixtures.py`**, and
+   `gen-signature-fixtures.py` is the *other* generator (the `/ByteRange`
+   coverage fixtures). The same stale-path shape the 92nd filing caught
+   in `encryption/PROVENANCE.md`.
+10. **The disclosure sentence** for the Signatures panel, sent verbatim
+    in the reply and to be replaced *with the verb* when this ships:
+    *"pdfce can see that this document is signed and can tell you whether
+    anything was appended after the signature. It does not yet check the
+    signature itself — so it cannot tell you the signed bytes are
+    unaltered, and it cannot tell you who signed it or whether to trust
+    them."* On ship, the first two clauses change and the trust clause
+    stays; the replacement wording goes to `pdfceGUI` with the entry
+    point.
+
+##### Dependency posture — recorded, not decided
+
+The reply's plan and the dispatch to this role: **an in-house minimal
+DER / CMS / X.509 walker (~500 lines, fuzzable)** rather than `cms`
+(`0.3.0-pre.2`) / `rsa` (`0.10.0-rc.18`), both still pre-1.0 on
+2026-09-03 and so churn the crate would have to track. Licence-checked
+candidates for the arithmetic, in `docs/PRIOR_ART.md` as of this filing:
+`num-bigint` (RSA modexp — verification only, so RUSTSEC-2023-0071
+"Marvin", a *private-key* timing channel, does not apply), `p256` /
+`p384` with `default-features = false, features = ["ecdsa"]`, `sha1`.
+**What the working tree says at filing time, which is further than the
+dispatch:** `crates/pdfce-core/src/crypto/bignum.rs` (untracked) opens
+*"Arbitrary-precision unsigned integers for public-key verification
+only"* and argues the dependency stack away — *"twenty-five crates,
+several carrying `unsafe` with cfg-selected constant-time backends … That
+shape exists for a reason that does not apply here: constant-time code
+protects a secret, and verification handles none"* — extending the
+`md5.rs` / `rc4.rs` judgement (frozen, small, safe Rust) to
+verification-side arithmetic **and explicitly not to signing**. So the
+candidates are checked and the tree is going the other way. **No
+decision number is minted here**: the choice is the engineer's and is
+recorded when the Pass ships, with whichever argument survived contact
+with the fuzzer. Rule 13 still applies to any crate that does enter
+`Cargo.toml` (`THIRD_PARTY_LICENSES.md` regenerated).
+
+##### Not in scope, by name
+
+Signing (*Backlog*); trust evaluation beyond reporting the certificate's
+own fields; `adbe.x509.rsa_sha1`; timestamps (RFC 3161); `/DocMDP`
+re-evaluation (already `Pass 3.2`'s `SignatureImpact`); any `pdfceGUI`
+surface — they build the tab read-side now and consume the verdict when
+it exists.
+
+**`docs/FEATURES.md`:** *Planned* row **"Verify a signature's integrity
+and coverage"** added this filing, all boxes unticked; the old combined
+*"signing and verification"* row is split.
+
 **★★ 396th filing, 2026-09-03 — `c0c8dee`: `tools/verify-release.py` now
 FAILS ON A MISSING GITHUB RELEASE AND SKIPS ONLY WHEN `gh` IS ABSENT FROM
 THE MACHINE — DECISION 127's DISARMED MECHANISM IS ARMED; AND
@@ -104103,145 +104592,197 @@ in the "still open" list. Full build record: this file's own
 
 ## Next up
 
-### `Pass 10.1` — **VERIFY AN EXISTING SIGNATURE: INTEGRITY AND COVERAGE AS TWO SEPARATE FACTS, TRUST NAMED `NotChecked`** — inbound `pdfceGUI` request 2026-09-03 08:28, answered 08:41, order committed: THIS FIRST — filed 2026-09-03 (396th filing), **NOT STARTED as a commit; STARTED in the working tree at filing time (see sourcing)**
+### `Pass 247.0` / `247.1` / `247.2` — **THE PRODUCT IS `pdfcer` ("pdf-see-er": create, edit, read); `pdfce` BECOMES ITS PRE-RELEASE CODE NAME. FORK BY CLONE INTO `D:\Dev\pdfcer`, STRIP THE OBSOLETE IN-REPO GUI, RENAME EVERYTHING PRESENT-TENSE, PUBLISH AS `KenM76/pdfcer`; THIS FOLDER AND REPOSITORY STAY AS THE UNTOUCHED BACKUP** — operator request 2026-09-03, filed 397th filing, **decision 128**
 
-**★ Sourcing (hard rule 8).** Shell available. The request:
-`D:\Dev\FeatureRequests\pdfce_FeatureRequests\open\request_a_document_cannot_be_signed.md`
-(3,750 B, 08:28). The reply:
-`reply_signature_integrity_first_then_encryption_and_your_two_sentences.md`
-(4,537 B, 08:41). `git status --short` at filing: **`??
-tools/gen-signed-fixtures.py`** (11,161 B, 08:49), **`??
-fixtures/synthetic/signature-verify/`** (`PROVENANCE.md` + seven PDFs,
-5,291–6,906 B each, 08:49), **`?? crates/pdfce-core/src/crypto/bignum.rs`**
-(13,675 B, 08:52) and **` M crates/pdfce-core/src/crypto/mod.rs`** (+1,
-`pub mod bignum;`) — none committed, none cited by hash, all the
-engineer's in-flight work on this Pass eight minutes after the reply went
-out. Spec corpus: `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__s__12.8.md`
-(dated 2026-07-31, 689 lines) states in its own header *"STILL NOT
-ingested: Table 252's other ~15 entries (`Filter`, `SubFilter`, …),
-§12.8.3's PKCS#1/PKCS#7"* — the ingestion the reply names as this Pass's
-gate is **in flight** (dispatched by the engineer this morning, not
-landed at filing). Crate versions by `cargo info` here: `num-bigint`
-0.5.1 MIT OR Apache-2.0; `p256` / `p384` 0.14.0 Apache-2.0 OR MIT;
-`sha1` 0.11.0 MIT OR Apache-2.0; `cms` **0.3.0-pre.2**; `rsa`
-**0.10.0-rc.18**.
+**Operator, verbatim, two messages.** First, marked *plan only*:
 
-**★ ID.** `Pass 10.0` (`2676d4d`+`2ae9991`, 2026-08-10) shipped
-`signature::byte_range_coverage` + `pdfce-cli list-signatures` — the
-non-cryptographic half. This is the cryptographic half of the same
-question, so **`10.1`**; the family ceiling was `10.0`. Signing is
-**not** this Pass — it stays in the *Backlog* Digital-signatures bucket,
-amended this filing.
+> *"Ideally, I'd like to rename this entire project and strip out the
+> obselete GUI part entirely. I think the safest way to do that would be
+> to make it in a new Dev folder, and this stays in its current state as
+> an obselete backup. I missed a real opportunity when I named this pdfce
+> (short for pdf create edit) when I could have named it pdfcer (pdf
+> create, edit, read, and pronounced pdf-see-er). The cli tool would be
+> named pdfcer (no dashes). Is this hard and complicated to do? I know
+> Windows and such start off with code names, and their projects end up
+> being named something else after release, well I guess our code name
+> for this pre-release might be pdfce!"*
 
-#### What is asked, in the requester's words
+Then, after the librarian's sizing (below): **"Let's do it."**
 
-*"VALIDATE an existing signature … with the three facts separated,
-because they fail independently and an operator needs to know which one
-failed: **integrity** — does the digest over the `/ByteRange` match
-`/Contents`; **coverage** — does the `/ByteRange` cover the whole file,
-or was content appended after signing (you already answer this one);
-**trust** — does the certificate chain up to something, and is it in
-date."* And: *"We would take (1) and (2) alone and be much better off
-than we are — 'the bytes under this signature have not been altered, and
-nothing was appended after it' is a real answer, and it needs no
-certificate store at all. Please do not let the trust question block the
-integrity one."* They will not build it shell-side: *"a GUI that reported
-'valid' from its own arithmetic would be making the one claim in this
-program that must never be wrong."*
+**★ Sourcing (hard rule 8) — the sizing the go-ahead was given on,
+every figure measured here.** `crates/` line counts by `wc -l` over
+`src/**/*.rs`: `pdfce-core` **215,677**, `pdfce-gui` **62,902**,
+`pdfce-render` 50,767, `pdfce-cli` 35,783, `pdfce-print` 7,984,
+`pdfce-fetch` 435 — total **373,548**, the GUI **16.8 %**. `pdfce`
+occurrences (`grep -ro -i`): `crates/` **9,981 in 389 files** (8,344
+outside the GUI crate), `tools/` **4,516 in 208 files**, `.github/` 78
+in 1, `docs/` 17,293 in 79, `README.md` 29, root `Cargo.toml` 35. No
+egui/eframe/wgpu dependency in any manifest but `pdfce-gui`'s (the
+uncommented lines of the other five contain none — the *zero GUI deps*
+CI job has enforced this since Pass 0). **Nine** tool scripts name the
+GUI crate: `check-ci-job-names.py`, `check-outcome-disclosed.py`,
+`check-settings-consumed.py`, `deploy-onedrive.py`,
+`package-portable.py`, `check-disclosure-channel.sh`,
+`check-string-gaps.sh`, `check-theme-colors.sh`, `check-ui-strings.sh`.
+`D:\Dev\pdfceGUI\Cargo.toml` depends on `pdfce-core`/`pdfce-render` **by
+path into `D:\Dev\pdfce`** (its own header: *"D:\Dev\pdfce is READ-ONLY
+for this project"*). Distinct seven-hex hashes cited in `ROADMAP.md` +
+`SESSION_LOG.md`: **2,040** (`grep -oE` + `sort -u`), every one checked
+by `check-cited-commits-exist.py` in CI. Name availability, read-only:
+`crates.io/api/v1/crates/pdfcer` → *"crate `pdfcer` does not exist"*;
+`gh repo view KenM76/pdfcer` → not found; `gh search repos pdfcer` →
+five *PDF-certificate* projects, no `pdfcer`. CLI binary today:
+`[[bin]] name = "pdfce-cli"`.
 
-#### Acceptance criteria (from the request and the reply; the reply is the commitment)
+**★ The one constraint that makes this safe, and it is the reason the
+first step is a clone rather than a new repo.** The ledgers cite 2,040
+commits by hash and CI fails on any cited hash not on `main`. A fresh
+repository kills all of them in one stroke and takes
+`check-commits-filed.py`'s whole-history walk with it. **`git clone` keeps
+every hash, every tag (`v0.5.1`–`v0.27.0`) and every release note.** The
+old folder is never written to — it *is* the backup the operator asked
+for, plus the existing bundles in `D:\Dev\pdfce-backups\`.
 
-1. **`pdfce_core::signature::verify(&graph, index) -> SignatureVerdict`**
-   with three independent enums, none collapsed into a bool:
-   `integrity`, `coverage`, `trust`.
-2. **`integrity`** = the digest over the `/ByteRange` matches the
-   `messageDigest` the signer signed **and** the signature over the
-   signed attributes verifies against the signer's own embedded
-   certificate. A byte flipped inside the signed range and a byte
-   flipped in the CMS signature value are **different failures**
-   (digest vs signature) and are reported as such — the engineer's
-   fixture set already carries one of each (`sig-rsa-tampered.pdf`,
-   `sig-rsa-contents-tampered.pdf`).
-3. **`coverage`** moves into the verdict so one call answers both; the
-   `Pass 10.0` function is not removed. `sig-rsa-appended.pdf` (an
-   incremental `/Info` update after signing) must read integrity PASS /
-   coverage *stops before EOF*.
-4. **`trust = NotChecked` in the first cut, in those words** — no trust
-   store, no chain building, no revocation. The verdict carries the
-   signer's subject and the certificate's validity dates as **reported
-   facts, never a judgement**.
-5. **`SubFilter` coverage:** `adbe.pkcs7.detached`,
-   `ETSI.CAdES.detached` (PAdES), `adbe.pkcs7.sha1`;
-   `adbe.x509.rsa_sha1` **named-unsupported**.
-6. **Algorithms:** RSA PKCS#1 v1.5 and RSASSA-PSS; ECDSA P-256 / P-384;
-   SHA-1 / SHA-256 / SHA-384 / SHA-512. **Anything else is
-   `integrity = Unverifiable { reason }`, never "invalid"** — a
-   fail-closed verdict that names why.
-7. **Spec gate before code:** §12.8.3 (SubFilter semantics, PKCS#1 /
-   PKCS#7 / CAdES encodings) and Table 252's remaining entries ingested
-   by `pdfce-spec-librarian` — *"that is the gate on this Pass, not the
-   code."* Cite the clause in the doc comments (rule 1).
-8. **CLI:** `list-signatures` (or a sibling) prints the three facts per
-   signature, and prints `trust: not checked` rather than omitting it
-   (rule 11 — the CLI prints what it did not do).
-9. **Fixtures** (rule 7): synthetic source document; signatures produced
-   by an **independent** implementation (the tree's generator names
-   pyHanko 0.37.0, MIT, with per-run self-signed certificates and
-   discarded keys), so pdfce's verifier is written from the standard and
-   checked against CMS objects it did not produce — the
-   `gen-encryption-fixtures.py` principle. ★ **Owed before commit, found
-   by reading the untracked tree:** `fixtures/synthetic/signature-verify/PROVENANCE.md`
-   says *"Generated by `tools/gen-signature-fixtures.py`"*; the script
-   beside it is **`tools/gen-signed-fixtures.py`**, and
-   `gen-signature-fixtures.py` is the *other* generator (the `/ByteRange`
-   coverage fixtures). The same stale-path shape the 92nd filing caught
-   in `encryption/PROVENANCE.md`.
-10. **The disclosure sentence** for the Signatures panel, sent verbatim
-    in the reply and to be replaced *with the verb* when this ships:
-    *"pdfce can see that this document is signed and can tell you whether
-    anything was appended after the signature. It does not yet check the
-    signature itself — so it cannot tell you the signed bytes are
-    unaltered, and it cannot tell you who signed it or whether to trust
-    them."* On ship, the first two clauses change and the trust clause
-    stays; the replacement wording goes to `pdfceGUI` with the entry
-    point.
+**★ What is renamed and what is NOT.** Present-tense surfaces rename:
+crate names (`pdfcer-core`, `pdfcer-render`, `pdfcer-cli`,
+`pdfcer-print`, `pdfcer-fetch`), module paths (`pdfcer_core::`), the CLI
+binary (**`pdfcer`**, no dash — the operator's words), the README,
+`ARCHITECTURE.md`, `FEATURES.md`, `LEGAL.md`, `docs/core-api/`, the
+`tools/` scripts, `ci.yml`, the agent files under `.claude/agents/`, the
+project `CLAUDE.md`, and the OneDrive slots (`pdfcer1`/`pdfcer2`, `R229`'s
+mechanism). **History does not rename:** `ROADMAP.md`'s *Shipped*
+blocks, `SESSION_LOG.md`, and §12's dated entries keep `pdfce` as the
+code name they were written under — append-only, and the operator's own
+framing (*"our code name for this pre-release might be pdfce"*). A
+`pdfce` in a dated record is correct; a `pdfce` in a present-tense
+sentence after `247.1` ships is a survivor for the hard-rule-11 sweep.
+**The suite-name gate is unaffected** (it guards a different name).
 
-#### Dependency posture — recorded, not decided
+#### `Pass 247.0` — fork by clone, strip the in-repo GUI, green
 
-The reply's plan and the dispatch to this role: **an in-house minimal
-DER / CMS / X.509 walker (~500 lines, fuzzable)** rather than `cms`
-(`0.3.0-pre.2`) / `rsa` (`0.10.0-rc.18`), both still pre-1.0 on
-2026-09-03 and so churn the crate would have to track. Licence-checked
-candidates for the arithmetic, in `docs/PRIOR_ART.md` as of this filing:
-`num-bigint` (RSA modexp — verification only, so RUSTSEC-2023-0071
-"Marvin", a *private-key* timing channel, does not apply), `p256` /
-`p384` with `default-features = false, features = ["ecdsa"]`, `sha1`.
-**What the working tree says at filing time, which is further than the
-dispatch:** `crates/pdfce-core/src/crypto/bignum.rs` (untracked) opens
-*"Arbitrary-precision unsigned integers for public-key verification
-only"* and argues the dependency stack away — *"twenty-five crates,
-several carrying `unsafe` with cfg-selected constant-time backends … That
-shape exists for a reason that does not apply here: constant-time code
-protects a secret, and verification handles none"* — extending the
-`md5.rs` / `rc4.rs` judgement (frozen, small, safe Rust) to
-verification-side arithmetic **and explicitly not to signing**. So the
-candidates are checked and the tree is going the other way. **No
-decision number is minted here**: the choice is the engineer's and is
-recorded when the Pass ships, with whichever argument survived contact
-with the fuzzer. Rule 13 still applies to any crate that does enter
-`Cargo.toml` (`THIRD_PARTY_LICENSES.md` regenerated).
+1. `git clone D:\Dev\pdfce D:\Dev\pdfcer` (local clone; `origin` stays
+   `KenM76/pdfce` until `247.2` re-points it). `git config
+   core.hooksPath tools/hooks` in the clone — `run-gates.sh` goes red
+   without it (`c0c8dee`).
+2. Delete `crates/pdfce-gui`; drop it from `[workspace] members`; drop
+   every dependency only it pulled (egui/eframe/wgpu/accesskit and the
+   rest — verify by `cargo tree` before/after, not by reading the
+   manifest); regenerate `THIRD_PARTY_LICENSES.md` (`cargo-about`, rule
+   13) and diff the licence set.
+3. Retire or re-point the nine GUI-targeting gates. The four that only
+   ever read `crates/pdfce-gui` (`check-ui-strings.sh`,
+   `check-theme-colors.sh`, `check-string-gaps.sh`,
+   `check-disclosure-channel.sh`) are **deleted with their CI steps and
+   their `check-ci-parity.py` rows** — a gate over a directory that no
+   longer exists is `a_gate_that_fails_for_a_locator_reason…`; the five
+   that also read other crates (`check-outcome-disclosed.py`,
+   `check-settings-consumed.py`, `check-ci-job-names.py`,
+   `package-portable.py`, `deploy-onedrive.py`) lose their GUI branch.
+   The *zero GUI deps* CI job **stays** — it is the invariant, not the
+   crate; it becomes trivially green and that is the point.
+4. `docs/FEATURES.md`: the header's ownership statement (*"`crates/
+   pdfce-gui` is paused and not yet removed"*) becomes *removed in `Pass
+   247.0`*; the `gui` column is unchanged — it has tracked
+   `D:\dev\pdfceGUI` since decision 073. `ARCHITECTURE.md` §3 loses the
+   crate; §6's packaging loses `pdfce-gui.exe`.
+5. Acceptance: `cargo build --workspace`, `cargo test --workspace`,
+   `cargo fmt --check`, `cargo clippy -D warnings`, `tools/run-gates.sh`
+   all green in the clone; `cargo tree -p pdfce-core` / `-p pdfce-render`
+   GUI-free (rule 2); test total recorded beside the pre-strip total so
+   the difference is the GUI's own tests and nothing else. The
+   `ui_specs/` folder stays — it is history and pdfceGUI's reference.
 
-#### Not in scope, by name
+#### `Pass 247.1` — the rename
 
-Signing (*Backlog*); trust evaluation beyond reporting the certificate's
-own fields; `adbe.x509.rsa_sha1`; timestamps (RFC 3161); `/DocMDP`
-re-evaluation (already `Pass 3.2`'s `SignatureImpact`); any `pdfceGUI`
-surface — they build the tab read-side now and consume the verdict when
-it exists.
+1. One mechanical, case-preserving pass over the clone: `pdfce-` →
+   `pdfcer-`, `pdfce_` → `pdfcer_`, bare `pdfce` → `pdfcer` in
+   present-tense files; **`docs/ROADMAP.md`, `docs/SESSION_LOG.md`,
+   `ARCHITECTURE.md` §12 and `docs/decisions/` excluded** (history). The
+   CLI binary becomes `[[bin]] name = "pdfcer"`; `--version` prints
+   `pdfcer 0.28.0`. Crate directories renamed to match. `Cargo.lock`
+   regenerated and read — eight `pdfce*` stanzas become `pdfcer*`.
+2. Every `tools/` script and `ci.yml` step re-pointed (208 files carry
+   the name); `check-ci-parity.py` and `check-ci-job-names.py` are the
+   gates that catch a missed one. `deploy-onedrive.py` → `pdfcer1` /
+   `pdfcer2`; `verify-release.py`'s OneDrive and GitHub checks follow.
+3. `D:\Dev\pdfceGUI\Cargo.toml`: path dependencies re-pointed to
+   `D:\Dev\pdfcer` and the new crate names — **a change in the other
+   project, filed through its own channel**, not silently from here.
+   Whether `pdfceGUI` itself renames is the operator's call, asked as
+   open question **(cd)** below.
+   *(cd) answered the same session: it renames to `pdfcer-gui` at
+   `D:\dev\pdfcer-gui`, in its own session, by its own engineer; this step is a notification through the
+   channel, plus agreeing the crate names and folder before either side
+   switches its path dependency.*
+4. Hard-rule-11 sweep for the CLAIM *"this product is called pdfce"* in
+   present-tense prose — README, core-api, `--help` strings, error
+   messages, `LEGAL.md`, the agent files — searched by the bare keyword
+   over the present-tense file set, hits that are dated history reported
+   as correct survivors.
+5. Acceptance: the same green set as `247.0`; `pdfcer --version`;
+   `pdfcer inspect` on a fixture; the portable package builds and passes
+   the fresh-folder smoke test as `pdfcer`.
 
-**`docs/FEATURES.md`:** *Planned* row **"Verify a signature's integrity
-and coverage"** added this filing, all boxes unticked; the old combined
-*"signing and verification"* row is split.
+#### `Pass 247.2` — publish, archive, release
+
+1. `gh repo create KenM76/pdfcer --public`; `git remote set-url origin`
+   in the clone; push `main` **with tags** (`--tags` — the release line
+   `v0.5.1`–`v0.27.0` travels). **Standing authority covers pushing
+   `main` and cutting a release (decisions 090, 121); it does NOT cover
+   creating a repository or archiving one** — both are acts outside the
+   working tree, and the operator's *"Let's do it"* was given on a plan
+   that named them, so they are authorised **for this Pass only**, not
+   standing.
+2. `KenM76/pdfce`: archived (read-only on GitHub), its README's head
+   pointing at `KenM76/pdfcer` — one commit, made in the old folder,
+   the only write that folder ever receives after the clone. Old
+   release pages stay where they are; nothing is moved.
+3. First release under the new name: **`v0.28.0`**, continuing the
+   version line (a rename is not a reset — the tags are the same
+   history), with decision 127's GitHub release and `R229`'s OneDrive
+   deploy into `pdfcer1`/`pdfcer2` (the old `pdfce1`/`pdfce2` folders
+   left in place, untouched, as the operator's previous-version copies).
+4. `verify-release.py v0.28.0` green on every check, including the two
+   OneDrive checks against the new slot names.
+5. The global `C:\Users\Ken\.claude\CLAUDE.md` references `D:\Dev\pdfce\`
+   (project agents, the RAG list) — **flagged for the operator, not
+   edited by any agent**. A new folder also means a fresh auto-memory
+   directory (`~/.claude/projects/D--Dev-pdfcer`); the in-repo
+   `.claude/agent-memory/` travels with the clone.
+
+**Sequencing, and why this order.** Strip first, rename second, publish
+last: each step is green before the next starts, and a failure in the
+rename cannot be confused with a failure in the strip. The rename is the
+widest change (14,500 occurrences in code and tools) and the strip is the
+deepest (a crate and nine gates); doing the narrow-deep one first means
+the wide-shallow one runs over a smaller tree.
+
+**Not this Pass:** anything in `D:\dev\pdfceGUI` beyond the path
+re-point; a `pdfcer` crates.io publication (never published; not asked);
+rewriting any dated record.
+
+**Open operator question (cd):** does `pdfceGUI` rename too
+(`pdfcerGUI` was the guess; the operator chose `pdfcer-gui`), and does its request channel folder
+(`D:\Dev\FeatureRequests\pdfce_FeatureRequests`) follow? Default if
+unanswered: neither renames in `247.x`; the path re-point is the only
+change made there.
+*ANSWERED 2026-09-03, same session, operator verbatim:* **"yes pdfcerGUI
+is getting the rename too and is being taken care of in a different
+session by its engineer agent."** Then, with the go-ahead: **"FYI decided
+on the other repo being named pdfcer-gui and in d:\dev\pdfcer-gui"**.
+So: `pdfceGUI` → **`pdfcer-gui`**, folder **`D:\dev\pdfcer-gui`**, done
+by its own engineer in its own session — **not by `247.x`**. Consequences
+for this side: `247.1` step 3 shrinks to *tell that session the new path
+and crate names through the request channel*; the two sessions must
+agree on the crate names (`pdfcer-core`, `pdfcer-render`) and the folder
+(`D:\Dev\pdfcer`) and its (`D:\dev\pdfcer-gui`) before either project's path dependency is switched,
+or one build breaks on the other's rename — the sequencing note is in
+this Pass, and the channel folder's own rename is that session's. The
+`gui` column of `FEATURES.md` reads *`D:\dev\pdfcer-gui`* from `247.1` on.
+
+**`docs/FEATURES.md`:** no row — a rename and a crate removal are not
+capabilities. The header's ownership sentence changes when `247.0` ships,
+in that filing.
 
 ### `Pass 5.4` — **ENCRYPT ON SAVE, `/R` 6 / AES-256 ONLY: `set_encryption`, `set_permissions`, `remove_encryption` (OWNER-AUTHENTICATED, REFUSED BY NAME OTHERWISE)** — inbound `pdfceGUI` request 2026-09-03 08:27, answered 08:41, order committed: SECOND, after `Pass 10.1` — filed 2026-09-03 (396th filing), **NOT STARTED**
 
@@ -104267,6 +104808,33 @@ sub-ID was ever minted. **`5.4`** is minted for the fourth increment and
 the first write-side one; **`5.1`–`5.3` are deliberately left unminted**
 (hard rule 2 is about reuse, not gaps; naming the shipped increments
 after the fact would put IDs into records that were filed without them).
+
+**★ Spec-side note, added at the 398th filing (2026-09-03, `Pass 10.1`
+shipped, `22421b6`) — two corrections OWED on the spec side that this
+Pass's writer must honour, from `pdfce-spec-librarian`'s
+`iso32000__ref__signature_verification.md` (trap 7 / `SI-G4`), owed to
+`iso32000__s__7.6.1.md` and `iso32000__ref__encryption_impl.md` and not
+yet made there.** (1) **A signature's `/Contents` string is NEVER
+encrypted** — ISO 32000-1 §7.6.1's exception list omits it; ETSI EN 319
+142-1 §5.5 supplies the bullet for the 1.7 baseline and ISO 32000-2
+§7.6.2 adds it for 2.0 — so criterion 6's never-encrypted list (`N13`)
+is right and the corpus's own §7.6.1 file is the one that is short.
+(2) **Encryption is applied BEFORE any signature is incorporated**
+(ETSI EN 319 142-1 §5.5, verbatim in the consolidator: *"encryption
+shall be applied to its content before any signature is incorporated
+into it"*) — the signer signs the CIPHERTEXT, and `Pass 10.1`'s verifier
+therefore hashes the file bytes as they are and never decrypts on the
+verification path. **Consequence for this Pass:** a full-rewrite
+encrypt of an already-signed document re-encrypts every string and
+stream the signature covered and so **breaks the signature by
+construction** (§5.5's forced-incremental conflict, now from the
+encryption side); `set_encryption` on a signed document must be
+**refused by name or disclosed as signature-destroying**, never silent —
+the same either/or `ARCHITECTURE.md` §5.5 already states for redaction.
+Add it to criterion 6's proof: encrypt → `verify-signatures` on the
+output must report what happened to every prior signature. The
+spec-side files are `pdfce-spec-librarian`'s to correct (hard rule 6);
+dispatch it before this Pass's writer is designed.
 
 **★ Premise corrected at filing, and it changes the gate on this Pass.**
 The *Backlog* bucket, `docs/FEATURES.md`'s Encryption row and every
@@ -122502,6 +123070,16 @@ added. See that section below.
   *Planned* row *"Digital signatures — PKCS#7/PAdES signing and
   verification"* is replaced by two rows, *verify* and *sign*, both
   unticked.
+  **★ `Pass 10.1` SHIPPED 2026-09-03, `22421b6` (398th filing):**
+  integrity + coverage + `trust = NotChecked`, all in-crate (decision
+  129). What this bucket still owns is unchanged by the ship: signing,
+  PAdES B-B/B-T/B-LT/B-LTA, RFC 3161, and the **trust** leg — and now
+  also the naming of the composite verdict, which stays pdfce's own
+  (`Verified` / `DigestMismatch` / `SignatureInvalid` / `Unverifiable`)
+  until ETSI EN 319 102-1 is ingested (`PB-G1`, `SV-A5` deferred) —
+  `TOTAL-PASSED` / `TOTAL-FAILED` / `INDETERMINATE` are that standard's
+  words and are not to be borrowed before it is read. Signing also needs
+  EN 319 122-1, **not staged** (`SI-G2`).
 - **Encryption** — standard security handler, RC4 (legacy read-compat
   only, never write), AES-128/256, public-key (certificate) security
   handler. **Updated 2026-07-31 by decision 007 (Pass 5 in its
