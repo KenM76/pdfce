@@ -6668,6 +6668,21 @@ instances (`delete_object`, `delete_redaction_mark`, and now
   opens and renders a fixture PDF. This is the packaging equivalent of
   MatExtractor's "smoke-import MainWindow" rule — don't claim a
   packaging pass done without actually running the copied folder.
+- **Release channels (decision 127, 2026-09-03; `R229`, 2026-08-29).** A
+  release is finished when the packaged folder has reached **both**
+  channels, in this order after the tag and the smoke test: the CLI to
+  OneDrive, alternating `pdfce1`/`pdfce2` so a previous version survives
+  (`tools/deploy-onedrive.py`, `R229`); then a **GitHub release for the
+  tag with the portable zip as its asset, marked latest** (`gh release
+  create <tag> <zip> --latest`, decision 127); then
+  `tools/verify-release.py <tag>` green. The two channels serve different
+  readers — OneDrive is the operator's CLI, GitHub is everyone else's full
+  folder and the offsite copy of the build — and neither is a `git
+  bundle`. Nine versions (`v0.18.0`–`v0.26.0`) reached only OneDrive
+  because the recipe did not name the second channel; decision 127 exists
+  so that cannot recur by omission, and `verify-release.py`'s
+  GitHub-release check is owed a `FAIL` (not `skip`) on a missing release
+  so it cannot recur by habit either.
 
 ## 7. CLI capabilities (`pdfce-cli`)
 
@@ -30011,6 +30026,16 @@ not proposed as a new standing rule — see this role's report).
   is unchanged, next free `R240`. **Ceiling moves `120` → `121`; next free
   `122`.**
 
+  > ★ **Cross-reference 2026-09-03 (395th filing, decision 127).** The
+  > release act this decision authorises — *"version bump, tag, package,
+  > deploy"* — has one more step than this text names: **a GitHub release
+  > with the portable zip as its asset**, on the operator's 2026-09-03
+  > instruction. The grant above is unchanged; the recipe is stated in
+  > full under decision 127. Between this decision and that one, nine
+  > versions (`v0.18.0`–`v0.26.0`) were released without a GitHub page,
+  > because this recipe did not name it and `verify-release.py` reported
+  > its absence as a `skip`.
+
 ### 2026-09-02 (378th filing) — decision 122: **A RENDER-PRESET AXIS THE STANDARD DOES NOT REACH STILL DEFAULTS TO `LeaveAlone` — EXCEPT WHERE THE VALUES RENDER VISIBLY DIFFERENTLY AND THE STANDARD'S OWN LABEL CREATES AN EXPECTATION AN UNPINNED CONTROL WOULD SILENTLY DEFEAT; `PDF/X` NOW PINS `SpotColorantDeviceModel` AT TIER `Implied`**
 
 **(librarian filing, 378th, no shell — relayed by the engineer, `Pass 237.0`,
@@ -30536,3 +30561,113 @@ because core cannot rasterise — the boundary held rather than bent.
 **Decision ceiling moves `125` → `126`; next free `127`.** **Standing rules
 ceiling `R240` — unchanged**, next free `R241`; no rule minted this filing
 (the decline is argued in `ROADMAP.md`'s 391st-filing *Shipped* block).
+
+### 2026-09-03 (395th filing) — decision 127: **"PUSH THE CURRENT RELEASE'S SOURCE AND RELEASE TO GITHUB" — A GITHUB RELEASE WITH THE PORTABLE ZIP AS ITS ASSET IS A STEP OF THE RELEASE ACT, EVERY RELEASE, FROM `v0.27.0` ON. DECISION 121'S RECIPE GAINS THAT ONE STEP; ITS GRANT OF AUTHORITY IS UNTOUCHED. THE OBLIGATION'S MECHANISM EXISTS AND IS DISARMED — `verify-release.py` PRINTS `skip`, NOT `FAIL`, FOR A MISSING RELEASE — AND ARMING IT IS THE OWED HALF**
+
+**(librarian filing, 395th. Shell available: `gh release list` → `v0.27.0`
+`Latest`, published `2026-09-03T12:15:02Z`, preceded by `v0.17.0` of
+`2026-08-30`; `gh release view v0.27.0 --json assets` → one asset,
+`pdfce-v0.27.0-windows-x64.zip`, 25,281,588 bytes, byte-identical to
+`D:\builds\pdfce-v0.27.0-windows-x64.zip` by `ls -l`; `python
+tools/verify-release.py v0.27.0` → `ok GitHub release has at least one
+asset`. The instruction and the act are the engineer's report; the
+reading of the instruction as standing is his and is adopted here.)**
+
+**The ruling, verbatim.** Ken, 2026-09-03, mid-session, while the engineer
+was working toward the next release:
+
+> *"while you are working on the new relase please push the current
+> releases source and release to github!"*
+
+**What was done on it, immediately.** The *source* half was already true:
+`main` was on `origin` at `68163a2` and tags `v0.26.0`/`v0.27.0` were on
+`origin`. The *release* half was not — no GitHub release had been created
+for any version after `v0.17.0`, nine versions (`v0.18.0`–`v0.26.0`) tagged
+and deployed to OneDrive with no release page — so `gh release create
+v0.27.0 <zip> --latest` was run, the zip a `Compress-Archive` of the
+packaged folder `D:\builds\pdfce-20260903-0717-dfce8a9` (49,338,217 bytes;
+the zip is 51.2 % of it), with notes covering `v0.18.0`–`v0.27.0` and
+naming the nine as OneDrive-only.
+
+**What it decides.** **Every release gets a GitHub release with the
+portable zip as its asset.** The release act decision 121 authorised —
+*"version bump, tag, package, deploy"* — is, in full and in order:
+
+1. version bump and tag (decision 121);
+2. package (`tools/package-portable.py`) and the fresh-folder smoke test
+   (§6);
+3. deploy the CLI to OneDrive, alternating slots (`R229`);
+4. **GitHub release for the tag, the portable zip attached, marked
+   latest** (this decision);
+5. `tools/verify-release.py <tag>` green on every check.
+
+A release missing step 4 is unfinished in the same sense a release missing
+step 3 has been unfinished since `R229`.
+
+**Why this is a decision and not an amendment to 121.** Decision 121 is a
+grant of *authority*: the engineer need not ask before releasing. This is
+an *obligation*: the engineer must do one more thing when releasing. The
+two are different kinds of content and would blur inside one record — a
+reader of 121's *"version bump, tag, package, deploy"* would still not see
+the step, and **that omission is how the gap opened**: 121's recipe never
+named the GitHub release, `verify-release.py` reported its absence as
+`skip GitHub release -- gh unavailable or not authenticated`, the
+engineer's dispatches read that line as tool trouble (the 391st filing's
+premise, verbatim: *"the script's `gh` subprocess reports unavailable, as
+it has since v0.18.0"*), and the release records before the 391st did not
+mention the check at all — by grep of both ledgers — while nine versions
+shipped without a page. `R229`'s own warning applied exactly: *an
+instruction that survives on narrative stops the moment no session repeats
+it.* The 391st filing caught it by reading the script instead of the
+message; the operator's sentence, three filings later, settled it.
+
+**Why not a standing-rule number.** `R229` carried the OneDrive obligation
+as a rule because it shipped with a mechanism that checks it. Here the
+mechanism **exists and is disarmed**: `tools/verify-release.py:202–203`
+turns a non-zero `gh release view` into a `skip` — the same branch for
+"`gh` not installed" and "no release for this tag". **A mandated step whose
+absence prints `skip` is enforced by nobody.** That is `R241`'s argument
+(394th filing) one act further along the same recipe, and `R241`'s
+disposition applies: once the check fails closed, the gate is the rule and
+a number beside it would be a second copy. So: **owed — `verify-release.py`
+must `FAIL` on a not-found release and say `gh` is unavailable only when it
+is** (the 391st filing's owed message fix, now load-bearing rather than
+cosmetic). Until then the obligation rests on this record and the
+engineer's memory, which is the state this project has three instances of
+not surviving.
+
+**Read narrowly, on the 090/121 warrant, and the narrowing is part of the
+ruling.** The sentence covers the GitHub half of the release act for the
+current and future releases. It does **not**:
+
+1. authorise backfilling release pages for `v0.18.0`–`v0.26.0` — not
+   asked; the engineer folded their notes into `v0.27.0`'s body, which is
+   recorded here as the disposition of the gap;
+2. touch decision `090`'s or `121`'s exclusions — `--force`, non-`main`
+   branches, remote refs other than the release tag;
+3. relax any gate — a release page is a public claim that a state is fit
+   to use (decision 090's own reasoning), so it comes *after* green gates
+   and the smoke test, never instead of them; `check-shipped-assets.py`'s
+   licence enforcement applies to what the zip carries (`LEGAL.md` §1.1:
+   the repository is public, so an asset publishes).
+
+**Closes `ROADMAP.md` open question (391st filing):** *"decide whether
+`v0.18.0`–`v0.26.0` should get GitHub release pages or whether OneDrive is
+the release channel now."* **Both are channels, for different readers.**
+OneDrive carries the CLI for the operator, two slots, previous version
+preserved (`R229`). GitHub carries the whole portable folder for anyone
+else and is the offsite copy of the build (the `v0.9.0` release record's
+*"a GitHub release is an offsite copy of one build and one PDF asset — it
+is not a `git bundle`"*, `ROADMAP.md`, 2026-08-25). Neither substitutes
+for the `git bundle` backup.
+
+**Body-section counterpart, filed in this same edit:** §6 (*Packaging*)
+gains a *release channels* bullet naming both channels and the order.
+**`CLAUDE.md` rule 8**'s recipe sentence — *"So: cut the tag, package,
+smoke-test, deploy to OneDrive, no per-release go-ahead"* — is one step
+short and is outside this role's tiers; flagged for the engineer, as
+decision 121 flagged the same sentence.
+
+**Decision ceiling moves `126` → `127`; next free `128`.** **Standing rules
+ceiling `R241` — unchanged**, next free `R242`; no rule minted (argued
+above).

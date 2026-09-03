@@ -96,6 +96,487 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 395th filing, 2026-09-03 — `v0.27.0` IS ON GITHUB AS A RELEASE WITH
+THE PORTABLE ZIP AS ITS ASSET, ON A MID-SESSION OPERATOR INSTRUCTION READ
+AS STANDING — DECISION **127**: EVERY RELEASE FROM NOW ON GETS A GITHUB
+RELEASE, AND THE RECIPE DECISION 121 AUTHORISED GAINS THAT ONE STEP. THE
+391st FILING'S OPEN "RELEASE-PAGE QUESTION" IS CLOSED. ★ `f23543e`: THE
+`R241` MECHANISM IS BUILT — `tools/hooks/pre-push` RUNS THE THREE
+PUBLIC-FACING GATES UNDER `git push`, `run-gates.sh` REPORTS WHETHER THE
+HOOK IS ACTIVE, AND THE FILING GATE MOVES TO THE END OF CI'S AUDITS JOB;
+`R241`'s OWED ITEM IS RESOLVED. ★★ TWO PREMISES CORRECTED FROM THE SHELL:
+`origin/main` IS NOT `68163a2` — THE OPERATOR COMMITTED A README EDIT ON
+GITHUB'S WEB EDITOR (`c1e4c17`) ONE MINUTE AFTER `f23543e` WAS COMMITTED
+LOCALLY, SO `main` HAS DIVERGED (1 AHEAD / 1 BEHIND) AND THE NEXT PUSH
+NEEDS A MERGE FIRST — A MERGE, NOT A REBASE, BECAUSE `f23543e` IS CITED BY
+HASH IN THIS FILING; AND `check-commits-filed.py` IS RED ON `f23543e`
+UNDER `--strict-tip` UNTIL THIS FILING LANDS.**
+
+**Sourcing (hard rule 8).** Shell available; every figure below produced
+here, command beside it. `gh release list --limit 4` → **`v0.27.0`,
+`Latest`, published `2026-09-03T12:15:02Z`**; the row beneath it is
+`v0.17.0`, `2026-08-30T14:00:25Z` — so the release-page gap the 391st
+filing recorded (`v0.18.0`–`v0.26.0`, **nine versions over four days**)
+closes at `v0.27.0` without being backfilled. `gh release view v0.27.0
+--json assets,targetCommitish,body` → one asset,
+**`pdfce-v0.27.0-windows-x64.zip`, 25,281,588 bytes**, target `main`;
+the body's first sentence states the nine OneDrive-only versions plainly.
+`ls -l /d/builds/pdfce-v0.27.0-windows-x64.zip` → 25,281,588 bytes,
+08:14 local, matching the asset byte-for-byte; the packaged folder it was
+zipped from, `D:\builds\pdfce-20260903-0717-dfce8a9`, is the 392nd
+filing's **49,338,217 bytes** — **the zip is 51.2 % of the folder**
+(25,281,588 / 49,338,217). `git rev-parse v0.27.0` = `dfce8a9`; `git
+ls-remote --tags origin` carries `v0.25.0`, `v0.26.0`, `v0.27.0`. `python
+tools/verify-release.py v0.27.0` → **`ok GitHub release has at least one
+asset`** (the line that read `skip` for nine versions), every other check
+`ok`, **one `FAIL`: *working tree clean* — 4 uncommitted paths**, which
+are the 394th filing's edits, the engineer's memory file and
+`NEXT_SESSION.md`, i.e. this dispatch's own working tree, not a release
+defect. `git show f23543e --stat` → 3 files, **+85 / −13**:
+`.github/workflows/ci.yml` (+20 / −13), `tools/hooks/pre-push` (**+53**,
+new, 2,492 bytes, mode `755`), `tools/run-gates.sh` (+12). `git config
+core.hooksPath` → **`tools/hooks`** on this clone. `grep -n "name:"
+.github/workflows/ci.yml` → *"check that every code commit is filed"* is
+the **last** named step of `repository audits (22 checks)` (line 605);
+the job header still says `22 checks`. `python
+tools/check-control-bytes.py` → **`clean -- 916 text file(s)`** — the
+394th filing measured **915**, and **916 − 915 = 1 = `tools/hooks/pre-push`**
+(suffixless, so classified by content). `python
+tools/check-suite-name-absent.py` → clean, exit 0. `python
+tools/check-commits-filed.py` (default, tip-deferring by `R217`) → clean,
+**779 code commits, 5 in the baseline**; **`--strict-tip` → exit 1, *"1
+code commit(s) are in no filing"* — `f23543e`**, which this filing files.
+`python tools/check-ledger-numbers.py` → clean; filings ceiling `394`, so
+this is the **395th**; decision ceiling `126`, so **`127` is free** and
+is minted below; rules ceiling `R241`, unchanged. **`git fetch origin` →
+`68163a2..c1e4c17 main -> origin/main`; `git ls-remote origin main` =
+`c1e4c17`**; `git rev-list --left-right --count main...origin/main` =
+**`1 1`** — local `main` is `f23543e` on top of `68163a2`, `origin/main`
+is `c1e4c17` on top of `68163a2`. `git show c1e4c17 --format=…` →
+author *Ken Mantle*, **committer `GitHub <noreply@github.com>`**,
+`2026-09-03T08:23:50-04:00` (= `12:23:50Z`), *"Revise README to indicate
+GUI project separation"*, `README.md` only, +8 / −3 — a web-editor commit;
+`f23543e` is `2026-09-03T08:22:50-04:00`, **sixty seconds earlier**. `gh
+run view 33754966176` (CI at `c1e4c17`, created `12:23:52Z`, in progress):
+`repository audits (22 checks)` **`completed failure`** at *"check that
+every code commit is filed"* (job step 6, the fourth check — CI at that
+commit runs the **old** `ci.yml`), **18 checks `skipped`** (steps 7–24);
+fmt, clippy, no-network, GUI-deps, cross-target, licence audit and fuzz
+build all `completed success`; both `cargo test` jobs `completed
+success` by the end of this filing — the run's only red is the audits
+job, so the run concludes **`failure`** on the expected filing-gate red
+alone. **Relayed, not re-run:** `git push --dry-run` exercising all three hook
+gates; `check-ci-job-names.py` and `check-ci-parity.py` green. **Not
+touched:** `docs/NEXT_SESSION.md`, the channel folder, and the engineer's
+memory files (`git status --short` shows
+`feedback_a_chore_commit_between_two_filings_is_unfiled.md` modified —
+his tier). Backup bundle currency: not asked; the 392nd filing's
+`pdfce-2026-09-03-dfce8a9-full.bundle` is the newest known here, stated
+as unverified against the directory.
+
+**Premises corrected by that check — two, both about the remote:**
+
+1. **`origin/main` is `c1e4c17`, not `68163a2`.** The dispatch's figure
+   was true when the engineer measured it and false by the time this
+   filing looked: the operator edited `README.md` in GitHub's web editor
+   at `12:23:50Z`, which commits directly to `origin/main` and runs **no
+   local hook** — the one route to the public tree that `R241`'s
+   mechanism cannot see, and the one the record now has an instance of.
+   **Consequence for the engineer:** the next `git push` is a
+   non-fast-forward and will be **refused by git itself**, before the
+   hook runs. The remedy is `git pull --no-rebase origin main` (a merge
+   commit — precedent `269e4e0`, `ab3fd25`), **not `--rebase`**: a rebase
+   would re-hash `f23543e`, which this filing cites by exact hash at the
+   engineer's instruction, and `check-cited-commits-exist.py` would then
+   fail on a hash that is on no branch — the `0d9f4df` casualty class.
+   Never `--force` (decision `090`'s standing exclusion). The merge does
+   not re-hash anything already cited.
+2. **`check-commits-filed.py` is red on `f23543e` under `--strict-tip`**
+   — expected by `R217` and stated so it is not read from the default
+   run's `clean`. This filing is what turns it green.
+
+**What `c1e4c17` says, because it is a public-facing claim the record
+should carry.** The README's head now reads that the GUI *"has been moved
+into it's own pdfceGUI project"*, that the in-repo one is *"obselete"*
+and not to be used, and gives **`https://github.com/KenM76/pdfceGUI`** —
+the first time that URL appears anywhere in this repository (`grep -rn
+KenM76/pdfceGUI docs/ README.md` on the pre-merge tree returns nothing).
+Nothing in it is new to the record — `crates/pdfce-gui` has been paused
+since 2026-08-13 and `docs/FEATURES.md`'s `gui` column has tracked
+`D:\dev\pdfceGUI` since decision `073` — so **`FEATURES.md` is untouched**;
+what is new is that the replacement is public. Two spellings in the
+operator's own text (*it's*, *obselete*) are on the public front page;
+the engineer's call whether to touch a sentence the operator wrote.
+
+### The operator's instruction, verbatim, and what was done on it
+
+> *"while you are working on the new relase please push the current
+> releases source and release to github!"*
+
+**Acted on immediately (engineer, relayed and confirmed above):** the
+*source* half was already true — `main` was on `origin` at `68163a2` and
+tags `v0.26.0`/`v0.27.0` were on `origin` — so nothing was pushed for it.
+The *release* half was not: `gh release create v0.27.0
+D:\builds\pdfce-v0.27.0-windows-x64.zip --latest`, the zip a
+`Compress-Archive` of the packaged folder, title *"pdfce v0.27.0 -
+redaction removes everything under a mark: images destroyed, vector
+paths cut"*, notes covering `v0.18.0`–`v0.27.0` with the nine
+OneDrive-only versions named as such. **The engineer read the
+instruction as STANDING** — every release from now on gets a GitHub
+release with the portable zip as its asset — and asked for it to be
+recorded as a decision. **Filed as decision 127**, not as an amendment to
+121; the argument is in `ARCHITECTURE.md` §12 and summarised here.
+
+#### Decision **127** — the GitHub release is a step of the release act, not an optional coda
+
+- **What it requires.** The release recipe decision `121` authorised —
+  *bump, tag, package, smoke-test, deploy to OneDrive* — gains one step
+  and becomes: **bump → tag → package → fresh-folder smoke test → deploy
+  to OneDrive (`R229`) → GitHub release with the portable zip as its
+  asset → `verify-release.py`.** A release with no GitHub page is not
+  finished, the same way one with no OneDrive deploy has not been since
+  `R229`.
+- **Why a decision and not a footer on 121.** `121` is a grant of
+  *authority* (the engineer need not ask); this is an *obligation* (the
+  engineer must do). A footer would fold "may" into "must" inside one
+  record, and the next reader of 121's *"version bump, tag, package,
+  deploy"* would still not find the step — which is exactly how the gap
+  opened: 121's own recipe never named the GitHub release, and nine
+  versions went by without one while the engineer's dispatches read the
+  `verify-release.py` skip line as tool trouble (the 391st filing's
+  premise, verbatim: *"the script's `gh` subprocess reports unavailable,
+  as it has since v0.18.0"*) and the release records before the 391st
+  did not mention the check at all — by grep of both ledgers.
+- **Why not a standing-rule number.** `R229` minted the OneDrive
+  obligation as a rule because it came with a mechanism
+  (`deploy-onedrive.py` + two `verify-release.py` checks) that makes the
+  obligation checkable. The GitHub-release obligation's mechanism
+  **exists but is disarmed**: `verify-release.py:202–203` turns a
+  missing release into a `skip`, not a `FAIL` — the message the 391st
+  filing found mislabelled. **A mandated step whose absence prints
+  `skip` is enforced by nobody**, which is `R241`'s argument one act
+  later in the same recipe. So the number that would carry this is the
+  gate's own exit code, once it fails closed — **owed, below** — and
+  `R241`'s disposition applies: the mechanism is the rule.
+- **Read narrowly, on the 090/121 warrant.** The sentence covers the
+  release act's GitHub half. It does **not** authorise backfilling
+  release pages for `v0.18.0`–`v0.26.0` (not asked; the engineer folded
+  their notes into `v0.27.0`'s body instead, which is recorded and
+  sufficient), and it touches none of `090`/`121`'s exclusions —
+  `--force`, non-`main` branches, remote refs other than the release tag,
+  skipping the gates. A release still owes green gates and a smoke test
+  before its page exists.
+- **Closes the 391st filing's open question** (*"decide whether
+  `v0.18.0`–`v0.26.0` should get GitHub release pages or whether OneDrive
+  is the release channel now"*): **both are the channel.** OneDrive
+  carries the CLI for the operator (`R229`); GitHub carries the full
+  portable folder for everyone else and is the offsite copy of the
+  build. The nine-version gap stays as a gap, described in `v0.27.0`'s
+  notes.
+- **Decision ceiling `126` → `127`; next free `128`.** Body-section
+  counterpart: `ARCHITECTURE.md` §6 gains a release-channels bullet.
+  **`CLAUDE.md` rule 8's recipe sentence** (*"So: cut the tag, package,
+  smoke-test, deploy to OneDrive, no per-release go-ahead"*) is now one
+  step short — flagged for the engineer, as decision 121 flagged the same
+  sentence; not this role's file.
+
+### `f23543e` (2026-09-03) — `tools/hooks/pre-push` + the hook-active line + the filing gate LAST in CI: `R241` clauses 1 and 2 built, clause 3 lapses, clause 4 in force
+
+**What shipped, from `git show f23543e`.** A tracked `pre-push` hook
+that runs `check-suite-name-absent.py`, `check-commits-filed.py` and
+`check-control-bytes.py` **bare**, in a `for` loop that exits `1` on the
+first refusal and prints which gate refused and that `--no-verify` is the
+bypass — *"if you type that, say so in the next filing."* Active per
+clone via `git config core.hooksPath tools/hooks` (set here; `git push
+--dry-run` ran all three first — relayed). Deliberately **only those
+three** — the ones whose failure is public the moment a push lands — with
+the reason in the hook's own header: *a pre-push hook that takes minutes
+gets `--no-verify`'d out of habit, and then guards nothing.*
+`tools/run-gates.sh` prints **`pre-push hook: ACTIVE`** or **`NOT ACTIVE
+-- run: git config core.hooksPath tools/hooks`** on every sweep, because
+git config is unversioned and a fresh clone has no hook. And `ci.yml`:
+*"check that every code commit is filed"* moves from the sixth step of
+`repository audits` to the **last**, with the reason beside it — by
+`R217` it is red on every push carrying a code commit ahead of its
+filing, and at `68163a2` (and again at `c1e4c17`, measured above) its
+red left every later audit **unrun**. Step count unchanged at 22.
+
+**`R241` against the build, clause by clause.**
+
+| clause | required | built | note |
+|---|---|---|---|
+| 1 | tracked hook, three gates bare, fail closed | **yes** | `tools/hooks/pre-push`, 2,492 bytes |
+| 2 | local sweep **goes red** when `core.hooksPath` is unset | **reported, not enforced** | `run-gates.sh` prints the status line; the sweep's exit code does not depend on it |
+| 3 | until 1 exists: one `&&` chain in a tracked script | **lapsed** — 1 exists | |
+| 4 | when 1 and 2 exist, the hook is the rule | **in force** | `R241` stays as the reason `tools/hooks/` exists |
+
+**The one variance, stated rather than rounded up.** Clause 2 asked for a
+red sweep; the build prints a line. On `R241`'s own argument a printed
+line is the thing with no teeth — it is read, not consumed — so a fresh
+clone's first sweep will *say* the hook is missing and still exit `0`.
+The engineer's choice, and it may be right (a sweep red-by-construction
+on every fresh clone until one config command runs is an `R217`-shaped
+red); it is recorded as a variance so nobody reads the table above as
+four-for-four. **Owed (small):** either make the line fail the sweep, or
+write in `R241` that clause 2 is satisfied by report — one or the other,
+so the rule and the build say the same thing.
+
+**What the hook cannot see, learned the same hour.** `c1e4c17` reached
+`origin/main` through GitHub's web editor, which runs no local hook. For
+that route CI is the only gate — and at `c1e4c17` CI ran the *old* step
+order, so the filing gate's expected red (on `4319f06`, unfiled on
+`origin` until the 394th filing is pushed) skipped 18 of 22 checks. The
+reorder in `f23543e` reaches CI only when `f23543e` is pushed. Not a
+defect in the hook; a boundary of it, written down.
+
+**No Pass ID** — tooling, the `9228cad` / `b5f5554` / `e3fb7e0` /
+`67ee5d6` / `4319f06` class. `docs/FEATURES.md` untouched.
+
+#### Engineer memory, for the record only (not touched)
+
+`.claude/agent-memory/pdfce-engineer/feedback_a_chore_commit_between_two_filings_is_unfiled.md`
+gained the third-instance note and the structural fix. His tier.
+
+#### Cross-record writes this filing
+
+- **`D:/dev/rag/rust/a_gate_read_by_a_human_and_not_consumed_by_the_act_protects_nothing.md`** —
+  dated footer: the mechanism is built (`f23543e`), the clause-2
+  variance, the web-editor route the hook cannot see, and the
+  `verify-release.py` `skip` corollary (a mandated step whose absence
+  prints *skip* is the same shape at the release act). Index bullet
+  amended in place.
+- **`D:/dev/rag/rust/a_web_editor_commit_diverges_main_and_a_cited_hash_forbids_the_rebase.md`** —
+  new: `origin/main` moves under a clone with no local signal until
+  `fetch`; a hash-citing project must merge, not rebase, its side of the
+  divergence; `git ls-remote origin main` is the one-command check.
+  Index bullet added.
+- The 394th block's *"Owed to the engineer"* paragraph, its side-finding
+  paragraph and its ledger rows; `R241`'s *"What the rule requires"*;
+  the 392nd block's `v0.27.0` and `v0.26.0` release records; the 391st
+  block's *"standing state, recorded plainly"* paragraph → dated footers,
+  below. The 391st–394th `SESSION_LOG.md` entries' *"GitHub-release-page
+  question"* lines → dated amendments.
+
+#### Hard-rule-11 sweep (claims: "no GitHub release since `v0.17.0`" / "the `verify-release.py` skip" / "no mechanism binds a gate to the push" / "`origin/main` = `68163a2`")
+
+- **Still true and left as written:** every dated statement of the nine-
+  version gap in the 391st/392nd/393rd/394th blocks and entries — history,
+  correct on its date, footered where it was framed as *open*. The
+  `verify-release.py:203` message itself — **still mislabelled and now
+  load-bearing**, see owed.
+- **`tools/hooks/pre-push` header** enumerates the three instances as
+  *"once through `| tail`, once through `cmd; echo rc=$?…`, once by
+  reading 'ok' from a neighbouring gate"* — the third phrase describes
+  instance 3 a second way and omits instance 1's construction (a chain
+  that did not halt on `exit=1`, `e7b1b7c`). Three instances counted,
+  three listed; the mapping to the `R241` table is one-off. Reported,
+  not owed — a header, not a check.
+- **`docs/NEXT_SESSION.md`** — not read, not touched, per the dispatch;
+  if it carries *"build the pre-push hook"* or *"origin/main =
+  `68163a2`"* as current, both are now stale and are the engineer's.
+- **`CLAUDE.md` rule 8** — the recipe sentence, flagged above.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `246.1` | unchanged — no Pass ID (tooling + release record). Next free major still `247.0` |
+| Decisions | ceiling `126`, next free `127` | **`127` minted**; ceiling `127`, next free `128` |
+| Standing rules | ceiling `R241`, next free `R242` | unchanged — argued above (the gate is the rule, once it fails closed) |
+| Releases | `v0.27.0` verified, OneDrive only; `ff738a6`, `a436432`, `35fbf6c`, `67ee5d6`, `4319f06`, `68163a2` unreleased | **`v0.27.0` on GitHub**, `Latest`, one asset 25,281,588 B; `f23543e`, `c1e4c17` and the two filing commits also unreleased |
+| `origin/main` | `68163a2` | **`c1e4c17`** (operator, web editor); local `main` **diverged 1/1** — merge before push, never rebase or force. **`check-cited-commits-exist.py` is RED on this tree until the merge** (`STALE c1e4c17 … no commit on HEAD carries that subject`, run here after filing) — this filing cites the operator's commit by hash and it is not on local `HEAD` yet; the merge resolves it, and the push cannot happen without the merge |
+| CI at `origin/main` | RED at `68163a2` (step 6 of 22; 16 unrun) | **RED at `c1e4c17`** (old order; 18 skipped) — resolves when the 394th + this filing are merged and pushed, and the reorder lands with `f23543e` |
+| Owed to the engineer | `verify-release.py:203`; `R241` hook + `core.hooksPath` + sweep line; audits step order (optional) | hook **CLOSED**, sweep line **CLOSED (as report — variance)**, step order **CLOSED** (`f23543e`); **`verify-release.py:202–203` UPGRADED**: a not-found release must `FAIL`, not `skip` — the mechanism decision 127 leans on; **+1 small**: reconcile `R241` clause 2 with the report-only build |
+| `D:\dev\rag\rust\` / `egui\` | — | **+1** rust file, **+1** dated footer on the 394th's file; two index bullets |
+| `C:\personal_rag\` | — | no change |
+| SESSION_LOG filings | 394 | **395** |
+
+---
+
+**★ ONE COMMIT, 394th filing, 2026-09-03 — `4319f06`,
+`tools/check-control-bytes.py` NOW SCANS `fixtures/` AS ITS DOCSTRING
+CLAIMED — THE 393rd FILING'S OWED DOCSTRING/`TEXT_ROOTS` MISMATCH, CLOSED
+THE SAME MORNING (872 → 915 text files, still clean). NO PASS ID (tooling),
+NO DECISION. ★★ AND A PROCESS FAILURE THE ENGINEER ASKED TO HAVE RECORDED
+IN PLAIN WORDS: THIS COMMIT WAS PUSHED WHILE `check-commits-filed.py` WAS
+RED ON IT, BECAUSE THE PUSH SAT IN A COMMAND CHAIN THAT DID NOT DEPEND ON
+THE GATE'S EXIT CODE — THE THIRD OCCURRENCE OF THE SHAPE THE 377th FILING
+NAMED AS A CANDIDATE AT n = 1, THE SECOND TODAY. STANDING RULE `R241`
+MINTED — AND THE RULE'S CONTENT IS THAT A RULE IS NOT THE INSTRUMENT.**
+
+**Sourcing (hard rule 8).** Shell available; every figure below produced
+here, command beside it. `git show 4319f06 --stat` → 1 file,
+`tools/check-control-bytes.py`, +4 / −3. `git show 4319f06` → the diff is
+one `TEXT_ROOTS` element (`"fixtures/"`) and three docstring lines.
+`python tools/check-control-bytes.py` → **`clean -- 915 text file(s)`**,
+exit 0; the 393rd filing measured **872** on the tree before this commit,
+and **915 − 872 = 43** is accounted for by `git ls-files --cached --others
+--exclude-standard fixtures` minus the suffix list: **40 `.md` + 1 `.json`
++ 1 `.py` + 1 `.sh` = 43** (two `.bin` files are skipped by content — a
+NUL in the first 8 KiB — not by suffix). `python
+tools/check-commits-filed.py` on this tree **before this filing** → **exit
+1**, *"1 code commit(s) are in no filing: `4319f06`"* — the gate is red,
+correctly, and this filing is what turns it green. `python
+tools/check-suite-name-absent.py` → clean, exit 0. `python
+tools/check-ledger-numbers.py` → clean; filings ceiling `393`, so this is
+the **394th**; ceilings `246.1` / `R240` / decision `126` before this
+filing's mint. `git ls-remote origin main` = **`68163a2`** — the 393rd
+filing commit, which sits ON TOP of `4319f06` in `git log` (`68163a2` →
+`4319f06` → `67ee5d6`): the code commit landed between the 393rd dispatch
+going out and its filing being committed, and both were pushed together.
+`gh run view 33753504260` (CI at `68163a2`, in progress at filing time):
+`repository audits (22 checks)` **RED** at step *"check that every code
+commit is filed"*, the **sixth** step of twenty-two — the sixteen steps
+after it, including `check-control-bytes.py`'s **first CI run**, show `-`
+(**not run**), not green. `git status --short` → one modified file,
+`.claude/agent-memory/pdfce-engineer/feedback_a_chore_commit_between_two_filings_is_unfiled.md`
+(the engineer's own memory, a dated recurrence footer for this event; not
+touched here). `git config core.hooksPath` → **unset**; `ls .git/hooks` →
+samples only; `ls tools/` → no `push.sh`, no `hooks/` — **no mechanism
+binds any gate to the push today.** `docs/NEXT_SESSION.md` and the channel
+folder: not touched, per the dispatch.
+
+### `4319f06` (2026-09-03) — `tools/check-control-bytes.py`: `fixtures/` joins `TEXT_ROOTS`; the docstring made exact
+
+The 393rd filing's one owed item. The module docstring's *WHAT IT CHECKS*
+had named `fixtures/*.md` and *"the crate `src` trees"* while `TEXT_ROOTS`
+held neither `fixtures/` nor a `src`-only restriction. The commit adds
+`"fixtures/"` as the seventh root and rewrites the sentence to what the
+code does — *`fixtures/` (its Markdown; the PDFs are binary by suffix)*
+and *the whole `crates/` tree*. The 393rd filing's byte loop over the 40
+`fixtures/` Markdown files had found 0 defective, and the gate's own run
+over the 43 newly-scanned files agrees: still clean. **No behaviour
+change beyond scope; no Pass ID** — the `9228cad` / `b5f5554` / `e3fb7e0`
+/ `67ee5d6` tooling class. `docs/FEATURES.md` untouched.
+
+**One thing worth a sentence:** the docstring is now the second place
+(after the commit message of `67ee5d6`) that states the scope correctly,
+and `TEXT_ROOTS` is the only place that *enforces* it — a reader who wants
+the scope should read the tuple, not the prose, which is the same
+*a-claim-in-a-comment-is-not-a-check* point the 393rd filing made about
+the mismatch it found.
+
+### ★★ The process failure this filing exists to record — a red gate, read as green, and the push went out
+
+**The engineer's own account, in his words as dispatched:** *this commit
+was PUSHED while `tools/check-commits-filed.py` was RED on it. I ran the
+gate in a command chain whose `git push` did not depend on the gate's exit
+code — `python gate; echo rc; other && other && git push` — read
+"ci-gates-ok" and pushed.* His working-tree memory footer adds the detail
+that the gate's output went to `/dev/null` and its `rc` was echoed and then
+not read, so the push depended on the two *later* gates only.
+
+**What it cost.** `4319f06` reached `origin` unfiled. CI at `68163a2` is
+red on the sixth of twenty-two audit steps and **silent on the other
+sixteen** — the audits job is sequential and stops at its first failure,
+so the control-byte gate, the suite-name gate and fourteen others have
+**no CI verdict at all** on the pushed tip; their first CI verdict on a
+tree containing `4319f06` will come from this filing's push. The red will
+resolve when this filing lands and is pushed; **it is recorded here as red
+rather than as "will be green"**, because the second phrasing is the one
+that has been wrong before in this record.
+
+**The count, sourced from the record rather than from "sixth-ish".** The
+engineer's dispatch called this *"sixth-ish instance of the class 'a gate
+ran and its result did not gate the act'"*. The record supports **three
+occurrences of the exact shape** — *a repository gate run before a push,
+correctly red, its exit code not consumed by the command the push sat in*
+— and the number matters because the 377th filing set a bar against it:
+
+| # | when | construction | pushed | where recorded |
+|---|---|---|---|---|
+| 1 | 2026-09-02 | chain did not halt on the gate's `exit=1` | `e7b1b7c` (a filing commit carrying code it could not file; `v0.21.0` tagged on top) | 377th filing — **named candidate at n = 1**, no number |
+| 2 | 2026-09-03 04:44 | `gate \| tail -1 && git push` — `&&` saw `tail`'s status | `c180aac` (a licensed name into public history; scrubbed `bd40ffa`, history not rewritten) | engineer memory `a64ee2c`; rule written: *"run it BARE, never through a pipe"* |
+| 3 | 2026-09-03 08:08 | `gate >/dev/null; echo rc=$?; other && other && git push` — bare, before a `;` | `4319f06` (unfiled) | **this filing** |
+
+The broader class the engineer counts — a gate's answer read wrongly or
+not at all — is larger (the 2026-08-07 `tail`-status readings, the `R217`
+amendment notes' stale answers, the `Pass 135.0` block's misread `tail`
+exit code of 2026-08-27), but those are the gate's **answer** being wrong
+or misread; the
+377th filing separated this shape from them deliberately: **here the
+answer was right and nothing enforced it.** Three of that, in thirty
+hours.
+
+#### Standing rule `R241` MINTED — at n = 3, on a candidate the record had already named, and on the argument that a rule is the wrong instrument
+
+The 393rd filing declined to mint against the control-byte mechanism
+because the gate already existed and *"where the check is mechanical, the
+gate is the rule."* This filing mints, and the two dispositions are the
+same argument applied to opposite facts: there the mechanism existed and a
+rule beside it would have been the fifth copy; **here NO mechanism exists**
+— `core.hooksPath` unset, no hook, no wrapper — and every occurrence is
+the same missing one. `R241`'s content is therefore not *"remember to
+chain with `&&`"* — that sentence was written into the engineer's memory
+at 04:44 and obeyed to the letter at 08:08 (the gate *was* bare, *was*
+before `&& git push` in spirit) by a construction it had not named. **A
+rule can only enumerate the constructions already seen; the set that
+disconnects an exit code from a later command is open-ended** (`|`, `;`,
+redirect-and-separate-echo, subshell, `|| true`, two tool calls). So the
+rule says: **the binding between a repository gate and the push is a
+MECHANISM the repo carries — a tracked `pre-push` hook — not a habit the
+operator re-types**, and it stands until that mechanism exists, at which
+point the hook is the rule and `R241` is the reason a reader finds for
+why `tools/hooks/` exists. Full text under *Standing rules*.
+
+**Owed to the engineer, and it is the whole remedy:** `tools/hooks/pre-push`
+running the repository-scoped gates (`check-suite-name-absent.py`,
+`check-commits-filed.py`, `check-control-bytes.py`) bare and failing the
+push closed; `git config core.hooksPath tools/hooks` per clone; and a line
+in `run-gates.sh` that goes red when `core.hooksPath` is unset, because
+the config is per-clone and unversioned — a gate guarding a gate, the
+`check-ci-parity.py` shape. Until it exists: one `&&` chain holding every
+gate and ending in the push, in a tracked script rather than the shell
+history. **Not touched here:** the engineer's memory files under
+`.claude/agent-memory/pdfce-engineer/` — his tier, and one of them is
+already mid-edit for this event in the working tree.
+*RESOLVED 2026-09-03 (395th filing):* built in `f23543e` — the hook, the
+`core.hooksPath` setting on this clone, and the sweep line. One variance:
+the sweep line **reports** rather than fails (see the 395th block's
+clause table).
+
+**A second, smaller thing the CI view shows, recorded once and not
+minted:** with the filing gate sixth of twenty-two in a sequential job,
+every push between a code commit and its filing — which by `R217`'s design
+is *most* pushes — leaves sixteen audits unrun. Ordering the gates that
+are red by construction LAST, or giving them their own job, would let one
+expected red stop hiding twenty-one verdicts. The engineer's call; it is
+a `ci.yml` step-order change, not a rule.
+*RESOLVED 2026-09-03 (395th filing):* `f23543e` moves the step to the end
+of the job, reason beside it; count unchanged at 22.
+
+#### Cross-record writes this filing
+
+- **`D:/dev/rag/rust/a_gate_read_by_a_human_and_not_consumed_by_the_act_protects_nothing.md`** —
+  new, with the three-instance table, the open-set argument, the
+  standing-authorisation exposure, the hook remedy and the
+  sequential-job side finding; `index.md` bullet added. Cross-project by
+  construction: any repository that grants itself standing push authority
+  inherits the exposure the same day.
+- **`C:/personal_rag/claude_code/lesson_20260807_pipeline_exit_status_belongs_to_the_last_element.md`** —
+  one dated footer: that lesson's 2026-08-07 amendment already said *"the
+  remedy is MECHANICAL, NOT ATTENTIONAL"* for the pipe branch; the footer
+  records the `;` branch and the day its own rule of thumb was obeyed and
+  the push still went out. No new lesson; master index unchanged.
+- The 393rd block's *"Owed to the engineer"* paragraph and ledger row →
+  dated RESOLVED footers, below.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `246.1` | unchanged — no Pass ID (tooling). Next free major still `247.0` |
+| Decisions | ceiling `126`, next free `127` | unchanged — none minted |
+| Standing rules | ceiling `R240`, next free `R241` | **`R241` minted**; ceiling `R241`, next free `R242` |
+| Releases | `v0.27.0` verified; `ff738a6`, `a436432`, `35fbf6c`, `67ee5d6` unreleased | unchanged; `4319f06` + `68163a2` also unreleased. `origin/main` = `68163a2` — this filing is the only unpushed work — *superseded 2026-09-03 (395th filing): `origin/main` moved to `c1e4c17` (operator, web editor) before this filing was pushed; local `main` diverged 1/1* |
+| CI at `origin/main` | green at `3331b80` | **RED at `68163a2`** (`check-commits-filed`, step 6 of 22; 16 steps unrun) — resolves when this filing is pushed — *395th: also RED at `c1e4c17`, same step, 18 skipped* |
+| Owed to the engineer | `verify-release.py:203` message; `check-control-bytes.py` docstring | docstring **CLOSED** (`4319f06`); **+1**: `tools/hooks/pre-push` + `core.hooksPath` + a hook-active line in `run-gates.sh` (`R241`); **+1 (optional)**: audits-job step order — *both RESOLVED 2026-09-03 (395th filing), `f23543e`; the sweep line as report, not red* |
+| `D:\dev\rag\rust\` / `egui\` | — | **+1** rust finding (above) |
+| `C:\personal_rag\` | — | one dated footer (`claude_code/lesson_20260807…pipeline_exit_status…`); no new lesson |
+| SESSION_LOG filings | 393 | **394** |
+
+---
+
 **★ ONE COMMIT, 393rd filing, 2026-09-03 — `67ee5d6`,
 `tools/check-control-bytes.py`: A STRAY C0 CONTROL BYTE IN ANY PROSE,
 CONFIG OR SOURCE FILE NOW FAILS CI — THE GATE THE 392nd FILING RECOMMENDED,
@@ -141,6 +622,10 @@ suffix-skipped) or strike the two words. The engineer's own commit
 message describes the scope correctly (*docs/, .claude/, tools/, crates/,
 .github/, fuzz/fuzz_targets/ and the root Markdown*); only the docstring
 disagrees with the code.
+*RESOLVED 2026-09-03 (394th filing):* `4319f06` adds `"fixtures/"` to
+`TEXT_ROOTS` and makes the docstring exact; the gate's count moves
+872 → 915 text files (40 `.md` + 1 `.json` + 1 `.py` + 1 `.sh`), still
+clean. See the 394th block.
 
 ### `67ee5d6` (2026-09-03) — `tools/check-control-bytes.py`: no prose, config or source file may carry a stray C0 byte; registered in CI, the parity table and `run-gates.sh`; the fourth swallowed `\b` repaired
 
@@ -268,7 +753,7 @@ gate"*); this filing confirms the gate exists and the reasoning held.
 | Standing rules | ceiling `R240`, next free `R241` | unchanged — decline argued above |
 | Releases | `v0.27.0` verified; `ff738a6` + `a436432` unreleased | unchanged; `35fbf6c` + `67ee5d6` also unreleased and **unpushed** (`origin/main` = `3331b80`) |
 | CI audits job | `21 checks` | **`22 checks`** (`check-ci-job-names.py` green) |
-| Owed to the engineer | `verify-release.py:203` message | **+1**: `check-control-bytes.py` docstring names `fixtures/*.md`; `TEXT_ROOTS` does not include it (40 `.md` files, 0 defective today) |
+| Owed to the engineer | `verify-release.py:203` message | **+1**: `check-control-bytes.py` docstring names `fixtures/*.md`; `TEXT_ROOTS` does not include it (40 `.md` files, 0 defective today) — *RESOLVED 2026-09-03 (394th filing), `4319f06`* |
 | `D:\dev\rag\rust\` / `egui\` | — | no change |
 | `C:\personal_rag\` | — | two dated footers (`claude_code/lesson_20260724…`, `claude_code/lesson_20260811…`); no new lesson |
 | SESSION_LOG filings | 392 | **393** |
@@ -353,6 +838,13 @@ commit were both in before it ran; the GitHub-release check will have
 **skipped** for the standing reason (no release page exists for any
 version after `v0.17.0`; the script's `:203` message mislabels that as
 `gh` being unavailable — still owed, above).
+*Amended 2026-09-03 (395th filing):* the release page now exists —
+`gh release create v0.27.0` at `12:15:02Z` on the operator's mid-session
+instruction, one asset of 25,281,588 bytes — and
+`verify-release.py v0.27.0` re-run here prints **`ok GitHub release has
+at least one asset`**. Decision 127 makes the page a step of every
+release from here on. The `:203` message is still mislabelled and is now
+the mechanism that step leans on — see the 395th block's owed row.
 
 **What the release carries.** `Pass 246.0` (`194b3a1`) — vector paths
 cut, image cells become paper, the pixel proof. It does **not** carry
@@ -825,6 +1317,13 @@ for any version after `v0.17.0` (2026-08-30)** — nine versions,
 release page and no release asset. Whether that is a defect or a
 deliberate stop is the engineer's/operator's call; this filing records
 the fact and the mislabelled message.
+*ANSWERED 2026-09-03 (395th filing, decision 127):* the operator,
+mid-session — *"please push the current releases source and release to
+github!"* — read as standing. `v0.27.0` has a release page and the zip
+as its asset; every release from here on does. The nine versions are not
+backfilled; `v0.27.0`'s notes name them as OneDrive-only. The message at
+`:203` remains owed, and its `skip` branch must become a `FAIL` for the
+obligation to be enforced by anything but habit.
 
 `docs/FEATURES.md`: *Redaction & security* → the **"Apply redaction —
 true removal"** row's vector sentence replaced (paths **CUT**; image cells
@@ -855,6 +1354,9 @@ at that moment — expected, not a release defect) and *GitHub release*
 (**skipped** — see the `verify-release.py:203` finding above: no release
 page exists for this or any version after `v0.17.0`, and the script's
 message mislabels that as `gh` being unavailable).
+*Amended 2026-09-03 (395th filing):* `v0.26.0` still has no page of its
+own and will not get one; its notes ride inside `v0.27.0`'s release body
+(decision 127).
 
 **What the release carries.** `Pass 245.0` (`98d4377`) — image-sample
 destruction, per-mark retention, vector paths disclosed by count. It does
@@ -141704,6 +142206,104 @@ ceiling `114` → `115`** (`iccce` enters as a git dependency pinned to tag
   ceiling `123` — UNCHANGED, next free `124`** — no decision minted with
   this rule; it is a testing-discipline convention, not an architectural
   ruling.
+
+- **R241 — A REPOSITORY GATE IS BOUND TO THE PUSH BY A MECHANISM THE
+  REPOSITORY CARRIES, NOT BY A HABIT THE OPERATOR RE-TYPES. A GATE WHOSE
+  EXIT CODE IS READ BY A HUMAN AND NOT CONSUMED BY THE COMMAND THE PUSH
+  DEPENDS ON PROTECTS NOTHING THAT A HURRIED OPERATOR CANNOT READ PAST —
+  THE CHECK AND THE ENFORCEMENT ARE DIFFERENT ACTS, AND ONLY THE SECOND
+  HAS TEETH.** Minted 2026-09-03 (394th filing), librarian-minted, at
+  **n = 3** on a candidate the 377th filing named at n = 1 in almost these
+  words.
+
+  | | **#1 — 2026-09-02** | **#2 — 2026-09-03 04:44** | **#3 — 2026-09-03 08:08** |
+  |---|---|---|---|
+  | gate | `check-commits-filed.py` | `check-suite-name-absent.py` | `check-commits-filed.py` |
+  | verdict | red, correctly (`exit=1` printed) | red, correctly | red, correctly (`rc=1` echoed) |
+  | construction | a chain that did not halt on the gate | `gate \| tail -1 && git push` — `&&` consumed `tail`'s status | `gate >/dev/null; echo rc=$?; a && b && git push` — the push depended on `a` and `b`; the gate sat before a `;`, its text discarded |
+  | what reached the public remote | `e7b1b7c`, a filing commit carrying code it could not file; `v0.21.0` tagged on top | `c180aac`, a licensed name in a docs file — scrubbed in `bd40ffa`, still in history | `4319f06`, unfiled; CI red at `68163a2`, sixteen audits unrun |
+  | rule in force at the time | none named | 377th filing's candidate (n = 1) | `a64ee2c`, written 3.5 h earlier: *"run it BARE before `&& git push`, never through a pipe"* — **obeyed**: bare, no pipe, and the push still went out |
+
+  **Why the rule's content is "build the mechanism" and not "chain with
+  `&&`".** The sentence *chain with `&&`* was already in force for #3 and
+  was followed. It named the construction that had failed in #2 (a pipe),
+  and #3 used a different one (a `;`). **The set of shell constructions
+  that disconnect an exit code from a later command is open-ended** —
+  `|`, `;`, a redirect plus a separate `echo $?`, a subshell, `|| true`,
+  the gate in one tool call and the push in the next — **and a rule can
+  only enumerate the ones already seen.** The 393rd filing's argument
+  against minting beside a working gate (*where the check is mechanical,
+  the gate is the rule*) runs the other way here, because **the mechanism
+  does not exist**: at the mint, `git config core.hooksPath` is unset,
+  `.git/hooks` holds samples only, and `tools/` has no hook and no push
+  wrapper. Every occurrence is the same missing thing.
+
+  **Why now, and why it will recur elsewhere.** Decisions `090` (*always
+  push*) and `121` (*always go ahead and push the latest one*) removed
+  the per-act pause in which a red verdict used to be read and acted on.
+  With the decision pre-made, the only thing left between a red line and
+  the public remote is the shell operator between two commands. **Any
+  project that grants itself standing push authority inherits this
+  exposure the same day** — the engineer's own memory file said as much
+  on 2026-09-02 (*"the fix is to make the scrub mechanical instead of
+  remembered"*) and #2 and #3 happened after it was written.
+
+  **What the rule requires.**
+  1. **`tools/hooks/pre-push`, tracked**, running the repository-scoped
+     gates — the ones whose subject is what the public repo CONTAINS
+     rather than what the build DOES: `check-suite-name-absent.py`,
+     `check-commits-filed.py`, `check-control-bytes.py` — each bare, the
+     hook exiting non-zero on any red. `git push` then fails closed
+     whatever the operator's shell line looked like. `--no-verify` is the
+     bypass, and it is a deliberate, greppable, different act.
+  2. **A hook-active check in `run-gates.sh`**: `core.hooksPath` is
+     per-clone and unversioned, so a fresh clone lacks the hook silently;
+     the local sweep goes red when it is unset. A gate guarding a gate —
+     the `check-ci-parity.py` shape.
+  3. **Until 1 exists:** one `&&` chain holding every gate and ending in
+     the push, in a tracked script, never the shell history. This clause
+     is the habit the rule exists to replace; it is written down so the
+     interval has an instruction, not so the interval can be extended.
+  4. **When 1 and 2 exist, the hook is the rule.** `R241` stays as the
+     reason a reader finds for why `tools/hooks/` exists — the 393rd
+     filing's disposition, reached from the other side.
+
+  > ★ **Amended 2026-09-03 (395th filing, `f23543e`).** Clause 1 is
+  > built (`tools/hooks/pre-push`, three gates bare, fail closed;
+  > `core.hooksPath tools/hooks` set on this clone). Clause 2 is built
+  > **as a report**: `run-gates.sh` prints `pre-push hook: ACTIVE` /
+  > `NOT ACTIVE -- run: …` on every sweep and does **not** fail on it —
+  > a variance from the clause as written, recorded rather than rounded
+  > up; the engineer either makes it red or amends this clause to say
+  > "reports". Clause 3 has lapsed. Clause 4 is in force: **the hook is
+  > the rule.** Learned the same hour: a commit made in GitHub's web
+  > editor (`c1e4c17`) runs no local hook — for that route CI is the
+  > only gate; the hook binds *this clone's* pushes, nothing else.
+
+  **Reading-side corollary, the cheaper half and not a substitute.** When a
+  gate's text says red and a later line says ok, the text outranks the
+  status line
+  (`C:/personal_rag/claude_code/lesson_20260807_pipeline_exit_status_belongs_to_the_last_element.md`,
+  which said *"the remedy is MECHANICAL, NOT ATTENTIONAL"* on 2026-08-07
+  for the pipe branch). #3 sent the text to `/dev/null`, so there was
+  nothing to outrank anything — a construction that discards the verdict
+  and disconnects the exit code has removed both channels at once.
+
+  **Not `R217`.** `R217` and its amendment notes are about the filing
+  gate's ANSWER — going stale before the push, deferring the tip,
+  reading CI's colour without querying it. All three instances above had
+  a current, correct answer. The 377th filing drew that line when it
+  declined a seventh `R217` note; this rule is on the other side of it.
+
+  **Cross-project derivation, written this filing (not deferred):**
+  `D:/dev/rag/rust/a_gate_read_by_a_human_and_not_consumed_by_the_act_protects_nothing.md`
+  (with the sequential-CI-job side finding: sixteen audits unrun behind
+  one expected red, so gates that are red by construction belong LAST or
+  in their own job).
+
+  **Standing rules ceiling `R240` → `R241`; next free `R242`.** **Decision
+  ceiling `126` — UNCHANGED, next free `127`** — a process rule, not an
+  architectural ruling.
 
 ## Update protocol
 

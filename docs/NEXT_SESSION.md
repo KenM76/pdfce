@@ -91,11 +91,19 @@ Candidates in the order I would take them:
   unreleased at hand-off, as are `67ee5d6` (the control-bytes gate) and the
   392nd/393rd filings — a v0.28.0 is owed when the next Pass lands (or now,
   if a session wants the shading disclosure on OneDrive).
-- **GitHub releases stop at v0.17.0.** No version since has had one;
-  `verify-release.py` skips the check because its `gh` subprocess reports
-  unavailable. Not a defect fixed this session; a standing state.
-  `gh release create` works from the interactive shell if the operator
-  wants them resumed.
+- **GitHub releases RESUMED at v0.27.0** — the operator asked, mid-session:
+  *"while you are working on the new release please push the current
+  release's source and release to github!"* `v0.27.0` is now the `Latest`
+  GitHub release with `pdfce-v0.27.0-windows-x64.zip` (25,281,588 bytes,
+  zipped from the packaged folder), notes covering v0.18.0–v0.27.0.
+  v0.18.0–v0.26.0 remain OneDrive-only. **Read that instruction as
+  standing: every release from now on gets a GitHub release with the
+  portable zip as its asset** — `powershell Compress-Archive` of the
+  `D:\builds\pdfce-<date>-<sha>` folder to
+  `D:\builds\pdfce-vX.Y.Z-windows-x64.zip`, then `gh release create vX.Y.Z
+  <zip> --title … --notes-file … --latest`. `verify-release.py`'s "gh
+  unavailable" message was misattributed — it fires when the release does
+  not exist; with one present it reports `ok`.
 - **pdfceGUI channel:** `reply_images_are_destroyed_now_and_all_three_asks_ship.md`
   (with a same-day v0.27.0 update appended) awaits their consumption;
   their request file stays in `open/` until then. The two earlier files
@@ -116,6 +124,11 @@ Candidates in the order I would take them:
 - **iccce pinned rev** `a4d9003b` (v0.3.0); dependency SET unchanged since
   v0.22.0; `THIRD_PARTY_LICENSES.md` did not move.
 - **Every code commit is FILED** — `python tools/check-commits-filed.py`.
+- **`tools/hooks/pre-push` (`f23543e`, R241)** runs suite-name / commits-filed /
+  control-bytes BEFORE every push, bound by git, not by a chain you type.
+  Per clone: `git config core.hooksPath tools/hooks`; `run-gates.sh` says
+  ACTIVE / NOT ACTIVE on every sweep. The commits-filed CI step is now LAST
+  in the audits job so its expected reds stop hiding the other verdicts.
 - **New gate `tools/check-control-bytes.py`** (`67ee5d6`): a stray C0 byte
   (a swallowed `\b`, a bare LF inside a literal) in docs/, .claude/, tools/,
   crates/ or the root Markdown fails the sweep. In CI (`repository audits`,
