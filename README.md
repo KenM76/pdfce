@@ -1,3 +1,21 @@
+# pdfce — ARCHIVED. The project continues as **pdfcer**
+
+> **This repository is frozen as of 2026-09-03.** `pdfce` was the pre-release
+> code name; the product is now **pdfcer** ("pdf-see-er": create, edit,
+> read), and every commit, tag and release here is the same history that
+> continues at:
+>
+> **https://github.com/KenM76/pdfcer** — the engine and the `pdfcer` CLI
+> (first release under the new name: `v0.28.0`)
+>
+> **https://github.com/KenM76/pdfcer-gui** — the desktop application
+>
+> The release pages below `v0.27.0` stay here unchanged. Nothing else in this
+> repository will be updated; the in-repo `crates/pdfce-gui` it still carries
+> is obsolete and was removed in the continuation.
+
+---
+
 # pdfce
 
 # pdfce
