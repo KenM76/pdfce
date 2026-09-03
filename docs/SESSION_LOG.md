@@ -89113,3 +89113,19 @@ their `index.md` bullets amended. **`C:\personal_rag\pdf\`:** (this
 dispatch) one new lesson,
 `lesson_20260903_signature_verification_fixtures_from_an_independent_signer_and_the_byterange_delimiters.md`,
 subject index and master index updated.
+
+## 2026-09-03 (final entry in this repository) — **ARCHIVED. The project continues as `pdfcer` at `KenM76/pdfcer`; this folder and repository are the untouched backup (decision 128, `Pass 247.2`)**
+
+The only write this repository receives after the clone (`Pass 247.0`
+step 1 cloned it at `cce414e` into `D:\Dev\pdfcer`): commit `fbc53ee`
+puts the pointer at the head of `README.md`, and this entry files that
+commit so the archived repository's own CI ends green rather than red on
+`check-commits-filed.py`. Two commits rather than the plan's one, for
+exactly that reason.
+
+Where the history continues: `https://github.com/KenM76/pdfcer` (engine
+and the `pdfcer` CLI; first release under the new name `v0.28.0`) and
+`https://github.com/KenM76/pdfcer-gui` (the desktop application). Every
+commit and tag here (`v0.5.1`–`v0.27.0`) is an ancestor of `pdfcer`'s
+`main`; the record from the 399th filing onward is in
+`D:\Dev\pdfcer\docs\SESSION_LOG.md`.
