@@ -1,8 +1,13 @@
 # pdfce
 
-## NOTE THAT THE CURRENT GUI FOR THIS PROJECT SUUUUCKS.
-The core and CLI are shining, but the GUI might as well be a basic
-viewer. I have split it off into its own project with a proper plan.
+# pdfce
+
+## NOTE THAT THE GUI HAS BEEN MOVED INTO IT'S OWN PDFGUI PROJECT.
+I have split the GUI off into its own project with a proper plan.
+Do not use the one included in this project as it is obselete.
+New GUI is here:
+https://github.com/KenM76/pdfceGUI
+
 If you need a fast RUST native pdf GUI editor and are planning it as an
 LLM project the core from this should save you weeks of time.
 If you need a CLI tool to use with your LLM to interact with pdf
