@@ -155,6 +155,12 @@ const MAX_NOTES: usize = 12;
 /// (IEC 61966-2-1). Used as the adaptation target in [`xyz_to_srgb`].
 const D65: [f32; 3] = [0.950_47, 1.0, 1.088_83];
 
+/// The ICC profile connection space's illuminant — D50 as ICC.1 §7.2.16
+/// encodes it in every profile header (`0.9642, 1.0, 0.8249`). The white
+/// [`ColorSpace::to_pcs_xyz`] adapts to, because a destination profile's
+/// B2A table is defined against it.
+const PCS_D50: [f32; 3] = [0.964_2, 1.0, 0.824_9];
+
 /// A colorant name in a `Separation` or `DeviceN` space (§8.6.6.4/.5).
 ///
 /// `All` and `None` are singled out because the standard gives them
@@ -652,6 +658,70 @@ impl ColorSpace {
             }
             _ => None,
         }
+    }
+
+    /// The colour as **CIE XYZ relative to the ICC profile connection
+    /// space's D50 white**, for the three CIE-based families
+    /// (`Pass 242.0`).
+    ///
+    /// # Why this exists
+    ///
+    /// A `Lab`, `CalRGB` or `CalGray` colour has no colorants and no
+    /// embedded profile, so on a page that composites in ink it used to
+    /// reach the colorant buffer by the worst route available: to sRGB
+    /// through [`xyz_to_srgb`], then back to four inks through the
+    /// max-GCR `rgb_to_cmyk` round trip. A colorimetric colour was thereby
+    /// separated by a formula that knows nothing about the press. Measured
+    /// on a print-conformance patch: a `Lab (60, 0, 0)` backdrop separated
+    /// to `K = 0.43` alone, where the document's own output intent separates
+    /// it to roughly `(0.38, 0.31, 0.31, 0.18)` — and a `ColorBurn` over the
+    /// K-only version burned to solid black.
+    ///
+    /// The document's `/OutputIntent` destination profile IS a separation
+    /// engine for exactly this input: its B2A table maps PCS values to
+    /// device ink. This method produces the PCS value; `IccBridgeCache::
+    /// pcs_to_ink` runs the table. So a CIE colour on an ink page takes the
+    /// same route Acrobat takes for it, and the same route an `ICCBased`
+    /// paint already takes here — profile connection space in, ink out.
+    ///
+    /// # The white point
+    ///
+    /// Each space declares its own `/WhitePoint` (Tables 63–65), and the
+    /// XYZ these decoders produce is relative to it. The PCS is defined at
+    /// D50 (ICC.1 §7.2.16), so the result is Bradford-adapted from the
+    /// declared white to D50 — the same adaptation [`xyz_to_srgb`] performs
+    /// towards D65 for the screen. For the overwhelmingly common
+    /// D50-declared space the adaptation is the identity.
+    ///
+    /// `None` for every other family: a device or `ICCBased` space has its
+    /// own route, and a `Separation`/`DeviceN` answers through its
+    /// alternate. `Indexed` is resolved by the caller through
+    /// [`Self::indexed_entry`] first, exactly as [`Self::to_cmyk`]'s callers
+    /// do.
+    #[must_use]
+    pub fn to_pcs_xyz(&self, comps: &[f32]) -> Option<[f32; 3]> {
+        let (xyz, white) = match self {
+            Self::CalGray { white, gamma } => {
+                (cal_gray_to_xyz(comp(comps, 0), *white, *gamma), *white)
+            }
+            Self::CalRgb {
+                white,
+                gamma,
+                matrix,
+            } => {
+                let abc = [comp(comps, 0), comp(comps, 1), comp(comps, 2)];
+                (cal_rgb_to_xyz(abc, *gamma, matrix), *white)
+            }
+            Self::Lab { white, range } => {
+                let [amin, amax, bmin, bmax] = *range;
+                let l = comp(comps, 0).clamp(0.0, 100.0);
+                let a = clamp_between(comp(comps, 1), amin, amax);
+                let b = clamp_between(comp(comps, 2), bmin, bmax);
+                (lab_to_xyz([l, a, b], *white), *white)
+            }
+            _ => return None,
+        };
+        Some(bradford_adapt(xyz, white, PCS_D50))
     }
 
     #[must_use]
@@ -2881,6 +2951,45 @@ mod tests {
             black.r < 0.01 && black.g < 0.01 && black.b < 0.01,
             "{black:?}"
         );
+    }
+
+    /// `to_pcs_xyz` adapts the space's declared white to the PCS's D50, and
+    /// the fixture that proves it must NOT declare D50 — on a D50 space the
+    /// adaptation is the identity and a missing adaptation passes
+    /// (`R225`; the three-ways `Lab` fixture is D50 and could not see this,
+    /// which a sabotage sweep showed the same hour).
+    ///
+    /// `Lab (100, 0, 0)` is the space's own white by definition, so its PCS
+    /// value must be the PCS white EXACTLY — for a D65-declared space that
+    /// means the answer is D50, and an unadapted implementation returns D65
+    /// instead: `Z` differs by 0.26, a third of its range.
+    #[test]
+    fn to_pcs_xyz_adapts_the_declared_white_to_d50() {
+        let d65_lab = ColorSpace::Lab {
+            white: D65,
+            range: [-100.0, 100.0, -100.0, 100.0],
+        };
+        let got = d65_lab
+            .to_pcs_xyz(&[100.0, 0.0, 0.0])
+            .expect("Lab has a PCS answer");
+        for (i, (g, w)) in got.iter().zip(PCS_D50.iter()).enumerate() {
+            assert!(
+                (g - w).abs() < 2e-3,
+                "component {i}: the D65 white adapted to {got:?}, expected D50 {PCS_D50:?}"
+            );
+        }
+        // A D50-declared space is the identity case, and a device space has
+        // no PCS answer at all.
+        let d50_lab = ColorSpace::Lab {
+            white: PCS_D50,
+            range: [-100.0, 100.0, -100.0, 100.0],
+        };
+        let same = d50_lab.to_pcs_xyz(&[100.0, 0.0, 0.0]).unwrap();
+        for (g, w) in same.iter().zip(PCS_D50.iter()) {
+            assert!((g - w).abs() < 1e-5);
+        }
+        assert_eq!(ColorSpace::DeviceRgb.to_pcs_xyz(&[1.0, 1.0, 1.0]), None);
+        assert_eq!(ColorSpace::DeviceCmyk.to_pcs_xyz(&[0.0; 4]), None);
     }
 
     /// The `a*` and `b*` axes must move the hue in the documented

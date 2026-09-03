@@ -343,6 +343,36 @@ fn same_profile(a: &std::sync::Arc<[u8]>, b: &std::sync::Arc<[u8]>) -> bool {
     std::sync::Arc::ptr_eq(a, b) || (a.len() == b.len() && **a == **b)
 }
 
+/// A destination-only chain: profile connection space in, the output
+/// intent's four inks out (`Pass 242.0`). Held behind an `Arc` by the cache
+/// and by every `Lab`/`CalRGB`/`CalGray` image decoded on the page.
+pub(crate) struct PcsBridge {
+    chain: iccce_cmm::transform::Chain,
+}
+
+impl std::fmt::Debug for PcsBridge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PcsBridge").finish_non_exhaustive()
+    }
+}
+
+impl PcsBridge {
+    /// Separate a D50-relative XYZ into ink. Clamped for the same reason
+    /// [`IccBridge::convert_components`] clamps.
+    pub(crate) fn to_ink(&self, xyz: [f32; 3]) -> Option<[f32; 4]> {
+        let out = self
+            .chain
+            .pcs_to_destination(iccce_color::Xyz {
+                x: f64::from(xyz[0]),
+                y: f64::from(xyz[1]),
+                z: f64::from(xyz[2]),
+            })
+            .ok()?;
+        let get = |i: usize| -> f32 { out.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0) as f32 };
+        Some([get(0), get(1), get(2), get(3)])
+    }
+}
+
 /// A page-lifetime cache of built [`IccBridge`]es.
 pub(crate) struct IccBridgeCache {
     /// The destination profile for this document, decoded once from
@@ -350,6 +380,12 @@ pub(crate) struct IccBridgeCache {
     /// named no output device, so nothing here can be colour-managed.
     dest: Option<std::sync::Arc<[u8]>>,
     entries: std::cell::RefCell<Vec<CacheEntry>>,
+    /// Destination-only chains for the PCS route (`Pass 242.0`), one per
+    /// rendering intent — a chain's B2A selection depends on the intent,
+    /// so two intents are two chains. `None` inside means the destination
+    /// would not build a chain at all, cached so a broken profile is tried
+    /// once rather than per paint.
+    pcs: std::cell::RefCell<Vec<(RenderingIntent, Option<std::sync::Arc<PcsBridge>>)>>,
     /// Tallies, in `Cell` because the conversion happens behind `&self`.
     ///
     /// They live here rather than on the renderer's `Diagnostics` for a
@@ -408,9 +444,64 @@ impl IccBridgeCache {
         Self {
             dest,
             entries: std::cell::RefCell::new(Vec::new()),
+            pcs: std::cell::RefCell::new(Vec::new()),
             managed: std::cell::Cell::new(0),
             unmanaged: std::cell::Cell::new(0),
         }
+    }
+
+    /// Separate a **profile-connection-space** colour into the output
+    /// intent's ink — the route for a colour that has colorimetry but no
+    /// profile and no colorants: `Lab`, `CalRGB`, `CalGray`
+    /// (`Pass 242.0`).
+    ///
+    /// # Why a destination-only chain, and why it is cached per intent
+    ///
+    /// iccce exposes exactly this for named colours
+    /// (`Chain::convert_pcs_to_device`), but that entry point builds a
+    /// chain per call — parsing the destination profile every time, which
+    /// for a 1.4 MB press profile is not a per-paint cost anyone can pay.
+    /// So the destination-only chain (`Chain::new(dst, dst, intent)`, the
+    /// same construction iccce's own function uses) is built once per
+    /// intent here and `pcs_to_destination` is called on it.
+    ///
+    /// Per INTENT, not once: ISO 32000-1 §8.6.5.8 makes the rendering
+    /// intent a graphics-state property, and a destination profile's B2A0/
+    /// B2A1/B2A2 tables are genuinely different separations. iccce's named-
+    /// colour entry point hard-codes media-relative because Table 66 fixes
+    /// that for `ncl2`; a `Lab` fill under `/Perceptual ri` has no such
+    /// clause and gets the intent the stream asked for.
+    ///
+    /// `xyz` is relative to D50 — [`crate::color::ColorSpace::to_pcs_xyz`]
+    /// produces exactly that. `None` when the document names no output
+    /// device, when the destination is not four-component, or when the
+    /// profile will not model; the caller then falls back to the
+    /// `rgb_to_cmyk` bridge it used before, and counts the paint as
+    /// unmanaged.
+    pub(crate) fn pcs_to_ink(&self, xyz: [f32; 3], intent: RenderingIntent) -> Option<[f32; 4]> {
+        self.pcs_bridge(intent)?.to_ink(xyz)
+    }
+
+    /// The destination-only chain for one intent, as a shareable handle —
+    /// what an image decode holds for the life of a decoded `Lab`/`CalRGB`/
+    /// `CalGray` image (`image::Space::Special`), so a texel and a fill of
+    /// one colour separate through one chain. Built once per intent; see
+    /// [`Self::pcs_to_ink`].
+    pub(crate) fn pcs_bridge(&self, intent: RenderingIntent) -> Option<std::sync::Arc<PcsBridge>> {
+        let dest = self.dest.as_ref()?;
+        let mut chains = self.pcs.borrow_mut();
+        if let Some((_, hit)) = chains.iter().find(|(i, _)| *i == intent) {
+            return hit.clone();
+        }
+        let bridge = iccce_profile::Profile::parse(dest)
+            .ok()
+            .and_then(|profile| {
+                iccce_cmm::transform::Chain::new(&profile, &profile, to_iccce_intent(intent)).ok()
+            })
+            .filter(|chain| chain.output_channels() == 4)
+            .map(|chain| std::sync::Arc::new(PcsBridge { chain }));
+        chains.push((intent, bridge.clone()));
+        bridge
     }
 
     /// Whether this document named an output device at all.

@@ -318,8 +318,10 @@ pub struct Diagnostics {
     /// How many paints were converted **through their own embedded profile**
     /// by the ICC engine — to ink (an `ICCBased` source on a page with an
     /// `/OutputIntent`), or to the screen (an `ICCBased` `N 3` source on any
-    /// page, `Pass 240.0`) — rather than by Table 66's reinterpretation or the
-    /// fallback `rgb_to_cmyk` reconstruction.
+    /// page, `Pass 240.0`) — or, for a `Lab`/`CalRGB`/`CalGray` source, through
+    /// the output intent's own B2A table from its PCS value (`Pass 242.0`) —
+    /// rather than by Table 66's reinterpretation or the fallback `rgb_to_cmyk`
+    /// reconstruction.
     ///
     /// ★ This exists to make a NULL RESULT INTERPRETABLE, which is the whole
     /// reason it was written before the fix was measured rather than after.
@@ -6139,6 +6141,38 @@ impl Interpreter<'_> {
             if self.display_bridge(space).is_some() {
                 self.icc.note_managed();
             } else {
+                self.icc.note_unmanaged();
+            }
+        }
+        // ★★★ THE PCS ROUTE FOR A CIE COLOUR, `Pass 242.0`.
+        //
+        // `Lab`, `CalRGB` and `CalGray` have colorimetry and nothing else: no
+        // colorants, no embedded profile. Until this Pass they reached a
+        // subtractive page through the worst route on offer -- to sRGB, then
+        // back to four inks through the max-GCR `rgb_to_cmyk` round trip --
+        // so a `Lab (60, 0, 0)` backdrop was separated to `K = 0.43` alone
+        // and a `ColorBurn` over it burned to solid black, where the
+        // document's own output intent separates the same grey to roughly
+        // `(0.38, 0.31, 0.31, 0.18)` and the burn lands on a mid grey.
+        // Measured on the print-conformance patch whose trap X is authored
+        // to vanish under exactly that separation.
+        //
+        // The output intent's destination profile is the separation engine
+        // the file asked for, and it accepts a PCS value directly. Same
+        // position in the ladder as the `ICCBased` branch above: below the
+        // document's own `DeviceCMYK` answer, above the reconstruction.
+        // `None` -- no output intent, a non-CMYK destination, a profile that
+        // will not model -- falls through to everything below unchanged.
+        if let Some(xyz) = space.to_pcs_xyz(comps) {
+            if let Some(cmyk) = self.icc.pcs_to_ink(xyz, self.gs.current.rendering_intent) {
+                self.icc.note_managed();
+                return Some(cmyk);
+            }
+            if self.icc.has_destination() {
+                // A destination exists and could not separate this colour:
+                // that is the unmanaged case the counter exists for. Without
+                // a destination nothing could have been managed, and the
+                // page's `blend_space_from_output_intent` already says so.
                 self.icc.note_unmanaged();
             }
         }

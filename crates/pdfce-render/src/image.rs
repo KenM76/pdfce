@@ -1354,7 +1354,7 @@ fn decode_sampled(
             overprint: Some(o),
             ..
         } => Some(o.kind.clone()),
-        Space::Special(cs) => match crate::overprint::classify(
+        Space::Special { cs, .. } => match crate::overprint::classify(
             cs,
             true,
             // ★ NOT a policy read, deliberately, and this is the one place
@@ -1408,7 +1408,7 @@ fn decode_sampled(
                 },
                 Some(_),
             ) => (o.spot_colorants.clone(), Vec::new()),
-            (Space::Special(cs), Some(kind)) => {
+            (Space::Special { cs, .. }, Some(kind)) => {
                 let slots = crate::overprint::authored_spots(kind, &vec![0.0_f32; readable]);
                 let colorants = slots
                     .iter()
@@ -1498,7 +1498,7 @@ fn decode_sampled(
     // per texel.
     let tinting = matches!(
         &space,
-        Space::Special(_) | Space::Icc { .. } | Space::IccRgb { .. }
+        Space::Special { .. } | Space::Icc { .. } | Space::IccRgb { .. }
     );
     // §8.6.6.4/.5: a `/None` colorant "shall never be painted on the
     // page". The whole image is therefore transparent — NOT white.
@@ -1508,11 +1508,11 @@ fn decode_sampled(
     // moment anything is underneath: an opaque white image ERASES the
     // backdrop the standard requires to show through. Caught by a fixture
     // whose divergence from pdfium was maximal in both directions.
-    let suppressed = matches!(&space, Space::Special(cs) if !cs.paints());
+    let suppressed = matches!(&space, Space::Special { cs, .. } if !cs.paints());
     if suppressed {
         notes.colorant_none_suppressed = true;
     }
-    if let Space::Special(cs) = &space {
+    if let Space::Special { cs, .. } = &space {
         notes.uncalibrated_colorimetry = match &**cs {
             crate::color::ColorSpace::Lab { .. } => Some("Lab"),
             crate::color::ColorSpace::CalGray { .. } => Some("CalGray"),
@@ -1526,7 +1526,7 @@ fn decode_sampled(
     // Per-component clamp bounds. Only `Lab` differs from 0–1, and it
     // differs enough to matter — see the `default_decode` note.
     let clamp_range: Vec<(f32, f32)> = match &space {
-        Space::Special(cs) => (0..cs.components())
+        Space::Special { cs, .. } => (0..cs.components())
             .map(|i| cs.component_range(i))
             .collect(),
         _ => vec![(0.0, 1.0); components],
@@ -2327,7 +2327,23 @@ pub(crate) enum Space {
     /// The cost is that conversion is no longer a closed-form arithmetic
     /// step — a `Separation` runs a §7.10 function per distinct sample
     /// tuple — which is what [`TintCache`] exists to bound.
-    Special(std::sync::Arc<crate::color::ColorSpace>),
+    Special {
+        /// The delegated space.
+        cs: std::sync::Arc<crate::color::ColorSpace>,
+        /// The output intent's separation engine, when the space is a CIE
+        /// family (`Lab`, `CalRGB`, `CalGray`) and the document names an
+        /// output device (`Pass 242.0`). `None` for every other delegated
+        /// space, and for a CIE space on a document with no intent.
+        ///
+        /// ★ Resolved at construction rather than looked up per texel for
+        /// the same reason `Icc`'s bridge is: the cache lives on the
+        /// interpreter and a `Space` outlives the decode call. With it, a
+        /// `Lab` image and a `Lab` fill of one colour separate through ONE
+        /// chain -- the fill through `Interpreter::authored_cmyk`, the image
+        /// through [`Space::to_cmyk`] -- rather than one through the
+        /// profile and the other through `rgb_to_cmyk`.
+        pcs: Option<std::sync::Arc<crate::icc::PcsBridge>>,
+    },
     /// `[/ICCBased stream]` where the document ALSO named an output device,
     /// so the samples can actually be colour-managed (`Pass 214.0`).
     ///
@@ -2447,7 +2463,7 @@ impl Space {
             // family. It drives the row stride and the `/Decode` length,
             // so a wrong answer here shears the image rather than
             // discolouring it.
-            Self::Special(cs) => cs.components(),
+            Self::Special { cs, .. } => cs.components(),
             Self::Icc { n, .. } => *n,
             Self::IccRgb { .. } => 3,
         }
@@ -2473,7 +2489,19 @@ impl Space {
             // sample into the darkest corner of the space and paint a
             // near-black picture — plausible enough to be mistaken for a
             // badly exposed scan rather than for a decode bug.
-            Self::Special(cs) => (0..cs.components())
+            Self::Special { cs, .. } => (0..cs.components())
+                .map(|i| cs.component_range(i))
+                .collect(),
+            _ => vec![(0.0, 1.0); self.components()],
+        }
+    }
+
+    /// Each component's `(lo, hi)` range — what a palette byte or a decoded
+    /// sample is scaled into. `0..1` for every family but the delegated
+    /// ones, where `Lab`'s L\* is `0..100` and its a\*/b\* follow `/Range`.
+    fn component_ranges(&self) -> Vec<(f32, f32)> {
+        match self {
+            Self::Special { cs, .. } => (0..cs.components())
                 .map(|i| cs.component_range(i))
                 .collect(),
             _ => vec![(0.0, 1.0); self.components()],
@@ -2511,7 +2539,7 @@ impl Space {
             // reported, whereas white is invisible on the blank page a
             // test most likely uses and silently erases content on a real
             // one. Fail loudly, not plausibly.
-            Self::Special(cs) => cs.to_rgb(comps, intent, diag).unwrap_or(Rgb::BLACK),
+            Self::Special { cs, .. } => cs.to_rgb(comps, intent, diag).unwrap_or(Rgb::BLACK),
             // An Indexed space never reaches here — the palette path
             // short-circuits it — but returning grey rather than
             // panicking keeps this total.
@@ -2607,7 +2635,14 @@ impl Space {
         let c = |i: usize| comps.get(i).copied().unwrap_or(0.0);
         match self {
             Self::Cmyk => Some([c(0), c(1), c(2), c(3)]),
-            Self::Special(cs) => cs.to_cmyk(comps, diag),
+            // A `Separation`/`DeviceN` answers through its alternate; a CIE
+            // space answers `None` there and takes the PCS route when the
+            // document named an output device (`Pass 242.0`). Both in one
+            // arm so the two cannot come to disagree about which applies.
+            Self::Special { cs, pcs } => cs.to_cmyk(comps, diag).or_else(|| {
+                let bridge = pcs.as_ref()?;
+                bridge.to_ink(cs.to_pcs_xyz(comps)?)
+            }),
             // ★★★ THE COLOUR-MANAGED ROUTE, `Pass 214.0`.
             //
             // This one arm is the whole image fix, and it is one arm because
@@ -2998,7 +3033,14 @@ fn resolve_space_array(
             let mut scratch = ColorDiagnostics::default();
             match crate::color::resolve_object(doc, &obj, resources, depth, &mut scratch) {
                 Some(cs) if cs.components() > 0 && cs.components() <= MAX_IMAGE_COMPONENTS => {
-                    Ok(Space::Special(cs))
+                    // The PCS route for the three CIE families, resolved
+                    // once here. `pcs_bridge` answers `None` without a
+                    // destination, so an ordinary document is unaffected.
+                    let pcs = match (icc.cache, cs.to_pcs_xyz(&vec![0.0; cs.components()])) {
+                        (Some(cache), Some(_)) => cache.pcs_bridge(icc.intent),
+                        _ => None,
+                    };
+                    Ok(Space::Special { cs, pcs })
                 }
                 // A space that resolves to zero components, or to more
                 // than the guard allows, is refused rather than clamped:
@@ -3043,13 +3085,39 @@ fn resolve_space_array(
 /// Both were found on 2026-08-21 by an operator reading a test patch's own
 /// caption, not by any gate this project owns.
 ///
-/// Short entries pad with zero rather than failing: a lookup table one
-/// byte short is a malformed file, and §8.6.6.3 gives no recovery, so the
-/// choice is between a black component and refusing the whole image. The
-/// caller already reports a short table by stopping the palette early.
-fn palette_entry(entry: &[u8], m: usize) -> Vec<f32> {
-    (0..m)
-        .map(|c| f32::from(entry.get(c).copied().unwrap_or(0)) / 255.0)
+/// Short entries pad with the component's MINIMUM rather than failing: a
+/// lookup table one byte short is a malformed file, and §8.6.6.3 gives no
+/// recovery, so the choice is between a darkest-value component and refusing
+/// the whole image. The caller already reports a short table by stopping the
+/// palette early.
+///
+/// # ★ The range is the BASE's, not `0..1` (`Pass 242.0`)
+///
+/// §8.6.6.3: each byte "shall be scaled to the range of the corresponding
+/// colour component in the base colour space". This function divided by 255
+/// and stopped, which is right for every device, `ICCBased`, `Separation`
+/// and `DeviceN` base and WRONG for a `Lab` base, whose L\* runs 0–100 and
+/// whose a\*/b\* run over its `/Range` — routinely negative. An `/Indexed`
+/// over `Lab` therefore decoded `L\* = 60` (byte 153) as `L\* = 0.6`, and the
+/// whole palette came out near-black: on the three-ways fixture the palette
+/// image probed at `(0, 0.50, 0.75, 0.98)` ink beside a fill at
+/// `(0, 0, 0, 0.43)`. The graphics-state twin, `color::indexed_to_rgb`, had
+/// read `component_range` correctly all along, so a `Lab` palette FILL was
+/// right and a `Lab` palette IMAGE was wrong on the same page — the route
+/// twin shape this project keeps recording, caught by the agreement test
+/// the same day the fixture was written.
+///
+/// `ranges` is the base's per-component `(lo, hi)`, from
+/// [`Space::component_ranges`]; a `(0.0, 1.0)` entry reproduces the old
+/// arithmetic exactly, so no non-`Lab` palette moves.
+fn palette_entry(entry: &[u8], ranges: &[(f32, f32)]) -> Vec<f32> {
+    ranges
+        .iter()
+        .enumerate()
+        .map(|(c, &(lo, hi))| {
+            let byte = f32::from(entry.get(c).copied().unwrap_or(0));
+            lo + byte / 255.0 * (hi - lo)
+        })
         .collect()
 }
 
@@ -3093,6 +3161,9 @@ fn resolve_indexed(
         ));
     }
     let m = base.components();
+    // The base's component ranges, read once: what each palette byte is
+    // scaled INTO (§8.6.6.3). `0..1` for everything but `Lab`.
+    let base_ranges = base.component_ranges();
 
     // `hival` is a MAXIMUM INDEX, not a count — the table has
     // `hival + 1` entries. Normative ceiling: 255.
@@ -3173,7 +3244,7 @@ fn resolve_indexed(
     // claiming there was nothing owed. See
     // `Diagnostics::overprint_process_images_unsupported`.
     let op_kind = match &base {
-        Space::Special(cs) => match crate::overprint::classify(
+        Space::Special { cs, .. } => match crate::overprint::classify(
             cs,
             true,
             // ★ NOT a policy read, deliberately, and this is the one place
@@ -3205,7 +3276,7 @@ fn resolve_indexed(
     // and what each looks like alone on white. Per-entry tints are read in
     // the loop below by component index, so no per-entry name search.
     let spot_slots: Vec<(usize, std::sync::Arc<[u8]>)> = match (&op_kind, &base) {
-        (Some(kind), Space::Special(_)) => {
+        (Some(kind), Space::Special { .. }) => {
             crate::overprint::authored_spots(kind, &vec![0.0_f32; m])
                 .into_iter()
                 .map(|(component, name, _)| (component, std::sync::Arc::from(name)))
@@ -3214,7 +3285,7 @@ fn resolve_indexed(
         _ => Vec::new(),
     };
     let spot_colorants: Vec<SpotColorant> = match &base {
-        Space::Special(cs) => spot_slots
+        Space::Special { cs, .. } => spot_slots
             .iter()
             .map(|(component, name)| {
                 (
@@ -3260,7 +3331,7 @@ fn resolve_indexed(
             // and set `palette_out_of_range`.
             break;
         };
-        let comps = palette_entry(entry, m);
+        let comps = palette_entry(entry, &base_ranges);
         // ★ `comps` is the entry in the BASE space, so the base is what is
         // asked — a `DeviceCMYK` base returns the components themselves, a
         // `Separation`/`DeviceN` base runs its tint transform, and an
@@ -3334,31 +3405,59 @@ mod tests {
     #[test]
     fn a_palette_entry_is_exactly_as_wide_as_its_base_space() {
         let entry = [10u8, 20, 30, 40, 50, 60];
+        let unit = |m: usize| vec![(0.0_f32, 1.0_f32); m];
         for m in 1..=6 {
             assert_eq!(
-                palette_entry(&entry, m).len(),
+                palette_entry(&entry, &unit(m)).len(),
                 m,
                 "a {m}-component base must receive {m} components, not 4"
             );
         }
         // And the values are the entry's own bytes, in order, normalised.
-        let two = palette_entry(&entry, 2);
+        let two = palette_entry(&entry, &unit(2));
         assert!((two[0] - 10.0 / 255.0).abs() < 1e-6);
         assert!((two[1] - 20.0 / 255.0).abs() < 1e-6);
         // Six colorants are NOT truncated to four -- `DeviceN` is the one
         // space whose width its family does not fix, and the print-conformance suite
         // ships a six-colorant patch.
-        let six = palette_entry(&entry, 6);
+        let six = palette_entry(&entry, &unit(6));
         assert!((six[5] - 60.0 / 255.0).abs() < 1e-6);
     }
 
-    /// A short lookup pads with zero rather than panicking. §8.6.6.3 gives
-    /// no recovery for a truncated table, and a black component is a
-    /// visible defect while a panic is a dead renderer.
+    /// §8.6.6.3 scales each byte into the BASE's component range. For a
+    /// `Lab` base that is `0..100` for L\* and the `/Range` for a\*/b\*, so
+    /// byte 153 is `L\* = 60` and byte 128 under `[-128 127]` is exactly 0 —
+    /// not 0.6 and 0.502, which is what dividing by 255 alone produced and
+    /// what painted every `/Indexed`-over-`Lab` image near-black.
     #[test]
-    fn a_short_palette_entry_pads_with_zero() {
-        assert_eq!(palette_entry(&[255u8], 3), vec![1.0, 0.0, 0.0]);
-        assert_eq!(palette_entry(&[], 2), vec![0.0, 0.0]);
+    fn a_palette_entry_is_scaled_into_the_bases_range_not_into_the_unit_interval() {
+        let lab = vec![(0.0_f32, 100.0_f32), (-128.0, 127.0), (-128.0, 127.0)];
+        let got = palette_entry(&[153u8, 128, 128], &lab);
+        assert!((got[0] - 60.0).abs() < 1e-4, "L* {}", got[0]);
+        assert!(got[1].abs() < 1e-4, "a* {}", got[1]);
+        assert!(got[2].abs() < 1e-4, "b* {}", got[2]);
+        // Byte 0 is the range's floor and byte 255 its ceiling, whatever
+        // the range is.
+        let ends = palette_entry(&[0u8, 255, 0], &lab);
+        assert!(
+            (ends[0]).abs() < 1e-6
+                && (ends[1] - 127.0).abs() < 1e-4
+                && (ends[2] + 128.0).abs() < 1e-4
+        );
+    }
+
+    /// A short lookup pads with the component's floor rather than
+    /// panicking. §8.6.6.3 gives no recovery for a truncated table, and a
+    /// darkest-value component is a visible defect while a panic is a dead
+    /// renderer.
+    #[test]
+    fn a_short_palette_entry_pads_with_the_floor() {
+        let unit = |m: usize| vec![(0.0_f32, 1.0_f32); m];
+        assert_eq!(palette_entry(&[255u8], &unit(3)), vec![1.0, 0.0, 0.0]);
+        assert_eq!(palette_entry(&[], &unit(2)), vec![0.0, 0.0]);
+        // For a signed range the floor is the range's minimum, not zero.
+        let lab = vec![(0.0_f32, 100.0_f32), (-128.0, 127.0), (-128.0, 127.0)];
+        assert_eq!(palette_entry(&[], &lab), vec![0.0, -128.0, -128.0]);
     }
 
     #[test]
@@ -3461,18 +3560,26 @@ mod tests {
             ("DeviceRGB is additive", Space::Rgb),
             (
                 "Lab is colorimetric, not a colorant space",
-                Space::Special(std::sync::Arc::new(crate::color::ColorSpace::Lab {
-                    white: [0.9642, 1.0, 0.8249],
-                    range: [-100.0, 100.0, -100.0, 100.0],
-                })),
+                Space::Special {
+                    cs: std::sync::Arc::new(crate::color::ColorSpace::Lab {
+                        white: [0.9642, 1.0, 0.8249],
+                        range: [-100.0, 100.0, -100.0, 100.0],
+                    }),
+                    // No output intent on this page, so no PCS route: the
+                    // colorimetric space stays colorant-less.
+                    pcs: None,
+                },
             ),
             (
                 "CalRGB likewise",
-                Space::Special(std::sync::Arc::new(crate::color::ColorSpace::CalRgb {
-                    white: [0.9505, 1.0, 1.089],
-                    gamma: [1.0, 1.0, 1.0],
-                    matrix: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-                })),
+                Space::Special {
+                    cs: std::sync::Arc::new(crate::color::ColorSpace::CalRgb {
+                        white: [0.9505, 1.0, 1.089],
+                        gamma: [1.0, 1.0, 1.0],
+                        matrix: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                    }),
+                    pcs: None,
+                },
             ),
         ] {
             assert_eq!(
