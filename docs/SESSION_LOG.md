@@ -88078,3 +88078,150 @@ remainder) with a head note. `:688` backspace repaired.
 **`C:\personal_rag\`:** one dated footer on
 `claude_code/lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`;
 no new lesson.
+
+*Amendment 2026-09-03 (393rd filing):* the fourth backspace byte listed
+under *Still in flight* (`project_corpus_state.md:70`) was repaired by
+the engineer in `67ee5d6`, and the control-byte gate recommended under
+*Findings* is built as `tools/check-control-bytes.py` in the same
+commit. See the 393rd entry.
+
+## 2026-09-03 (393rd filing) — `67ee5d6`: `tools/check-control-bytes.py` SHIPPED — a stray C0 control byte in any prose, config or source file under the scanned roots fails CI (`repository audits` 21 → 22 checks); its first run found exactly the 392nd filing's fourth, unrepaired backspace and the same commit repaired it; no Pass ID, no decision, no rule — the no-rule argued against a four-times-written mechanism; one docstring/code scope mismatch owed
+
+**Sourcing (hard rule 8).** Shell available; every figure below was
+produced here, command beside it. `git show 67ee5d6 --stat` → 4 files,
++142 / −2. `python tools/check-control-bytes.py` → **`clean -- 872 text
+file(s) carry no stray C0 byte`**, exit 0. `python
+tools/check-ci-parity.py` → clean (28 / 11 / 3). `python
+tools/check-ci-job-names.py` → clean, *every declared count is right*
+(so `22 checks` at `ci.yml:312` is gate-verified). `bash
+tools/run-gates.sh --list` → line 24 `python tools/check-control-bytes.py`.
+`python tools/check-ledger-numbers.py` → clean; filings ceiling `392`,
+so this is the 393rd. `git ls-remote origin main` = **`3331b80`**; `git
+log` → `67ee5d6` (`HEAD`), `35fbf6c`, `3331b80` — **two commits
+unpushed** at filing time. `git status --short` → only
+`docs/NEXT_SESSION.md` modified (the engineer's; untouched here).
+`cat -v` on `project_corpus_state.md:70` post-image → `\bMK\b`, no
+`^H`. `git ls-files fixtures | grep '\.md$'` → 40; a byte loop over
+them by the gate's own rule → 0 defective. **Relayed:**
+`check-suite-name-absent.py`, `check-commits-filed.py` green.
+
+**Premises corrected:** none of the dispatch's figures disagreed with
+the disk. **One the dispatch did not say:** the gate's module docstring
+lists `fixtures/*.md` among the scanned paths and says *"the crate `src`
+trees"*; `TEXT_ROOTS` is `docs/`, `.claude/`, `tools/`, `crates/`,
+`.github/`, `fuzz/fuzz_targets/` — **no `fixtures/`**, and all of
+`crates/` rather than `src` only (a superset; harmless). Forty prose
+files claimed scanned are not. The commit message states the scope
+correctly; only the docstring disagrees with the code — the
+*a-claim-in-a-comment-is-not-a-check* shape.
+
+**Shipped:**
+- **`67ee5d6` — `tools/check-control-bytes.py`** (130 lines).
+  `git ls-files --cached --others --exclude-standard` filtered to the
+  six roots plus five root files (`README.md`, `CLAUDE.md`, `LICENSE`,
+  `UI_PREFERENCES.md`, `THIRD_PARTY_LICENSES.md`); binaries skipped by a
+  suffix list and by a NUL in the first 8 KiB. **Fails on `0x00–0x08`,
+  `0x0B`, `0x0E–0x1F`, `0x7F`**; TAB/LF/FF/CR allowed. Reports the first
+  offence per file as `<path>:<line>  byte \xNN` — hex name, never the
+  raw byte, since a CI log is text and would otherwise reproduce the
+  defect inside its own report. Exit 1 with a three-line remedy (Edit /
+  Write tool, never sed or a heredoc); exit 0 with a count when clean.
+  Registered in `ci.yml`'s `audits` job (title `21` → `22 checks`, an
+  8-line comment naming the mechanism) and `check-ci-parity.py`'s
+  `LOCAL` table `:119`. **First run: one file, the fourth backspace the
+  392nd filing had reported** (`.claude/agent-memory/pdfce-spec-librarian/project_corpus_state.md:70`,
+  `\bMK\b`); repaired in the same commit with a byte-level script through
+  the Write tool. No Pass ID — tooling, the `9228cad` / `b5f5554` /
+  `e3fb7e0` class.
+
+**Decisions made this session:**
+- **No standing rule minted, with the two-occurrence bar MET on the
+  count and declined on the instrument.** The shape (a control byte in
+  the record) is at n = 2 — the 2026-08-18 carriage returns in the
+  librarian agent file, and the four 2026-09-03 backspaces — and the
+  mechanism has been written down four times in `personal_rag`. The
+  argument, in full in the `ROADMAP.md` block: the failure is **silent
+  by construction** (renders invisibly, `git diff` shows a changed line,
+  nothing parses it as wrong), so there is no moment at which a rule
+  could be read and applied; four writings did not stop the fifth
+  planting; and hard rule 11's reason for being procedural — *no gate
+  can content-check* — runs the other way here, because `0x08` is never
+  legitimate in Markdown whatever the author meant. **Where the check is
+  mechanical, the gate is the rule.** A future recurrence would mean a
+  file outside `TEXT_ROOTS` or CI unread before push, and both already
+  have their own gate or rule; the fix would be a `TEXT_ROOTS` line.
+- **Two widenings over the 392nd filing's recommendation are the
+  engineer's and are recorded as such:** source trees scanned (a Rust
+  byte-string literal with a swallowed escape compiled by accident the
+  day the gate was written, per the docstring); `0x7F` added and `0x0C`
+  released.
+
+**Findings + decisions:**
+- **A scan that found one defect on a tree known to hold one is a
+  calibration, small but real.** Had the first run returned zero after
+  the 392nd filing counted four (three repaired, one not), the gate
+  would have been suspect. Recorded so the next gate's first run is read
+  the same way: the expected count is known before the run.
+- **The docstring/`TEXT_ROOTS` mismatch** (above). 0 of 40 `fixtures/`
+  Markdown files defective today by the same byte rule, so nothing is
+  hidden; the claim is still wrong. Owed to the engineer: add
+  `"fixtures/"` to `TEXT_ROOTS` (PDFs are already suffix-skipped) or
+  strike the two words.
+
+**Hard-rule-11 sweep (claim: "the audits job has 21 checks" / "the
+fourth byte is unrepaired" / "the gate is recommended, not built"):**
+- `ci.yml:312` — moved by the commit; verified by `check-ci-job-names`.
+- Grep for `21 checks`, `21 audit`, `twenty-one` over `docs/`, `tools/`,
+  `.claude/`, `README.md` excluding the two ledgers → **no hits**; the
+  count lived only in `ci.yml`.
+- `ROADMAP.md` 392nd block, the *"reported, not repaired"* line → dated
+  RESOLVED footer added this filing. `SESSION_LOG.md` 392nd entry
+  (*Still in flight* / *Findings* / *For next session*) → dated amendment
+  footer added above. Correct survivors, not touched: the 392nd block's
+  *"Recommended to the engineer, not built"* paragraph and its *Standing
+  rules — no new mint* paragraph — both dated and correct on their date,
+  and the second one predicted this filing's outcome.
+- `docs/NEXT_SESSION.md:91` and `:119` already name `67ee5d6` and the
+  gate — the engineer's own edit, in the working tree, not touched.
+- `personal_rag` — the 2026-08-11 lesson's footer says *"Recommended to
+  the pdfce engineer as `tools/check-control-bytes.py` over `docs/`,
+  `.claude/`, `README.md`"* → dated "built" line added beneath it (the
+  scope differences named). The 2026-07-24 mechanism lesson → dated
+  footer pointing at the gate.
+
+**Still in flight:**
+- `35fbf6c` + `67ee5d6` + this filing: **unpushed** (`origin/main` =
+  `3331b80`). Standing-authorised (decision 090); scrub gate first.
+- `ff738a6`, `a436432`, `35fbf6c`, `67ee5d6`: **unreleased** — the next
+  bump is the engineer's call.
+- `tools/verify-release.py:203` message — still owed (carried from the
+  391st filing).
+- `check-control-bytes.py` docstring vs `TEXT_ROOTS` — owed (this
+  filing).
+- `docs/NEXT_SESSION.md` — modified in the working tree by the engineer;
+  not touched. Channel folder not touched.
+
+**For next session:**
+- Fix the docstring/`TEXT_ROOTS` mismatch in one line, then push.
+- The `sh` census and the shading-cut scoping, carried from the 392nd
+  filing.
+- The GitHub-release-page question, carried from the 391st.
+
+**`docs/FEATURES.md`:** untouched — no capability.
+
+**`ROADMAP.md`:** new top *Shipped* block (393rd filing): sourcing, the
+docstring premise, the `67ee5d6` record (what it does, the two
+widenings, the first-run calibration, registration, why no Pass ID), the
+no-mint argument, the cross-record footers, the ledger. The 392nd
+block's fourth-byte line given a dated RESOLVED footer.
+
+**`ARCHITECTURE.md`:** untouched — no decision.
+
+**`D:\dev\rag\rust\` / `egui\`:** no change.
+
+**`C:\personal_rag\`:** two dated footers —
+`claude_code/lesson_20260724_bash_tool_heredoc_backslash_mangling.md`
+(the pdfce repo now gates the symptom) and
+`claude_code/lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`
+(the recommendation it carries is built); no new lesson, master index
+unchanged.

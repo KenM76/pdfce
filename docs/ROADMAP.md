@@ -96,6 +96,185 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★ ONE COMMIT, 393rd filing, 2026-09-03 — `67ee5d6`,
+`tools/check-control-bytes.py`: A STRAY C0 CONTROL BYTE IN ANY PROSE,
+CONFIG OR SOURCE FILE NOW FAILS CI — THE GATE THE 392nd FILING RECOMMENDED,
+BUILT BY THE ENGINEER THE SAME MORNING; ITS FIRST RUN FOUND EXACTLY THE
+FOURTH BACKSPACE THAT FILING HAD REPORTED AND LEFT ALONE, REPAIRED IN THE
+SAME COMMIT. NO PASS ID (tooling), NO DECISION, NO RULE — the no-rule
+argued below against a four-times-written mechanism.**
+
+**Sourcing (hard rule 8).** Shell available; checked, command beside
+each. `git show 67ee5d6 --stat`: 4 files, +142 / −2 —
+`tools/check-control-bytes.py` (new, 130 lines by `grep -c ""`),
+`.github/workflows/ci.yml` (+11 / −2), `tools/check-ci-parity.py` (+1),
+`.claude/agent-memory/pdfce-spec-librarian/project_corpus_state.md` (the
+`:70` repair, `\bMK\b` now four bytes, `cat -v` shows no `^H`).
+`python tools/check-control-bytes.py` on this tree → **`clean -- 872
+text file(s)`**, exit 0. `python tools/check-ci-parity.py` → clean, *28
+covered by the local sweep, 11 by a named local stand-in, 3 genuinely
+CI-only*. `python tools/check-ci-job-names.py` → clean, *9 job(s); every
+declared count is right* — so the `ci.yml:312` rename to *`repository
+audits (22 checks)`* is verified by the gate that exists for it, not
+relayed. `bash tools/run-gates.sh --list` line 24 = `python
+tools/check-control-bytes.py`. `python tools/check-ledger-numbers.py` →
+clean; ceilings `246.1` / `R240` / decision `126` / filing `392`, so this
+is the **393rd**. `git ls-remote origin main` = **`3331b80`** — `35fbf6c`
+(the 392nd filing) and `67ee5d6` are **unpushed** at filing time. `git
+status`: `docs/NEXT_SESSION.md` modified in the working tree (the
+engineer's, per the dispatch; not touched). **Relayed, not re-run:**
+`check-suite-name-absent.py` and `check-commits-filed.py` green.
+
+**Premise checked and found wanting — the gate's own docstring.** The
+module doc's *WHAT IT CHECKS* names **`fixtures/*.md`** among the scanned
+paths and describes the crate half as *"the crate `src` trees"*. The code
+(`TEXT_ROOTS`) scans **`crates/` whole** (tests and `Cargo.toml` included —
+a harmless superset) and **`fixtures/` not at all**. `git ls-files
+fixtures | grep '\.md$'` = **40** prose files (`fixtures/README.md`, the
+`PROVENANCE.md` chain) outside the sweep. Scanned here by the same rule
+with a byte loop: **0 of 40** carry a stray byte today, so nothing is
+hidden — but the docstring claims a scope the code does not have, the
+*a-claim-in-a-comment-is-not-a-check* shape from the 331st filing's
+ledger-gate fix. **Owed to the engineer** (`tools/` is outside this
+role's remit): add `"fixtures/"` to `TEXT_ROOTS` (PDFs are already
+suffix-skipped) or strike the two words. The engineer's own commit
+message describes the scope correctly (*docs/, .claude/, tools/, crates/,
+.github/, fuzz/fuzz_targets/ and the root Markdown*); only the docstring
+disagrees with the code.
+
+### `67ee5d6` (2026-09-03) — `tools/check-control-bytes.py`: no prose, config or source file may carry a stray C0 byte; registered in CI, the parity table and `run-gates.sh`; the fourth swallowed `\b` repaired
+
+**What it does** (from the source, not the description). `git ls-files
+--cached --others --exclude-standard -z`, filtered to `docs/`, `.claude/`,
+`tools/`, `crates/`, `.github/`, `fuzz/fuzz_targets/` and five root files
+(`README.md`, `CLAUDE.md`, `LICENSE`, `UI_PREFERENCES.md`,
+`THIRD_PARTY_LICENSES.md`); a suffix list skips binaries (`.pdf`, images,
+fonts, `.rten`, `.icc`, `.bundle`, `.lock`, …) and a NUL in the first
+8 KiB skips the rest by content. Every remaining byte is tested: **`0x00–0x08`,
+`0x0B`, `0x0E–0x1F` and `0x7F` fail**; TAB, LF, FF and CR are allowed.
+Output on failure: one line per file, first offence only,
+`<path>:<line>  byte \xNN` — **the byte is printed as its hex name, never
+raw**, because a CI log is text too and a raw backspace in it would
+reproduce the defect in the report of the defect. Exit 1 with a
+three-line remedy (*repair with the Edit/Write tool, never sed or another
+heredoc*); exit 0 and one count line when clean.
+
+**Two deliberate widenings over the 392nd filing's recommendation**
+(`docs/`, `.claude/`, `README.md`; `0x00–0x08`, `0x0B–0x0C`, `0x0E–0x1F`):
+**(1)** source trees are in, because — per the docstring — a Rust
+byte-string literal that had swallowed its escape (`b'\n'` holding a
+literal LF) compiled by accident the day the gate was written, and `grep`
+answered *"Binary file matches"* rather than showing the line; **(2)**
+`0x7F` (DEL) added, `0x0C` (FF) released as legitimate. Neither changes
+what the 392nd filing found; both are the engineer's call and are
+recorded so the recommendation and the build are not read as the same
+text.
+
+**What its first run found.** The 392nd filing repaired three backspaces
+in the two ledgers and **reported** a fourth in the spec-librarian's
+memory file (`project_corpus_state.md:70`, the regex `\bMK\b`, in the
+dispatch-62 row) as *not this role's; reported, not repaired*. The gate's
+first run on the tree returned exactly that one file and no other —
+**the tree had one defect and the gate found one**, which is the
+smallest possible calibration and still a real one: a scan that had
+returned zero would have been suspect, given the filing had just
+counted four. Repaired in the same commit with a **byte-level Python
+script routed through the Write tool, not a heredoc** — the 392nd
+filing's own two failed repairs having shown that a heredoc carrying
+`\\b` arrives as a real backspace and rewrites `0x08` as `0x08`. `cat -v`
+on the post-image shows `\bMK\b` with no `^H`.
+
+**Registration.** `.github/workflows/ci.yml` `audits` job: step *"check
+no prose or source file carries a stray control byte"* with an 8-line
+`#` comment naming the mechanism; job title `21 checks` → **`22 checks`**
+(`check-ci-job-names.py` verifies the declared count against the step
+list — green). `tools/check-ci-parity.py` `LOCAL` table `:119`, so the
+local sweep runs it and `run-gates.sh --list` prints it. **Every gate
+that guards gate-registration is green on this commit** —
+`check-ci-job-names`, `check-ci-parity`; and the two commit/content gates
+`check-suite-name-absent`, `check-commits-filed` (relayed).
+
+**Why no Pass ID.** Same class as `9228cad` (descendant-search fix),
+`b5f5554` (CI-per-push) and `e3fb7e0` (`check-shipped-assets.py`) —
+repository tooling with no capability behind it. `docs/FEATURES.md` has no row to
+tick and is **untouched**.
+
+#### Standing rules — no new mint, and the argument is the interesting part
+
+The dispatch asks the question directly: the backslash-through-heredoc
+mechanism has been written down **four times**
+(`lesson_20260724` → addenda 2026-08-01 and 2026-08-07 → the `\b`-eats-a-
+character lesson of 2026-08-11 → the 392nd filing's recurrence footer),
+and its symptom has now appeared in this repository's own record at
+**n = 2** shapes (real carriage returns in the librarian agent file,
+2026-08-18 → 08-22; four backspaces across three files, found 2026-09-03).
+The two-occurrence bar is met on the count. **No rule is minted, and
+the reason is not that the bar is unmet — it is that a rule is the
+wrong instrument for this failure, and four rules have already proved
+it.**
+
+- **The failure is silent by construction.** A backspace renders
+  invisibly in a terminal, `git diff` shows only a changed line, and no
+  parser rejects it. A standing rule works by being *read at the moment
+  it applies* — R217 at push time, R209 at test time — and this mistake
+  has no such moment: the author typed `\\b`, meant `\b`, and saw
+  nothing wrong. **A rule cannot fire on an event nobody perceives.**
+- **The mechanism was already a rule, four times over, and the fourth
+  writing did not stop the fifth planting** (`3331b80`, the 391st
+  filing, was written by this role, whose own agent file has carried the
+  2026-08-18 carriage-return episode in hard rule 11's parenthetical
+  since 2026-08-22). A fifth copy of the same sentence in `ROADMAP.md`'s
+  Standing rules would be the fifth copy.
+- **Hard rule 11's argument, inverted.** Rule 11 is a procedural
+  commitment *because* no gate can content-check a disclosure — the gate
+  would have to know what "true" is. A control-byte scan needs to know
+  nothing: `0x08` is never legitimate in a Markdown file, whoever meant
+  what. **Where the check is mechanical, the gate is the rule**, and
+  minting a rule beside a working gate is the pattern R239 warns against
+  from the other side — publishing the count instead of the command.
+- **What a future occurrence would mean.** If a control byte reaches
+  `main` again, it will be because a file lay *outside* `TEXT_ROOTS`
+  (the `fixtures/` gap above is the live example) or because CI was not
+  read before push — and both of those already have gates and rules
+  (`check-ci-parity.py`, R217). The remedy would be a `TEXT_ROOTS` line,
+  not a rule.
+
+So: the four-times-written pattern is **closed by the gate, not by a
+rule**, and this block is the place a reader who looks for the rule
+will find the reason there is none. The 392nd filing's *Standing rules —
+no new mint* paragraph said the same in advance (*"the remedy is a
+gate"*); this filing confirms the gate exists and the reasoning held.
+
+#### Cross-record footers written this filing
+
+- **`C:\personal_rag\claude_code\lesson_20260724_bash_tool_heredoc_backslash_mangling.md`**
+  — one dated footer: the pdfce repository now carries a CI gate for
+  the symptom. Meets the bar — a reader of the mechanism lesson should
+  know that one project has made the mistake *fail*, and how, so the
+  same 130 lines can be lifted elsewhere.
+- **`C:\personal_rag\claude_code\lesson_20260811_b_escape_eats_a_character_out_of_a_non_raw_windows_build_path.md`**
+  — one dated line under its 2026-09-03 footer: the gate it recommended
+  is built, with the two scope differences. Hard rule 4: the
+  recommendation lives there; its resolution belongs beside it.
+- The 392nd filing's *"reported, not repaired"* line for the fourth byte
+  (this file, above in that block) gets a dated RESOLVED footer.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | ceiling `246.1` | unchanged — no Pass ID (tooling). Next free major still `247.0` |
+| Decisions | ceiling `126`, next free `127` | unchanged — none minted |
+| Standing rules | ceiling `R240`, next free `R241` | unchanged — decline argued above |
+| Releases | `v0.27.0` verified; `ff738a6` + `a436432` unreleased | unchanged; `35fbf6c` + `67ee5d6` also unreleased and **unpushed** (`origin/main` = `3331b80`) |
+| CI audits job | `21 checks` | **`22 checks`** (`check-ci-job-names.py` green) |
+| Owed to the engineer | `verify-release.py:203` message | **+1**: `check-control-bytes.py` docstring names `fixtures/*.md`; `TEXT_ROOTS` does not include it (40 `.md` files, 0 defective today) |
+| `D:\dev\rag\rust\` / `egui\` | — | no change |
+| `C:\personal_rag\` | — | two dated footers (`claude_code/lesson_20260724…`, `claude_code/lesson_20260811…`); no new lesson |
+| SESSION_LOG filings | 392 | **393** |
+
+---
+
 **★★ THREE COMMITS, 392nd filing, 2026-09-03 — `v0.27.0` (`dfce8a9`)
 RESOLVED PENDING → VERIFIED (tag on `origin`, CI green at `3331b80`,
 packaged, fresh-folder smoke-tested, deployed to `pdfce2`, `verify-release`
@@ -340,6 +519,10 @@ itself is filed in *Planned* as a new row with all boxes unticked.
 - **`.claude/agent-memory/pdfce-spec-librarian/project_corpus_state.md:70`**
   — a fourth (`\bMK\b`, a regex), in the spec-librarian's own memory
   file, **not this role's; reported, not repaired.**
+  *RESOLVED 2026-09-03 (393rd filing): repaired in `67ee5d6` by the
+  engineer, with a byte-level script through the Write tool; the new
+  `tools/check-control-bytes.py` found it as the tree's only defect
+  before the repair and reports `872 text file(s)` clean after.*
 
 All three in the two ledgers were repaired to the two characters `\b`
 with the **Edit tool** (a correction is a claim: `git diff | cat -v`

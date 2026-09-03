@@ -88,8 +88,9 @@ Candidates in the order I would take them:
   smoke-tested (both binaries), pushed with `3331b80`, CI green there,
   deployed to OneDrive `pdfce2` (pdfce1 = 0.26.0), `verify-release.py
   v0.27.0` clean. `ff738a6` and `a436432` are AFTER the v0.27.0 tag and
-  unreleased at hand-off — a v0.28.0 is owed when the next Pass lands (or
-  now, if a session wants the shading disclosure on OneDrive).
+  unreleased at hand-off, as are `67ee5d6` (the control-bytes gate) and the
+  392nd/393rd filings — a v0.28.0 is owed when the next Pass lands (or now,
+  if a session wants the shading disclosure on OneDrive).
 - **GitHub releases stop at v0.17.0.** No version since has had one;
   `verify-release.py` skips the check because its `gh` subprocess reports
   unavailable. Not a defect fixed this session; a standing state.
@@ -115,6 +116,13 @@ Candidates in the order I would take them:
 - **iccce pinned rev** `a4d9003b` (v0.3.0); dependency SET unchanged since
   v0.22.0; `THIRD_PARTY_LICENSES.md` did not move.
 - **Every code commit is FILED** — `python tools/check-commits-filed.py`.
+- **New gate `tools/check-control-bytes.py`** (`67ee5d6`): a stray C0 byte
+  (a swallowed `\b`, a bare LF inside a literal) in docs/, .claude/, tools/,
+  crates/ or the root Markdown fails the sweep. In CI (`repository audits`,
+  22 checks) and in `run-gates.sh --list`. It is what the heredoc rule in §C
+  could not do: make the mistake FAIL. (It caught the sentence you are reading: the
+  first draft of this bullet went through a heredoc and lost its own
+  backslash. Fifth recurrence, first one caught by a machine.)
 - **Backups:** refresh with
   `git bundle create /d/Dev/pdfce-backups/pdfce-<date>-<sha>-full.bundle --all`
   then `git bundle verify` on it. Refreshed this session at `dfce8a9`.
