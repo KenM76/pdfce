@@ -176,15 +176,19 @@ fi
 # by `tools/hooks/pre-push`, but only when this clone's `core.hooksPath`
 # points there -- git config is not versioned, so a fresh clone has no hook.
 # Say so on every sweep; a first bad push is the wrong place to find out.
+failed=()
 if [ "$(git config --get core.hooksPath 2>/dev/null)" = "tools/hooks" ]; then
     printf 'pre-push hook: ACTIVE (core.hooksPath = tools/hooks)
 '
 else
+    # R241 clause 2: a sweep on a clone whose pushes are not gated is RED,
+    # not merely informed -- the 395th filing recorded the first draft's
+    # "prints and exits 0" as a variance from the rule, and this closes it.
     printf 'pre-push hook: NOT ACTIVE -- run: git config core.hooksPath tools/hooks
 '
+    failed+=("pre-push hook not active (git config core.hooksPath tools/hooks)")
 fi
 
-failed=()
 run_one() {
     local cmd="$1"
     printf '\n=== %s\n' "$cmd"

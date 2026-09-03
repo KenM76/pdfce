@@ -74,6 +74,7 @@ USAGE
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import pathlib
 import sys
@@ -194,21 +195,39 @@ def main(tag: str) -> int:
         of=origin_main,
     )
 
-    gh = subprocess.run(
-        ["gh", "release", "view", tag, "--json", "assets", "--jq",
-         "[.assets[].name] | length"],
-        capture_output=True, text=True,
-    )
-    if gh.returncode != 0:
-        print("  skip  GitHub release -- `gh` unavailable or not authenticated")
+    # Decision 127 (2026-09-03): every release gets a GitHub release with the
+    # portable zip as its asset. Until then this branch printed `skip` for ANY
+    # non-zero `gh` exit and attributed it to "gh unavailable" -- and nine
+    # releases in a row (v0.18.0..v0.26.0) passed "clean" with no release page,
+    # because `gh release view` on a tag with no release exits non-zero too.
+    # A tool that is genuinely absent is still a skip (that is a machine fact,
+    # not a release fact); a release that does not exist is a FAIL.
+    gh_present = shutil.which("gh") is not None
+    if not gh_present:
+        print("  skip  GitHub release -- `gh` is not installed on this machine")
     else:
-        count = gh.stdout.strip()
-        check(
-            count.isdigit() and int(count) > 0,
-            "GitHub release has at least one asset",
-            f"asset count = {count or '0'} -- a release with no binary is one "
-            "nobody can use",
+        gh = subprocess.run(
+            ["gh", "release", "view", tag, "--json", "assets", "--jq",
+             "[.assets[].name] | length"],
+            capture_output=True, text=True,
         )
+        if gh.returncode != 0:
+            check(
+                False,
+                "GitHub release exists",
+                f"`gh release view {tag}` failed: "
+                f"{(gh.stderr or gh.stdout).strip() or 'no output'} -- decision "
+                "127: every release is published to GitHub with the portable zip; "
+                "`gh release create` it, or fix `gh auth status`",
+            )
+        else:
+            count = gh.stdout.strip()
+            check(
+                count.isdigit() and int(count) > 0,
+                "GitHub release has at least one asset",
+                f"asset count = {count or '0'} -- a release with no binary is one "
+                "nobody can use",
+            )
 
     # * Is CI actually GREEN at the commit this tag points at?
     #
