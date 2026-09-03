@@ -769,19 +769,42 @@ pub enum OverprintZeroTintScope {
     /// `OPM 1`'s zero-tint rule. A `DeviceGray` or `DeviceRGB` paint with
     /// `/OP true` changes nothing about which components it writes.
     ///
-    /// **Strictly conforming, and it knocks a spot backdrop out** where
-    /// Acrobat preserves it. Choose this to reproduce pdfce's pre-`Pass
-    /// 143.0` output, or when the question is *"what does ISO 32000-1
-    /// literally require?"*
+    /// **Strictly conforming, and THE SHIPPED DEFAULT since `Pass 244.0`
+    /// (2026-09-03).** It was the non-default from `Pass 143.0` to
+    /// `Pass 243.0` for the sequencing reason [`Self::GreyAsKOnly`] records
+    /// at length: flipping it before pdfce had a per-spot-colorant plane
+    /// traded one wrong cell for another. The plane landed in `Pass 238.0`/
+    /// `239.0`, and with it in place this reading was re-measured on the
+    /// print-conformance sweep: **0 FAIL / 43 pass of 51**, against
+    /// 2 FAIL / 41 pass under [`Self::GreyAsKOnly`] — the two failures being
+    /// exactly the two grey-over-process cells whose reference render this
+    /// reading matches (`255,255,255` both). Three patches change a pixel
+    /// under the flip: those two, and a font-support page whose grey text
+    /// rows move TOWARD the reference. Nothing else moves.
+    ///
+    /// The sentence this paragraph replaces said "it knocks a spot backdrop
+    /// out where Acrobat preserves it" — true only while pdfce flattened
+    /// spots into C/M/Y. With a spot plane, a grey over a spot backdrop is
+    /// Table 149's "any process space × spot colorant × OP true = c_b" under
+    /// EVERY value of this setting (`OP-N3`), so the spot survives here too.
+    #[default]
     DeviceCmykOnly,
     /// Additionally treat a **`DeviceGray`** source as the K-only
     /// `DeviceCMYK` it converts to, so its zero C, M and Y preserve the
     /// backdrop.
     ///
-    /// **The shipped default**, and this is a print-conformance axis whose
-    /// measurement instrument is authored to press behaviour — so the
+    /// ★★ **The shipped default from `Pass 143.0` to `Pass 243.0`; NOT the
+    /// default since `Pass 244.0`** — see [`Self::DeviceCmykOnly`] for the
+    /// measurement that moved it. Kept as a selectable value: it is what
+    /// every pdfce release up to v0.24.0 rendered, and the setting exists
+    /// precisely so a reading is chosen rather than hard-coded. The paragraphs
+    /// below are the record of WHY it was the default and why that reasoning
+    /// ran out; they are kept legible rather than rewritten.
+    ///
+    /// This was "the shipped default, and this is a print-conformance axis
+    /// whose measurement instrument is authored to press behaviour — so the
     /// default is determined by what the instrument is for, not by a
-    /// preference.
+    /// preference."
     ///
     /// # ★★ THE SENTENCE THAT USED TO END THAT PARAGRAPH IS FALSE
     ///
@@ -812,9 +835,11 @@ pub enum OverprintZeroTintScope {
     /// `DeviceGray` source in row 2 (*"any process colour space"*, `c_s` in
     /// all three columns), not in row 1, whose scope note says `DeviceCMYK`.
     ///
-    /// # Why the default is nevertheless UNCHANGED for now
+    /// # Why the default was nevertheless UNCHANGED until `Pass 244.0`
     ///
-    /// A sequencing decision, not an endorsement. Flipping it alone is
+    /// (Historical: the condition named below — the per-spot-colorant plane
+    /// — was met in `Pass 238.0`/`239.0`, and the flip followed once it was
+    /// re-measured.) A sequencing decision, not an endorsement. Flipping it alone was
     /// trap-neutral across the conformance corpus: it corrects one cell and
     /// breaks another that passes today only through a **compensating
     /// error** — pdfce flattens a spot colorant into C/M/Y for want of a spot
@@ -832,7 +857,6 @@ pub enum OverprintZeroTintScope {
     /// patches, **none** carries a `DeviceRGB` fill, so extending the rule to
     /// RGB here would be an unmeasured behavioural change riding along with
     /// a measured one. [`Self::AllProcessSpaces`] is where that lives, opt-in.
-    #[default]
     GreyAsKOnly,
     /// Treat **every** process space as the `DeviceCMYK` it converts to —
     /// `DeviceRGB` and `CalRGB` as well as `DeviceGray`.
@@ -2758,12 +2782,16 @@ impl Settings {
              # then applying the rule). That is a DIVERGENCE, not a spec ambiguity:\n\
              # 11.7.4.5 Table 149 puts a DeviceGray source in the process-space row.\n\
              #\n\
-             #   device_cmyk_only   8.6.7 to the letter; the spot is knocked out\n\
-             #   grey_as_k_only     DEFAULT. Preserves the backdrop, DeviceGray only.\n\
-             #                      Matches Acrobat over a SPOT backdrop; does NOT match\n\
-             #                      it over process components (measured 2026-09-01).\n\
-             #                      Neither setting matches everywhere -- the real\n\
-             #                      difference is that Acrobat has a spot plane.\n\
+             #   device_cmyk_only   DEFAULT (since v0.25.0). 8.6.7 to the letter: only a\n\
+             #                      DeviceCMYK source skips its zero tints. Matches the\n\
+             #                      reference render on every patch of the print-\n\
+             #                      conformance suite now that pdfce keeps spot inks on\n\
+             #                      their own plane, so a grey over a spot still\n\
+             #                      preserves it under this value.\n\
+             #   grey_as_k_only     The default up to v0.24.0. Treats DeviceGray as the\n\
+             #                      K-only CMYK it converts to, so its zero C, M and Y\n\
+             #                      preserve a PROCESS backdrop where the standard and\n\
+             #                      the reference replace it.\n\
              #   all_process_spaces also DeviceRGB and CalRGB. Principled but\n\
              #                      unmeasured -- no corpus patch exercises it\n\
              #\n\
@@ -3510,8 +3538,8 @@ mod tests {
             // NOT the default (`OutputIntentIfSubtractive`) -- see the note
             // above about a value that matches the default proving nothing.
             page_blend_space_source: PageBlendSpaceSource::DeviceNative,
-            // NOT the default (`GreyAsKOnly`), same reason.
-            overprint_zero_tint_scope: OverprintZeroTintScope::DeviceCmykOnly,
+            // NOT the default (`DeviceCmykOnly` since `Pass 244.0`), same reason.
+            overprint_zero_tint_scope: OverprintZeroTintScope::GreyAsKOnly,
             // Non-default, per the discipline the comment above states.
             spot_colorant_device_model: SpotColorantDeviceModel::AlternateSpaceSubstitution,
             // NOT the default (`PerRecord`), same reason.

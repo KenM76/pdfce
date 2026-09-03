@@ -2915,33 +2915,38 @@ enum Command {
         #[arg(long)]
         standard: Option<String>,
         /// Override `overprint_zero_tint_scope` for this render only
-        /// (`Pass 143.0`): `device_cmyk_only`, `grey_as_k_only` (default)
-        /// or `all_process_spaces`.
+        /// (`Pass 143.0`): `device_cmyk_only` (default since `Pass 244.0`),
+        /// `grey_as_k_only` (the default up to v0.24.0) or
+        /// `all_process_spaces`.
         ///
         /// # What this exposes, and it is a DIVERGENCE, not an ambiguity
         ///
         /// ISO 32000-1 §8.6.7 scopes `OPM 1`'s zero-tint rule to a
         /// `DeviceCMYK` source. A `DeviceGray` fill under `/OP true` either
-        /// knocks its backdrop out (the literal reading) or preserves the
-        /// backdrop's C, M and Y (converting grey to K-only CMYK first, then
-        /// applying the rule). pdfce's default preserves.
+        /// replaces a PROCESS backdrop (the literal reading, the default) or
+        /// preserves its C, M and Y (`grey_as_k_only`: convert grey to K-only
+        /// CMYK first, then apply the rule). A SPOT backdrop survives under
+        /// every value: Table 149 puts any process space × spot colorant ×
+        /// `OP true` at `c_b`, and pdfce has kept spot inks on their own
+        /// plane since `Pass 238.0`.
         ///
-        /// ★ Which value matches Acrobat DEPENDS ON THE GEOMETRY, so neither
-        /// is "the Acrobat setting": the default agrees with Acrobat over a
-        /// SPOT backdrop, and `device_cmyk_only` agrees with it over PROCESS
-        /// components. Measured 2026-09-01. The underlying difference is that
-        /// Acrobat has a per-spot-colorant plane and pdfce does not yet.
+        /// ★ The default MOVED on 2026-09-03. `grey_as_k_only` had been the
+        /// default while pdfce flattened spots into C/M/Y — the literal reading
+        /// then knocked a spot backdrop out, and the divergence preserved it by
+        /// a compensating error. With the spot plane in place the literal
+        /// reading was re-measured on the whole print-conformance sweep:
+        /// 0 FAIL / 43 pass, against 2 FAIL under the old default, the two
+        /// being grey-over-process cells whose reference render the literal
+        /// reading matches exactly. Choose `grey_as_k_only` to reproduce a
+        /// pre-v0.25.0 render.
         ///
         /// ★ This help said "the ambiguity this exposes" until `Pass 174.5`,
         /// and under **ISO 32000-1** that is wrong: §8.6.7's next sentence
         /// excludes *"conversions from some other colour space"* by name, and
         /// Tables 148/149 tabulate *"any process colour space"* and give it
-        /// `OPM 0` behaviour. **The default is a deliberate divergence from
-        /// ISO 32000-1**, kept for the sequencing reason above rather than
-        /// because it matches any reference. ISO 32000-**2** deletes both of
-        /// those supports, so the
-        /// question really is open there — the edition matters. Choosing
-        /// `device_cmyk_only` gets you ISO 32000-1 to the letter.
+        /// `OPM 0` behaviour. ISO 32000-**2** deletes both of those supports,
+        /// so the question really is open there — the edition matters. The
+        /// default is now ISO 32000-1 to the letter.
         ///
         /// Like `--standard`, this is applied OVER the saved settings and is
         /// **never written back**: one diagnostic render must not silently

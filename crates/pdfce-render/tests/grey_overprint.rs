@@ -286,20 +286,50 @@ fn the_default_reading_preserves_the_spot() {
 /// PRESERVED (142,198,63). The literal reading matches Acrobat; the default
 /// does not.
 ///
-/// ⇒ The default is deliberately **left unchanged** for now, and that is a
-/// sequencing decision rather than an endorsement: flipping it alone is
-/// trap-neutral on the conformance corpus, because it corrects one cell and
-/// breaks another that currently passes only through a compensating error
-/// (pdfce flattens the spot into C/M/Y, and the wrong row assignment then
-/// happens to preserve exactly those planes). The honest fix is the literal
-/// row assignment **together with** the per-spot-colorant plane. Until then
-/// this test pins what actually ships.
+/// ⇒ The default was deliberately left unchanged at the time, as a
+/// sequencing decision rather than an endorsement: flipping it alone was
+/// trap-neutral on the conformance corpus, because it corrected one cell and
+/// broke another that passed only through a compensating error (pdfce
+/// flattened the spot into C/M/Y, and the wrong row assignment then happened
+/// to preserve exactly those planes). The honest fix was the literal row
+/// assignment **together with** the per-spot-colorant plane.
+///
+/// # ★★★ FLIPPED in `Pass 244.0` (2026-09-03)
+///
+/// The plane landed (`Pass 238.0`/`239.0`) and the literal reading was
+/// re-measured on the whole sweep: 0 FAIL / 43 pass, against 2 FAIL / 41
+/// pass for `GreyAsKOnly` — the two failures being the grey-over-process
+/// cells this file's discriminating test below describes. So the default is
+/// now `DeviceCmykOnly`, and this test pins THAT, still against
+/// `Default::default()` so that flipping the attribute back fails here.
+///
+/// The spot-backdrop fixture is the right one to pin it on: under a spot
+/// plane BOTH readings preserve a spot backdrop (`OP-N3`), so the default
+/// must still render this page greenish — a regression that knocked the
+/// spot out would fail the second assertion whichever reading was default.
 #[test]
-fn the_shipped_default_is_grey_as_k_only() {
-    let explicit = render("grey_op_over_spot.pdf", OverprintZeroTintScope::GreyAsKOnly);
+fn the_shipped_default_is_device_cmyk_only() {
+    let explicit = render(
+        "grey_op_over_spot.pdf",
+        OverprintZeroTintScope::DeviceCmykOnly,
+    );
     let defaulted = render("grey_op_over_spot.pdf", OverprintZeroTintScope::default());
     assert_eq!(mark(&explicit), mark(&defaulted));
-    assert!(is_greenish(mark(&defaulted)));
+    assert!(
+        is_greenish(mark(&defaulted)),
+        "with a spot plane the literal reading still preserves a spot backdrop: {:?}",
+        mark(&defaulted)
+    );
+    // And the discriminating geometry: under the default a white mark over a
+    // PROCESS backdrop replaces it, as the reference does.
+    let process = mark(&render(
+        "grey_op_over_cmyk.pdf",
+        OverprintZeroTintScope::default(),
+    ));
+    assert!(
+        is_neutral(process),
+        "the default must be the literal reading on process geometry; got {process:?}"
+    );
 }
 
 /// ★★★ THE DISCRIMINATING CASE: grey over a PROCESS backdrop.
