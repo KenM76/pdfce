@@ -96,6 +96,99 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+**★★ 386th filing, 2026-09-02 — TWO RELEASE COMMITS FILED LATE, CLOSING
+THE GAP THAT LEFT `tools/check-commits-filed.py` RED AT THE PUSHED TIP
+`dc31dd1`: `6876cd3` (`chore: v0.23.0`) WAS OMITTED FROM BOTH THE 384th
+AND 385th FILINGS' OWN DISPATCH TEXT; `dbd6b57` (`chore: v0.24.0`) IS
+FILED HERE FOR THE FIRST TIME, STILL UNTAGGED AT FILING TIME.**
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, dates,
+gate results and packaging/deploy details relayed verbatim by the
+engineer in the dispatch prompt, not independently confirmed via `git
+show`/`git log`. `dbd6b57`'s tag/package/smoke-test/deploy/
+`verify-release.py` steps are stated as **in progress at filing
+time** — the engineer verifies and completes them immediately after
+this filing — and are **not** claimed here as done.
+
+**The drift, named plainly, per this filing's own dispatch.** `6876cd3`
+(`chore: v0.23.0`) is a version bump touching `crates/*/Cargo.toml` and
+both lockfiles — a CODE commit under `check-commits-filed.py`'s own
+classification (`crates/` is one of its four code prefixes), so it
+needed a hash citation in `ROADMAP.md` or `SESSION_LOG.md` like any
+other. It was committed between the 384th filing (`Pass 240.0`/`Pass
+241.0`) and the 385th filing (`Pass 242.0`). The 385th filing's own
+dispatch text never named it as a commit to file; the 384th's dispatch
+predates the commit and could not have. The gap sat unfiled through two
+filings until CI on the pushed tip `dc31dd1` went red on the
+commits-filed gate and surfaced it. **The drift point is the dispatch
+text handed to this role, not a reading error by this role** — the same
+distinction hard rule 8's own 2026-08-07 amendment draws about its own
+premise: an obligation is only as sound as what is put in front of the
+party that owes it.
+
+### `6876cd3` — `chore: v0.23.0` — version bump; dependency set and licences unchanged
+
+2026-09-02 19:16 -0400. Mechanical version bump; both lockfiles moved.
+`cargo about` regenerated `THIRD_PARTY_LICENSES.md` with **no** diff —
+dependency **set** unchanged, `iccce` stays pinned to `rev a4d9003b`
+(decision 123, untouched by this commit).
+
+### `v0.23.0` release (`6876cd3` bump, tagged at `6876cd3`) — packaged, smoke-tested, deployed, verified clean
+
+Tagged directly at the bump commit `6876cd3`. Packaged to
+`D:\builds\pdfce-20260902-1936-6876cd3`. **Fresh-folder smoke test**:
+both binaries copied to a temp path — `pdfce-cli --version` banner
+prints `iccce: 0.3.0 (rev a4d9003b, committed 2026-09-01T08:54:36Z)`;
+the four-ways ICC fixture rendered managed from the copied folder;
+`pdfce-gui.exe` launched. Deployed to OneDrive slot `pdfce2` (`pdfce1`
+keeps `0.22.0`). `python tools/verify-release.py v0.23.0` reported
+**clean**. CI **green** at the tag.
+
+**What the release carries.** `Pass 240.0`, `Pass 241.0` (both already
+filed as *Shipped*, below).
+
+`docs/FEATURES.md`: untouched — no capability shipped by this filing (a
+version bump and a release cut, not a Pass).
+
+### `dbd6b57` — `chore: v0.24.0` — version bump; NOT yet tagged, packaged or deployed as of this filing
+
+Just committed at filing time, not yet pushed or tagged. Mechanical
+version bump; both lockfiles moved. `THIRD_PARTY_LICENSES.md`
+unchanged. Sits on top of `Pass 242.0` (385th filing). **Gates run on
+this tree, all clean**: every `tools/run-gates.sh` command run
+piecewise in the foreground (the script's own backgrounded run gets
+killed past a 10-minute window, per the 385th filing's own gotcha);
+workspace **5054 passed / 0 failed**; `wasm32-unknown-unknown` clean;
+fuzz targets build; `--no-default-features` clean; `cargo tree -p
+pdfce-core` / `-p pdfce-render` re-verified GUI-free.
+
+**Tag/package/smoke-test/deploy/`verify-release.py` are IN PROGRESS at
+filing time** — the engineer verifies and completes these immediately
+after this filing, per the standard working order (commit code, file,
+push together). Not claimed as done here; a follow-on filing entry is
+expected once complete, mirroring this project's own `v0.22.0` pattern
+(381st → 382nd → 383rd filings, where the release cut and its
+verification landed in separate entries).
+
+`docs/FEATURES.md`: untouched — no capability shipped by this filing (a
+version bump, not a Pass).
+
+#### Standing rules — no new mint
+
+Per this role's own instruction for this filing: mint nothing. The
+drift above is recorded as a dated instance in this entry's own text,
+not promoted to a standing rule.
+
+#### Ledger
+
+| ledger | before | after |
+|---|---|---|
+| Pass IDs | unchanged | unchanged — no Pass ships from this filing |
+| Decisions | ceiling `123`, next free `124` | unchanged |
+| Standing rules | ceiling `R240`, next free `R241` | unchanged |
+
+---
+
 **★★★ 385th filing, 2026-09-02 — ONE PASS SHIPPED (`Pass 242.0`,
 `48f8fbb`): A CIE COLOUR (`Lab`/`CalRGB`/`CalGray`) NOW SEPARATES THROUGH
 THE OUTPUT INTENT ON EVERY ROUTE, AND AN OLDER `/Indexed`-OVER-`Lab`

@@ -87219,3 +87219,92 @@ palette defect; Acrobat's output-intent routing for a CIE colour under
 **`D:\dev\rag\rust\`:** one new finding (a conversion reimplemented on a
 second code path diverges — test the paths against each other), index
 updated.
+
+## 2026-09-02 (386th filing) — two release commits filed late, closing the gap that left `check-commits-filed.py` red at the pushed tip `dc31dd1`; `6876cd3` (`chore: v0.23.0`) was omitted from both the 384th and 385th filings' own dispatch text; `dbd6b57` (`chore: v0.24.0`) filed for the first time, still untagged
+
+**Sourcing (hard rule 8).** No shell this filing. Commit hashes, dates,
+gate results, and packaging/deploy details relayed verbatim by the
+engineer in the dispatch prompt, not independently confirmed via `git
+show`/`git log`. `dbd6b57`'s tag/package/smoke-test/deploy/
+`verify-release.py` steps are stated as **in progress at filing
+time**, not claimed here as done.
+
+**Shipped:**
+- No new Pass. `6876cd3` — `chore: v0.23.0`: version bump, both
+  lockfiles, `THIRD_PARTY_LICENSES.md` regenerated with no diff
+  (dependency set unchanged; `iccce` stays pinned to `rev a4d9003b`).
+  Release `v0.23.0` tagged at `6876cd3`, packaged
+  (`D:\builds\pdfce-20260902-1936-6876cd3`), fresh-folder smoke test of
+  both binaries passed (CLI banner `iccce: 0.3.0 (rev a4d9003b,
+  committed 2026-09-01T08:54:36Z)`; four-ways ICC fixture rendered
+  managed from the copied folder; GUI launched), deployed to OneDrive
+  slot `pdfce2` (`pdfce1` keeps `0.22.0`), `verify-release.py v0.23.0`
+  clean, CI green at the tag. Carries `Pass 240.0` + `Pass 241.0`.
+- `dbd6b57` — `chore: v0.24.0`: version bump, both lockfiles,
+  `THIRD_PARTY_LICENSES.md` unchanged. Sits on `Pass 242.0`. Every
+  `tools/run-gates.sh` command run piecewise in the foreground, all
+  clean; workspace **5054 passed / 0 failed**; `wasm32-unknown-unknown`
+  clean; fuzz targets build; `--no-default-features` clean; `cargo
+  tree` re-verified GUI-free for `pdfce-core`/`pdfce-render`. Tag,
+  package, smoke test, deploy and `verify-release.py` are **in
+  progress at filing time** — the engineer verifies before pushing the
+  tag, immediately after this filing.
+
+**Decisions made this session:**
+- None. No new `ARCHITECTURE.md` §12 entry; no new standing rule —
+  mint nothing was this filing's own instruction.
+
+**Findings + decisions:**
+- **The omission, named plainly.** `6876cd3` touches
+  `crates/*/Cargo.toml` and both lockfiles — a CODE commit under
+  `check-commits-filed.py`'s own classification (`crates/` is one of
+  its four code prefixes) — so it needed a hash citation in
+  `ROADMAP.md` or `SESSION_LOG.md` like any other code commit. It was
+  committed between the 384th filing (`Pass 240.0`/`Pass 241.0`) and
+  the 385th filing (`Pass 242.0`). Neither filing's dispatch named it:
+  the 384th's predates the commit and could not have; the 385th's
+  simply omitted it. The gap sat unfiled through two filings until CI
+  on the pushed tip `dc31dd1` went red on the commits-filed gate and
+  surfaced it.
+- **The drift point is the dispatch text handed to this role, not a
+  reading error by this role.** Same distinction hard rule 8's own
+  2026-08-07 amendment draws about its own premise — an obligation
+  stated correctly is only as reliable as what is actually put in
+  front of the party that owes it. Recorded here as a dated instance,
+  not promoted to a standing rule (this filing was instructed to mint
+  nothing, and one occurrence of "a chore commit missing from a
+  dispatch" does not on its own clear this project's two-occurrence
+  bar for a new rule).
+- Backup bundle currency: **not checked this filing** — no shell this
+  session; per hard rule 8, stated as unverifiable from here rather
+  than inferred.
+
+**Still in flight:**
+- `dbd6b57` (`v0.24.0`) still needs its tag cut, package built,
+  fresh-folder smoke test run, OneDrive deploy, and
+  `verify-release.py v0.24.0` run clean before it can be recorded as a
+  completed release — expected as a follow-on filing, mirroring this
+  project's own `v0.22.0` pattern (381st → 382nd → 383rd filings).
+- The build-provenance-banner literal correction flagged by the 381st
+  filing (three sites: two in `crates/`, one in `docs/FEATURES.md`) —
+  still owed to the engineer per the 384th filing's note; unrelated to
+  this filing and not touched by it.
+
+**For next session:**
+- Once `dbd6b57` is tagged/packaged/deployed/verified, file that
+  outcome as its own entry rather than folding it in here after the
+  fact — this filing deliberately records only what was true at filing
+  time, per the dispatch's own instruction.
+- Re-run `tools/check-commits-filed.py` after this filing's own commit
+  is pushed to confirm `dc31dd1`'s red clears with both hashes now on
+  the record.
+
+**`docs/FEATURES.md`:** untouched, per the dispatch's own instruction —
+no release row lists versions.
+
+**`ROADMAP.md`:** new top *Shipped* entry (386th filing) for `6876cd3`
+(`chore: v0.23.0` + the `v0.23.0` release, packaged/smoke-tested/
+deployed/verified) and `dbd6b57` (`chore: v0.24.0`, release steps in
+progress).
+
+**`ARCHITECTURE.md`:** untouched — no decision from this filing.
