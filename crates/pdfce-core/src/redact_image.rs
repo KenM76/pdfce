@@ -38,7 +38,7 @@
 //!    *partially* covered placement always receives its **own clone** with
 //!    its own cleared cells, bound under a fresh resource name on the page
 //!    that draws it; the original is then **tombstoned** (replaced in place
-//!    by a 1×1 zero-sample image) if every use of it in the document was a
+//!    by a 1×1 paper-sample image) if every use of it in the document was a
 //!    marked placement, and left untouched — and disclosed — if some other,
 //!    unmarked placement still needs it.
 //! 6. **Inline images** are content-stream bytes, so their re-encode is a
@@ -62,7 +62,7 @@
 //! dirty set does not name. A deleted object would leave dangling references
 //! in every resource dictionary that still names it (a shared `/Resources`
 //! between pages is common), which is legal (§7.3.10: an unresolvable
-//! reference is `null`) but ugly and trips validators. A 1×1 zero-sample
+//! reference is `null`) but ugly and trips validators. A 1×1 paper-sample
 //! image under the same object number resolves everywhere the original did,
 //! carries none of its samples, and costs a few dozen bytes.
 //!
@@ -1194,7 +1194,7 @@ fn clear_regions(
     (count > 0).then_some(count)
 }
 
-/// Replace `id` in place with a 1×1 zero-sample image of the same colour
+/// Replace `id` in place with a 1×1 paper-sample image of the same colour
 /// space, and do the same to its `/SMask` / stencil `/Mask`. Idempotent per
 /// id (a second covered placement of the same image finds it done).
 #[allow(clippy::too_many_arguments)]

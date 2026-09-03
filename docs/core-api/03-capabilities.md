@@ -1626,7 +1626,7 @@ form, an appearance stream, an unmarked placement on the same page — is
 `/XObject` name (`/pdfceRd<obj>_<n>`) holding the cleared clone, the
 original survives for its other placements, and `images_cloned_shared` plus
 a `SHARED` note say so. When every use of the original was marked, the
-original object is **tombstoned** in place (a 1×1 zero-sample image under the
+original object is **tombstoned** in place (a 1×1 paper-sample image under the
 same object number, so no resource dictionary dangles). Every placement gets
 one note naming its page, position, size and fate.
 
