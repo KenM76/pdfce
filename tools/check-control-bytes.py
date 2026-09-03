@@ -21,8 +21,9 @@ try to prevent the mistake, it makes the mistake fail.
 WHAT IT CHECKS
 ==============
 Every tracked (and untracked, non-ignored) file under ``docs/``,
-``.claude/``, ``tools/``, ``fixtures/*.md``, the crate ``src`` trees and the
-repository-root Markdown files is scanned for bytes in ``0x00-0x08``,
+``.claude/``, ``tools/``, ``fixtures/`` (its Markdown; the PDFs are
+binary by suffix), the whole ``crates/`` tree and the repository-root
+Markdown files is scanned for bytes in ``0x00-0x08``,
 ``0x0B``, ``0x0E-0x1F`` and ``0x7F``. TAB (0x09), LF (0x0A), FF (0x0C) and
 CR (0x0D) are legitimate and skipped. Binary files (a NUL in the first 8 KiB,
 or a suffix in the binary list) are skipped, because a PNG legitimately
@@ -59,7 +60,7 @@ BINARY_SUFFIXES = {
     ".icm", ".fdf", ".jb2", ".jbig2", ".dat", ".wasm", ".lock",
 }
 
-TEXT_ROOTS = ("docs/", ".claude/", "tools/", "crates/", ".github/", "fuzz/fuzz_targets/")
+TEXT_ROOTS = ("docs/", ".claude/", "tools/", "crates/", ".github/", "fuzz/fuzz_targets/", "fixtures/")
 ROOT_MARKDOWN = ("README.md", "CLAUDE.md", "LICENSE", "UI_PREFERENCES.md", "THIRD_PARTY_LICENSES.md")
 
 ALLOWED = {0x09, 0x0A, 0x0C, 0x0D}
