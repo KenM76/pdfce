@@ -127,6 +127,7 @@ pub mod paper;
 pub mod parser;
 pub mod recover;
 pub mod redact;
+mod redact_image;
 pub mod richtext;
 pub mod settings;
 pub mod signature;

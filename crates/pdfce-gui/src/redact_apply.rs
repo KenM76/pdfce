@@ -639,12 +639,13 @@ mod tests {
         );
     }
 
-    /// Core's image refusal must reach the GUI as a refusal, not as a
-    /// partially-applied success. A region over a raster image is the named
-    /// §12.5.6.23 case where masking would be a false redaction, so the
-    /// whole apply is declined.
+    /// A region over a raster image is the named §12.5.6.23 case where
+    /// masking would be a false redaction. Core now DESTROYS the covered
+    /// samples (`Pass 245.0`) rather than refusing, and the GUI must see
+    /// that as an applied redaction whose report counts the image — not as
+    /// a refusal, and not as a success that says nothing about the image.
     #[test]
-    fn a_region_over_an_image_refuses_the_whole_apply() {
+    fn a_region_over_an_image_destroys_its_samples_and_the_report_says_so() {
         // A page whose content draws an image XObject, with a mark over it.
         let content = "q 200 0 0 100 20 20 cm /Im0 Do Q";
         let stream = format!(
@@ -676,13 +677,20 @@ mod tests {
             .unwrap();
 
         match prepare_redaction_apply(&session) {
-            Err(RedactApplyRefusal::CoreRefused { reason }) => {
+            Ok(prepared) => {
+                assert_eq!(prepared.report.images_cleared, 1);
+                assert_eq!(prepared.report.marks_retained, 0);
                 assert!(
-                    reason.contains("image"),
-                    "the refusal must name the image: {reason}"
+                    prepared
+                        .report
+                        .notes
+                        .iter()
+                        .any(|n| n.contains("sample cell(s) destroyed")),
+                    "the report must name the image: {:?}",
+                    prepared.report.notes
                 );
             }
-            other => panic!("expected a refusal over the image region, got {other:?}"),
+            other => panic!("expected the image to be redacted, got {other:?}"),
         }
     }
 

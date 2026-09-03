@@ -46,8 +46,9 @@
 //! | Overlapping annotations (& their /AP/Contents/RC) | **removed** (the stricter Acrobat-parity reading) |
 //! | `/Info` and XMP strings duplicating redacted text | **scrubbed** (the redacted characters are known — the interpreter decodes them while removing them) |
 //! | Prior incremental revisions | **dropped** — apply forces a FULL REWRITE (R35), never incremental |
-//! | Images intersecting a region | **REFUSED, by name** — pdfce does not yet destroy image pixels, and a clip/overlay would be a false redaction (§12.5.6.23) |
+//! | Images intersecting a region | **samples DESTROYED** — decoded, the covered cells overwritten, re-encoded losslessly; a wholly covered placement is removed outright; a shared image is copied-on-write; a placement pdfce cannot decode RETAINS its mark and is disclosed by name (`redact_image`) |
 //! | Form-XObject content in-region | **disclosed** — not surgically redacted this cut (verify manually) |
+//! | Vector paths in-region | **disclosed, by count** — a painted path whose bounding box crosses a region is counted and reported as an un-redacted residual; path cutting is not implemented this build |
 //! | Overlay marking (Table 192 ladder) | `/OverlayText` **burnt in** (via §12.7.3.3 variable text, `/DA`-formatted, `/Q`-justified); `/IC` filled under it; **absent `/IC` ⇒ TRANSPARENT**, per Table 192; `/RO` **not drawn** — disclosed, falls back to a plain box; `/Repeat` **ignored** — disclosed |
 //! | XFA / file attachments / structure-tree ActualText / thumbnails | **detected + disclosed** (not asserted-absent) |
 //!
@@ -89,6 +90,7 @@ use crate::document::Document;
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageTreeError, Rect};
+use crate::redact_image::{self, ImageHit, ImageSource};
 use crate::settings::UnmappableCode;
 use crate::span::ByteSpan;
 use crate::text_extract::font::ExtractFont;
@@ -112,13 +114,13 @@ const GLYPH_BOX_ASCENT: f64 = 1.0;
 /// `[a b 0 / c d 0 / e f 1]` (§8.3.3), in `f64` for interpreter
 /// precision.
 #[derive(Debug, Clone, Copy)]
-struct Mat {
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-    e: f64,
-    f: f64,
+pub(crate) struct Mat {
+    pub(crate) a: f64,
+    pub(crate) b: f64,
+    pub(crate) c: f64,
+    pub(crate) d: f64,
+    pub(crate) e: f64,
+    pub(crate) f: f64,
 }
 
 impl Mat {
@@ -155,7 +157,7 @@ impl Mat {
     }
 
     /// Transform a point (row-vector convention).
-    fn apply(self, x: f64, y: f64) -> (f64, f64) {
+    pub(crate) fn apply(self, x: f64, y: f64) -> (f64, f64) {
         (
             self.a * x + self.c * y + self.e,
             self.b * x + self.d * y + self.f,
@@ -167,11 +169,11 @@ impl Mat {
 /// /Redact quad or /Rect — orientation is irrelevant for a removal mask,
 /// so quads are reduced to bounds per the RAG's guidance).
 #[derive(Debug, Clone, Copy)]
-struct RegionBox {
-    min_x: f64,
-    min_y: f64,
-    max_x: f64,
-    max_y: f64,
+pub(crate) struct RegionBox {
+    pub(crate) min_x: f64,
+    pub(crate) min_y: f64,
+    pub(crate) max_x: f64,
+    pub(crate) max_y: f64,
 }
 
 impl RegionBox {
@@ -201,18 +203,27 @@ pub enum RedactError {
     /// The document has no /Redact annotations to apply.
     #[error("the document has no redaction marks to apply")]
     NothingToApply,
-    /// A redaction region intersects a raster image (XObject or inline).
-    /// Refused **by name** rather than masked: pdfce cannot yet destroy
-    /// image pixels, and a clip/overlay would leave the pixels
-    /// recoverable — the exact false-redaction failure §12.5.6.23 names.
+    /// **Every** redaction mark in the document touches a raster image
+    /// pdfce could not destroy, so there is nothing to apply.
+    ///
+    /// A single such mark is not an error: it is RETAINED (left in the
+    /// document, unapplied) and disclosed in the report while the other
+    /// marks are applied — see [`RedactionReport::marks_retained`]. This
+    /// variant is the degenerate case where retaining would mean writing
+    /// a file with nothing redacted, which is refused **by name** rather
+    /// than reported as a success with zero marks applied. `reason` is
+    /// the first placement's reason, in the same words the report would
+    /// have used.
     #[error(
-        "redaction region on page {page} intersects an image; pdfce cannot yet destroy image \
-         pixels (clipping or masking would leave them recoverable, ISO 32000-1 §12.5.6.23) — \
-         apply refused rather than producing a false redaction"
+        "no redaction mark could be applied: every mark touches a raster image pdfce could not \
+         destroy (page {page}: {reason}); a mask or clip would leave the samples recoverable \
+         (ISO 32000-1 §12.5.6.23), so the marks were left in place"
     )]
-    ImageRegion {
-        /// 1-based page number carrying the intersecting image.
+    ImageUndestroyable {
+        /// 1-based page number of the first undestroyable placement.
         page: usize,
+        /// Why that placement's samples could not be destroyed.
+        reason: String,
     },
     /// A content stream could not be tokenized, so its glyphs could not
     /// be located for removal. Refused rather than risk leaving covered
@@ -322,6 +333,36 @@ pub struct RedactionReport {
     /// Regions left TRANSPARENT because the mark carried no `/RO`,
     /// `/OverlayText` or `/IC` — Table 192's stated default.
     pub overlay_transparent: u64,
+    /// Image placements whose in-region samples were destroyed and the
+    /// image re-encoded (losslessly, `FlateDecode`) — §12.5.6.23's
+    /// "that portion of the image data shall be destroyed".
+    pub images_cleared: u64,
+    /// Image placements removed from the page outright because a region
+    /// contained the whole placement — the `Do` (or inline `BI…EI`) is
+    /// gone, and the object is a 1×1 blank if this was its last use.
+    pub images_removed: u64,
+    /// Placements whose image is painted elsewhere too (another page, a
+    /// form, an appearance stream, or an unmarked placement on the same
+    /// page) and therefore received a copy-on-write clone; the original's
+    /// samples survive for those other placements, and a note says so.
+    pub images_cloned_shared: u64,
+    /// Placements whose rotated or skewed matrix made the cleared cells a
+    /// bounding-box over-cover — more destroyed than marked, never less.
+    pub images_overcovered: u64,
+    /// Painted vector paths whose bounding box crossed a region and were
+    /// NOT cut — vector-path redaction is not implemented this build. Each
+    /// is an un-redacted residual: the path's bytes remain in the content
+    /// stream. Reported through the `vector_paths` carrier as
+    /// `DisclosedNotScrubbed` so no shell can present a drawing with lines
+    /// through a region as fully redacted.
+    pub vector_paths_intersecting: u64,
+    /// `/Redact` marks left IN the document, unapplied, because a region
+    /// touched an image whose samples pdfce could not destroy. Each is
+    /// named in `notes` with its reason, and the `images` carrier reads
+    /// `DisclosedNotScrubbed` so a shell surfaces it loudly. Nothing was
+    /// removed under a retained mark and no overlay was drawn over it: the
+    /// page shows the mark, not a false redaction.
+    pub marks_retained: u64,
     /// Per-carrier diligence status (§12.5.6.23's "all content" sweep).
     pub carriers: Vec<CarrierStatus>,
     /// The distinct redacted text strings, for the operator's review and
@@ -390,8 +431,19 @@ struct Surgeon<'a> {
     removed_text: Vec<String>,
     glyphs_removed: u64,
     ops_edited: u64,
-    image_intersect: bool,
     form_intersect: bool,
+    /// Every image placement that intersects a region, with what is
+    /// needed to destroy its samples.
+    image_hits: Vec<ImageHit>,
+    /// The bounding box, in user space, of the path under construction
+    /// (`m`/`l`/`c`/`v`/`y`/`re` since the last painting operator).
+    /// Control points are included, which over-approximates a curve's
+    /// extent — the safe direction for a residual count.
+    path_bbox: Option<(f64, f64, f64, f64)>,
+    /// Painted paths (`S`, `f`, `B`, … — not `n`) whose bounding box
+    /// crossed a region. Vector cutting is not implemented this build, so
+    /// every one of these is an un-redacted residual and is disclosed.
+    vector_paths_intersecting: u64,
     estimated_fonts: BTreeSet<String>,
 }
 
@@ -423,10 +475,10 @@ struct SurgeryResult {
     removed_text: Vec<String>,
     glyphs_removed: u64,
     ops_edited: u64,
-    /// A raster image intersects a region — the caller must refuse.
-    image_intersect: bool,
     /// A form XObject intersects a region — disclosed, not refused.
     form_intersect: bool,
+    /// Painted vector paths whose bounding box crossed a region.
+    vector_paths_intersecting: u64,
     estimated_fonts: BTreeSet<String>,
 }
 
@@ -452,8 +504,10 @@ impl<'a> Surgeon<'a> {
             removed_text: Vec::new(),
             glyphs_removed: 0,
             ops_edited: 0,
-            image_intersect: false,
             form_intersect: false,
+            image_hits: Vec::new(),
+            path_bbox: None,
+            vector_paths_intersecting: 0,
             estimated_fonts: BTreeSet::new(),
         }
     }
@@ -488,8 +542,10 @@ impl<'a> Surgeon<'a> {
     }
 
     /// Is a named XObject an image (or a form) whose unit-square placement
-    /// intersects a region? Sets `image_intersect` / `form_intersect`.
-    fn check_xobject(&mut self, name: &[u8]) {
+    /// intersects a region? Sets `image_intersect` / `form_intersect`, and
+    /// records an image placement (with the `Do`'s byte span, so the
+    /// operation can be rewritten or removed) for the image surgery.
+    fn check_xobject(&mut self, name: &[u8], span: (usize, usize)) {
         let Some(xobjects) = self
             .resources
             .get(b"XObject")
@@ -498,10 +554,11 @@ impl<'a> Surgeon<'a> {
         else {
             return;
         };
-        let Some(obj) = xobjects.get(name).map(|o| self.doc.resolve(o)) else {
+        let Some(entry) = xobjects.get(name) else {
             return;
         };
-        let Object::Stream(stream) = obj else {
+        let id = entry.as_reference();
+        let Object::Stream(stream) = self.doc.resolve(entry) else {
             return;
         };
         let subtype = stream
@@ -515,7 +572,16 @@ impl<'a> Surgeon<'a> {
             return;
         }
         match subtype.as_slice() {
-            b"Image" => self.image_intersect = true,
+            b"Image" => {
+                self.image_hits.push(ImageHit {
+                    span,
+                    ctm: self.ctm,
+                    source: ImageSource::XObject {
+                        name: name.to_vec(),
+                        id,
+                    },
+                });
+            }
             b"Form" => self.form_intersect = true,
             _ => {}
         }
@@ -546,10 +612,17 @@ impl<'a> Surgeon<'a> {
     fn operation(&mut self, op: &crate::content::Operation<'_>, buf: &[u8]) {
         let Some(name) = op.operator_name(buf) else {
             // An inline image: its unit-square placement may intersect.
-            if let ContentTokenKind::InlineImage { .. } = op.operator.kind
+            if let ContentTokenKind::InlineImage { params, data } = &op.operator.kind
                 && self.unit_square_intersects()
             {
-                self.image_intersect = true;
+                self.image_hits.push(ImageHit {
+                    span: (op.operator.span.start, op.operator.span.end()),
+                    ctm: self.ctm,
+                    source: ImageSource::Inline {
+                        params: params.clone(),
+                        data: *data,
+                    },
+                });
             }
             return;
         };
@@ -651,7 +724,7 @@ impl<'a> Surgeon<'a> {
                     ContentTokenKind::Operand(Object::Name(nm)) => Some(nm.as_bytes().to_vec()),
                     _ => None,
                 }) {
-                    self.check_xobject(&xname);
+                    self.check_xobject(&xname, op_span(op));
                 }
             }
             b"Tj" => self.show_simple(op, ShowKind::Tj),
@@ -668,6 +741,41 @@ impl<'a> Surgeon<'a> {
                 self.show_simple(op, ShowKind::DoubleQuote);
             }
             b"TJ" => self.show_array(op),
+            // Path construction (§8.5.2) — tracked only for the residual
+            // count; nothing here is edited.
+            b"m" | b"l" => {
+                if let [x, y] = n.as_slice() {
+                    self.path_point(*x, *y);
+                }
+            }
+            b"c" => {
+                for pair in n.chunks_exact(2) {
+                    if let [x, y] = pair {
+                        self.path_point(*x, *y);
+                    }
+                }
+            }
+            b"v" | b"y" => {
+                for pair in n.chunks_exact(2) {
+                    if let [x, y] = pair {
+                        self.path_point(*x, *y);
+                    }
+                }
+            }
+            b"re" => {
+                if let [x, y, w, h] = n.as_slice() {
+                    self.path_point(*x, *y);
+                    self.path_point(*x + *w, *y + *h);
+                }
+            }
+            // Path painting (§8.5.3). `n` ends a path without painting it
+            // (a clip definition), so it is not a residual.
+            b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" => {
+                self.path_painted();
+            }
+            b"n" => {
+                self.path_bbox = None;
+            }
             _ => {}
         }
     }
@@ -690,6 +798,30 @@ impl<'a> Surgeon<'a> {
         self.th = s.th;
         self.trise = s.trise;
         self.tl = s.tl;
+    }
+
+    /// Grow the path-under-construction bounding box by a user-space point
+    /// given in the current coordinate system.
+    fn path_point(&mut self, x: f64, y: f64) {
+        let (px, py) = self.ctm.apply(x, y);
+        self.path_bbox = Some(match self.path_bbox {
+            None => (px, py, px, py),
+            Some((x0, y0, x1, y1)) => (x0.min(px), y0.min(py), x1.max(px), y1.max(py)),
+        });
+    }
+
+    /// A painting operator ended the current path: count it if its box
+    /// crossed a region (with positive area — a mere touch is not a
+    /// crossing), then start a fresh path.
+    fn path_painted(&mut self) {
+        if let Some((x0, y0, x1, y1)) = self.path_bbox.take()
+            && self
+                .regions
+                .iter()
+                .any(|r| r.min_x < x1 && x0 < r.max_x && r.min_y < y1 && y0 < r.max_y)
+        {
+            self.vector_paths_intersecting += 1;
+        }
     }
 
     /// The horizontal advance `tx` for one code (text-line units, §9.4.4),
@@ -940,7 +1072,7 @@ fn advance_to_tj(sum_tx: f64, tfs: f64, th: f64) -> f64 {
 }
 
 /// The AABB of a set of transformed corner points.
-fn aabb(pts: &[(f64, f64)]) -> (f64, f64, f64, f64) {
+pub(crate) fn aabb(pts: &[(f64, f64)]) -> (f64, f64, f64, f64) {
     let mut min_x = f64::INFINITY;
     let mut min_y = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
@@ -992,10 +1124,18 @@ fn redact_page_content(
     regions: &[RegionBox],
     stream: &ContentStream,
     overlay: &[u8],
+    image_edits: Vec<(usize, usize, Vec<u8>)>,
 ) -> SurgeryResult {
     let mut surgeon = Surgeon::new(doc, resources, regions);
     for op in stream.operations() {
         surgeon.operation(&op, &stream.buf);
+    }
+    // The image surgery's edits (a `Do` renamed to its clone, a `Do` or
+    // `BI…EI` removed, an inline image re-encoded) splice in beside the
+    // glyph edits. They never overlap: a painting operator is not a show
+    // operator.
+    for (start, end, bytes) in image_edits {
+        surgeon.edits.push(Edit { start, end, bytes });
     }
     // Splice edits (sorted, non-overlapping) into the buffer.
     surgeon.edits.sort_by_key(|e| e.start);
@@ -1025,10 +1165,33 @@ fn redact_page_content(
         removed_text: surgeon.removed_text,
         glyphs_removed: surgeon.glyphs_removed,
         ops_edited: surgeon.ops_edited,
-        image_intersect: surgeon.image_intersect,
         form_intersect: surgeon.form_intersect,
+        vector_paths_intersecting: surgeon.vector_paths_intersecting,
         estimated_fonts: surgeon.estimated_fonts,
     }
+}
+
+/// The image placements on one page that intersect any of `regions` — the
+/// census the blocker pass runs BEFORE any surgery, so a mark that touches
+/// an undestroyable image can be retained rather than half-applied.
+fn census_images(
+    doc: &Document,
+    resources: &Dict,
+    regions: &[RegionBox],
+    stream: &ContentStream,
+) -> Vec<ImageHit> {
+    let mut surgeon = Surgeon::new(doc, resources, regions);
+    for op in stream.operations() {
+        surgeon.operation(&op, &stream.buf);
+    }
+    surgeon.image_hits
+}
+
+/// Does `hit`'s placement overlap `region` with positive area? (A mere
+/// touch of bounding boxes destroys no cell and covers nothing.)
+fn hit_covers(hit: &ImageHit, region: RegionBox) -> bool {
+    let (x0, y0, x1, y1) = hit.bbox();
+    region.min_x < x1 && x0 < region.max_x && region.min_y < y1 && y0 < region.max_y
 }
 
 /// What [`build_overlay`] did, so the caller can DISCLOSE it.
@@ -1264,10 +1427,29 @@ fn overlay_font_resources(
 // ===================================================================
 
 /// The `/Redact` annotations found on one page, resolved into geometry.
+/// One page after pass 1 of [`apply_redactions`]: its surviving plan, its
+/// parsed content, and the image placements the census found — everything
+/// pass 2 needs, so nothing is parsed or decoded twice.
+struct PreparedPage {
+    /// Index into the page list.
+    index: usize,
+    /// The plan with retained marks already removed.
+    red: PageRedaction,
+    /// The page's `/Contents` stream ids.
+    contents: Vec<ObjId>,
+    /// The parsed, concatenated content.
+    stream: ContentStream,
+    /// Image placements intersecting any region (before retention).
+    hits: Vec<ImageHit>,
+}
+
 struct PageRedaction {
     page_id: ObjId,
     /// Surgery regions (all quads across all marks on this page).
     boxes: Vec<RegionBox>,
+    /// The `/Redact` annotation each entry of `boxes` came from, index for
+    /// index — so a blocked region can retain exactly its own mark.
+    box_marks: Vec<ObjId>,
     /// Overlay regions with the Table 192 marking regime each mark selected.
     overlay: Vec<(RegionBox, OverlayRegime)>,
     /// The `/Redact` annotation object ids to remove.
@@ -1287,13 +1469,24 @@ struct PageRedaction {
 /// scrub rides that same rewrite (an incremental scrub would leave the
 /// "removed" carrier recoverable in the prior revision).
 ///
+/// ## Images under a region are destroyed, and a mark can be retained
+///
+/// A raster image a region touches has the covered samples destroyed and
+/// is re-encoded (or removed outright when wholly covered) — see
+/// `redact_image`. When an image's samples cannot be decoded, the
+/// marks touching it are **retained**: left in the output as unapplied
+/// `/Redact` annotations, with nothing removed under them and no box drawn
+/// over them, and counted in [`RedactionReport::marks_retained`] with a
+/// note naming the placement and the reason. Every other mark applies. A
+/// caller must therefore read `marks_retained` (or the `images` carrier)
+/// before presenting the output as redacted.
+///
 /// # Errors
 ///
 /// [`RedactError::NothingToApply`] if there are no marks;
-/// [`RedactError::ImageRegion`] if a region intersects a raster image
-/// (refused rather than falsely masked); [`RedactError::Content`] if a
-/// redacted page cannot be parsed; [`RedactError::Encrypted`];
-/// [`RedactError::Write`].
+/// [`RedactError::ImageUndestroyable`] if EVERY mark would be retained
+/// (nothing could be applied); [`RedactError::Content`] if a redacted page
+/// cannot be parsed; [`RedactError::Encrypted`]; [`RedactError::Write`].
 pub fn apply_redactions(
     doc: &Document,
     options: &SaveOptions,
@@ -1321,32 +1514,171 @@ pub fn apply_redactions(
     let base_len = doc.bytes().len();
     let mut next_num = doc.next_object_number().unwrap_or(1);
     let mut form_intersect_any = false;
+    let mut images_seen = false;
     let mut estimated_fonts: BTreeSet<String> = BTreeSet::new();
     let mut overlay_totals = OverlayOutcome::default();
 
-    for (index, red, contents) in &plan {
-        let page = pages.get(*index).ok_or(RedactError::NothingToApply)?;
+    // --- pass 1: parse, census the images, decide which marks survive ---
+    //
+    // Every page's content is parsed and every image placement that
+    // intersects a region is decoded BEFORE any page is rewritten. A
+    // placement pdfce cannot destroy retains the marks that touch it (the
+    // mark stays in the document, unapplied, and is disclosed by name);
+    // everything else proceeds. Doing this for the whole document first is
+    // what lets the copy-on-write decision see every marked placement of a
+    // shared image, on every page, before the first clone is made.
+    let view = doc.view();
+    let mut cache = redact_image::DecodeCache::default();
+    let uses = redact_image::image_use_census(doc, &pages);
+    let mut covered: std::collections::BTreeMap<ObjId, usize> = std::collections::BTreeMap::new();
+    let mut prepared: Vec<PreparedPage> = Vec::new();
+    let mut first_blocker: Option<(usize, String)> = None;
+    for (index, red, contents) in plan {
+        let page = pages.get(index).ok_or(RedactError::NothingToApply)?;
         // Parse the page's concatenated content. BASE READ (decision 018
         // caller audit): `apply_redactions` is a one-shot whole-document
         // operation over a loaded `&Document` — there is no session here,
         // and the spans it computes are consumed by the writer, which is
         // contractually a base-bytes consumer.
-        let stream =
-            ContentStream::from_page(&doc.view(), page).map_err(|e| RedactError::Content {
-                page: index + 1,
-                source: e,
-            })?;
+        let stream = ContentStream::from_page(&view, page).map_err(|e| RedactError::Content {
+            page: index + 1,
+            source: e,
+        })?;
+        let hits = census_images(doc, &page.resources, &red.boxes, &stream);
+        if !hits.is_empty() {
+            images_seen = true;
+        }
+        let mut retain: BTreeSet<ObjId> = BTreeSet::new();
+        for hit in &hits {
+            let Some(why) =
+                redact_image::blocker(doc, &view, &page.resources, &stream.buf, hit, &mut cache)
+            else {
+                continue;
+            };
+            let (bx0, by0, bx1, by1) = hit.bbox();
+            let touching: Vec<ObjId> = red
+                .boxes
+                .iter()
+                .zip(red.box_marks.iter())
+                .filter(|(rb, _)| rb.intersects(bx0, by0, bx1, by1))
+                .map(|(_, m)| *m)
+                .collect();
+            for mark in &touching {
+                if retain.insert(*mark) {
+                    report.marks_retained += 1;
+                    report.note(format!(
+                        "redaction: page {} — mark {} 0 R was RETAINED (left in the document, \
+                         unapplied) because it touches an image at ({bx0:.1}, {by0:.1}) \
+                         {:.1}×{:.1} pt whose samples pdfce could not destroy: {why}. Nothing \
+                         under it was removed and no box was drawn over it; the page shows the \
+                         mark, not a false redaction",
+                        index + 1,
+                        mark.num,
+                        bx1 - bx0,
+                        by1 - by0
+                    ));
+                }
+            }
+            if first_blocker.is_none() && !touching.is_empty() {
+                first_blocker = Some((index + 1, why));
+            }
+        }
+        let red = if retain.is_empty() {
+            red
+        } else {
+            red.without_marks(doc, &retain)
+        };
+        if red.redact_ids.is_empty() {
+            continue; // every mark on this page was retained
+        }
+        // Count this page's marked placements per image, for copy-on-write.
+        for hit in &hits {
+            if let ImageSource::XObject { id: Some(id), .. } = &hit.source
+                && (redact_image::wholly_covered(hit.ctm, &red.boxes)
+                    || red.boxes.iter().any(|r| hit_covers(hit, *r)))
+            {
+                *covered.entry(*id).or_insert(0) += 1;
+            }
+        }
+        prepared.push(PreparedPage {
+            index,
+            red,
+            contents,
+            stream,
+            hits,
+        });
+    }
+    if prepared.is_empty() {
+        let (page, reason) = first_blocker.unwrap_or((1, "unknown".to_string()));
+        return Err(RedactError::ImageUndestroyable { page, reason });
+    }
+
+    // --- pass 2: the surgery, page by page ---
+    let mut tombstoned: std::collections::BTreeMap<ObjId, ()> = std::collections::BTreeMap::new();
+    for PreparedPage {
+        index,
+        red,
+        contents,
+        stream,
+        hits,
+    } in &prepared
+    {
+        let page = pages.get(*index).ok_or(RedactError::NothingToApply)?;
         let ov = build_overlay(doc, &page.resources, &red.overlay);
         overlay_totals.absorb(&ov);
-        let result = redact_page_content(doc, &page.resources, &red.boxes, &stream, &ov.content);
 
-        // Image intersection → refuse by name (never a false redaction).
-        if result.image_intersect {
-            return Err(RedactError::ImageRegion { page: index + 1 });
+        // Image surgery for this page (§12.5.6.23's destroy clause).
+        let mut images = redact_image::ImageOutcome::default();
+        {
+            let mut alloc = redact_image::Allocator {
+                staging: &mut staging,
+                base_len,
+                next_num: &mut next_num,
+            };
+            redact_image::plan_page(
+                doc,
+                &view,
+                index + 1,
+                &page.resources,
+                &stream.buf,
+                hits,
+                &red.boxes,
+                &uses,
+                &covered,
+                &mut tombstoned,
+                &mut cache,
+                &mut alloc,
+                &mut images,
+            );
         }
+        for (id, obj) in images.objects.drain(..) {
+            dirty.replace(id, obj);
+        }
+        let mut image_clones = Dict::new();
+        for (name, id) in &images.bindings {
+            image_clones.insert(Name::from(name.as_slice()), Object::Reference(*id));
+        }
+        report.images_cleared += images.cleared;
+        report.images_removed += images.removed;
+        report.images_cloned_shared += images.cloned_shared;
+        report.images_overcovered += images.rotated_overcovered;
+        for note in images.notes.drain(..) {
+            report.note(note);
+        }
+
+        let result = redact_page_content(
+            doc,
+            &page.resources,
+            &red.boxes,
+            stream,
+            &ov.content,
+            std::mem::take(&mut images.edits),
+        );
+
         if result.form_intersect {
             form_intersect_any = true;
         }
+        report.vector_paths_intersecting += result.vector_paths_intersecting;
         estimated_fonts.extend(result.estimated_fonts);
         report.glyphs_removed += result.glyphs_removed;
         report.show_operators_edited += result.ops_edited;
@@ -1399,7 +1731,14 @@ pub fn apply_redactions(
 
         // Rewrite the page dict: /Contents -> [content_id], /Annots with the
         // removed marks/overlaps gone, /Thumb dropped.
-        let page_write = rewrite_page_dict(doc, red.page_id, content_id, &remove_annots, &ov.fonts);
+        let page_write = rewrite_page_dict(
+            doc,
+            red.page_id,
+            content_id,
+            &remove_annots,
+            &ov.fonts,
+            &image_clones,
+        );
         if let Some((new_dict, thumb)) = page_write {
             dirty.replace(red.page_id, Object::Dict(new_dict));
             if let Some(thumb_id) = thumb {
@@ -1430,6 +1769,14 @@ pub fn apply_redactions(
     report.overlay_text_burned = overlay_totals.text_regions;
     report.overlay_ro_not_drawn = overlay_totals.ro_regions;
     report.overlay_transparent = overlay_totals.transparent_regions;
+    if report.images_overcovered > 0 {
+        report.note(format!(
+            "redaction: {} image placement(s) are rotated or skewed, so the destroyed cells \
+             are the region's bounding rectangle in image space — more than the region, \
+             never less",
+            report.images_overcovered
+        ));
+    }
     if overlay_totals.text_regions > 0 {
         report.note(format!(
             "redaction: overlay text burnt into {} region(s) (ISO 32000-1 Table 192 \
@@ -1505,7 +1852,7 @@ pub fn apply_redactions(
         &mut dirty,
         &mut report,
     );
-    carrier_detect_disclose(doc, form_intersect_any, &mut report);
+    carrier_detect_disclose(doc, form_intersect_any, images_seen, &mut report);
 
     // --- container decomposition (§7.5.7 Strategy B) ---
     decompose_containers(doc, &mut dirty, &mut report);
@@ -1563,6 +1910,7 @@ fn gather_page(doc: &Document, page_id: ObjId) -> Option<PageRedaction> {
         .and_then(Object::as_array)?;
 
     let mut boxes = Vec::new();
+    let mut box_marks = Vec::new();
     let mut overlay = Vec::new();
     let mut redact_ids = Vec::new();
     let mut other: Vec<(ObjId, RegionBox)> = Vec::new();
@@ -1584,6 +1932,7 @@ fn gather_page(doc: &Document, page_id: ObjId) -> Option<PageRedaction> {
             let regime = annot_overlay(doc, dict);
             for rb in annot_regions(doc, dict) {
                 boxes.push(rb);
+                box_marks.push(aid);
                 overlay.push((rb, regime.clone()));
             }
             redact_ids.push(aid);
@@ -1607,10 +1956,65 @@ fn gather_page(doc: &Document, page_id: ObjId) -> Option<PageRedaction> {
     Some(PageRedaction {
         page_id,
         boxes,
+        box_marks,
         overlay,
         redact_ids,
         overlap_ids,
     })
+}
+
+impl PageRedaction {
+    /// This page's plan with the marks in `retain` removed: their regions
+    /// are not surgery targets, their overlays are not drawn, their
+    /// annotations are not deleted, and the overlapping-annotation set is
+    /// recomputed against the regions that remain.
+    fn without_marks(&self, doc: &Document, retain: &BTreeSet<ObjId>) -> Self {
+        let mut boxes = Vec::new();
+        let mut box_marks = Vec::new();
+        let mut overlay = Vec::new();
+        for (i, rb) in self.boxes.iter().enumerate() {
+            let Some(mark) = self.box_marks.get(i) else {
+                continue;
+            };
+            if retain.contains(mark) {
+                continue;
+            }
+            boxes.push(*rb);
+            box_marks.push(*mark);
+            if let Some(ov) = self.overlay.get(i) {
+                overlay.push(ov.clone());
+            }
+        }
+        let redact_ids: Vec<ObjId> = self
+            .redact_ids
+            .iter()
+            .copied()
+            .filter(|id| !retain.contains(id))
+            .collect();
+        let overlap_ids: Vec<ObjId> = self
+            .overlap_ids
+            .iter()
+            .copied()
+            .filter(|aid| {
+                let Some(dict) = doc.get(*aid).map(|io| &io.value).and_then(Object::as_dict) else {
+                    return false;
+                };
+                annot_rect_box(doc, dict).is_some_and(|rb| {
+                    boxes
+                        .iter()
+                        .any(|r| r.intersects(rb.min_x, rb.min_y, rb.max_x, rb.max_y))
+                })
+            })
+            .collect();
+        Self {
+            page_id: self.page_id,
+            boxes,
+            box_marks,
+            overlay,
+            redact_ids,
+            overlap_ids,
+        }
+    }
 }
 
 /// The regions a `/Redact` annotation covers: its `/QuadPoints`
@@ -1862,6 +2266,7 @@ fn rewrite_page_dict(
     content_id: ObjId,
     remove: &[ObjId],
     overlay_fonts: &Dict,
+    image_clones: &Dict,
 ) -> Option<(Dict, Option<ObjId>)> {
     let page = doc
         .get(page_id)
@@ -1888,25 +2293,43 @@ fn rewrite_page_dict(
     // An existing binding for the same name is NEVER overwritten: the page's
     // own font wins, and `overlay_font_resources` has already laid the text
     // out against that same face, so the two agree.
-    if !overlay_fonts.is_empty() {
+    //
+    // The same denormalisation carries the image surgery's copy-on-write
+    // clones: a fresh `/XObject` name per cleared placement, bound on THIS
+    // page only, so a shared original keeps serving every other page.
+    if !overlay_fonts.is_empty() || !image_clones.is_empty() {
         let mut resources = page
             .get(b"Resources")
             .map(|o| doc.resolve(o))
             .and_then(Object::as_dict)
             .cloned()
             .unwrap_or_default();
-        let mut fonts = resources
-            .get(b"Font")
-            .map(|o| doc.resolve(o))
-            .and_then(Object::as_dict)
-            .cloned()
-            .unwrap_or_default();
-        for (name, val) in overlay_fonts.iter() {
-            if fonts.get(name.as_bytes()).is_none() {
-                fonts.insert(name.clone(), val.clone());
+        if !overlay_fonts.is_empty() {
+            let mut fonts = resources
+                .get(b"Font")
+                .map(|o| doc.resolve(o))
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default();
+            for (name, val) in overlay_fonts.iter() {
+                if fonts.get(name.as_bytes()).is_none() {
+                    fonts.insert(name.clone(), val.clone());
+                }
             }
+            resources.insert(Name::from(b"Font"), Object::Dict(fonts));
         }
-        resources.insert(Name::from(b"Font"), Object::Dict(fonts));
+        if !image_clones.is_empty() {
+            let mut xobjects = resources
+                .get(b"XObject")
+                .map(|o| doc.resolve(o))
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default();
+            for (name, val) in image_clones.iter() {
+                xobjects.insert(name.clone(), val.clone());
+            }
+            resources.insert(Name::from(b"XObject"), Object::Dict(xobjects));
+        }
         updated.insert(Name::from(b"Resources"), Object::Dict(resources));
     }
     // /Annots: drop the removed refs. If it is an indirect array, inline a
@@ -2042,8 +2465,26 @@ fn carrier_xmp(
 
 /// Carriers pdfce **detects but does not scrub** this build — disclosed as
 /// residuals for manual verification (never silently left).
-fn carrier_detect_disclose(doc: &Document, form_intersect: bool, report: &mut RedactionReport) {
+fn carrier_detect_disclose(
+    doc: &Document,
+    form_intersect: bool,
+    images_seen: bool,
+    report: &mut RedactionReport,
+) {
     let catalog = doc.catalog().ok();
+
+    // Raster images (§12.5.6.23: "that portion of the image data shall be
+    // destroyed"). Present when any placement intersected a region;
+    // scrubbed when every such placement was destroyed or removed; disclosed
+    // when a mark had to be retained over an image pdfce could not decode.
+    let images_action = if !images_seen {
+        CarrierAction::Absent
+    } else if report.marks_retained > 0 {
+        CarrierAction::DisclosedNotScrubbed
+    } else {
+        CarrierAction::Scrubbed
+    };
+    report.add_carrier("images", images_seen, images_action);
 
     // XFA — a parallel XML copy of form/text content (§12.5.6.23 names it).
     let xfa = catalog
@@ -2117,6 +2558,22 @@ fn carrier_detect_disclose(doc: &Document, form_intersect: bool, report: &mut Re
              surgically redacted this build; verify manually or flatten the form first"
                 .to_string(),
         );
+    }
+
+    // Vector paths (§8.5) crossing a region. Counted by the surgery
+    // interpreter; not cut. On a CAD sheet this is the residual that
+    // matters most, and it must never read as "redacted".
+    let vectors = report.vector_paths_intersecting;
+    if vectors > 0 {
+        report.add_carrier("vector_paths", true, CarrierAction::DisclosedNotScrubbed);
+        report.note(format!(
+            "redaction: {vectors} painted vector path(s) cross a redaction region and were NOT \
+             cut — vector-path redaction is not implemented this build, so those lines, fills \
+             and curves remain in the content stream (the text and images under the region \
+             were removed); verify the region by eye or flatten the vectors first"
+        ));
+    } else {
+        report.add_carrier("vector_paths", false, CarrierAction::Absent);
     }
 }
 
@@ -2727,50 +3184,478 @@ mod tests {
         None
     }
 
-    // -- image refuse ----------------------------------------------------
+    // -- image destroy (§12.5.6.23) ----------------------------------------
 
-    #[test]
-    fn a_region_over_an_image_is_refused_not_masked() {
-        let img = "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 \
-                   /BitsPerComponent 8 /ColorSpace /DeviceGray /Length 1 >>\nstream\n\x00\nendstream";
-        let content = b"q 100 0 0 50 50 100 cm /Im1 Do Q";
-        let stream = format!(
-            "<< /Length {} >>\nstream\n{}\nendstream",
-            content.len(),
-            std::str::from_utf8(content).unwrap()
+    /// Assemble a classic PDF from BINARY bodies (an image stream cannot be
+    /// a `&str`). Same shape as [`assemble`] otherwise.
+    fn assemble_bytes(bodies: &[Vec<u8>]) -> Vec<u8> {
+        let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in bodies.iter().enumerate() {
+            offsets.push(buf.len());
+            buf.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+            buf.extend_from_slice(body);
+            buf.extend_from_slice(b"\nendobj\n");
+        }
+        let xref_at = buf.len();
+        let n = bodies.len() + 1;
+        buf.extend_from_slice(format!("xref\n0 {n}\n0000000000 65535 f \n").as_bytes());
+        for off in &offsets {
+            buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+        }
+        buf.extend_from_slice(
+            format!("trailer\n<< /Size {n} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n")
+                .as_bytes(),
         );
-        let pdf = assemble(
-            &[
-                "<< /Type /Catalog /Pages 2 0 R >>",
-                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] \
-                 /Resources << /XObject << /Im1 5 0 R >> >> /Contents 4 0 R >>",
-                &stream,
-                img,
-            ],
-            "",
-        );
-        // Author a redaction over the image placement (50,100)-(150,150).
+        buf
+    }
+
+    fn stream_body(dict_entries: &str, data: &[u8]) -> Vec<u8> {
+        let mut b = format!("<< {dict_entries} /Length {} >>\nstream\n", data.len()).into_bytes();
+        b.extend_from_slice(data);
+        b.extend_from_slice(b"\nendstream");
+        b
+    }
+
+    /// A one-page document: `content` painted with `/Im1` bound to object 5
+    /// (`image`) plus, optionally, a Helvetica `/F1` (object 6) and object 7.
+    fn image_pdf(content: &[u8], image: Vec<u8>, extra: Vec<Vec<u8>>) -> Vec<u8> {
+        let mut bodies = vec![
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] \
+               /Resources << /XObject << /Im1 5 0 R >> /Font << /F1 6 0 R >> >> \
+               /Contents 4 0 R >>"
+                .to_vec(),
+            stream_body("", content),
+            image,
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_vec(),
+        ];
+        bodies.extend(extra);
+        assemble_bytes(&bodies)
+    }
+
+    /// A 4×4 8-bit DeviceGray image, every sample 0xFF, no filter.
+    fn gray_4x4() -> Vec<u8> {
+        stream_body(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
+             /ColorSpace /DeviceGray",
+            &[0xFF; 16],
+        )
+    }
+
+    /// Mark the given rectangles on page 0 and save incrementally.
+    fn mark_rects(pdf: Vec<u8>, rects: &[[f64; 4]]) -> Vec<u8> {
         let doc = Document::from_bytes(pdf).unwrap();
         let mut session = EditSession::new(doc);
-        let spec = crate::annot_author::RedactSpec {
-            quads: vec![crate::annot_author::Quad::from_rect(Rect::from_corners(
-                60.0, 110.0, 120.0, 140.0,
-            ))],
-            fill: None,
-            overlay_text: None,
-            quadding: crate::vartext::Quadding::Left,
-        };
-        session.add_redaction(0, &spec).unwrap();
+        for r in rects {
+            let spec = crate::annot_author::RedactSpec {
+                quads: vec![crate::annot_author::Quad::from_rect(Rect::from_corners(
+                    r[0], r[1], r[2], r[3],
+                ))],
+                fill: None,
+                overlay_text: None,
+                quadding: crate::vartext::Quadding::Left,
+            };
+            session.add_redaction(0, &spec).unwrap();
+        }
         let (marked, _) = session
             .to_incremental_bytes(&SaveOptions::identity())
             .unwrap();
+        marked
+    }
 
+    /// The page's `/XObject` resources of the saved output, resolved, plus
+    /// the page content bytes.
+    fn output_page(bytes: &[u8]) -> (Document, Dict, Vec<u8>) {
+        let doc = Document::from_bytes(bytes.to_vec()).unwrap();
+        let pages = page_tree::pages(&doc).unwrap();
+        let page = &pages[0];
+        let xobjects = page
+            .resources
+            .get(b"XObject")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_default();
+        let content = ContentStream::from_page(&doc.view(), page).unwrap().buf;
+        (doc, xobjects, content)
+    }
+
+    /// Decode the image object `id` of `doc` to its raw samples and size.
+    fn decode_object(doc: &Document, id: ObjId) -> (Vec<u8>, u32, u32, Dict) {
+        let Some(Object::Stream(s)) = doc.get(id).map(|io| &io.value) else {
+            panic!("{id:?} is not a stream");
+        };
+        let view = doc.view();
+        let raw = view.slice(s.data_span).unwrap();
+        let coded = crate::image_codec::decode_image_view(&view, &s.dict, raw, false).unwrap();
+        let w = s.dict.get(b"Width").and_then(Object::as_int).unwrap() as u32;
+        let h = s.dict.get(b"Height").and_then(Object::as_int).unwrap() as u32;
+        (coded.samples, w, h, s.dict.clone())
+    }
+
+    fn carrier_action(report: &RedactionReport, name: &str) -> CarrierAction {
+        report
+            .carriers
+            .iter()
+            .find(|c| c.carrier == name)
+            .map(|c| c.action)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_partially_covered_image_has_its_covered_cells_destroyed() {
+        // Placement (50,100)-(150,150); region (60,110)-(120,140) covers
+        // u 0.1..0.7 → cols 0..3 and v 0.2..0.8 → rows 0..4 of a 4×4 grid.
+        let pdf = image_pdf(b"q 100 0 0 50 50 100 cm /Im1 Do Q", gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+
+        assert_eq!(report.images_cleared, 1);
+        assert_eq!(report.images_removed, 0);
+        assert_eq!(report.images_cloned_shared, 0);
+        assert_eq!(report.marks_retained, 0);
+        assert_eq!(carrier_action(&report, "images"), CarrierAction::Scrubbed);
+        assert!(!report.has_disclosed_residuals());
+
+        let (out_doc, xobjects, content) = output_page(&out);
+        // The Do now names the clone; the old name is no longer painted.
+        assert!(
+            !contains(&content, b"/Im1 Do"),
+            "{}",
+            String::from_utf8_lossy(&content)
+        );
+        assert!(contains(&content, b"/pdfceRd5_1 Do"));
+        let clone_id = xobjects
+            .get(b"pdfceRd5_1")
+            .and_then(Object::as_reference)
+            .unwrap();
+        let (samples, w, h, dict) = decode_object(&out_doc, clone_id);
+        assert_eq!((w, h), (4, 4));
+        assert_eq!(
+            dict.get(b"Filter")
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes()),
+            Some(&b"FlateDecode"[..])
+        );
+        for row in 0..4 {
+            assert_eq!(
+                &samples[row * 4..row * 4 + 4],
+                &[0, 0, 0, 0xFF],
+                "row {row}"
+            );
+        }
+        // The original (its only use was this placement) is a 1×1 blank.
+        let (orig, w, h, _) = decode_object(&out_doc, ObjId::new(5, 0));
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(orig, vec![0]);
+        // And no byte of the original's 0xFF grid survives in the file: the
+        // absence proof, over the OUTPUT bytes.
+        assert!(!contains(&out, &[0xFF; 16]));
+    }
+
+    #[test]
+    fn a_wholly_covered_image_is_removed_from_the_page_outright() {
+        let pdf = image_pdf(b"q 100 0 0 50 50 100 cm /Im1 Do Q", gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[0.0, 0.0, 300.0, 200.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+
+        assert_eq!(report.images_removed, 1);
+        assert_eq!(report.images_cleared, 0);
+        assert!(
+            report.notes.iter().any(|n| n.contains("REMOVED ENTIRELY")),
+            "{:?}",
+            report.notes
+        );
+
+        let (out_doc, _xobjects, content) = output_page(&out);
+        assert!(
+            !contains(&content, b"Do"),
+            "{}",
+            String::from_utf8_lossy(&content)
+        );
+        let (orig, w, h, _) = decode_object(&out_doc, ObjId::new(5, 0));
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(orig, vec![0]);
+        assert!(!contains(&out, &[0xFF; 16]));
+    }
+
+    #[test]
+    fn a_shared_image_is_cloned_and_the_original_survives_for_its_other_placement() {
+        // Two placements of /Im1; only the first is marked.
+        let content = b"q 100 0 0 50 50 100 cm /Im1 Do Q q 100 0 0 50 150 20 cm /Im1 Do Q";
+        let pdf = image_pdf(content, gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+
+        assert_eq!(report.images_cleared, 1);
+        assert_eq!(report.images_cloned_shared, 1);
+        assert!(
+            report.notes.iter().any(|n| n.contains("SHARED")),
+            "{:?}",
+            report.notes
+        );
+
+        let (out_doc, _x, content) = output_page(&out);
+        assert!(contains(&content, b"/pdfceRd5_1 Do"));
+        assert!(
+            contains(&content, b"/Im1 Do"),
+            "the unmarked placement keeps the original"
+        );
+        let (orig, w, _h, _) = decode_object(&out_doc, ObjId::new(5, 0));
+        assert_eq!(w, 4);
+        assert_eq!(orig, vec![0xFF; 16], "the original is untouched");
+    }
+
+    /// An image whose samples pdfce cannot decode: JBIG2 with garbage.
+    fn undecodable_image() -> Vec<u8> {
+        stream_body(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 1 \
+             /ColorSpace /DeviceGray /Filter /JBIG2Decode",
+            b"not a jbig2 stream at all",
+        )
+    }
+
+    #[test]
+    fn an_undestroyable_image_retains_its_mark_and_the_other_marks_apply() {
+        let content =
+            b"q 100 0 0 50 50 100 cm /Im1 Do Q BT /F1 24 Tf 20 20 Td (SECRET PUBLIC) Tj ET";
+        let pdf = image_pdf(content, undecodable_image(), vec![]);
+        // One mark over the image, one over "SECRET" (by search).
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let marked = mark_and_save(&marked);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+
+        assert_eq!(report.marks_retained, 1);
+        assert_eq!(report.marks_applied, 1);
+        assert!(report.glyphs_removed >= 6, "{report:?}");
+        assert_eq!(
+            carrier_action(&report, "images"),
+            CarrierAction::DisclosedNotScrubbed
+        );
+        assert!(report.has_disclosed_residuals());
+        assert!(
+            report
+                .notes
+                .iter()
+                .any(|n| n.contains("RETAINED") && n.contains("JBIG2")),
+            "{:?}",
+            report.notes
+        );
+
+        let out_doc = Document::from_bytes(out.clone()).unwrap();
+        // The retained mark is still IN the output as an unapplied /Redact.
+        assert_eq!(count_redaction_marks(&out_doc.view()), 1);
+        // The image is still painted (nothing was masked over it).
+        let (_d, _x, content) = output_page(&out);
+        assert!(contains(&content, b"/Im1 Do"));
+        assert!(!contains(&all_decoded_content(&out_doc), b"SECRET"));
+    }
+
+    #[test]
+    fn every_mark_undestroyable_is_refused_by_name() {
+        let pdf = image_pdf(
+            b"q 100 0 0 50 50 100 cm /Im1 Do Q",
+            undecodable_image(),
+            vec![],
+        );
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
         let doc = Document::from_bytes(marked).unwrap();
         let err = apply_redactions(&doc, &SaveOptions::identity()).unwrap_err();
         assert!(
-            matches!(err, RedactError::ImageRegion { page: 1 }),
-            "expected a named image refusal, got {err:?}"
+            matches!(&err, RedactError::ImageUndestroyable { page: 1, reason } if reason.contains("decoded")),
+            "expected a named refusal, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_touch_of_the_bounding_box_destroys_nothing() {
+        // Region abuts the placement's right edge at x = 150 exactly.
+        let pdf = image_pdf(b"q 100 0 0 50 50 100 cm /Im1 Do Q", gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[150.0, 100.0, 200.0, 150.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.images_cleared, 0);
+        assert_eq!(report.images_removed, 0);
+        let (out_doc, _x, content) = output_page(&out);
+        assert!(contains(&content, b"/Im1 Do"));
+        let (orig, _, _, _) = decode_object(&out_doc, ObjId::new(5, 0));
+        assert_eq!(orig, vec![0xFF; 16]);
+    }
+
+    #[test]
+    fn an_inline_image_is_re_encoded_with_its_covered_cells_destroyed() {
+        // 2×2 gray inline image, all 0xFF, placed (50,100)-(150,150).
+        let mut content = b"q 100 0 0 50 50 100 cm BI /W 2 /H 2 /CS /G /BPC 8 ID ".to_vec();
+        content.extend_from_slice(&[0xFF; 4]);
+        content.extend_from_slice(b" EI Q");
+        let pdf = image_pdf(&content, gray_4x4(), vec![]);
+        // Left half of the placement → column 0 of both rows.
+        let marked = mark_rects(pdf, &[[50.0, 100.0, 100.0, 150.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.images_cleared, 1);
+
+        let (out_doc, _x, content) = output_page(&out);
+        let cs = ContentStream::parse(content).unwrap();
+        let inline = cs
+            .operations()
+            .find_map(|op| match &op.operator.kind {
+                ContentTokenKind::InlineImage { params, data } => Some((params.clone(), *data)),
+                _ => None,
+            })
+            .expect("the inline image survives, re-encoded");
+        let raw = inline.1.slice(&cs.buf).unwrap();
+        assert_eq!(
+            inline
+                .0
+                .get(b"Filter")
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes()),
+            Some(&b"FlateDecode"[..])
+        );
+        let coded =
+            crate::image_codec::decode_image_view(&out_doc.view(), &inline.0, raw, true).unwrap();
+        assert_eq!(coded.samples, vec![0, 0xFF, 0, 0xFF]);
+    }
+
+    #[test]
+    fn a_wholly_covered_inline_image_is_removed() {
+        let mut content = b"q 100 0 0 50 50 100 cm BI /W 2 /H 2 /CS /G /BPC 8 ID ".to_vec();
+        content.extend_from_slice(&[0xFF; 4]);
+        content.extend_from_slice(b" EI Q");
+        let pdf = image_pdf(&content, gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[0.0, 0.0, 300.0, 200.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.images_removed, 1);
+        let (_d, _x, content) = output_page(&out);
+        assert!(
+            !contains(&content, b"BI"),
+            "{}",
+            String::from_utf8_lossy(&content)
+        );
+        assert!(!contains(&content, b"EI"));
+    }
+
+    #[test]
+    fn a_jpeg_is_decoded_cleared_and_re_encoded_losslessly() {
+        let jpeg = crate::image_codec::fixtures::GRAY_2X2;
+        let image = stream_body(
+            "/Type /XObject /Subtype /Image /Width 2 /Height 2 /BitsPerComponent 8 \
+             /ColorSpace /DeviceGray /Filter /DCTDecode",
+            jpeg,
+        );
+        // What the codec yields for the untouched right column.
+        let probe = Document::from_bytes(image_pdf(b"", image.clone(), vec![])).unwrap();
+        let (before, _, _, _) = decode_object(&probe, ObjId::new(5, 0));
+
+        let pdf = image_pdf(b"q 100 0 0 50 50 100 cm /Im1 Do Q", image, vec![]);
+        let marked = mark_rects(pdf, &[[50.0, 100.0, 100.0, 150.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.images_cleared, 1);
+
+        let (out_doc, xobjects, _c) = output_page(&out);
+        let clone_id = xobjects
+            .get(b"pdfceRd5_1")
+            .and_then(Object::as_reference)
+            .unwrap();
+        let (samples, w, h, dict) = decode_object(&out_doc, clone_id);
+        assert_eq!((w, h), (2, 2));
+        assert_eq!(
+            dict.get(b"Filter")
+                .and_then(Object::as_name)
+                .map(|n| n.as_bytes()),
+            Some(&b"FlateDecode"[..])
+        );
+        assert_eq!(samples, vec![0, before[1], 0, before[3]]);
+        // The JPEG codestream itself is gone from the file.
+        assert!(!contains(&out, jpeg));
+    }
+
+    #[test]
+    fn a_soft_mask_is_destroyed_with_its_image() {
+        // /Im1 (object 5) carries /SMask 7 0 R, a 4×4 gray alpha of 0x80.
+        let image = stream_body(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
+             /ColorSpace /DeviceGray /SMask 7 0 R",
+            &[0xFF; 16],
+        );
+        let smask = stream_body(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
+             /ColorSpace /DeviceGray",
+            &[0x80; 16],
+        );
+        let pdf = image_pdf(b"q 100 0 0 50 50 100 cm /Im1 Do Q", image, vec![smask]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (out, _report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+
+        let (out_doc, xobjects, _c) = output_page(&out);
+        let clone_id = xobjects
+            .get(b"pdfceRd5_1")
+            .and_then(Object::as_reference)
+            .unwrap();
+        let (_s, _w, _h, dict) = decode_object(&out_doc, clone_id);
+        let sm_id = dict.get(b"SMask").and_then(Object::as_reference).unwrap();
+        assert_ne!(sm_id, ObjId::new(7, 0), "the clone has its own mask");
+        let (alpha, w, h, _) = decode_object(&out_doc, sm_id);
+        assert_eq!((w, h), (4, 4));
+        for row in 0..4 {
+            assert_eq!(
+                &alpha[row * 4..row * 4 + 4],
+                &[0xFF, 0xFF, 0xFF, 0x80],
+                "row {row}"
+            );
+        }
+        // The original mask is tombstoned with the original image.
+        let (om, w, h, _) = decode_object(&out_doc, ObjId::new(7, 0));
+        assert_eq!((w, h), (1, 1));
+        assert_eq!(om, vec![0]);
+        assert!(!contains(&out, &[0x80; 16]));
+    }
+
+    // -- vector paths: counted and disclosed, not cut ----------------------
+
+    #[test]
+    fn a_vector_path_crossing_a_region_is_disclosed_as_a_residual() {
+        // One line through the region, one rectangle well outside it, and a
+        // clip-only path (`n`) inside it that must NOT count.
+        let content = b"0 0 m 300 200 l S 200 10 20 20 re f 70 120 10 10 re W n";
+        let pdf = image_pdf(content, gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (_out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.vector_paths_intersecting, 1);
+        assert_eq!(
+            carrier_action(&report, "vector_paths"),
+            CarrierAction::DisclosedNotScrubbed
+        );
+        assert!(report.has_disclosed_residuals());
+        assert!(
+            report.notes.iter().any(|n| n.contains("NOT cut")),
+            "{:?}",
+            report.notes
+        );
+    }
+
+    #[test]
+    fn a_vector_path_outside_every_region_is_not_a_residual() {
+        let content = b"200 10 m 250 30 l S";
+        let pdf = image_pdf(content, gray_4x4(), vec![]);
+        let marked = mark_rects(pdf, &[[60.0, 110.0, 120.0, 140.0]]);
+        let doc = Document::from_bytes(marked).unwrap();
+        let (_out, report) = apply_redactions(&doc, &SaveOptions::identity()).unwrap();
+        assert_eq!(report.vector_paths_intersecting, 0);
+        assert_eq!(
+            carrier_action(&report, "vector_paths"),
+            CarrierAction::Absent
         );
     }
 

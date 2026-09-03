@@ -15,6 +15,15 @@
 //!   all of a string, none of it, or a partial glyph at the edge;
 //! - **malformed operators, truncated arrays, huge numbers** — anything the
 //!   `content` tokenizer will accept and hand to the interpreter.
+//! - **image placements** (`Pass 245.0`) — the template's resources carry
+//!   `/Im1` (a raw 4×4 grey grid), `/Im2` (a `DCTDecode` stream whose bytes
+//!   are the TAIL of the fuzz input, so the decoder sees arbitrary
+//!   codestreams and the mark-retention path runs), and `/Im3` (raw RGB
+//!   with `/Im1` as its `/SMask`). The fuzzed content may `Do` any of them
+//!   under any CTM — singular, skewed, enormous — and may carry inline
+//!   images (`BI … EI`), so the cell mapping, the sample clearing at every
+//!   bit depth, the copy-on-write census and the inline re-encode are all
+//!   driven from hostile input.
 //!
 //! Invariant asserted (the crate's panic-free policy): for ANY input the
 //! whole mark → save → reload → `apply_redactions` pipeline returns
@@ -40,15 +49,23 @@ use pdfce_core::redact;
 use pdfce_core::vartext::Quadding;
 use pdfce_core::writer::SaveOptions;
 
-/// Assemble a one-page template whose `/Contents` is exactly `content`.
-fn template(content: &[u8]) -> Vec<u8> {
+/// Assemble a one-page template whose `/Contents` is exactly `content`,
+/// with three image XObjects whose second one is built from `jpeg`.
+fn template(content: &[u8], jpeg: &[u8]) -> Vec<u8> {
+    let stream = |dict: &str, data: &[u8]| -> Vec<u8> {
+        let mut s = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
+        s.extend_from_slice(data);
+        s.extend_from_slice(b"\nendstream");
+        s
+    };
     // A Type0 Identity-H descendant with a bare CIDFont — enough for
     // `ExtractFont` to segment 2-byte codes and estimate widths.
     let bodies: Vec<Vec<u8>> = vec![
         b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] \
-          /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>"
+          /Resources << /Font << /F1 5 0 R /F2 6 0 R >> \
+          /XObject << /Im1 8 0 R /Im2 9 0 R /Im3 10 0 R >> >> /Contents 4 0 R >>"
             .to_vec(),
         {
             let mut s = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
@@ -64,6 +81,21 @@ fn template(content: &[u8]) -> Vec<u8> {
           /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> \
           /DW 1000 >>"
             .to_vec(),
+        stream(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
+             /ColorSpace /DeviceGray",
+            &[0xA5; 16],
+        ),
+        stream(
+            "/Type /XObject /Subtype /Image /Width 2 /Height 2 /BitsPerComponent 8 \
+             /ColorSpace /DeviceRGB /Filter /DCTDecode",
+            jpeg,
+        ),
+        stream(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 4 /BitsPerComponent 8 \
+             /ColorSpace /DeviceRGB /SMask 8 0 R",
+            &[0x5A; 48],
+        ),
     ];
 
     let mut buf = b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n".to_vec();
@@ -96,7 +128,13 @@ fuzz_target!(|data: &[u8]| {
         data
     };
 
-    let pdf = template(content);
+    // The last (up to) 512 bytes double as the `/Im2` JPEG codestream.
+    let jpeg = if data.len() > 512 {
+        &data[data.len() - 512..]
+    } else {
+        data
+    };
+    let pdf = template(content, jpeg);
     let Ok(doc) = Document::from_bytes(pdf) else {
         return;
     };
@@ -156,6 +194,6 @@ fuzz_target!(|data: &[u8]| {
                 }
             }
         }
-        Err(_) => {} // a named refusal (image region, unparsable content) is fine
+        Err(_) => {} // a named refusal (undestroyable image, unparsable content) is fine
     }
 });

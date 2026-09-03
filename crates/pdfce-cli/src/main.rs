@@ -1590,17 +1590,25 @@ enum Command {
     ///
     /// The one destructive, irreversible operation in pdfce (R35). It
     /// removes the covered glyphs from the content stream (advance-
-    /// preserving, so surviving text stays put), scrubs duplicating
-    /// carriers (`/Info`, XMP), decomposes object streams so no removed
-    /// object survives compressed, removes the marks, and writes a FORCED
-    /// FULL REWRITE with no prior revision — so nothing is recoverable.
+    /// preserving, so surviving text stays put), DESTROYS the covered
+    /// samples of any image a region touches (decoded, cleared, re-encoded
+    /// losslessly; an image a region contains entirely is removed outright;
+    /// an image also painted elsewhere is copied so the other placements
+    /// keep it), scrubs duplicating carriers (`/Info`, XMP), decomposes
+    /// object streams so no removed object survives compressed, removes the
+    /// marks, and writes a FORCED FULL REWRITE with no prior revision — so
+    /// nothing is recoverable.
     ///
     /// It prints a REDACTION REPORT of exactly what was removed and which
     /// carriers were scrubbed or left. If any carrier could not be scrubbed
-    /// (XFA, a tagged ActualText copy, an attachment), apply exits non-zero
-    /// UNLESS you pass `--acknowledge-residuals` — there is no path where a
-    /// partial redaction reads as complete. A region over an image is
-    /// refused outright (pdfce cannot yet destroy image pixels).
+    /// (XFA, a tagged ActualText copy, an attachment, a vector path crossing
+    /// a region — vector cutting is not implemented yet), apply exits
+    /// non-zero UNLESS you pass `--acknowledge-residuals` — there is no path
+    /// where a partial redaction reads as complete. A mark over an image
+    /// whose samples pdfce cannot decode is RETAINED in the output (left
+    /// unapplied, named in the report with its reason) while every other
+    /// mark applies; only when no mark at all can be applied is the run
+    /// refused.
     RedactApply {
         /// Input PDF carrying `/Redact` marks.
         input: PathBuf,
@@ -22772,7 +22780,7 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
         Err(err) => {
             eprintln!("pdfce-cli: redaction refused: {err}");
             return match err {
-                RedactError::ImageRegion { .. }
+                RedactError::ImageUndestroyable { .. }
                 | RedactError::NothingToApply
                 | RedactError::Encrypted => exit::EDIT_REFUSED,
                 RedactError::Write(_) => exit::SAVE_REFUSED,
@@ -22814,6 +22822,20 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
         "  overlay_text_burned={} overlay_ro_not_drawn={} overlay_transparent={}",
         report.overlay_text_burned, report.overlay_ro_not_drawn, report.overlay_transparent,
     );
+    // The image surgery (§12.5.6.23 "that portion of the image data shall be
+    // destroyed"). `marks_retained` is the one a batch caller must read: a
+    // non-zero value means a /Redact mark is still IN the output, unapplied,
+    // and the notes below name it and say why.
+    println!(
+        "  images_cleared={} images_removed={} images_cloned_shared={} images_overcovered={} \
+         marks_retained={} vector_paths_intersecting={}",
+        report.images_cleared,
+        report.images_removed,
+        report.images_cloned_shared,
+        report.images_overcovered,
+        report.marks_retained,
+        report.vector_paths_intersecting,
+    );
     println!("  carriers (diligence sweep, ISO 32000-1 §12.5.6.23):");
     for c in &report.carriers {
         println!(
@@ -22831,6 +22853,14 @@ fn cmd_redact_apply(input: &Path, output: &Path, acknowledge_residuals: bool) ->
     }
 
     // The refusal-acknowledgement gate.
+    if report.marks_retained > 0 {
+        eprintln!(
+            "pdfce-cli: {} redaction mark(s) were RETAINED in the output, unapplied — each touches \
+             an image whose samples pdfce could not destroy (see the notes above). The output is \
+             NOT fully redacted; the retained marks are still visible in it.",
+            report.marks_retained
+        );
+    }
     if report.has_disclosed_residuals() && !acknowledge_residuals {
         eprintln!(
             "pdfce-cli: the covered content WAS removed, but one or more diligence carriers could \

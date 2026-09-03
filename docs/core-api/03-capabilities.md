@@ -1600,17 +1600,56 @@ internally (`redact.rs:1220-1224`).
 `RedactionReport` (`redact.rs:290`): `pages_redacted`, `marks_applied`,
 `glyphs_removed`, `show_operators_edited`, `content_streams_rewritten`,
 `annotations_removed`, `containers_decomposed`, `objects_promoted`,
-`info_strings_scrubbed`, `estimated_width_fonts`, `carriers: Vec<CarrierStatus>`,
-`redacted_text`, `notes`; plus `has_disclosed_residuals()` (`redact.rs:343`).
+`info_strings_scrubbed`, `estimated_width_fonts`, `overlay_text_burned`,
+`overlay_ro_not_drawn`, `overlay_transparent`, **`images_cleared`,
+`images_removed`, `images_cloned_shared`, `images_overcovered`,
+`vector_paths_intersecting`, `marks_retained`** (all `Pass 245.0`),
+`carriers: Vec<CarrierStatus>`, `redacted_text`, `notes`; plus
+`has_disclosed_residuals()` (`redact.rs:343`).
 `CarrierStatus { carrier, present, action }` (`redact.rs:242`) with
 `CarrierAction::{Absent, Scrubbed, DroppedByRewrite, DisclosedNotScrubbed}`
 (`redact.rs:256`) and `as_str()` (`:274`) yielding
-`"DISCLOSED_NOT_SCRUBBED"`. The ten carriers (`redact.rs:244-246`): `info`,
-`xmp`, `xfa`, `struct_tree`, `attachments`, `ocg`, `thumbnails`,
-`object_streams`, `prior_revisions`, `overlapping_annotations`.
+`"DISCLOSED_NOT_SCRUBBED"`. The twelve carriers: `info`, `xmp`, **`images`**,
+`xfa`, `struct_tree`, `attachments`, `ocg`, `thumbnails`, `object_streams`,
+`prior_revisions`, `overlapping_annotations`, **`vector_paths`**.
+
+**Images (`Pass 245.0`, `redact_image.rs`).** A raster image a region
+touches — image XObject or inline, any codec pdfce decodes (raw, DCT, CCITT,
+JBIG2, JPX) — has the covered sample cells **destroyed** (overwritten, then
+re-encoded losslessly as `FlateDecode`; its `/SMask` and stencil `/Mask` are
+cleared over the same cells because a soft mask's alpha is a shape). A
+placement one region contains entirely is **removed** from the page (the
+`Do`/`BI…EI` is deleted). An image also painted elsewhere — another page, a
+form, an appearance stream, an unmarked placement on the same page — is
+**copied-on-write**: the marked placement is rebound to a fresh
+`/XObject` name (`/pdfceRd<obj>_<n>`) holding the cleared clone, the
+original survives for its other placements, and `images_cloned_shared` plus
+a `SHARED` note say so. When every use of the original was marked, the
+original object is **tombstoned** in place (a 1×1 zero-sample image under the
+same object number, so no resource dictionary dangles). Every placement gets
+one note naming its page, position, size and fate.
+
+**A mark can be RETAINED.** When an image's samples cannot be decoded (a
+codec feature pdfce lacks, a corrupt codestream, a bit depth Flate cannot
+carry), every mark touching that placement is **left in the output as an
+unapplied `/Redact` annotation** — nothing removed under it, no box drawn
+over it — and counted in `marks_retained`, with a note naming the placement
+and the reason; the `images` carrier reads `DisclosedNotScrubbed`, so
+`has_disclosed_residuals()` is `true`. **A shell must read `marks_retained`
+before presenting the output as redacted**: a non-zero value means the
+document still carries marks. Only when *no* mark at all can be applied does
+apply refuse, with `ImageUndestroyable`.
+
+**Vector paths are counted, not cut.** `vector_paths_intersecting` is the
+number of painted paths (`S`, `f`, `B`… — not `n`) whose bounding box crosses
+a region; the `vector_paths` carrier reads `DisclosedNotScrubbed` whenever it
+is non-zero. Path cutting is not implemented; on a CAD sheet this is the
+residual that trips the acknowledgement gate.
 
 `RedactError` (`redact.rs:195`): `PageTree`, `NothingToApply`,
-`ImageRegion { page }`, `Content { page, source }`, `Encrypted`, `Write`.
+**`ImageUndestroyable { page, reason }`** (replaces `ImageRegion { page }`,
+which is gone as of `Pass 245.0`), `Content { page, source }`, `Encrypted`,
+`Write`.
 
 ### 4.3 Minimal worked sequence
 
@@ -1722,12 +1761,19 @@ defect but a **security failure**. The cardinal rule, verbatim
   preserves superseded content … the 'removed' text would sit in the saved
   file one `startxref` hop away, trivially recoverable by any parser that
   walks `/Prev`"* (`crates/pdfce-gui/src/redact_apply.rs:22-28`).
-- **An image intersecting a region is REFUSED by name, not clipped.**
-  `RedactError::ImageRegion { page }` (`redact.rs:206-210`): *"pdfce cannot
-  yet destroy image pixels (clipping or masking would leave them recoverable,
-  §12.5.6.23) — apply refused rather than producing a false redaction."* It
-  refuses the **whole apply**, not just that region. Surface it as a refusal
-  the operator can act on, never as a generic failure.
+- **An image intersecting a region is DESTROYED, never clipped — and a mark
+  over an undecodable image is RETAINED, not applied.** (`Pass 245.0`;
+  before it, `RedactError::ImageRegion` refused the whole apply, and a shell
+  written against that variant will not compile.) Read `marks_retained`
+  after every apply: an output with retained marks is **not redacted**, and
+  `list-redactions` on it says so. `ImageUndestroyable` is raised only when
+  nothing at all could be applied. A shared image's original survives for
+  its unmarked placements by design — the `SHARED` note is the disclosure,
+  not a defect.
+- **A vector path crossing a region is NOT cut.** `vector_paths_intersecting`
+  counts them and the `vector_paths` carrier discloses them; text and images
+  under the region are removed, the lines are not. Say so in the same
+  sentence as "removed" (rule 1 of §4.4's wording contract).
 - **`RedactionMark::rect` is display information only.**
   *"This must never be used to decide what gets removed, only to describe a
   mark to a human"* (`redact.rs:1786-1790`) — apply uses `/QuadPoints`.
